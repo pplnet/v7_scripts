@@ -1,0 +1,106 @@
+*Ignore=V7
+
+** Test de Recálculo de Campos
+** Este script prueba la funcionalidad de recálculo automático de campos dependientes
+** Escenario: Factura simple con cantidad, precio unitario, subtotal, IVA y total
+
+DialogoVisible(SI)
+CrearDialogo
+    ** Campos editables (triggers de recálculo)
+    Cantidad1: 'Cantidad'        ;1;1;1;SI;SI;SI;;SI;10;Dialogo.Cantidad1 * Dialogo.Cantidad2;;;'#0.00';
+    Cantidad2: 'Precio Unitario' ;2;1;1;SI;SI;SI;;SI;100;Dialogo.Cantidad1 * Dialogo.Cantidad2;;;'#0.00';
+    Cantidad3: 'Tasa IVA %'      ;3;1;1;SI;SI;SI;;SI;21;Dialogo.Cantidad4 * (1 + Dialogo.Cantidad3 / 100);;;'#0.00';
+
+    ** Campos calculados (no editables)
+    Cantidad4: 'Subtotal'        ;1;2;1;NO;SI;SI;;SI;;Dialogo.Cantidad1 * Dialogo.Cantidad2;;;'#0.00';
+    Cantidad5: 'IVA'             ;2;2;1;NO;SI;SI;;SI;;Dialogo.Cantidad4 * Dialogo.Cantidad3 / 100;;;'#0.00';
+    Cantidad6: 'Total'           ;3;2;1;NO;SI;SI;;SI;;Dialogo.Cantidad4 + Dialogo.Cantidad5;;;'#0.00';
+FinDialogo
+
+** Estructura del Diálogo:
+**
+** Columna 1 (Editables):     Columna 2 (Calculados):
+** ┌─────────────────────┐    ┌─────────────────────┐
+** │ Cantidad: 10        │    │ Subtotal: 1000.00   │
+** ├─────────────────────┤    ├─────────────────────┤
+** │ Precio Unit: 100    │    │ IVA: 210.00         │
+** ├─────────────────────┤    ├─────────────────────┤
+** │ Tasa IVA %: 21      │    │ Total: 1210.00      │
+** └─────────────────────┘    └─────────────────────┘
+**
+** Dependencias:
+** - Cantidad1 → afecta a Cantidad4 (Subtotal)
+** - Cantidad2 → afecta a Cantidad4 (Subtotal)
+** - Cantidad4 → afecta a Cantidad5 (IVA) y Cantidad6 (Total)
+** - Cantidad3 → afecta a Cantidad5 (IVA)
+** - Cantidad5 → afecta a Cantidad6 (Total)
+**
+** Flujo de recálculo esperado:
+** 1. Usuario cambia Cantidad1 de 10 a 20
+** 2. Backend recalcula Cantidad4 (Subtotal): 20 * 100 = 2000
+** 3. Backend recalcula en cascada Cantidad5 (IVA): 2000 * 21 / 100 = 420
+** 4. Backend recalcula en cascada Cantidad6 (Total): 2000 + 420 = 2420
+
+test("recalc_initial_values", -> {
+    &dialog := GetDialog()
+
+    ** Verificar valores iniciales
+    assertEq(10, &dialog.Value('Cantidad1'))
+    assertEq(100, &dialog.Value('Cantidad2'))
+    assertEq(21, &dialog.Value('Cantidad3'))
+
+    ** Verificar cálculos iniciales
+    assertEq(1000, &dialog.Value('Cantidad4'))  ** 10 * 100
+    assertEq(210, &dialog.Value('Cantidad5'))   ** 1000 * 21 / 100
+    assertEq(1210, &dialog.Value('Cantidad6'))  ** 1000 + 210
+})
+
+test("recalc_change_cantidad", -> {
+    &dialog := GetDialog()
+
+    ** Cambiar cantidad
+    &dialog.SetValue('Cantidad1', 20, SI)
+
+    ** Verificar recálculos en cascada
+    assertEq(2000, &dialog.Value('Cantidad4'))  ** 20 * 100
+    assertEq(420, &dialog.Value('Cantidad5'))   ** 2000 * 21 / 100
+    assertEq(2420, &dialog.Value('Cantidad6'))  ** 2000 + 420
+})
+
+test("recalc_change_precio", -> {
+    &dialog := GetDialog()
+
+    ** Cambiar precio unitario
+    &dialog.SetValue('Cantidad2', 150, SI)
+
+    ** Verificar recálculos en cascada
+    assertEq(1500, &dialog.Value('Cantidad4'))  ** 10 * 150
+    assertEq(315, &dialog.Value('Cantidad5'))   ** 1500 * 21 / 100
+    assertEq(1815, &dialog.Value('Cantidad6'))  ** 1500 + 315
+})
+
+test("recalc_change_iva", -> {
+    &dialog := GetDialog()
+
+    ** Cambiar tasa de IVA
+    &dialog.SetValue('Cantidad3', 10, SI)
+
+    ** Verificar recálculos (solo IVA y Total cambian)
+    assertEq(1000, &dialog.Value('Cantidad4'))  ** Sin cambios
+    assertEq(100, &dialog.Value('Cantidad5'))   ** 1000 * 10 / 100
+    assertEq(1100, &dialog.Value('Cantidad6'))  ** 1000 + 100
+})
+
+test("recalc_multiple_changes", -> {
+    &dialog := GetDialog()
+
+    ** Cambiar múltiples valores
+    &dialog.SetValue('Cantidad1', 5, SI)
+    &dialog.SetValue('Cantidad2', 200, SI)
+    &dialog.SetValue('Cantidad3', 15, SI)
+
+    ** Verificar recálculos finales
+    assertEq(1000, &dialog.Value('Cantidad4'))  ** 5 * 200
+    assertEq(150, &dialog.Value('Cantidad5'))   ** 1000 * 15 / 100
+    assertEq(1150, &dialog.Value('Cantidad6'))  ** 1000 + 150
+})
