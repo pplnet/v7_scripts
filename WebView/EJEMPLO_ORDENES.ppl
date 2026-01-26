@@ -1,0 +1,127 @@
+** ============================================================================
+** PPL WebView: Estado de Órdenes en Tiempo Real
+** ============================================================================
+** Descripción: Muestra un reporte en tiempo real de órdenes con filtros
+**              dinámicos y actualización automática vía FPA Hub
+** Autor: Sistema V7
+** Fecha: 2026-01-23
+** ============================================================================
+
+** Variables globales
+&ordenes := $[]
+&tiposOrden := $[]
+&estadosOrden := $[]
+
+** ============================================================================
+** Función: Obtener órdenes desde la base de datos
+** ============================================================================
+def GetOrdenes()
+    &sql := "
+        SELECT
+            o.TipoOrden,
+            o.NroOrden,
+            CONVERT(VARCHAR(10), o.FechaOrden, 103) as FechaOrden,
+            c.RazonSocial as Cliente,
+            o.Estado,
+            o.Monto,
+            o.Usuario
+        FROM Ordenes o
+        INNER JOIN Clientes c ON o.ClienteId = c.ClienteId
+        WHERE o.FechaOrden >= DATEADD(DAY, -30, GETDATE())
+        ORDER BY o.FechaOrden DESC, o.NroOrden DESC
+    "
+
+    &resultado := QUERY(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Función: Obtener tipos de orden únicos
+** ============================================================================
+def GetTiposOrden()
+    &sql := "
+        SELECT DISTINCT TipoOrden
+        FROM Ordenes
+        ORDER BY TipoOrden
+    "
+
+    &resultado := QUERY(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Función: Obtener estados únicos
+** ============================================================================
+def GetEstados()
+    &sql := "
+        SELECT DISTINCT Estado
+        FROM Ordenes
+        ORDER BY Estado
+    "
+
+    &resultado := QUERY(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Función: Obtener detalle de una orden específica
+** ============================================================================
+def GetDetalleOrden(nroOrden)
+    &sql := "
+        SELECT
+            d.NroItem,
+            e.Descripcion as Especie,
+            d.Cantidad,
+            d.Precio,
+            d.Importe,
+            d.Comision
+        FROM OrdenesDetalle d
+        INNER JOIN Especies e ON d.EspecieId = e.EspecieId
+        WHERE d.NroOrden = " ~ Str(nroOrden) ~ "
+        ORDER BY d.NroItem
+    "
+
+    &resultado := QUERY(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Función: Obtener estadísticas resumidas
+** ============================================================================
+def GetEstadisticas()
+    &sql := "
+        SELECT
+            COUNT(*) as TotalOrdenes,
+            SUM(CASE WHEN Estado = 'Pendiente' THEN 1 ELSE 0 END) as Pendientes,
+            SUM(CASE WHEN Estado = 'Ejecutada' THEN 1 ELSE 0 END) as Ejecutadas,
+            SUM(CASE WHEN Estado = 'Cancelada' THEN 1 ELSE 0 END) as Canceladas,
+            SUM(Monto) as MontoTotal,
+            AVG(Monto) as MontoPromedio
+        FROM Ordenes
+        WHERE FechaOrden >= DATEADD(DAY, -30, GETDATE())
+    "
+
+    &resultado := QUERY(&sql)
+
+    If &resultado.count > 0
+        return &resultado.itemAt(0)
+    EndIf
+
+    return ${}
+end
+
+** ============================================================================
+** SECCIÓN PRINCIPAL
+** ============================================================================
+
+** Cargar datos iniciales
+&ordenes := GetOrdenes()
+&tiposOrden := GetTiposOrden()
+&estadosOrden := GetEstados()
+&stats := GetEstadisticas()
+
+** Guardar en variables del Scope para acceso desde JavaScript
+VAR('ORDENES', &ordenes)
+VAR('TIPOS_ORDEN', &tiposOrden)
+VAR('ESTADOS', &estadosOrden)
+VAR('STATS', &stats)
