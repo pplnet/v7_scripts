@@ -13,6 +13,90 @@
     let updateInterval = null;
 
     // ========================================================================
+    // Transformador de datos del backend
+    // ========================================================================
+    // El backend retorna arrays de objetos {key, value}, necesitamos convertirlos
+    // a objetos planos {TipoOrden: "Compra", NroOrden: 1001, ...}
+    function transformRow(row) {
+        if (!row || !Array.isArray(row)) return row;
+
+        const obj = {};
+        row.forEach(function(item) {
+            if (item && item.key !== undefined) {
+                // Capitalizar la primera letra de cada palabra para mantener compatibilidad
+                const key = capitalizeKey(item.key);
+                // Trim de strings para quitar espacios en blanco extras
+                obj[key] = typeof item.value === 'string' ? item.value.trim() : item.value;
+            }
+        });
+        return obj;
+    }
+
+    function transformData(data) {
+        if (!data) return [];
+
+        // Si es un objeto con propiedad 'result', extraerla
+        if (data.result && Array.isArray(data.result)) {
+            data = data.result;
+        }
+
+        if (!Array.isArray(data)) return [];
+
+        // Si el primer elemento es un array de {key, value}, transformar todo
+        if (data.length > 0 && Array.isArray(data[0])) {
+            return data.map(transformRow);
+        }
+
+        // Si ya es un array de objetos planos, solo hacer trim de strings
+        return data.map(function(row) {
+            if (row && typeof row === 'object' && !Array.isArray(row)) {
+                const obj = {};
+                Object.keys(row).forEach(function(key) {
+                    const newKey = capitalizeKey(key);
+                    obj[newKey] = typeof row[key] === 'string' ? row[key].trim() : row[key];
+                });
+                return obj;
+            }
+            return row;
+        });
+    }
+
+    // Capitaliza la primera letra de cada palabra (tipoorden -> TipoOrden)
+    function capitalizeKey(key) {
+        if (!key) return key;
+        // Mapeo directo para claves conocidas
+        const keyMap = {
+            'tipoorden': 'TipoOrden',
+            'nroorden': 'NroOrden',
+            'fechaorden': 'FechaOrden',
+            'cliente': 'Cliente',
+            'estado': 'Estado',
+            'monto': 'Monto',
+            'usuario': 'Usuario',
+            'nroitem': 'NroItem',
+            'especie': 'Especie',
+            'cantidad': 'Cantidad',
+            'precio': 'Precio',
+            'importe': 'Importe',
+            'comision': 'Comision',
+            'totalordenes': 'TotalOrdenes',
+            'pendientes': 'Pendientes',
+            'ejecutadas': 'Ejecutadas',
+            'canceladas': 'Canceladas',
+            'montototal': 'MontoTotal',
+            'montopromedio': 'MontoPromedio'
+        };
+
+        const lowerKey = key.toLowerCase();
+        if (keyMap[lowerKey]) {
+            return keyMap[lowerKey];
+        }
+
+        // Fallback: capitalizar primera letra
+        return key.charAt(0).toUpperCase() + key.slice(1);
+    }
+
+    // ========================================================================
     // Configuración de DataTable
     // ========================================================================
     const colsConfig = [
@@ -98,8 +182,8 @@
     // Cargar datos iniciales desde PPL
     // ========================================================================
     function loadInitialData() {
-        bound.execPPL("VAR('ORDENES')").then(function(result) {
-            ordenesData = result || [];
+        bound.execPPL("GetOrdenes()").then(function(result) {
+            ordenesData = transformData(result);
             console.log('Órdenes cargadas:', ordenesData.length);
 
             if (dataTable) {
@@ -162,36 +246,40 @@
     // ========================================================================
     function buildCustomFilters() {
         // Filtro de Tipo de Orden
-        bound.execPPL("VAR('TIPOS_ORDEN')").then(function(tipos) {
+        bound.execPPL("GetTiposOrden()").then(function(result) {
+            const tipos = transformData(result);
             const filterTipo = $('#filter-0');
             filterTipo.empty();
             filterTipo.append('<a class="dropdown-item" href="#" data-value="">Todos</a>');
 
             tipos.forEach(function(tipo) {
-                const item = $('<a class="dropdown-item" href="#" data-value="' + tipo.TipoOrden + '">' + tipo.TipoOrden + '</a>');
+                const tipoOrden = tipo.TipoOrden || tipo.Tipoorden;
+                const item = $('<a class="dropdown-item" href="#" data-value="' + tipoOrden + '">' + tipoOrden + '</a>');
                 item.on('click', function(e) {
                     e.preventDefault();
                     const value = $(this).data('value');
                     dataTable.column(1).search(value).draw();
-                    $('#dropdownTipo').text(tipo.TipoOrden || 'Todos los tipos');
+                    $('#dropdownTipo').text(value || 'Todos los tipos');
                 });
                 filterTipo.append(item);
             });
         });
 
         // Filtro de Estado
-        bound.execPPL("VAR('ESTADOS')").then(function(estados) {
+        bound.execPPL("GetEstados()").then(function(result) {
+            const estados = transformData(result);
             const filterEstado = $('#filter-4');
             filterEstado.empty();
             filterEstado.append('<a class="dropdown-item" href="#" data-value="">Todos</a>');
 
             estados.forEach(function(estado) {
-                const item = $('<a class="dropdown-item" href="#" data-value="' + estado.Estado + '">' + estado.Estado + '</a>');
+                const estadoVal = estado.Estado;
+                const item = $('<a class="dropdown-item" href="#" data-value="' + estadoVal + '">' + estadoVal + '</a>');
                 item.on('click', function(e) {
                     e.preventDefault();
                     const value = $(this).data('value');
                     dataTable.column(5).search(value).draw();
-                    $('#dropdownEstado').text(estado.Estado || 'Todos los estados');
+                    $('#dropdownEstado').text(value || 'Todos los estados');
                 });
                 filterEstado.append(item);
             });
@@ -202,7 +290,24 @@
     // Cargar estadísticas
     // ========================================================================
     function loadStatistics() {
-        bound.execPPL("VAR('STATS')").then(function(stats) {
+        bound.execPPL("GetEstadisticas()").then(function(result) {
+            // GetEstadisticas retorna un solo objeto (la primera fila)
+            let stats = result;
+
+            // Si viene como array de {key, value}, transformar
+            if (Array.isArray(result) && result.length > 0) {
+                if (Array.isArray(result[0])) {
+                    // Es array de arrays (múltiples filas en formato key/value)
+                    stats = transformRow(result[0]);
+                } else if (result[0].key !== undefined) {
+                    // Es un array de {key, value} directamente
+                    stats = transformRow(result);
+                } else {
+                    // Ya es un objeto plano o array de objetos
+                    stats = result[0] || result;
+                }
+            }
+
             if (!stats) return;
 
             $('#stat-total').text(stats.TotalOrdenes || 0);
@@ -255,8 +360,10 @@
     function loadDetalleOrden(nroOrden, row, tr) {
         $$.loading(true);
 
-        bound.execPPL("GetDetalleOrden(" + nroOrden + ")").then(function(detalle) {
+        bound.execPPL("GetDetalleOrden(" + nroOrden + ")").then(function(result) {
             $$.loading(false);
+
+            const detalle = transformData(result);
 
             if (!detalle || detalle.length === 0) {
                 row.child('<div class="p-3">No hay detalle disponible para esta orden</div>').show();
@@ -299,7 +406,8 @@
         $('#modal-nro-orden').text(nroOrden);
         $('#modalDetalle').modal('show');
 
-        bound.execPPL("GetDetalleOrden(" + nroOrden + ")").then(function(detalle) {
+        bound.execPPL("GetDetalleOrden(" + nroOrden + ")").then(function(result) {
+            const detalle = transformData(result);
             const tbody = $('#dt-detalle tbody');
             tbody.empty();
 
@@ -330,8 +438,8 @@
     function refreshData() {
         $$.loading(true);
 
-        bound.execPPL("GetOrdenes()").then(function(ordenes) {
-            ordenesData = ordenes || [];
+        bound.execPPL("GetOrdenes()").then(function(result) {
+            ordenesData = transformData(result);
             $$.setData(ordenesData, colsConfig);
             loadStatistics();
             $$.loading(false);
