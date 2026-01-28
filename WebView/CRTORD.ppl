@@ -1,0 +1,121 @@
+** ============================================================================
+** PPL WebView: Creación de Órdenes
+** ============================================================================
+** Descripción: Formulario para crear órdenes con notificación en tiempo real
+** Autor: Sistema V7
+** Fecha: 2026-01-28
+** ============================================================================
+
+** ============================================================================
+** Función: Obtener lista de clientes activos
+** ============================================================================
+def GetClientes()
+    &sql := <<
+        SELECT
+            Codigo,
+            RazonSocial,
+            CUIT
+        FROM Clientes
+        WHERE Activo = 1
+        ORDER BY RazonSocial
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Función: Obtener lista de especies disponibles
+** ============================================================================
+def GetEspecies()
+    &sql := <<
+        SELECT
+            EspecieId,
+            Codigo,
+            Descripcion,
+            Tipo,
+            Moneda
+        FROM Especies
+        ORDER BY Codigo
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Función: Crear una nueva orden
+** Parámetro: ordenJson - JSON con datos de la orden
+** ============================================================================
+def CrearOrden(ordenJson)
+    ** Parsear el JSON de entrada
+    &orden := ParseJson(ordenJson)
+
+    ** Iniciar transacción
+    BeginTransaction()
+
+    Try
+        ** Obtener próximo número de orden
+        &sqlNextNro := "SELECT ISNULL(MAX(NroOrden), 0) + 1 FROM Ordenes"
+        &nroOrden := QueryScalar(&sqlNextNro)
+
+        ** Insertar cabecera de orden
+        &sqlInsert := <<
+            INSERT INTO Ordenes (NroOrden, TipoOrden, ClienteId, FechaOrden, Estado, Monto, Usuario, Observaciones)
+            VALUES (
+                " ~ Str(&nroOrden) ~ ",
+                '" ~ &orden.tipoOrden ~ "',
+                '" ~ &orden.clienteId ~ "',
+                GETDATE(),
+                'Pendiente',
+                " ~ Str(&orden.monto) ~ ",
+                '" ~ GetCurrentUser() ~ "',
+                '" ~ Replace(&orden.observaciones, "'", "''") ~ "'
+            )
+        >>
+        Execute(&sqlInsert)
+
+        ** Insertar detalle de items
+        &itemCount := Len(&orden.items)
+        For &i In Range(1, &itemCount)
+            &item := &orden.items[&i - 1]
+
+            &sqlDetalle := <<
+                INSERT INTO OrdenesDetalle (NroOrden, NroItem, EspecieId, Cantidad, Precio, Importe, Comision)
+                VALUES (
+                    " ~ Str(&nroOrden) ~ ",
+                    " ~ Str(&i) ~ ",
+                    " ~ Str(&item.especieId) ~ ",
+                    " ~ Str(&item.cantidad) ~ ",
+                    " ~ Str(&item.precio) ~ ",
+                    " ~ Str(&item.importe) ~ ",
+                    " ~ Str(&item.comision) ~ "
+                )
+            >>
+            Execute(&sqlDetalle)
+        Next
+
+        ** Confirmar transacción
+        CommitTransaction()
+
+        ** Log de auditoría
+        LogAudit("ORDEN_CREADA", "NroOrden: " ~ Str(&nroOrden) ~ ", Cliente: " ~ &orden.clienteId)
+
+        ** Retornar número de orden creada
+        return ${ "NroOrden": &nroOrden, "Success": true }
+
+    Catch &error
+        ** Revertir transacción en caso de error
+        RollbackTransaction()
+
+        LogError("Error creando orden: " ~ &error.message)
+        return ${ "Success": false, "Error": &error.message }
+    EndTry
+end
+
+** ============================================================================
+** Función auxiliar: Obtener usuario actual
+** ============================================================================
+def GetCurrentUser()
+    return SysVar("CURRENT_USER")
+end

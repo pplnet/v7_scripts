@@ -2,6 +2,7 @@
    JavaScript: Estado de Órdenes en Tiempo Real
    ============================================================================
    Lógica de interactividad, comunicación con backend PPL y actualizaciones
+   en tiempo real via WebSocket (SignalR)
    ============================================================================ */
 
 (function() {
@@ -10,7 +11,10 @@
     // Variables globales
     let dataTable = null;
     let ordenesData = [];
-    let updateInterval = null;
+    let hubConnection = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 10;
+    const RECONNECT_DELAY_MS = 3000;
 
     // ========================================================================
     // Transformador de datos del backend
@@ -172,8 +176,8 @@
         // Configurar event listeners
         setupEventListeners();
 
-        // Configurar actualización en tiempo real
-        setupRealtimeUpdates();
+        // Configurar actualización en tiempo real via WebSocket
+        setupWebSocketConnection();
 
         console.log('WebView inicializada correctamente');
     }
@@ -454,33 +458,240 @@
     }
 
     // ========================================================================
-    // Configurar actualización en tiempo real vía FPA Hub
+    // Configurar conexión WebSocket con SignalR
     // ========================================================================
-    function setupRealtimeUpdates() {
-        // Suscribirse a eventos de actualización
-        bound.subscribe('OrdenActualizada', function(data) {
-            console.log('Notificación recibida:', data);
+    function setupWebSocketConnection() {
+        // Obtener la URL base del API desde la configuración o usar default
+        const apiBaseUrl = window.API_BASE_URL || 'http://localhost:56614';
+        const hubUrl = apiBaseUrl + '/hubs/ppl';
 
-            // Actualizar datos automáticamente
-            refreshData();
+        console.log('Conectando a WebSocket:', hubUrl);
 
-            // Mostrar notificación
-            showNotification('Nueva orden actualizada en el sistema');
+        // Crear conexión SignalR
+        hubConnection = new signalR.HubConnectionBuilder()
+            .withUrl(hubUrl, {
+                // Usar WebSockets como transporte preferido para mejor rendimiento
+                transport: signalR.HttpTransportType.WebSockets,
+                // Habilitar credentials para Windows Auth
+                withCredentials: true
+            })
+            .withAutomaticReconnect({
+                nextRetryDelayInMilliseconds: function(retryContext) {
+                    // Estrategia de reconexión exponencial con límite
+                    if (retryContext.previousRetryCount < MAX_RECONNECT_ATTEMPTS) {
+                        const delay = Math.min(
+                            RECONNECT_DELAY_MS * Math.pow(2, retryContext.previousRetryCount),
+                            30000 // Máximo 30 segundos
+                        );
+                        console.log('Reintentando conexión en ' + delay + 'ms...');
+                        return delay;
+                    }
+                    // Dejar de reintentar después de MAX_RECONNECT_ATTEMPTS
+                    return null;
+                }
+            })
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        // Configurar handlers de eventos
+        setupHubEventHandlers();
+
+        // Iniciar conexión
+        startConnection();
+    }
+
+    // ========================================================================
+    // Configurar handlers de eventos del Hub
+    // ========================================================================
+    function setupHubEventHandlers() {
+        // Handler para recibir mensajes
+        hubConnection.on('ReceiveMessage', function(messageCode, payload) {
+            console.log('Mensaje recibido:', messageCode, payload);
+
+            // Solo procesar mensajes ESTORD
+            if (messageCode === 'ESTORD') {
+                handleESTORDMessage(payload);
+            }
         });
 
-        // También actualizar cada 30 segundos como backup
-        updateInterval = setInterval(function() {
-            console.log('Auto-refresh cada 30s');
+        // Handler de reconexión
+        hubConnection.onreconnecting(function(error) {
+            console.warn('Conexión perdida, reconectando...', error);
+            updateConnectionStatus('reconnecting');
+            showNotification('Reconectando al servidor...', 'warning');
+        });
+
+        // Handler de reconexión exitosa
+        hubConnection.onreconnected(function(connectionId) {
+            console.log('Reconectado al servidor con ID:', connectionId);
+            reconnectAttempts = 0;
+            updateConnectionStatus('connected');
+            showNotification('Conexión restablecida', 'success');
+
+            // Refrescar datos después de reconectar
             refreshData();
-        }, 30000);
+        });
+
+        // Handler de desconexión
+        hubConnection.onclose(function(error) {
+            console.error('Conexión cerrada:', error);
+            updateConnectionStatus('disconnected');
+
+            // Intentar reconectar manualmente si no se pudo automáticamente
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                reconnectAttempts++;
+                setTimeout(startConnection, RECONNECT_DELAY_MS * reconnectAttempts);
+            } else {
+                showError('No se pudo conectar al servidor. Por favor, recargue la página.');
+            }
+        });
+    }
+
+    // ========================================================================
+    // Iniciar conexión WebSocket
+    // ========================================================================
+    function startConnection() {
+        hubConnection.start()
+            .then(function() {
+                console.log('Conexión WebSocket establecida');
+                reconnectAttempts = 0;
+                updateConnectionStatus('connected');
+
+                // Suscribirse al grupo ESTORD
+                return hubConnection.invoke('Subscribe', 'ESTORD');
+            })
+            .then(function() {
+                console.log('Suscrito al grupo ESTORD');
+                showNotification('Conectado en tiempo real', 'success');
+            })
+            .catch(function(error) {
+                console.error('Error conectando al WebSocket:', error);
+                updateConnectionStatus('error');
+
+                // Reintentar conexión
+                if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    reconnectAttempts++;
+                    const delay = RECONNECT_DELAY_MS * reconnectAttempts;
+                    console.log('Reintentando en ' + delay + 'ms...');
+                    setTimeout(startConnection, delay);
+                }
+            });
+    }
+
+    // ========================================================================
+    // Manejar mensajes ESTORD
+    // ========================================================================
+    function handleESTORDMessage(payload) {
+        console.log('Procesando mensaje ESTORD:', payload);
+
+        const action = payload.action || 'updated';
+        const orderData = payload.data;
+
+        switch (action) {
+            case 'created':
+                showNotification('Nueva orden creada: #' + (orderData?.NroOrden || ''), 'info');
+                refreshData();
+                break;
+
+            case 'updated':
+                showNotification('Orden actualizada: #' + (orderData?.NroOrden || ''), 'info');
+                if (orderData && orderData.NroOrden) {
+                    // Actualizar solo la fila específica si es posible
+                    updateSingleRow(orderData);
+                } else {
+                    refreshData();
+                }
+                break;
+
+            case 'deleted':
+                showNotification('Orden eliminada: #' + (orderData?.NroOrden || ''), 'warning');
+                refreshData();
+                break;
+
+            default:
+                // Acción desconocida, refrescar todo
+                refreshData();
+        }
+
+        // Siempre actualizar estadísticas
+        loadStatistics();
+    }
+
+    // ========================================================================
+    // Actualizar una fila específica
+    // ========================================================================
+    function updateSingleRow(orderData) {
+        if (!dataTable || !orderData || !orderData.NroOrden) {
+            refreshData();
+            return;
+        }
+
+        // Buscar la fila existente
+        let rowFound = false;
+        dataTable.rows().every(function() {
+            const data = this.data();
+            if (data && data.NroOrden === orderData.NroOrden) {
+                // Actualizar los datos de la fila
+                this.data(orderData).draw(false);
+                rowFound = true;
+                return false; // Salir del loop
+            }
+        });
+
+        // Si no se encontró la fila, es una orden nueva - refrescar todo
+        if (!rowFound) {
+            refreshData();
+        }
+    }
+
+    // ========================================================================
+    // Actualizar indicador de estado de conexión
+    // ========================================================================
+    function updateConnectionStatus(status) {
+        let statusHtml = '';
+        let statusClass = '';
+
+        switch (status) {
+            case 'connected':
+                statusHtml = '<i class="fas fa-circle text-success"></i> Conectado';
+                statusClass = 'text-success';
+                break;
+            case 'reconnecting':
+                statusHtml = '<i class="fas fa-circle text-warning"></i> Reconectando...';
+                statusClass = 'text-warning';
+                break;
+            case 'disconnected':
+            case 'error':
+                statusHtml = '<i class="fas fa-circle text-danger"></i> Desconectado';
+                statusClass = 'text-danger';
+                break;
+            default:
+                statusHtml = '<i class="fas fa-circle text-muted"></i> Conectando...';
+                statusClass = 'text-muted';
+        }
+
+        // Actualizar indicador si existe
+        const statusIndicator = $('#ws-status');
+        if (statusIndicator.length) {
+            statusIndicator.html(statusHtml).removeClass().addClass(statusClass);
+        }
     }
 
     // ========================================================================
     // Utilidades
     // ========================================================================
-    function showNotification(message) {
+    function showNotification(message, type) {
+        type = type || 'info';
+        const alertClass = {
+            'info': 'alert-info',
+            'success': 'alert-success',
+            'warning': 'alert-warning',
+            'error': 'alert-danger',
+            'danger': 'alert-danger'
+        }[type] || 'alert-info';
+
         // Crear toast o notificación simple
-        const notification = $('<div class="alert alert-info alert-dismissible fade show position-fixed" role="alert" style="top: 20px; right: 20px; z-index: 9999;">')
+        const notification = $('<div class="alert ' + alertClass + ' alert-dismissible fade show position-fixed" role="alert" style="top: 20px; right: 20px; z-index: 9999;">')
             .html(message + '<button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>');
 
         $('body').append(notification);
@@ -491,22 +702,15 @@
     }
 
     function showError(message) {
-        const notification = $('<div class="alert alert-danger alert-dismissible fade show position-fixed" role="alert" style="top: 20px; right: 20px; z-index: 9999;">')
-            .html('<strong>Error:</strong> ' + message + '<button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>');
-
-        $('body').append(notification);
-
-        setTimeout(function() {
-            notification.alert('close');
-        }, 5000);
+        showNotification('<strong>Error:</strong> ' + message, 'danger');
     }
 
     // ========================================================================
     // Cleanup al cerrar
     // ========================================================================
     window.addEventListener('beforeunload', function() {
-        if (updateInterval) {
-            clearInterval(updateInterval);
+        if (hubConnection) {
+            hubConnection.stop();
         }
     });
 
