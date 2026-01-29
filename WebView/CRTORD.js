@@ -1,7 +1,8 @@
 /* ============================================================================
-   JavaScript: Creación de Órdenes
+   JavaScript: Creacion de Ordenes
    ============================================================================
-   Lógica para crear órdenes y notificar via WebSocket (SignalR)
+   Logica para crear ordenes y notificar via WebSocket (SignalR)
+   Endpoint de notificaciones: https://localhost:44300/notifications
    ============================================================================ */
 
 (function() {
@@ -11,41 +12,53 @@
     let hubConnection = null;
     let especies = [];
     let clientes = [];
+    let tiposOrden = [];
     let itemCount = 0;
     let reconnectAttempts = 0;
     const MAX_RECONNECT_ATTEMPTS = 10;
     const RECONNECT_DELAY_MS = 3000;
-    const COMISION_PORCENTAJE = 0.01; // 1% de comisión
+    const COMISION_PORCENTAJE = 0.01; // 1% de comision
+
+    // URL base del API - sin /api/ al inicio
+    const API_BASE_URL = window.API_BASE_URL || 'https://localhost:44300';
+    const NOTIFICATIONS_URL = API_BASE_URL + '/notifications';
+    const HUB_URL = API_BASE_URL + '/hubs/ppl';
 
     // ========================================================================
-    // Inicialización
+    // Inicializacion
     // ========================================================================
     function init() {
-        console.log('Inicializando WebView de Creación de Órdenes...');
-
-        // Cargar datos iniciales
-        loadClientes();
-        loadEspecies();
+        console.log('Inicializando WebView de Creacion de Ordenes...');
+        console.log('API Base URL:', API_BASE_URL);
+        console.log('Notifications URL:', NOTIFICATIONS_URL);
+        console.log('Hub URL:', HUB_URL);
 
         // Configurar event listeners
         setupEventListeners();
 
-        // Agregar primer item vacío
-        addItem();
+        // Cargar datos iniciales (especies primero, luego agregar item)
+        loadClientes();
+        loadTiposOrden();
+        loadEspecies().then(function() {
+            // Agregar primer item vacio despues de cargar especies
+            addItem();
+        });
 
-        // Configurar conexión WebSocket
+        // Configurar conexion WebSocket
         setupWebSocketConnection();
 
         console.log('WebView inicializada correctamente');
     }
 
     // ========================================================================
-    // Cargar clientes
+    // Cargar clientes - usa tabla CLIENTES real
     // ========================================================================
     function loadClientes() {
         bound.execPPL("GetClientes()").then(function(result) {
             clientes = transformData(result);
             const select = $('#clienteId');
+            select.empty();
+            select.append('<option value="">Seleccione cliente...</option>');
 
             clientes.forEach(function(cliente) {
                 select.append(
@@ -61,10 +74,10 @@
     }
 
     // ========================================================================
-    // Cargar especies
+    // Cargar especies - usa tabla ESPECIES real
     // ========================================================================
     function loadEspecies() {
-        bound.execPPL("GetEspecies()").then(function(result) {
+        return bound.execPPL("GetEspecies()").then(function(result) {
             especies = transformData(result);
 
             // Mostrar especies populares en el panel lateral
@@ -72,23 +85,58 @@
             lista.empty();
 
             especies.slice(0, 5).forEach(function(especie) {
+                const nombre = especie.Nombre || especie.Codigo;
                 const item = $('<li class="list-group-item d-flex justify-content-between align-items-center">' +
                     '<span>' + especie.Codigo + '</span>' +
-                    '<small class="text-muted">' + especie.Descripcion.substring(0, 20) + '...</small>' +
+                    '<small class="text-muted">' + nombre.substring(0, 15) + '</small>' +
                     '</li>');
 
                 item.on('click', function() {
-                    // Al hacer clic, agregar un item con esta especie
                     const lastItem = $('.item-row').last();
                     if (lastItem.length) {
-                        lastItem.find('.especie-select').val(especie.EspecieId);
+                        lastItem.find('.especie-select').val(especie.Codigo);
+                        // Auto-llenar precio si tenemos VTeorico
+                        if (especie.VTeorico) {
+                            lastItem.find('.precio-input').val(especie.VTeorico);
+                            calcularTotales();
+                        }
                     }
                 });
 
                 lista.append(item);
             });
+
+            console.log('Especies cargadas:', especies.length);
         }).catch(function(error) {
             console.error('Error cargando especies:', error);
+        });
+    }
+
+    // ========================================================================
+    // Cargar tipos de orden - usa tabla TIPOSORDEN real
+    // ========================================================================
+    function loadTiposOrden() {
+        bound.execPPL("GetTiposOrdenDisponibles()").then(function(result) {
+            tiposOrden = transformData(result);
+            const select = $('#tipoOrden');
+            select.empty();
+            select.append('<option value="">Seleccione tipo...</option>');
+
+            tiposOrden.forEach(function(tipo) {
+                select.append(
+                    '<option value="' + tipo.Codigo + '">' +
+                    tipo.Nombre +
+                    '</option>'
+                );
+            });
+        }).catch(function(error) {
+            console.error('Error cargando tipos de orden:', error);
+            // Fallback a tipos fijos si falla
+            const select = $('#tipoOrden');
+            select.empty();
+            select.append('<option value="">Seleccione tipo...</option>');
+            select.append('<option value="COMPRA">Orden de Compra</option>');
+            select.append('<option value="VENTA">Orden de Venta</option>');
         });
     }
 
@@ -96,25 +144,19 @@
     // Configurar event listeners
     // ========================================================================
     function setupEventListeners() {
-        // Agregar item
         $('#btn-add-item').on('click', addItem);
-
-        // Limpiar formulario
         $('#btn-limpiar').on('click', limpiarFormulario);
 
-        // Crear orden
         $('#form-orden').on('submit', function(e) {
             e.preventDefault();
             crearOrden();
         });
 
-        // Crear otra orden desde modal
         $('#btn-nueva-orden').on('click', function() {
             $('#modalConfirm').modal('hide');
             limpiarFormulario();
         });
 
-        // Contador de caracteres en observaciones
         $('#observaciones').on('input', function() {
             $('#obs-count').text($(this).val().length);
         });
@@ -158,23 +200,33 @@
 
         $('#items-container').append(itemHtml);
 
-        // Llenar el select de especies
+        // Llenar el select de especies con codigo real
         const newSelect = $(`[data-item="${itemCount}"] .especie-select`);
         especies.forEach(function(especie) {
+            const nombre = especie.Nombre || especie.Codigo;
             newSelect.append(
-                '<option value="' + especie.EspecieId + '">' +
-                especie.Codigo + ' - ' + especie.Descripcion +
+                '<option value="' + especie.Codigo + '" data-precio="' + (especie.VTeorico || 0) + '">' +
+                especie.Codigo + ' - ' + nombre +
                 '</option>'
             );
         });
 
-        // Quitar clase de animación después de completarla
+        // Auto-llenar precio al seleccionar especie
+        newSelect.on('change', function() {
+            const selectedOption = $(this).find(':selected');
+            const precio = selectedOption.data('precio');
+            if (precio && precio > 0) {
+                $(this).closest('.item-row').find('.precio-input').val(precio);
+                calcularTotales();
+            }
+        });
+
         setTimeout(function() {
             $(`[data-item="${itemCount}"]`).removeClass('new');
         }, 300);
     }
 
-    // Función global para eliminar item
+    // Funcion global para eliminar item
     window.removeItem = function(itemNum) {
         const items = $('.item-row');
         if (items.length > 1) {
@@ -222,10 +274,9 @@
     }
 
     // ========================================================================
-    // Crear orden
+    // Crear orden - usa parametros separados
     // ========================================================================
     function crearOrden() {
-        // Validar formulario
         if (!validarFormulario()) {
             return;
         }
@@ -233,58 +284,88 @@
         $$.loading(true);
         $('#btn-crear').prop('disabled', true);
 
-        // Recopilar datos de la orden
-        const ordenData = {
-            tipoOrden: $('#tipoOrden').val(),
-            clienteId: $('#clienteId').val(),
-            observaciones: $('#observaciones').val(),
-            items: []
-        };
+        // Recopilar datos del formulario
+        const tipoOrden = $('#tipoOrden').val();
+        const clienteId = $('#clienteId').val();
+        const observaciones = $('#observaciones').val() || '';
 
-        // Recopilar items
-        $('.item-row').each(function() {
-            const especieId = $(this).find('.especie-select').val();
-            const cantidad = parseFloat($(this).find('.cantidad-input').val());
-            const precio = parseFloat($(this).find('.precio-input').val());
+        // Obtener primer item (por ahora solo soportamos un item)
+        const firstItem = $('.item-row').first();
+        const especie = firstItem.find('.especie-select').val();
+        const cantidad = parseFloat(firstItem.find('.cantidad-input').val());
+        const precio = parseFloat(firstItem.find('.precio-input').val());
 
-            if (especieId && cantidad && precio) {
-                ordenData.items.push({
-                    especieId: parseInt(especieId),
-                    cantidad: cantidad,
-                    precio: precio,
-                    importe: cantidad * precio,
-                    comision: cantidad * precio * COMISION_PORCENTAJE
-                });
-            }
-        });
+        // Calcular monto total para notificacion
+        const importe = cantidad * precio;
+        const monto = importe + (importe * COMISION_PORCENTAJE);
 
-        // Calcular monto total
-        ordenData.monto = ordenData.items.reduce(function(sum, item) {
-            return sum + item.importe + item.comision;
-        }, 0);
+        console.log('Creando orden:', { tipoOrden, clienteId, especie, cantidad, precio, observaciones });
 
-        console.log('Creando orden:', ordenData);
+        // Escapar strings para PPL
+        function escapeString(str) {
+            return str.replace(/"/g, '""').replace(/'/g, "''");
+        }
 
-        // Llamar a la función PPL para crear la orden
-        bound.execPPL("CrearOrden(" + JSON.stringify(ordenData) + ")").then(function(result) {
+        // Llamar a la funcion PPL con parametros separados
+        const pplCall = 'CrearOrden("' + escapeString(tipoOrden) + '", "' +
+                        escapeString(clienteId) + '", "' +
+                        escapeString(especie) + '", ' +
+                        cantidad + ', ' +
+                        precio + ', "' +
+                        escapeString(observaciones) + '")';
+
+        console.log('PPL Call:', pplCall);
+
+        bound.execPPL(pplCall).then(function(result) {
             $$.loading(false);
             $('#btn-crear').prop('disabled', false);
 
-            const nroOrden = result.NroOrden || result.nroOrden || result;
+            console.log('Resultado crudo:', result);
+            console.log('Resultado JSON:', JSON.stringify(result, null, 2));
 
-            console.log('Orden creada:', nroOrden);
+            // Extraer NrOrden del resultado (viene como array de {key, value})
+            var nrOrden = '';
+            if (Array.isArray(result)) {
+                // Buscar el item con key 'nrorden' o 'NrOrden'
+                var nrOrdenItem = result.find(function(item) {
+                    return item.key && item.key.toLowerCase() === 'nrorden';
+                });
+                console.log('nrOrdenItem encontrado:', nrOrdenItem);
+                if (nrOrdenItem) {
+                    // El value puede ser: string, {val: string}, o anidado
+                    var val = nrOrdenItem.value;
+                    if (typeof val === 'string') {
+                        nrOrden = val;
+                    } else if (val && typeof val === 'object') {
+                        // Puede ser {val: 'ORD00001'} o {value: 'ORD00001'}
+                        nrOrden = val.val || val.value || val.Val || val.Value || JSON.stringify(val);
+                    }
+                }
+            } else if (result && typeof result === 'object') {
+                nrOrden = result.NrOrden || result.nrOrden || result.nrorden || result.val || '';
+            } else if (typeof result === 'string') {
+                nrOrden = result;
+            }
 
-            // Emitir mensaje ESTORD via WebSocket
-            emitirNotificacionOrden('created', {
-                NroOrden: nroOrden,
-                TipoOrden: ordenData.tipoOrden,
-                ClienteId: ordenData.clienteId,
-                Monto: ordenData.monto,
-                Estado: 'Pendiente'
-            });
+            console.log('Orden creada:', nrOrden);
 
-            // Mostrar modal de confirmación
-            $('#orden-creada-nro').text(nroOrden);
+            // Emitir notificacion via WebSocket y API REST
+            const notificationData = {
+                NrOrden: nrOrden,
+                TipoOrden: tipoOrden,
+                Cliente: clienteId,
+                Monto: monto,
+                Estado: 'PEN',
+                Especie: especie
+            };
+
+            emitirNotificacionOrden('created', notificationData);
+
+            // Tambien enviar via API REST como backup
+            sendNotificationViaREST('ESTORD', 'created', notificationData);
+
+            // Mostrar modal de confirmacion
+            $('#orden-creada-nro').text(nrOrden);
             $('#modalConfirm').modal('show');
 
         }).catch(function(error) {
@@ -301,7 +382,6 @@
     function validarFormulario() {
         let isValid = true;
 
-        // Validar tipo de orden
         if (!$('#tipoOrden').val()) {
             $('#tipoOrden').addClass('is-invalid');
             isValid = false;
@@ -309,7 +389,6 @@
             $('#tipoOrden').removeClass('is-invalid');
         }
 
-        // Validar cliente
         if (!$('#clienteId').val()) {
             $('#clienteId').addClass('is-invalid');
             isValid = false;
@@ -317,7 +396,6 @@
             $('#clienteId').removeClass('is-invalid');
         }
 
-        // Validar que haya al menos un item completo
         let hasValidItem = false;
         $('.item-row').each(function() {
             const especie = $(this).find('.especie-select').val();
@@ -338,16 +416,13 @@
     }
 
     // ========================================================================
-    // Configurar conexión WebSocket con SignalR
+    // Configurar conexion WebSocket con SignalR
     // ========================================================================
     function setupWebSocketConnection() {
-        const apiBaseUrl = window.API_BASE_URL || 'http://localhost:56614';
-        const hubUrl = apiBaseUrl + '/hubs/ppl';
-
-        console.log('Conectando a WebSocket:', hubUrl);
+        console.log('Conectando a WebSocket:', HUB_URL);
 
         hubConnection = new signalR.HubConnectionBuilder()
-            .withUrl(hubUrl, {
+            .withUrl(HUB_URL, {
                 transport: signalR.HttpTransportType.WebSockets,
                 withCredentials: true
             })
@@ -379,11 +454,11 @@
             console.log('Reconectado:', connectionId);
             reconnectAttempts = 0;
             updateConnectionStatus('connected');
-            showNotification('Conexión restablecida', 'success');
+            showNotification('Conexion restablecida', 'success');
         });
 
         hubConnection.onclose(function(error) {
-            console.error('Conexión cerrada:', error);
+            console.error('Conexion cerrada:', error);
             updateConnectionStatus('disconnected');
 
             if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -394,16 +469,15 @@
     }
 
     // ========================================================================
-    // Iniciar conexión
+    // Iniciar conexion
     // ========================================================================
     function startConnection() {
         hubConnection.start()
             .then(function() {
-                console.log('Conexión WebSocket establecida');
+                console.log('Conexion WebSocket establecida');
                 reconnectAttempts = 0;
                 updateConnectionStatus('connected');
 
-                // Suscribirse al grupo ESTORD
                 return hubConnection.invoke('Subscribe', 'ESTORD');
             })
             .then(function() {
@@ -421,11 +495,11 @@
     }
 
     // ========================================================================
-    // Emitir notificación de orden via WebSocket
+    // Emitir notificacion de orden via WebSocket
     // ========================================================================
     function emitirNotificacionOrden(action, orderData) {
         if (!hubConnection || hubConnection.state !== signalR.HubConnectionState.Connected) {
-            console.warn('WebSocket no conectado, no se puede emitir notificación');
+            console.warn('WebSocket no conectado, usando API REST');
             return;
         }
 
@@ -435,20 +509,51 @@
             data: orderData
         };
 
-        console.log('Emitiendo notificación ESTORD:', payload);
+        console.log('Emitiendo notificacion ESTORD via WebSocket:', payload);
 
-        // Usar BroadcastToAll para notificar a todos (incluido el creador)
         hubConnection.invoke('BroadcastToAll', 'ESTORD', payload)
             .then(function() {
-                console.log('Notificación ESTORD emitida correctamente');
+                console.log('Notificacion ESTORD emitida correctamente via WebSocket');
             })
             .catch(function(error) {
-                console.error('Error emitiendo notificación:', error);
+                console.error('Error emitiendo notificacion via WebSocket:', error);
             });
     }
 
     // ========================================================================
-    // Actualizar estado de conexión
+    // Enviar notificacion via API REST (sin /api/)
+    // ========================================================================
+    function sendNotificationViaREST(group, action, data) {
+        const url = NOTIFICATIONS_URL + '/send';
+
+        console.log('Enviando notificacion via REST:', url);
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+                group: group,
+                messageCode: group,
+                action: action,
+                data: data
+            })
+        })
+        .then(function(response) {
+            if (!response.ok) {
+                throw new Error('Error enviando notificacion: ' + response.status);
+            }
+            console.log('Notificacion enviada via API REST correctamente');
+        })
+        .catch(function(error) {
+            console.error('Error enviando notificacion via REST:', error);
+        });
+    }
+
+    // ========================================================================
+    // Actualizar estado de conexion
     // ========================================================================
     function updateConnectionStatus(status) {
         let html = '';
@@ -489,6 +594,15 @@
                         const key = item.key.charAt(0).toUpperCase() + item.key.slice(1);
                         obj[key] = typeof item.value === 'string' ? item.value.trim() : item.value;
                     }
+                });
+                return obj;
+            }
+            // Si ya es objeto plano, hacer trim de strings
+            if (row && typeof row === 'object') {
+                const obj = {};
+                Object.keys(row).forEach(function(key) {
+                    const newKey = key.charAt(0).toUpperCase() + key.slice(1);
+                    obj[newKey] = typeof row[key] === 'string' ? row[key].trim() : row[key];
                 });
                 return obj;
             }

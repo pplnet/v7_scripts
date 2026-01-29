@@ -1,10 +1,10 @@
 ** ============================================================================
-** PPL WebView: Estado de Órdenes en Tiempo Real
+** PPL WebView: Estado de Ordenes en Tiempo Real
 ** ============================================================================
-** Descripción: Muestra un reporte en tiempo real de órdenes con filtros
-**              dinámicos y actualización automática vía FPA Hub
+** Descripcion: Muestra un reporte en tiempo real de ordenes con filtros
+**              dinamicos y actualizacion automatica via WebSocket
 ** Autor: Sistema V7
-** Fecha: 2026-01-23
+** Fecha: 2026-01-28
 ** ============================================================================
 
 ** Variables globales
@@ -13,22 +13,22 @@
 &estadosOrden := $[]
 
 ** ============================================================================
-** Función: Obtener órdenes desde la base de datos
+** Funcion: Obtener ordenes desde la base de datos
+** Usa columnas reales de la tabla ORDENES
 ** ============================================================================
 def GetOrdenes()
     &sql := <<
         SELECT
-            o.TipoOrden,
-            o.NroOrden,
+            RTRIM(o.TipoOrden) as TipoOrden,
+            RTRIM(o.NrOrden) as NrOrden,
             CONVERT(VARCHAR(10), o.FechaOrden, 103) as FechaOrden,
-            c.RazonSocial as Cliente,
-            o.Estado,
-            o.Monto,
-            o.Usuario
-        FROM Ordenes o
-        INNER JOIN Clientes c ON o.ClienteId = c.Codigo
+            RTRIM(o.Cliente) as Cliente,
+            RTRIM(o.Estado) as Estado,
+            ISNULL(o.CantidadTotalOrden, 0) * ISNULL(o.PrecioLimite, 0) as Monto,
+            RTRIM(o.Operador) as Operador
+        FROM ORDENES o
         WHERE o.FechaOrden >= DATEADD(DAY, -30, GETDATE())
-        ORDER BY o.FechaOrden DESC, o.NroOrden DESC
+        ORDER BY o.FechaOrden DESC, o.NrOrden DESC
     >>
 
     &resultado := QueryTable(&sql)
@@ -36,12 +36,13 @@ def GetOrdenes()
 end
 
 ** ============================================================================
-** Función: Obtener tipos de orden únicos
+** Funcion: Obtener tipos de orden unicos
 ** ============================================================================
 def GetTiposOrden()
     &sql := <<
-        SELECT DISTINCT TipoOrden
-        FROM Ordenes
+        SELECT DISTINCT RTRIM(TipoOrden) as TipoOrden
+        FROM ORDENES
+        WHERE TipoOrden IS NOT NULL
         ORDER BY TipoOrden
     >>
 
@@ -50,12 +51,13 @@ def GetTiposOrden()
 end
 
 ** ============================================================================
-** Función: Obtener estados únicos
+** Funcion: Obtener estados unicos
 ** ============================================================================
 def GetEstados()
     &sql := <<
-        SELECT DISTINCT Estado
-        FROM Ordenes
+        SELECT DISTINCT RTRIM(Estado) as Estado
+        FROM ORDENES
+        WHERE Estado IS NOT NULL
         ORDER BY Estado
     >>
 
@@ -64,32 +66,36 @@ def GetEstados()
 end
 
 ** ============================================================================
-** Función: Obtener detalle de una orden específica
+** Funcion: Obtener detalle de una orden especifica
 ** ============================================================================
-def GetDetalleOrden(nroOrden)
-    &sql := "SELECT d.NroItem, e.Descripcion as Especie, d.Cantidad, d.Precio, d.Importe, d.Comision "
-    &sql := &sql ~ "FROM OrdenesDetalle d "
-    &sql := &sql ~ "INNER JOIN Especies e ON d.EspecieId = e.EspecieId "
-    &sql := &sql ~ "WHERE d.NroOrden = " ~ Str(nroOrden) ~ " "
-    &sql := &sql ~ "ORDER BY d.NroItem"
+def GetDetalleOrden(nrOrden)
+    &sql := "SELECT "
+    &sql := &sql ~ "1 as NroItem, "
+    &sql := &sql ~ "RTRIM(o.Especie) as Especie, "
+    &sql := &sql ~ "ISNULL(o.CantidadTotalOrden, 0) as Cantidad, "
+    &sql := &sql ~ "ISNULL(o.PrecioLimite, 0) as Precio, "
+    &sql := &sql ~ "ISNULL(o.CantidadTotalOrden, 0) * ISNULL(o.PrecioLimite, 0) as Importe, "
+    &sql := &sql ~ "ISNULL(o.Aranceles, 0) + ISNULL(o.DerechoBolsa, 0) + ISNULL(o.DerechoMercado, 0) as Comision "
+    &sql := &sql ~ "FROM ORDENES o "
+    &sql := &sql ~ "WHERE o.NrOrden = '" ~ nrOrden ~ "'"
 
     &resultado := QueryTable(&sql)
     return &resultado
 end
 
 ** ============================================================================
-** Función: Obtener estadísticas resumidas
+** Funcion: Obtener estadisticas resumidas
 ** ============================================================================
 def GetEstadisticas()
     &sql := <<
         SELECT
             COUNT(*) as TotalOrdenes,
-            SUM(CASE WHEN Estado = 'Pendiente' THEN 1 ELSE 0 END) as Pendientes,
-            SUM(CASE WHEN Estado = 'Ejecutada' THEN 1 ELSE 0 END) as Ejecutadas,
-            SUM(CASE WHEN Estado = 'Cancelada' THEN 1 ELSE 0 END) as Canceladas,
-            SUM(Monto) as MontoTotal,
-            AVG(Monto) as MontoPromedio
-        FROM Ordenes
+            SUM(CASE WHEN RTRIM(Estado) = 'PEN' THEN 1 ELSE 0 END) as Pendientes,
+            SUM(CASE WHEN RTRIM(Estado) = 'COM' THEN 1 ELSE 0 END) as Ejecutadas,
+            SUM(CASE WHEN RTRIM(Estado) = 'CAN' THEN 1 ELSE 0 END) as Canceladas,
+            ISNULL(SUM(ISNULL(CantidadTotalOrden, 0) * ISNULL(PrecioLimite, 0)), 0) as MontoTotal,
+            ISNULL(AVG(ISNULL(CantidadTotalOrden, 0) * ISNULL(PrecioLimite, 0)), 0) as MontoPromedio
+        FROM ORDENES
         WHERE FechaOrden >= DATEADD(DAY, -30, GETDATE())
     >>
 

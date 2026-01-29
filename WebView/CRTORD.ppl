@@ -1,22 +1,23 @@
 ** ============================================================================
-** PPL WebView: Creación de Órdenes
+** PPL WebView: Creacion de Ordenes
 ** ============================================================================
-** Descripción: Formulario para crear órdenes con notificación en tiempo real
+** Descripcion: Formulario para crear ordenes con notificacion en tiempo real
 ** Autor: Sistema V7
 ** Fecha: 2026-01-28
 ** ============================================================================
 
 ** ============================================================================
-** Función: Obtener lista de clientes activos
+** Funcion: Obtener lista de clientes activos
+** Usa la tabla CLIENTES real
 ** ============================================================================
 def GetClientes()
     &sql := <<
         SELECT
-            Codigo,
-            RazonSocial,
-            CUIT
-        FROM Clientes
-        WHERE Activo = 1
+            RTRIM(Codigo) as Codigo,
+            RTRIM(RazonSocial) as RazonSocial,
+            RTRIM(CUIT) as CUIT
+        FROM CLIENTES
+        WHERE RTRIM(Status) = 'ACT'
         ORDER BY RazonSocial
     >>
 
@@ -25,17 +26,19 @@ def GetClientes()
 end
 
 ** ============================================================================
-** Función: Obtener lista de especies disponibles
+** Funcion: Obtener lista de especies disponibles
+** Usa la tabla ESPECIES real
 ** ============================================================================
 def GetEspecies()
     &sql := <<
         SELECT
-            EspecieId,
-            Codigo,
-            Descripcion,
-            Tipo,
-            Moneda
-        FROM Especies
+            RTRIM(Codigo) as Codigo,
+            RTRIM(Nombre) as Nombre,
+            RTRIM(Tipo) as Tipo,
+            RTRIM(MonedaEmision) as MonedaEmision,
+            ISNULL(VTeorico, 0) as VTeorico
+        FROM ESPECIES
+        WHERE RTRIM(Habilitada) = 'SI'
         ORDER BY Codigo
     >>
 
@@ -44,42 +47,79 @@ def GetEspecies()
 end
 
 ** ============================================================================
-** Función: Crear una nueva orden
-** Parámetro: ordenJson - JSON con datos de la orden
+** Funcion: Obtener tipos de orden disponibles
+** Usa la tabla TIPOSORDEN real
 ** ============================================================================
-def CrearOrden(ordenJson)
-    ** Parsear el JSON de entrada
-    &orden := ParseJson(ordenJson)
+def GetTiposOrdenDisponibles()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(Nombre) as Nombre
+        FROM TIPOSORDEN
+        ORDER BY Nombre
+    >>
 
-    ** Iniciar transacción
-    BeginTransaction()
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
 
-        ** Obtener próximo número de orden
-        &sqlNextNro := "SELECT ISNULL(MAX(NroOrden), 0) + 1 FROM Ordenes"
-        &nroOrden := QueryScalar(&sqlNextNro)
+** ============================================================================
+** Funcion: Crear una nueva orden
+** Parametros separados para evitar problemas con JSON
+** ============================================================================
+def CrearOrden(tipoOrden, clienteId, especie, cantidad, precio, observaciones)
+    ** Obtener proximo numero de orden (formato ORD00001)
+    &sqlNextNro := <<
+        SELECT 'ORD' + RIGHT('00000' + CAST(ISNULL(MAX(CAST(REPLACE(NrOrden, 'ORD', '') AS INT)), 0) + 1 AS VARCHAR(5)), 5) FROM ORDENES
+    >>
+    &nrOrden := Query(&sqlNextNro)
 
-        ** Insertar cabecera de orden
-        &sqlInsert := "INSERT INTO Ordenes (NroOrden, TipoOrden, ClienteId, FechaOrden, Estado, Monto, Usuario, Observaciones) "
-        &sqlInsert := &sqlInsert ~ "VALUES (" ~ Str(&nroOrden) ~ ", '" ~ &orden.tipoOrden ~ "', '" ~ &orden.clienteId ~ "', GETDATE(), 'Pendiente', " ~ Str(&orden.monto) ~ ", '" ~ GetCurrentUser() ~ "', '" ~ Replace(&orden.observaciones, "'", "''") ~ "')"
-        
-Execute(&sqlInsert)
+    ** Calcular direccion (1 = Compra, -1 = Venta)
+    If EqStr(tipoOrden, "VENTA")
+        &direccion := -1
+    Else
+        &direccion := 1
+    EndIf
 
-        ** Insertar detalle de items
-        &itemCount := Len(&orden.items)
-        For &i In Range(1, &itemCount)
-            &item := &orden.items[&i - 1]
+    ** Insertar orden en tabla ORDENES (usando LEFT para truncar campos)
+    &sqlInsert := "INSERT INTO ORDENES ("
+    &sqlInsert := &sqlInsert ~ "NrOrden, TipoOrden, FechaOrden, Cliente, Especie, "
+    &sqlInsert := &sqlInsert ~ "CantidadTotalOrden, PrecioLimite, Estado, Operador, "
+    &sqlInsert := &sqlInsert ~ "Direccion, Observaciones, FechaCarga, Mercado"
+    &sqlInsert := &sqlInsert ~ ") VALUES ("
+    &sqlInsert := &sqlInsert ~ "'" ~ &nrOrden ~ "', "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ tipoOrden ~ "', 6), "
+    &sqlInsert := &sqlInsert ~ "GETDATE(), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ clienteId ~ "', 10), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ especie ~ "', 6), "
+    &sqlInsert := &sqlInsert ~ Str(cantidad) ~ ", "
+    &sqlInsert := &sqlInsert ~ Str(precio) ~ ", "
+    &sqlInsert := &sqlInsert ~ "'PEN', "
+    &sqlInsert := &sqlInsert ~ "LEFT('WEBVIEW', 30), "
+    &sqlInsert := &sqlInsert ~ Str(&direccion) ~ ", "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ observaciones ~ "', 255), "
+    &sqlInsert := &sqlInsert ~ "GETDATE(), "
+    &sqlInsert := &sqlInsert ~ "'BYMA'"
+    &sqlInsert := &sqlInsert ~ ")"
 
-            &sqlDetalle := "INSERT INTO OrdenesDetalle (NroOrden, NroItem, EspecieId, Cantidad, Precio, Importe, Comision) "
-            &sqlDetalle := &sqlDetalle ~ "VALUES (" ~ Str(&nroOrden) ~ ", " ~ Str(&i) ~ ", " ~ Str(&item.especieId) ~ ", " ~ Str(&item.cantidad) ~ ", " ~ Str(&item.precio) ~ ", " ~ Str(&item.importe) ~ ", " ~ Str(&item.comision) ~ ")"
-            Execute(&sqlDetalle)
-        Next
+    Execute(&sqlInsert)
 
-        ** Confirmar transacción
-        CommitTransaction()
+    ** Retornar numero de orden creada
+    return ${ NrOrden = &nrOrden, Success = true }
+end
 
-        ** Log de auditoría
-        LogAudit("ORDEN_CREADA", "NroOrden: " ~ Str(&nroOrden) ~ ", Cliente: " ~ &orden.clienteId)
+** ============================================================================
+** Funcion: Obtener vehiculos disponibles
+** ============================================================================
+def GetVehiculos()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(Descripcion) as Descripcion
+        FROM VEHICULOS
+        ORDER BY Codigo
+    >>
 
-        ** Retornar número de orden creada
-        return ${ NroOrden = &nroOrden, Success = true }
+    &resultado := QueryTable(&sql)
+    return &resultado
 end
