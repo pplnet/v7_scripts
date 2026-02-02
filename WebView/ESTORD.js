@@ -260,13 +260,23 @@
             const tipos = transformData(result);
             const filterTipo = $('#filter-0');
             filterTipo.empty();
-            filterTipo.append('<a class="dropdown-item" href="#" data-value="">Todos</a>');
+
+            // Item "Todos" con event listener
+            const todosItem = $('<a class="dropdown-item" href="javascript:void(0)" data-value="">Todos</a>');
+            todosItem.on('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dataTable.column(1).search('').draw();
+                $('#dropdownTipo').text('Todos los tipos');
+            });
+            filterTipo.append(todosItem);
 
             tipos.forEach(function(tipo) {
                 const tipoOrden = tipo.TipoOrden;
-                const item = $('<a class="dropdown-item" href="#" data-value="' + tipoOrden + '">' + tipoOrden + '</a>');
+                const item = $('<a class="dropdown-item" href="javascript:void(0)" data-value="' + tipoOrden + '">' + tipoOrden + '</a>');
                 item.on('click', function(e) {
                     e.preventDefault();
+                    e.stopPropagation();
                     const value = $(this).data('value');
                     dataTable.column(1).search(value).draw();
                     $('#dropdownTipo').text(value || 'Todos los tipos');
@@ -280,13 +290,23 @@
             const estados = transformData(result);
             const filterEstado = $('#filter-4');
             filterEstado.empty();
-            filterEstado.append('<a class="dropdown-item" href="#" data-value="">Todos</a>');
+
+            // Item "Todos" con event listener
+            const todosEstadoItem = $('<a class="dropdown-item" href="javascript:void(0)" data-value="">Todos</a>');
+            todosEstadoItem.on('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dataTable.column(5).search('').draw();
+                $('#dropdownEstado').text('Todos los estados');
+            });
+            filterEstado.append(todosEstadoItem);
 
             estados.forEach(function(estado) {
                 const estadoVal = estado.Estado;
-                const item = $('<a class="dropdown-item" href="#" data-value="' + estadoVal + '">' + estadoVal + '</a>');
+                const item = $('<a class="dropdown-item" href="javascript:void(0)" data-value="' + estadoVal + '">' + estadoVal + '</a>');
                 item.on('click', function(e) {
                     e.preventDefault();
+                    e.stopPropagation();
                     const value = $(this).data('value');
                     dataTable.column(5).search(value).draw();
                     $('#dropdownEstado').text(value || 'Todos los estados');
@@ -713,9 +733,29 @@
     });
 
     // ========================================================================
+    // Prevenir navegación no deseada dentro del iframe
+    // ========================================================================
+    function preventUnwantedNavigation() {
+        // Interceptar clicks en links que podrían causar navegación
+        $(document).on('click', 'a[href="#"], a[href=""], a:not([href])', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        // Prevenir que el iframe navegue a la página principal
+        window.addEventListener('beforeunload', function(e) {
+            // Solo permitir si es un cierre legítimo de la ventana
+            if (hubConnection) {
+                hubConnection.stop();
+            }
+        });
+    }
+
+    // ========================================================================
     // Iniciar cuando el DOM este listo
     // ========================================================================
     $(document).ready(function() {
+        preventUnwantedNavigation();
         init();
     });
 
