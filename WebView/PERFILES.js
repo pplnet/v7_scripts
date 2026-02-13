@@ -685,6 +685,19 @@ var PERFILES = {};
     }
 
     // ========================================================================
+    // Mapeo de tabla de instancia a prefijo de sigla
+    // ========================================================================
+    function getInstanciaPrefix(tabla) {
+        var t = tabla.toUpperCase().trim();
+        if (t === 'OPERACIONES') return 'IN';
+        if (t === 'TRANSACCIONES' || t === 'TRANSACCIONES2') return 'TR';
+        if (t === 'ORDENES') return 'OR';
+        if (t === 'OPMINORISTAS') return 'OM';
+        if (t === 'MINUTASBOLSA') return 'MB';
+        return null;
+    }
+
+    // ========================================================================
     // Parsear script existente para marcar checkboxes
     // ========================================================================
     function parseScript(scriptStr) {
@@ -745,7 +758,19 @@ var PERFILES = {};
             if (siglaSet['VA' + r.codigo.toUpperCase()]) r.hab = true;
         });
 
-        // Instancias: TODO - parseo pendiente
+        // Instancias: @{PREFIJO}{NrInstancia}{PERMISO}
+        // OPERACIONES=IN, TRANSACCIONES2=TR, ORDENES=OR, OPMINORISTAS=OM, MINUTASBOLSA=MB
+        // Permisos: A=alta, B=baja, E=modificacion, F=avanzar, R=retroceder
+        permData.instancias.forEach(function(inst) {
+            var prefix = getInstanciaPrefix(inst.tabla);
+            if (!prefix) return;
+            var nr = inst.nrInstancia;
+            if (siglaSet['@' + prefix + nr + 'A']) inst.alta = true;
+            if (siglaSet['@' + prefix + nr + 'B']) inst.baja = true;
+            if (siglaSet['@' + prefix + nr + 'E']) inst.modificacion = true;
+            if (siglaSet['@' + prefix + nr + 'F']) inst.avanzar = true;
+            if (siglaSet['@' + prefix + nr + 'R']) inst.retroceder = true;
+        });
     }
 
     // ========================================================================
@@ -803,7 +828,17 @@ var PERFILES = {};
             if (r.hab) siglas.push('VA' + r.codigo);
         });
 
-        // Instancias: TODO
+        // Instancias: @{PREFIJO}{NrInstancia}{PERMISO}
+        permData.instancias.forEach(function(inst) {
+            var prefix = getInstanciaPrefix(inst.tabla);
+            if (!prefix) return;
+            var nr = inst.nrInstancia;
+            if (inst.alta) siglas.push('@' + prefix + nr + 'A');
+            if (inst.baja) siglas.push('@' + prefix + nr + 'B');
+            if (inst.modificacion) siglas.push('@' + prefix + nr + 'E');
+            if (inst.avanzar) siglas.push('@' + prefix + nr + 'F');
+            if (inst.retroceder) siglas.push('@' + prefix + nr + 'R');
+        });
 
         return siglas.join(' ');
     }

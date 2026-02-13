@@ -2,6 +2,8 @@
 ** PPL WebView: ABM de Usuarios
 ** ============================================================================
 ** Descripcion: Alta, Baja y Modificacion de Usuarios del sistema.
+**              Incluye operaciones administrativas (Iter 7):
+**              Resetear Password, Desbloquear y Usuarios Activos.
 **              Accede a la tabla USUARIOS con JOIN a PERFILES2.
 ** Autor: Sistema V7
 ** Fecha: 2026-02-11
@@ -21,7 +23,10 @@ def GetUsuarios()
             RTRIM(u.Codigo) as Codigo,
             RTRIM(u.Nombre) as Nombre,
             RTRIM(ISNULL(u.Perfil, '')) as Perfil,
-            RTRIM(ISNULL(p.Nombre, '')) as PerfilDescripcion
+            RTRIM(ISNULL(p.Nombre, '')) as PerfilDescripcion,
+            ISNULL(u.Status, 0) as Status,
+            u.FAcceso,
+            ISNULL(u.CantIntentos, 0) as CantIntentos
         FROM USUARIOS u
         LEFT JOIN PERFILES2 p ON RTRIM(u.Perfil) = RTRIM(p.Codigo)
         ORDER BY u.Codigo
@@ -110,4 +115,84 @@ def DeleteUsuario(codigo)
     SQL.Add(&sql)
     SQL.Exec()
     return "OK"
+end
+
+** ============================================================================
+** OPERACIONES ADMINISTRATIVAS (Iteracion 7)
+** ============================================================================
+
+** ============================================================================
+** Funcion: Resetear password de un usuario
+** Replica ItemUtilitarios.ResetearPasswordUsuario (40)
+** El password default es el codigo del usuario en uppercase.
+** Cuando password == username, PasswordHasher.CreateHash devuelve UPPER(codigo).
+** Se limpia Historia2..20, se actualiza FPassword = hoy, CantIntentos = 0, Status = 0.
+** ============================================================================
+def ResetPassword(codigo)
+    ** Verificar que el usuario existe
+    &sqlCheck := "SELECT COUNT(1) FROM USUARIOS WHERE UPPER(RTRIM(Codigo)) = UPPER('" ~ codigo ~ "')"
+    &existe := QueryScalar(&sqlCheck)
+    If &existe = 0
+        return "ERROR:Usuario '" ~ codigo ~ "' no encontrado"
+    EndIf
+
+    ** El hash default cuando password == username es simplemente UPPER(codigo)
+    ** Usamos UPPER() en SQL para setear Historia1
+    &sql := "UPDATE USUARIOS SET "
+    &sql := &sql ~ "Historia1 = UPPER('" ~ codigo ~ "'), "
+    &sql := &sql ~ "Historia2 = NULL, Historia3 = NULL, Historia4 = NULL, "
+    &sql := &sql ~ "Historia5 = NULL, Historia6 = NULL, Historia7 = NULL, "
+    &sql := &sql ~ "Historia8 = NULL, Historia9 = NULL, Historia10 = NULL, "
+    &sql := &sql ~ "Historia11 = NULL, Historia12 = NULL, Historia13 = NULL, "
+    &sql := &sql ~ "Historia14 = NULL, Historia15 = NULL, Historia16 = NULL, "
+    &sql := &sql ~ "Historia17 = NULL, Historia18 = NULL, Historia19 = NULL, "
+    &sql := &sql ~ "Historia20 = NULL, "
+    &sql := &sql ~ "FPassword = GETDATE(), "
+    &sql := &sql ~ "CantIntentos = 0, "
+    &sql := &sql ~ "Status = 0 "
+    &sql := &sql ~ "WHERE UPPER(RTRIM(Codigo)) = UPPER('" ~ codigo ~ "')"
+
+    SQL.Add(&sql)
+    SQL.Exec()
+    return "OK:Password reseteado para usuario '" ~ codigo ~ "'"
+end
+
+** ============================================================================
+** Funcion: Desbloquear un usuario
+** Replica ItemUtilitarios.DesbloquearUsuario (41)
+** Pone CantIntentos = 0 y Status = 0.
+** ============================================================================
+def DesbloquearUsuario(codigo)
+    ** Verificar que el usuario existe
+    &sqlCheck := "SELECT COUNT(1) FROM USUARIOS WHERE UPPER(RTRIM(Codigo)) = UPPER('" ~ codigo ~ "')"
+    &existe := QueryScalar(&sqlCheck)
+    If &existe = 0
+        return "ERROR:Usuario '" ~ codigo ~ "' no encontrado"
+    EndIf
+
+    &sql := "UPDATE USUARIOS SET CantIntentos = 0, Status = 0 "
+    &sql := &sql ~ "WHERE UPPER(RTRIM(Codigo)) = UPPER('" ~ codigo ~ "')"
+
+    SQL.Add(&sql)
+    SQL.Exec()
+    return "OK:Usuario '" ~ codigo ~ "' desbloqueado"
+end
+
+** ============================================================================
+** Funcion: Obtener usuarios activos (logueados)
+** Lee la tabla USUARIOSACTIVOS con JOIN a USUARIOS para obtener el nombre.
+** ============================================================================
+def GetUsuariosActivos()
+    &sql := <<
+        SELECT
+            RTRIM(ua.Codigo) as Codigo,
+            RTRIM(ISNULL(u.Nombre, '')) as Nombre,
+            RTRIM(ISNULL(ua.IP, '')) as IP
+        FROM USUARIOSACTIVOS ua
+        LEFT JOIN USUARIOS u ON UPPER(RTRIM(ua.Codigo)) = UPPER(RTRIM(u.Codigo))
+        ORDER BY ua.Codigo
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
 end

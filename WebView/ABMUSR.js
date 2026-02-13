@@ -3,6 +3,8 @@
    ============================================================================
    Logica de interactividad y comunicacion con backend PPL para Alta, Baja
    y Modificacion de usuarios del sistema.
+   Incluye operaciones administrativas (Iter 7):
+   Resetear Password, Desbloquear Usuario y Usuarios Activos.
    ============================================================================ */
 
 (function() {
@@ -66,7 +68,10 @@
             'codigo': 'Codigo',
             'nombre': 'Nombre',
             'perfil': 'Perfil',
-            'perfildescripcion': 'PerfilDescripcion'
+            'perfildescripcion': 'PerfilDescripcion',
+            'status': 'Status',
+            'facceso': 'FAcceso',
+            'cantintentos': 'CantIntentos'
         };
 
         var lowerKey = key.toLowerCase();
@@ -99,6 +104,62 @@
             "render": function(data, type, row) {
                 if (type === 'display' && row.PerfilDescripcion) {
                     return data + ' - ' + row.PerfilDescripcion;
+                }
+                return data;
+            }
+        },
+        {
+            "data": "Status",
+            "title": "Estado",
+            "render": function(data, type, row) {
+                if (type === 'display') {
+                    var status = parseInt(data) || 0;
+                    var intentos = parseInt(row.CantIntentos) || 0;
+                    if (status === 1) {
+                        return '<span class="badge badge-danger">Bloqueado</span>';
+                    } else if (intentos > 0) {
+                        return '<span class="badge badge-warning">' + intentos + ' intento(s)</span>';
+                    }
+                    return '<span class="badge badge-success">Activo</span>';
+                }
+                return data;
+            },
+            "className": "text-center"
+        },
+        {
+            "data": "FAcceso",
+            "title": "Últ. Acceso",
+            "render": function(data, type) {
+                if (type === 'display') {
+                    if (!data) return '<span class="text-muted">-</span>';
+                    try {
+                        var d = new Date(data);
+                        if (isNaN(d.getTime())) return data;
+                        var dd = ('0' + d.getDate()).slice(-2);
+                        var mm = ('0' + (d.getMonth() + 1)).slice(-2);
+                        var yyyy = d.getFullYear();
+                        var hh = ('0' + d.getHours()).slice(-2);
+                        var mi = ('0' + d.getMinutes()).slice(-2);
+                        return dd + '/' + mm + '/' + yyyy + ' ' + hh + ':' + mi;
+                    } catch(e) {
+                        return data;
+                    }
+                }
+                return data;
+            },
+            "className": "text-center"
+        },
+        {
+            "data": "CantIntentos",
+            "title": "Intentos",
+            "className": "text-center",
+            "render": function(data, type) {
+                if (type === 'display') {
+                    var val = parseInt(data) || 0;
+                    if (val > 0) {
+                        return '<span class="text-danger font-weight-bold">' + val + '</span>';
+                    }
+                    return val;
                 }
                 return data;
             }
@@ -289,6 +350,49 @@
         $('#btn-confirm-delete').on('click', function() {
             deleteUsuario();
         });
+
+        // --- Admin: Resetear Password (Iter 7) ---
+        $('#btn-reset-password').on('click', function() {
+            if (!selectedData) {
+                showNotification('Seleccione un usuario para resetear su password', 'warning');
+                return;
+            }
+            $('#reset-codigo').text(selectedData.Codigo);
+            $('#modalResetPassword').modal('show');
+        });
+
+        $('#btn-confirm-reset').on('click', function() {
+            resetPassword();
+        });
+
+        // --- Admin: Desbloquear (Iter 7) ---
+        $('#btn-desbloquear').on('click', function() {
+            if (!selectedData) {
+                showNotification('Seleccione un usuario para desbloquear', 'warning');
+                return;
+            }
+            var status = parseInt(selectedData.Status) || 0;
+            var intentos = parseInt(selectedData.CantIntentos) || 0;
+            if (status === 0 && intentos === 0) {
+                showNotification('El usuario ' + selectedData.Codigo + ' ya está activo y sin intentos fallidos', 'info');
+                return;
+            }
+            $('#desbloquear-codigo').text(selectedData.Codigo);
+            $('#modalDesbloquear').modal('show');
+        });
+
+        $('#btn-confirm-desbloquear').on('click', function() {
+            desbloquearUsuario();
+        });
+
+        // --- Admin: Usuarios Activos (Iter 7) ---
+        $('#btn-usuarios-activos').on('click', function() {
+            showUsuariosActivos();
+        });
+
+        $('#btn-refresh-activos').on('click', function() {
+            loadUsuariosActivos();
+        });
     }
 
     // ========================================================================
@@ -474,6 +578,120 @@
         }
         selectedRow = null;
         selectedData = null;
+    }
+
+    // ========================================================================
+    // Admin: Resetear Password (Iter 7)
+    // ========================================================================
+    function resetPassword() {
+        if (!selectedData) return;
+
+        var codigo = selectedData.Codigo;
+        $('#modalResetPassword').modal('hide');
+        $$.loading(true);
+
+        bound.execPPL("ResetPassword('" + codigo + "')").then(function(result) {
+            $$.loading(false);
+            var res = parseAdminResult(result);
+            if (res.ok) {
+                showNotification('Password reseteado para ' + codigo, 'success');
+                loadUsuarios();
+            } else {
+                showError(res.message);
+            }
+        }).catch(function(error) {
+            $$.loading(false);
+            console.error('Error reseteando password:', error);
+            showError('Error al resetear el password: ' + error.message);
+        });
+    }
+
+    // ========================================================================
+    // Admin: Desbloquear Usuario (Iter 7)
+    // ========================================================================
+    function desbloquearUsuario() {
+        if (!selectedData) return;
+
+        var codigo = selectedData.Codigo;
+        $('#modalDesbloquear').modal('hide');
+        $$.loading(true);
+
+        bound.execPPL("DesbloquearUsuario('" + codigo + "')").then(function(result) {
+            $$.loading(false);
+            var res = parseAdminResult(result);
+            if (res.ok) {
+                showNotification('Usuario ' + codigo + ' desbloqueado correctamente', 'success');
+                loadUsuarios();
+            } else {
+                showError(res.message);
+            }
+        }).catch(function(error) {
+            $$.loading(false);
+            console.error('Error desbloqueando usuario:', error);
+            showError('Error al desbloquear el usuario: ' + error.message);
+        });
+    }
+
+    // ========================================================================
+    // Admin: Usuarios Activos (Iter 7)
+    // ========================================================================
+    function showUsuariosActivos() {
+        $('#modalActivos').modal('show');
+        loadUsuariosActivos();
+    }
+
+    function loadUsuariosActivos() {
+        $('#activos-loading').show();
+        $('#activos-empty').hide();
+        $('#dt-activos tbody').empty();
+
+        bound.execPPL("GetUsuariosActivos()").then(function(result) {
+            $('#activos-loading').hide();
+            var activos = transformData(result);
+            console.log('Usuarios activos cargados:', activos.length);
+
+            if (activos.length === 0) {
+                $('#activos-empty').show();
+                $('#activos-count').text('0 usuarios conectados');
+                return;
+            }
+
+            var tbody = $('#dt-activos tbody');
+            tbody.empty();
+
+            activos.forEach(function(usr) {
+                var tr = $('<tr></tr>');
+                tr.append($('<td></td>').text(usr.Codigo || ''));
+                tr.append($('<td></td>').text(usr.Nombre || ''));
+                tr.append($('<td></td>').text(usr.IP || ''));
+                tbody.append(tr);
+            });
+
+            $('#activos-count').text(activos.length + ' usuario(s) conectado(s)');
+        }).catch(function(error) {
+            $('#activos-loading').hide();
+            console.error('Error cargando usuarios activos:', error);
+            $('#activos-empty').show().html(
+                '<i class="fas fa-exclamation-triangle text-danger"></i> Error al cargar usuarios activos'
+            );
+        });
+    }
+
+    // ========================================================================
+    // Parsear resultado de funciones admin (formato "OK:msg" o "ERROR:msg")
+    // ========================================================================
+    function parseAdminResult(result) {
+        if (!result || typeof result !== 'string') {
+            return { ok: true, message: '' };
+        }
+        var str = result.trim();
+        if (str.indexOf('ERROR:') === 0) {
+            return { ok: false, message: str.substring(6) };
+        }
+        if (str.indexOf('OK:') === 0) {
+            return { ok: true, message: str.substring(3) };
+        }
+        return { ok: true, message: str };
     }
 
     // ========================================================================
