@@ -3,7 +3,7 @@
    ============================================================================
    Logica de interactividad y comunicacion con backend PPL para Alta, Baja
    y Modificacion de Perfiles de Usuario del sistema.
-   Incluye 12 tabs de permisos con datos hardcodeados y generacion de script.
+   Incluye 14 tabs de permisos con datos cargados desde la BD y generacion de script.
    ============================================================================ */
 
 // Namespace global para funciones llamadas desde onclick del HTML
@@ -36,87 +36,21 @@ var PERFILES = {};
         eventos: [],
         especiales: [],
         variables: [],
-        instancias: []
+        instancias: [],
+        webviews: [],
+        canales: []
     };
 
     // ========================================================================
-    // DATOS HARDCODEADOS DE PERMISOS
-    // (Copiados de perfilEditMockData.ts - se reemplazaran por queries reales)
+    // DATOS DE PERMISOS (cargados dinamicamente desde la BD)
     // ========================================================================
 
-    var BASE_ITEMS_MENU = [
-        { subMenu: "Ordenes", item: "Compliance Ordenes", codMenu: "669", ver: false },
-        { subMenu: "Ordenes", item: "Pendiente Adjudic", codMenu: "604", ver: false },
-        { subMenu: "Ordenes", item: "Post Siopel CPC1", codMenu: "571", ver: false },
-        { subMenu: "Ordenes", item: "Anulacion Oferta", codMenu: "531", ver: false },
-        { subMenu: "Ordenes", item: "Siopel Incompleto", codMenu: "504", ver: false },
-        { subMenu: "Ordenes", item: "Rechazada", codMenu: "570", ver: false },
-        { subMenu: "Ordenes", item: "Auxiliar BYMA", codMenu: "550", ver: false },
-        { subMenu: "Ordenes", item: "Sup.NO Bloq.Saldos", codMenu: "609", ver: false },
-        { subMenu: "Ordenes", item: "Ejecutada", codMenu: "509", ver: false },
-        { subMenu: "Ordenes", item: "Rta.Inf. al MAE", codMenu: "662", ver: false },
-        { subMenu: "Ordenes", item: "Carga Orden", codMenu: "501", ver: false },
-        { subMenu: "Ordenes", item: "Terminal", codMenu: "670", ver: false },
-        { subMenu: "Ordenes", item: "Carga Manifestacion", codMenu: "601", ver: false },
-        { subMenu: "Ordenes", item: "Auxiliar MAE", codMenu: "650", ver: false },
-        { subMenu: "Ordenes", item: "Sup. Ctrl Precio", codMenu: "540", ver: false },
-        { subMenu: "Transacciones", item: "Transportes de Liq.", codMenu: "915", ver: false },
-        { subMenu: "Transacciones", item: "Transacciones", codMenu: "900", ver: false },
-        { subMenu: "Transacciones", item: "Ajuste de Resultados", codMenu: "909", ver: false },
-        { subMenu: "Transacciones", item: "Anulacion", codMenu: "930", ver: false },
-        { subMenu: "Transacciones", item: "Fallas", codMenu: "908", ver: false },
-        { subMenu: "Operaciones", item: "Carga Operacion", codMenu: "201", ver: false },
-        { subMenu: "Operaciones", item: "Eventuales", codMenu: "210", ver: false },
-        { subMenu: "Operaciones", item: "Minoristas", codMenu: "220", ver: false },
-        { subMenu: "Operaciones", item: "Anulacion", codMenu: "230", ver: false },
-        { subMenu: "Archivo", item: "Clientes", codMenu: "101", ver: false },
-        { subMenu: "Archivo", item: "Especies", codMenu: "102", ver: false },
-        { subMenu: "Archivo", item: "Agentes", codMenu: "103", ver: false },
-        { subMenu: "Archivo", item: "Monedas", codMenu: "104", ver: false },
-        { subMenu: "Utilitarios", item: "Backup", codMenu: "801", ver: false },
-        { subMenu: "Utilitarios", item: "Restore", codMenu: "802", ver: false },
-        { subMenu: "Utilitarios", item: "Parametros", codMenu: "810", ver: false }
-    ];
+    // Cargados dinamicamente via bound.execPPL() en loadBaseData()
+    var BASE_ITEMS_MENU = [];
+    var BASE_TABLAS_ABM = [];
+    var BASE_TIPOS_OPERACION = [];
 
-    var BASE_TABLAS_ABM = [
-        { nombre: "Automaticos", codAbm: "__AUTO", prefijo: "AU", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Cuentas Contables", codAbm: "__CCON", prefijo: "CN", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Filtros", codAbm: "__FILT", prefijo: "FI", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Modelos de Asiento", codAbm: "__MASI", prefijo: "MA", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Numeradores", codAbm: "__NUME", prefijo: "NU", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Perfiles de Usuarios", codAbm: "__PERF", prefijo: "P2", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Relacion Cuenta", codAbm: "__RCUE", prefijo: "RC", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Supervision", codAbm: "__SUP", prefijo: "_S", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Tipos de Asiento", codAbm: "__TASI", prefijo: "TS", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Usuarios", codAbm: "__USU", prefijo: "US", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Variables", codAbm: "__VARI", prefijo: "VA", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Configuracion Valores Externos Integr.", codAbm: "ABMC", prefijo: "AD", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Ejemplo de abm", codAbm: "ABME", prefijo: "ABB", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Actividades BCRA", codAbm: "ACBCRA", prefijo: "AC", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Acuerdos Cuenta", codAbm: "ACCTA", prefijo: "A3", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Acuerdos Globales", codAbm: "ACGLO", prefijo: "A1", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Acuerdos Tipo Cliente", codAbm: "ACTCL", prefijo: "A2", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Agenda Cupones", codAbm: "AGENDA", prefijo: "AP", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Agentes", codAbm: "AGENT", prefijo: "AG", alta: false, baja: false, modificacion: false, ver: false, doble: false },
-        { nombre: "Aranceles Cliente", codAbm: "ARAN", prefijo: "AL", alta: false, baja: false, modificacion: false, ver: false, doble: false }
-    ];
-
-    var BASE_TIPOS_OPERACION = [
-        { codigo: "CAMBIO", nombre: "Cambio", hab: false },
-        { codigo: "CAUCION", nombre: "Caucion", hab: false },
-        { codigo: "CHEQUE", nombre: "Cheque", hab: false },
-        { codigo: "CONTADO", nombre: "Contado", hab: false },
-        { codigo: "EXTER", nombre: "Exterior", hab: false },
-        { codigo: "FONDOS", nombre: "Fondos Comunes", hab: false },
-        { codigo: "FUTURO", nombre: "Futuro", hab: false },
-        { codigo: "LICITAC", nombre: "Licitacion", hab: false },
-        { codigo: "MINORI", nombre: "Minorista", hab: false },
-        { codigo: "OPCFUT", nombre: "Opcion sobre Futuro", hab: false },
-        { codigo: "OPCION", nombre: "Opcion", hab: false },
-        { codigo: "PLAZO", nombre: "Plazo Fijo", hab: false },
-        { codigo: "PRESTA", nombre: "Prestamo", hab: false }
-    ];
-
+    // HARDCODED: no existe tabla TIPOSTRANSACCION en la BD
     var BASE_TIPOS_TRANSACCION = [
         { codigo: "ACRED", nombre: "Acreditacion", hab: false },
         { codigo: "AJUSTE", nombre: "Ajuste", hab: false },
@@ -133,50 +67,11 @@ var PERFILES = {};
         { codigo: "TRANSP", nombre: "Transporte", hab: false }
     ];
 
-    var BASE_TIPOS_ORDEN = [
-        { codigo: "TMANIF", nombre: "Manifestacion", hab: false },
-        { codigo: "OTIV", nombre: "Orden Titulos Valores", hab: false },
-        { codigo: "PRUORD", nombre: "Prueba Orden", hab: false },
-        { codigo: "SIOPCAM", nombre: "Siopel Cambio", hab: false },
-        { codigo: "SIOPELD", nombre: "Siopel Dolares", hab: false },
-        { codigo: "SIOPELP", nombre: "Siopel Pesos", hab: false },
-        { codigo: "TVBYMA", nombre: "TV BYMA", hab: false }
-    ];
+    var BASE_TIPOS_ORDEN = [];
+    var BASE_INFORMES = [];
+    var BASE_EVENTOS = [];
 
-    var BASE_INFORMES = [
-        { codigo: "BOLETO", nombre: "Boleto", tipo: "Operaciones", hab: false },
-        { codigo: "CTACTE", nombre: "Cuenta Corriente", tipo: "Operaciones", hab: false },
-        { codigo: "ESTADO", nombre: "Estado de Cuenta", tipo: "Operaciones", hab: false },
-        { codigo: "LIQUI", nombre: "Liquidacion", tipo: "Operaciones", hab: false },
-        { codigo: "POSIC", nombre: "Posicion", tipo: "Operaciones", hab: false },
-        { codigo: "RENTER", nombre: "Renta Exterior", tipo: "Transacciones", hab: false },
-        { codigo: "RENTLOC", nombre: "Renta Local", tipo: "Transacciones", hab: false },
-        { codigo: "SALDOS", nombre: "Saldos", tipo: "Transacciones", hab: false },
-        { codigo: "TENENC", nombre: "Tenencia", tipo: "Transacciones", hab: false },
-        { codigo: "CUSTOD", nombre: "Custodia", tipo: "Utilitarios", hab: false },
-        { codigo: "DIARIO", nombre: "Diario Contable", tipo: "Utilitarios", hab: false },
-        { codigo: "MAYOR", nombre: "Mayor Contable", tipo: "Utilitarios", hab: false }
-    ];
-
-    var BASE_EVENTOS = [
-        { codigo: "1", nombre: "PRUEBA_EVENTO", tipo: "", hab: false },
-        { codigo: "2434", nombre: "esperar", tipo: "", hab: false },
-        { codigo: "ANMBKO", nombre: "Anulacion de Modificacion de Book en Op", tipo: "", hab: false },
-        { codigo: "E_API", nombre: "Traer nombre especies", tipo: "", hab: false },
-        { codigo: "E_ASCI", nombre: "Evento importar exportar TXT Pedro", tipo: "", hab: false },
-        { codigo: "E_UNDO", nombre: "Recuperar Valor 1 Especies", tipo: "", hab: false },
-        { codigo: "EJAPI", nombre: "Modificacion de tablas", tipo: "", hab: false },
-        { codigo: "EJTXT", nombre: "Importar y exportar txt", tipo: "", hab: false },
-        { codigo: "INTLAV", nombre: "Interfaz de Lavado de Dinero", tipo: "", hab: false },
-        { codigo: "NUBNDF", nombre: "Numerador Boleto NDF", tipo: "", hab: false },
-        { codigo: "YCONF2", nombre: "YCONFI EjecutarEvento2", tipo: "", hab: false },
-        { codigo: "AVOPME", nombre: "Avanza operaciones Mercados", tipo: "Ordenes", hab: false },
-        { codigo: "CAMARA", nombre: "Cambio Arancel Acciones", tipo: "Ordenes", hab: false },
-        { codigo: "__EXPO", nombre: "Exportar Script PPL (DB)", tipo: "Auxiliares", hab: false },
-        { codigo: "000010", nombre: "VUECTA", tipo: "Auxiliares", hab: false },
-        { codigo: "42", nombre: "bajar datos a un txt", tipo: "Auxiliares", hab: false }
-    ];
-
+    // HARDCODED: permisos especiales fijos (no tienen tabla en BD)
     var BASE_ESPECIALES = [
         { codigo: "EX001", nombre: "Procesar movimientos automaticos", hab: false },
         { codigo: "EX003", nombre: "Abrir dia", hab: false },
@@ -196,37 +91,13 @@ var PERFILES = {};
         { codigo: "CARGAOPS", nombre: "Cargar operaciones con carga deshabilitada", hab: false }
     ];
 
-    var BASE_VARIABLES = [
-        { codigo: "ABIERTO", nombre: "ABIERTO", hab: false },
-        { codigo: "ACTCONFILA", nombre: "ACTCON Limite de filas", hab: false },
-        { codigo: "ACTCOTFILA", nombre: "ACTCOT Limite de filas", hab: false },
-        { codigo: "ACTPOS", nombre: "Actualizacion Posicion", hab: false },
-        { codigo: "AGESIOP", nombre: "AGESIOP", hab: false },
-        { codigo: "ALTACLI", nombre: "PATH CLI. DE BANTOTAL", hab: false },
-        { codigo: "ALTCLIPROC", nombre: "PATH CLIBT PROCESADOS", hab: false },
-        { codigo: "AMBBYMA", nombre: "Ambito de Negoc. BYMA", hab: false },
-        { codigo: "AMBIENTE", nombre: "Ambiente DES o PROD", hab: false },
-        { codigo: "AMBMAE", nombre: "Ambito de Negociacion MAE", hab: false },
-        { codigo: "AMBOCT", nombre: "Ambito de Negociacion OCT", hab: false },
-        { codigo: "AMBROFEX", nombre: "Ambito de Negociacion RFX", hab: false },
-        { codigo: "ARCCOTESP", nombre: "Nombre de Planilla Esp", hab: false },
-        { codigo: "ARCHBASCON", nombre: "Arch. Asientos Cont.", hab: false },
-        { codigo: "ASINUM", nombre: "Numerador de Asientos", hab: false }
-    ];
+    var BASE_VARIABLES = [];
+    var BASE_INSTANCIAS = [];
+    var BASE_WEBVIEWS = [];
+    var BASE_CANALES = [];
 
-    var BASE_INSTANCIAS = [
-        { tabla: "Operaciones", nrInstancia: "1", nombre: "Carga", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false },
-        { tabla: "Operaciones", nrInstancia: "2", nombre: "Supervision", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false },
-        { tabla: "Operaciones", nrInstancia: "3", nombre: "Confirmacion", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false },
-        { tabla: "Operaciones", nrInstancia: "4", nombre: "Liquidacion", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false },
-        { tabla: "Transacciones", nrInstancia: "1", nombre: "Carga", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false },
-        { tabla: "Transacciones", nrInstancia: "2", nombre: "Supervision", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false },
-        { tabla: "Transacciones", nrInstancia: "3", nombre: "Confirmacion", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false },
-        { tabla: "Ordenes", nrInstancia: "1", nombre: "Carga", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false },
-        { tabla: "Ordenes", nrInstancia: "2", nombre: "Supervision", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false },
-        { tabla: "Ordenes", nrInstancia: "3", nombre: "Ejecucion", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false },
-        { tabla: "Ordenes", nrInstancia: "4", nombre: "Confirmacion", alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false }
-    ];
+    // Flag para cargar datos base una sola vez por sesion
+    var baseDataLoaded = false;
 
     // ========================================================================
     // Transformador de datos del backend
@@ -270,7 +141,15 @@ var PERFILES = {};
         var keyMap = {
             'codigo': 'Codigo',
             'nombre': 'Nombre',
-            'script': 'Script'
+            'script': 'Script',
+            'menu': 'Menu',
+            'tipo': 'Tipo',
+            'acceso': 'Acceso',
+            'submenu': 'SubMenu',
+            'descripcion': 'Descripcion',
+            'tabla': 'Tabla',
+            'nrinstancia': 'NrInstancia',
+            'id': 'Id'
         };
         var lowerKey = key.toLowerCase();
         if (keyMap[lowerKey]) return keyMap[lowerKey];
@@ -282,6 +161,221 @@ var PERFILES = {};
     // ========================================================================
     function cloneArray(arr) {
         return JSON.parse(JSON.stringify(arr));
+    }
+
+    // ========================================================================
+    // Carga dinamica de datos base desde la BD
+    // ========================================================================
+
+    function loadBaseData() {
+        if (baseDataLoaded) {
+            return Promise.resolve();
+        }
+
+        return Promise.all([
+            loadMenuItems(),
+            loadTablasAbm(),
+            loadTiposOperacion(),
+            loadTiposOrden(),
+            loadInformes(),
+            loadEventos(),
+            loadVariables(),
+            loadInstancias(),
+            loadWebViews(),
+            loadCanales()
+        ]).then(function() {
+            baseDataLoaded = true;
+            console.log('Datos base cargados desde la BD');
+        }).catch(function(error) {
+            console.error('Error cargando datos base:', error);
+        });
+    }
+
+    function loadMenuItems() {
+        return bound.execPPL("GetItemsMenu()").then(function(result) {
+            var rows = transformData(result);
+            BASE_ITEMS_MENU = rows.map(function(r) {
+                return {
+                    subMenu: (r.SubMenu || r.Descripcion || '').trim() || 'General',
+                    item: (r.Nombre || '').trim(),
+                    codMenu: (r.Menu || '').trim(),
+                    ver: false
+                };
+            });
+            console.log('Items menu cargados:', BASE_ITEMS_MENU.length);
+        }).catch(function(e) {
+            console.warn('Error cargando items menu:', e);
+            BASE_ITEMS_MENU = [];
+        });
+    }
+
+    function loadTablasAbm() {
+        return bound.execPPL("GetTablasAbm()").then(function(result) {
+            var rows = transformData(result);
+            BASE_TABLAS_ABM = rows.map(function(r) {
+                return {
+                    nombre: (r.Nombre || '').trim(),
+                    codAbm: (r.Codigo || '').trim(),
+                    prefijo: (r.Acceso || '').trim(),
+                    alta: false, baja: false, modificacion: false, ver: false, doble: false
+                };
+            });
+
+            // Agregar entradas hardcodeadas que no estan en la tabla ABMS
+            var hardcoded = [
+                { nombre: "Operaciones", codAbm: "__OP", prefijo: "OP" },
+                { nombre: "Op. Minoristas", codAbm: "__OM", prefijo: "OM" },
+                { nombre: "Op. Eventuales", codAbm: "__OE", prefijo: "OE" },
+                { nombre: "Transacciones", codAbm: "__T3", prefijo: "T3" },
+                { nombre: "Ordenes", codAbm: "__OR", prefijo: "OR" },
+                { nombre: "Minutas Bolsa", codAbm: "__MI", prefijo: "MI" }
+            ];
+
+            hardcoded.forEach(function(hc) {
+                var exists = BASE_TABLAS_ABM.some(function(t) {
+                    return t.prefijo === hc.prefijo;
+                });
+                if (!exists) {
+                    BASE_TABLAS_ABM.push({
+                        nombre: hc.nombre, codAbm: hc.codAbm, prefijo: hc.prefijo,
+                        alta: false, baja: false, modificacion: false, ver: false, doble: false
+                    });
+                }
+            });
+
+            console.log('Tablas ABM cargadas:', BASE_TABLAS_ABM.length);
+        }).catch(function(e) {
+            console.warn('Error cargando tablas ABM:', e);
+            BASE_TABLAS_ABM = [];
+        });
+    }
+
+    function loadTiposOperacion() {
+        return bound.execPPL("GetTiposOperacion()").then(function(result) {
+            var rows = transformData(result);
+            BASE_TIPOS_OPERACION = rows.map(function(r) {
+                return { codigo: (r.Codigo || '').trim(), nombre: (r.Nombre || '').trim(), hab: false };
+            });
+            console.log('Tipos operacion cargados:', BASE_TIPOS_OPERACION.length);
+        }).catch(function(e) {
+            console.warn('Error cargando tipos operacion:', e);
+            BASE_TIPOS_OPERACION = [];
+        });
+    }
+
+    function loadTiposOrden() {
+        return bound.execPPL("GetTiposOrden()").then(function(result) {
+            var rows = transformData(result);
+            BASE_TIPOS_ORDEN = rows.map(function(r) {
+                return { codigo: (r.Codigo || '').trim(), nombre: (r.Nombre || '').trim(), hab: false };
+            });
+            console.log('Tipos orden cargados:', BASE_TIPOS_ORDEN.length);
+        }).catch(function(e) {
+            console.warn('Error cargando tipos orden:', e);
+            BASE_TIPOS_ORDEN = [];
+        });
+    }
+
+    function loadInformes() {
+        return bound.execPPL("GetInformes()").then(function(result) {
+            var rows = transformData(result);
+            BASE_INFORMES = rows.map(function(r) {
+                return {
+                    codigo: (r.Codigo || '').trim(),
+                    nombre: (r.Nombre || '').trim(),
+                    tipo: (r.Tipo || '').trim(),
+                    hab: false
+                };
+            });
+            console.log('Informes cargados:', BASE_INFORMES.length);
+        }).catch(function(e) {
+            console.warn('Error cargando informes:', e);
+            BASE_INFORMES = [];
+        });
+    }
+
+    function loadEventos() {
+        return bound.execPPL("GetEventos()").then(function(result) {
+            var rows = transformData(result);
+            BASE_EVENTOS = rows.map(function(r) {
+                return {
+                    codigo: (r.Codigo || '').trim(),
+                    nombre: (r.Nombre || '').trim(),
+                    tipo: (r.Tipo || '').trim(),
+                    hab: false
+                };
+            });
+            console.log('Eventos cargados:', BASE_EVENTOS.length);
+        }).catch(function(e) {
+            console.warn('Error cargando eventos:', e);
+            BASE_EVENTOS = [];
+        });
+    }
+
+    function loadVariables() {
+        return bound.execPPL("GetVariables()").then(function(result) {
+            var rows = transformData(result);
+            BASE_VARIABLES = rows.map(function(r) {
+                return { codigo: (r.Codigo || '').trim(), nombre: (r.Nombre || '').trim(), hab: false };
+            });
+            console.log('Variables cargadas:', BASE_VARIABLES.length);
+        }).catch(function(e) {
+            console.warn('Error cargando variables:', e);
+            BASE_VARIABLES = [];
+        });
+    }
+
+    function loadInstancias() {
+        return bound.execPPL("GetInstancias()").then(function(result) {
+            var rows = transformData(result);
+            BASE_INSTANCIAS = rows.map(function(r) {
+                return {
+                    tabla: (r.Tabla || '').trim(),
+                    nrInstancia: String(r.NrInstancia || r.Nrinstancia || ''),
+                    nombre: (r.Nombre || '').trim(),
+                    alta: false, baja: false, modificacion: false, avanzar: false, retroceder: false
+                };
+            });
+            console.log('Instancias cargadas:', BASE_INSTANCIAS.length);
+        }).catch(function(e) {
+            console.warn('Error cargando instancias:', e);
+            BASE_INSTANCIAS = [];
+        });
+    }
+
+    function loadWebViews() {
+        return bound.execPPL("GetWebViews()").then(function(result) {
+            var rows = transformData(result);
+            BASE_WEBVIEWS = rows.map(function(r) {
+                return {
+                    codigo: (r.Codigo || '').trim(),
+                    nombre: (r.Nombre || '').trim(),
+                    tipo: (r.Tipo || '').trim(),
+                    hab: false
+                };
+            });
+            console.log('WebViews cargados:', BASE_WEBVIEWS.length);
+        }).catch(function(e) {
+            console.warn('Error cargando webviews:', e);
+            BASE_WEBVIEWS = [];
+        });
+    }
+
+    function loadCanales() {
+        return bound.execPPL("GetCanales()").then(function(result) {
+            var rows = transformData(result);
+            BASE_CANALES = rows.map(function(r) {
+                return {
+                    id: String(r.Id || '').trim(),
+                    nombre: (r.Nombre || '').trim(),
+                    permiso: 'restringido'
+                };
+            });
+            console.log('Canales cargados:', BASE_CANALES.length);
+        }).catch(function(e) {
+            console.warn('Error cargando canales:', e);
+            BASE_CANALES = [];
+        });
     }
 
     // ========================================================================
@@ -531,7 +625,9 @@ var PERFILES = {};
             'search-eventos': '#tab-eventos',
             'search-especiales': '#tab-especiales',
             'search-variables': '#tab-variables',
-            'search-instancias': '#tab-instancias'
+            'search-instancias': '#tab-instancias',
+            'search-webviews': '#tab-webviews',
+            'search-canales': '#tab-canales'
         };
 
         Object.keys(searchMap).forEach(function(searchId) {
@@ -557,71 +653,78 @@ var PERFILES = {};
 
     function showForm(mode, data) {
         formMode = mode;
-        resetPermissions();
-        clearForm();
+        $$.loading(true);
 
-        // Titulo e icono segun modo
-        var titles = {
-            'alta': 'Perfiles - Alta',
-            'modificacion': 'Perfiles - Modificación',
-            'visualizacion': 'Perfiles - Visualización'
-        };
-        var icons = {
-            'alta': 'fas fa-plus-circle',
-            'modificacion': 'fas fa-pencil-alt',
-            'visualizacion': 'fas fa-eye'
-        };
+        // Cargar datos base desde la BD antes de mostrar el formulario
+        loadBaseData().then(function() {
+            resetPermissions();
+            clearForm();
 
-        $('#form-title').text(titles[mode] || 'Perfiles');
-        $('#form-icon').attr('class', icons[mode] || 'fas fa-id-badge');
+            // Titulo e icono segun modo
+            var titles = {
+                'alta': 'Perfiles - Alta',
+                'modificacion': 'Perfiles - Modificación',
+                'visualizacion': 'Perfiles - Visualización'
+            };
+            var icons = {
+                'alta': 'fas fa-plus-circle',
+                'modificacion': 'fas fa-pencil-alt',
+                'visualizacion': 'fas fa-eye'
+            };
 
-        // Encontrar indice actual para navegacion
-        if (data) {
-            currentPerfilIndex = perfilesData.findIndex(function(p) {
-                return p.Codigo === data.Codigo;
-            });
-        } else {
-            currentPerfilIndex = -1;
-        }
-        updateNavButtons();
+            $('#form-title').text(titles[mode] || 'Perfiles');
+            $('#form-icon').attr('class', icons[mode] || 'fas fa-id-badge');
 
-        // Configurar campos segun modo
-        if (mode === 'alta') {
-            $('#fld-codigo').prop('readonly', false).removeClass('fld-readonly-pk');
-        } else {
-            $('#fld-codigo').prop('readonly', true).addClass('fld-readonly-pk');
-        }
+            // Encontrar indice actual para navegacion
+            if (data) {
+                currentPerfilIndex = perfilesData.findIndex(function(p) {
+                    return p.Codigo === data.Codigo;
+                });
+            } else {
+                currentPerfilIndex = -1;
+            }
+            updateNavButtons();
 
-        if (mode === 'visualizacion') {
-            $('#fld-codigo').prop('readonly', true);
-            $('#fld-nombre').prop('readonly', true);
-            $('#btn-confirmar').hide();
-        } else {
-            $('#fld-nombre').prop('readonly', false);
-            $('#btn-confirmar').show();
-        }
+            // Configurar campos segun modo
+            if (mode === 'alta') {
+                $('#fld-codigo').prop('readonly', false).removeClass('fld-readonly-pk');
+            } else {
+                $('#fld-codigo').prop('readonly', true).addClass('fld-readonly-pk');
+            }
 
-        // Cargar datos si es modificacion o visualizacion
-        if (data && (mode === 'modificacion' || mode === 'visualizacion')) {
-            loadPerfilData(data.Codigo);
-        }
+            if (mode === 'visualizacion') {
+                $('#fld-codigo').prop('readonly', true);
+                $('#fld-nombre').prop('readonly', true);
+                $('#btn-confirmar').hide();
+            } else {
+                $('#fld-nombre').prop('readonly', false);
+                $('#btn-confirmar').show();
+            }
 
-        // Mostrar vista formulario
-        $('#view-grid').hide();
-        $('#view-form').show();
+            // Mostrar vista formulario
+            $('#view-grid').hide();
+            $('#view-form').show();
 
-        // Activar primer tab
-        $('#tab-general-link').tab('show');
+            // Activar primer tab
+            $('#tab-general-link').tab('show');
 
-        // Inicializar DataTables de tabs
-        initTabDataTables();
+            // Inicializar DataTables de tabs
+            initTabDataTables();
 
-        // Foco
-        if (mode === 'alta') {
-            $('#fld-codigo').focus();
-        } else if (mode === 'modificacion') {
-            $('#fld-nombre').focus();
-        }
+            // Cargar datos si es modificacion o visualizacion
+            if (data && (mode === 'modificacion' || mode === 'visualizacion')) {
+                loadPerfilData(data.Codigo);
+            } else {
+                $$.loading(false);
+            }
+
+            // Foco
+            if (mode === 'alta') {
+                $('#fld-codigo').focus();
+            } else if (mode === 'modificacion') {
+                $('#fld-nombre').focus();
+            }
+        });
     }
 
     // ========================================================================
@@ -682,6 +785,8 @@ var PERFILES = {};
         permData.especiales = cloneArray(BASE_ESPECIALES);
         permData.variables = cloneArray(BASE_VARIABLES);
         permData.instancias = cloneArray(BASE_INSTANCIAS);
+        permData.webviews = cloneArray(BASE_WEBVIEWS);
+        permData.canales = cloneArray(BASE_CANALES);
     }
 
     // ========================================================================
@@ -746,6 +851,24 @@ var PERFILES = {};
         });
 
         // Instancias: TODO - parseo pendiente
+
+        // Vistas Web: VW + codigo
+        permData.webviews.forEach(function(r) {
+            if (siglaSet['VW' + r.codigo.toUpperCase()]) r.hab = true;
+        });
+
+        // Canales: #{id}_OB = obligatorio, #{id}_OP = opcional, ninguno = restringido
+        permData.canales.forEach(function(c) {
+            var obKey = '#' + c.id + '_OB';
+            var opKey = '#' + c.id + '_OP';
+            if (siglaSet[obKey.toUpperCase()]) {
+                c.permiso = 'obligatorio';
+            } else if (siglaSet[opKey.toUpperCase()]) {
+                c.permiso = 'opcional';
+            } else {
+                c.permiso = 'restringido';
+            }
+        });
     }
 
     // ========================================================================
@@ -804,6 +927,21 @@ var PERFILES = {};
         });
 
         // Instancias: TODO
+
+        // Vistas Web: VW + codigo
+        permData.webviews.forEach(function(r) {
+            if (r.hab) siglas.push('VW' + r.codigo);
+        });
+
+        // Canales: solo emitir token si no es restringido
+        permData.canales.forEach(function(c) {
+            if (c.permiso === 'obligatorio') {
+                siglas.push('#' + c.id + '_OB');
+            } else if (c.permiso === 'opcional') {
+                siglas.push('#' + c.id + '_OP');
+            }
+            // restringido = no emitir token
+        });
 
         return siglas.join(' ');
     }
@@ -880,10 +1018,11 @@ var PERFILES = {};
             });
         });
 
-        // Tabs categorizadas (Informes, Eventos)
+        // Tabs categorizadas (Informes, Eventos, Vistas Web)
         var catTabs = [
             { key: '#tab-informes', selector: '#dt-informes', data: permData.informes, tabName: 'informes' },
-            { key: '#tab-eventos', selector: '#dt-eventos', data: permData.eventos, tabName: 'eventos' }
+            { key: '#tab-eventos', selector: '#dt-eventos', data: permData.eventos, tabName: 'eventos' },
+            { key: '#tab-webviews', selector: '#dt-webviews', data: permData.webviews, tabName: 'webviews' }
         ];
 
         catTabs.forEach(function(cfg) {
@@ -911,6 +1050,27 @@ var PERFILES = {};
                 { data: 'modificacion', title: 'Mod.', className: 'chk-cell', render: renderCheckbox('instancias', 'modificacion', isReadonly) },
                 { data: 'avanzar', title: 'Avan.', className: 'chk-cell', render: renderCheckbox('instancias', 'avanzar', isReadonly) },
                 { data: 'retroceder', title: 'Retr.', className: 'chk-cell', render: renderCheckbox('instancias', 'retroceder', isReadonly) }
+            ],
+            paging: false, searching: true, info: false, ordering: true, scrollY: '300px', scrollCollapse: true
+        });
+
+        // Canales de Mensajes (radio buttons: restringido/obligatorio/opcional)
+        tabDataTables['#tab-canales'] = $('#dt-canales').DataTable({
+            data: permData.canales,
+            columns: [
+                { data: 'id', title: 'Id' },
+                { data: 'nombre', title: 'Canal' },
+                {
+                    data: 'permiso', title: 'Permiso', className: 'text-center',
+                    render: function(data, type, row, meta) {
+                        if (type !== 'display') return data;
+                        var name = 'canal-' + meta.row;
+                        var dis = isReadonly ? ' disabled' : '';
+                        return '<label class="radio-inline mr-2"><input type="radio" name="' + name + '" value="restringido"' + (data === 'restringido' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> Rest.</label>' +
+                               '<label class="radio-inline mr-2"><input type="radio" name="' + name + '" value="obligatorio"' + (data === 'obligatorio' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> Oblig.</label>' +
+                               '<label class="radio-inline"><input type="radio" name="' + name + '" value="opcional"' + (data === 'opcional' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> Opc.</label>';
+                    }
+                }
             ],
             paging: false, searching: true, info: false, ordering: true, scrollY: '300px', scrollCollapse: true
         });
@@ -951,6 +1111,16 @@ var PERFILES = {};
 
             updateTabCounts();
         });
+
+        // Listener para radio buttons de canales
+        $('#tab-canales').on('change', 'input[type="radio"]', function() {
+            var rowIdx = $(this).data('row');
+            var value = $(this).val();
+            if (permData.canales[rowIdx]) {
+                permData.canales[rowIdx].permiso = value;
+            }
+            updateTabCounts();
+        });
     }
 
     // ========================================================================
@@ -967,7 +1137,9 @@ var PERFILES = {};
             'eventos': permData.eventos.filter(function(r) { return r.hab; }).length,
             'especiales': permData.especiales.filter(function(r) { return r.hab; }).length,
             'variables': permData.variables.filter(function(r) { return r.hab; }).length,
-            'instancias': permData.instancias.filter(function(i) { return i.alta || i.baja || i.modificacion || i.avanzar || i.retroceder; }).length
+            'instancias': permData.instancias.filter(function(i) { return i.alta || i.baja || i.modificacion || i.avanzar || i.retroceder; }).length,
+            'webviews': permData.webviews.filter(function(r) { return r.hab; }).length,
+            'canales': permData.canales.filter(function(c) { return c.permiso !== 'restringido'; }).length
         };
 
         Object.keys(counts).forEach(function(key) {
@@ -995,7 +1167,9 @@ var PERFILES = {};
             '#tab-eventos': permData.eventos,
             '#tab-especiales': permData.especiales,
             '#tab-variables': permData.variables,
-            '#tab-instancias': permData.instancias
+            '#tab-instancias': permData.instancias,
+            '#tab-webviews': permData.webviews,
+            '#tab-canales': permData.canales
         };
 
         Object.keys(tabMap).forEach(function(key) {
@@ -1016,8 +1190,9 @@ var PERFILES = {};
         });
         tabDataTables = {};
 
-        // Limpiar listeners de checkboxes
+        // Limpiar listeners de checkboxes y radio buttons
         $('.tab-pane').off('change', 'input[type="checkbox"][data-tab]');
+        $('#tab-canales').off('change', 'input[type="radio"]');
     }
 
     // ========================================================================
@@ -1047,6 +1222,8 @@ var PERFILES = {};
             data.forEach(function(i) {
                 i.alta = value; i.baja = value; i.modificacion = value; i.avanzar = value; i.retroceder = value;
             });
+        } else if (tabName === 'canales') {
+            data.forEach(function(c) { c.permiso = value ? 'opcional' : 'restringido'; });
         } else {
             data.forEach(function(r) { r.hab = value; });
         }
@@ -1056,7 +1233,7 @@ var PERFILES = {};
             'menu': '#tab-menu', 'tablas': '#tab-tablas', 'tiposop': '#tab-tiposop',
             'tipostr': '#tab-tipostr', 'tiposord': '#tab-tiposord', 'informes': '#tab-informes',
             'eventos': '#tab-eventos', 'especiales': '#tab-especiales', 'variables': '#tab-variables',
-            'instancias': '#tab-instancias'
+            'instancias': '#tab-instancias', 'webviews': '#tab-webviews', 'canales': '#tab-canales'
         };
 
         var dtKey = tabKeyMap[tabName];
