@@ -50,22 +50,8 @@ var PERFILES = {};
     var BASE_TABLAS_ABM = [];
     var BASE_TIPOS_OPERACION = [];
 
-    // HARDCODED: no existe tabla TIPOSTRANSACCION en la BD
-    var BASE_TIPOS_TRANSACCION = [
-        { codigo: "ACRED", nombre: "Acreditacion", hab: false },
-        { codigo: "AJUSTE", nombre: "Ajuste", hab: false },
-        { codigo: "CANJES", nombre: "Canjes", hab: false },
-        { codigo: "COBRO", nombre: "Cobro", hab: false },
-        { codigo: "DEBITO", nombre: "Debito", hab: false },
-        { codigo: "DIVID", nombre: "Dividendo", hab: false },
-        { codigo: "GASTOS", nombre: "Gastos", hab: false },
-        { codigo: "INTERE", nombre: "Intereses", hab: false },
-        { codigo: "MOVI", nombre: "Movimiento", hab: false },
-        { codigo: "PAGO", nombre: "Pago", hab: false },
-        { codigo: "RENTA", nombre: "Renta", hab: false },
-        { codigo: "RETIRO", nombre: "Retiro", hab: false },
-        { codigo: "TRANSP", nombre: "Transporte", hab: false }
-    ];
+    // Cargado dinamicamente desde ppl_deploy (scripts de tipo Transaccion)
+    var BASE_TIPOS_TRANSACCION = [];
 
     var BASE_TIPOS_ORDEN = [];
     var BASE_INFORMES = [];
@@ -176,6 +162,7 @@ var PERFILES = {};
             loadMenuItems(),
             loadTablasAbm(),
             loadTiposOperacion(),
+            loadTiposTransaccion(),
             loadTiposOrden(),
             loadInformes(),
             loadEventos(),
@@ -260,6 +247,19 @@ var PERFILES = {};
         }).catch(function(e) {
             console.warn('Error cargando tipos operacion:', e);
             BASE_TIPOS_OPERACION = [];
+        });
+    }
+
+    function loadTiposTransaccion() {
+        return bound.execPPL("GetTiposTransaccion()").then(function(result) {
+            var rows = transformData(result);
+            BASE_TIPOS_TRANSACCION = rows.map(function(r) {
+                return { codigo: (r.Codigo || '').trim(), nombre: (r.Nombre || '').trim(), hab: false };
+            });
+            console.log('Tipos transaccion cargados:', BASE_TIPOS_TRANSACCION.length);
+        }).catch(function(e) {
+            console.warn('Error cargando tipos transaccion:', e);
+            BASE_TIPOS_TRANSACCION = [];
         });
     }
 
