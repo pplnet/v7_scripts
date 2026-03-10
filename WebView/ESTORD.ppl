@@ -1,0 +1,109 @@
+** ============================================================================
+** PPL WebView: Estado de Ordenes en Tiempo Real
+** ============================================================================
+** Descripcion: Muestra un reporte en tiempo real de ordenes con filtros
+**              dinamicos y actualizacion automatica via WebSocket
+** Autor: Sistema V7
+** Fecha: 2026-01-28
+** ============================================================================
+
+** Variables globales
+&ordenes := $[]
+&tiposOrden := $[]
+&estadosOrden := $[]
+
+** ============================================================================
+** Funcion: Obtener ordenes desde la base de datos
+** Usa columnas reales de la tabla ORDENES
+** ============================================================================
+def GetOrdenes()
+    &sql := <<
+        SELECT
+            RTRIM(o.TipoOrden) as TipoOrden,
+            RTRIM(o.NrOrden) as NrOrden,
+            CONVERT(VARCHAR(10), o.FechaOrden, 103) as FechaOrden,
+            RTRIM(o.Cliente) as Cliente,
+            RTRIM(o.Estado) as Estado,
+            ISNULL(o.CantidadTotalOrden, 0) * ISNULL(o.PrecioLimite, 0) as Monto,
+            RTRIM(o.Operador) as Operador
+        FROM ORDENES o
+        WHERE o.FechaOrden >= DATEADD(DAY, -30, GETDATE())
+        ORDER BY o.FechaOrden DESC, o.NrOrden DESC
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener tipos de orden unicos
+** ============================================================================
+def GetTiposOrden()
+    &sql := <<
+        SELECT DISTINCT RTRIM(TipoOrden) as TipoOrden
+        FROM ORDENES
+        WHERE TipoOrden IS NOT NULL
+        ORDER BY TipoOrden
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener estados unicos
+** ============================================================================
+def GetEstados()
+    &sql := <<
+        SELECT DISTINCT RTRIM(Estado) as Estado
+        FROM ORDENES
+        WHERE Estado IS NOT NULL
+        ORDER BY Estado
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener detalle de una orden especifica
+** ============================================================================
+def GetDetalleOrden(nrOrden)
+    &sql := "SELECT "
+    &sql := &sql ~ "1 as NroItem, "
+    &sql := &sql ~ "RTRIM(o.Especie) as Especie, "
+    &sql := &sql ~ "ISNULL(o.CantidadTotalOrden, 0) as Cantidad, "
+    &sql := &sql ~ "ISNULL(o.PrecioLimite, 0) as Precio, "
+    &sql := &sql ~ "ISNULL(o.CantidadTotalOrden, 0) * ISNULL(o.PrecioLimite, 0) as Importe, "
+    &sql := &sql ~ "ISNULL(o.Aranceles, 0) + ISNULL(o.DerechoBolsa, 0) + ISNULL(o.DerechoMercado, 0) as Comision "
+    &sql := &sql ~ "FROM ORDENES o "
+    &sql := &sql ~ "WHERE o.NrOrden = '" ~ nrOrden ~ "'"
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener estadisticas resumidas
+** ============================================================================
+def GetEstadisticas()
+    &sql := <<
+        SELECT
+            COUNT(*) as TotalOrdenes,
+            SUM(CASE WHEN RTRIM(Estado) = 'PEN' THEN 1 ELSE 0 END) as Pendientes,
+            SUM(CASE WHEN RTRIM(Estado) = 'COM' THEN 1 ELSE 0 END) as Ejecutadas,
+            SUM(CASE WHEN RTRIM(Estado) = 'CAN' THEN 1 ELSE 0 END) as Canceladas,
+            ISNULL(SUM(ISNULL(CantidadTotalOrden, 0) * ISNULL(PrecioLimite, 0)), 0) as MontoTotal,
+            ISNULL(AVG(ISNULL(CantidadTotalOrden, 0) * ISNULL(PrecioLimite, 0)), 0) as MontoPromedio
+        FROM ORDENES
+        WHERE FechaOrden >= DATEADD(DAY, -30, GETDATE())
+    >>
+
+    &resultado := QueryTable(&sql)
+
+    If &resultado.count > 0
+        return &resultado.itemAt(0)
+    EndIf
+
+    return ${}
+end
