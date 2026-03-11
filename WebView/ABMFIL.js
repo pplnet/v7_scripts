@@ -380,6 +380,7 @@
     function validateForm() {
         var codigo = $('#fld-codigo').val().trim();
         var nombre = $('#fld-nombre').val().trim();
+        var tabla = $('#fld-tabla').val();
 
         if (!codigo) {
             showNotification('El campo Codigo es obligatorio', 'warning');
@@ -397,6 +398,19 @@
             showNotification('El campo Nombre es obligatorio', 'warning');
             $('#tab-general').tab('show');
             $('#fld-nombre').focus();
+            return false;
+        }
+        if (!tabla) {
+            showNotification('Debe seleccionar una Tabla para el filtro', 'warning');
+            $('#tab-condiciones').tab('show');
+            $('#fld-tabla').focus();
+            return false;
+        }
+        var nrInstancia = $('#fld-nrinstancia').val();
+        if (nrInstancia === '' || nrInstancia === null || nrInstancia === undefined) {
+            showNotification('El campo Nro Instancia es obligatorio', 'warning');
+            $('#tab-condiciones').tab('show');
+            $('#fld-nrinstancia').focus();
             return false;
         }
         return true;
