@@ -1,0 +1,81 @@
+﻿#*********************************************************************************
+#combos data sources.
+set ds_CallPut             = "CAL:O.Compra|PUT:O.Venta|FUT:Futuro|"
+set ds_Origen              = "MAN:Manual|SIB:SIB|REU:Reuters|OTR:Otros|"
+set fsys = db.get_scalar("SELECT convert(datetime, Valor, 103) from "+dbo+".VARIABLES where Codigo='FECHASYS' ") 
+set today = db.get_scalar("Select convert(datetime, GetDate())")
+#*********************************************************************************
+def abm 'CotizacionesFut'
+   def grid
+       Fecha:, Codigo:, Moneda:, FechaFut:, Mercado:, CallPut:, PrecioEj:, Precio1:, Precio2:, Precio3:, Precio4:, Precio5:, Precio6:
+   end
+   def user_filter
+       "Del dia", "Fecha = FECHASYS"
+   end
+   def key
+   Fecha:, Codigo:, Moneda:, FechaFut:, Mercado:, CallPut:, PrecioEj:
+   end
+   def context_menu
+       "Generar cotizaciones", do 
+           $.GenerarCotizacionesDialog()  
+           $.RefreshGrid()
+       end 
+   end
+   def dialog
+       #**************************************************************************
+       tab 'General'
+          column
+             Fecha: , 'Fecha Cotizacion', date 
+             Codigo: , 'Cod. Especie', autocomplete, 'Especies', 'Codigo,Nombre'
+             Moneda: , 'Moneda', autocomplete, 'Especies', 'Codigo,Nombre',,dbo+".DesciendeDeEspecie(CODIGO,'MONEDA')=1 "
+             FechaFut: , 'Fecha Fut', date
+             Mercado: , 'Mercado', autocomplete, 'Mercados', 'Codigo,Descripcion',," TipoNegocio like '%F%' "
+             Precio1: , 'Close', numeric,'#######0.0000000000'
+             Precio2: , 'Bid', numeric,'#######0.0000000000'
+             Precio3: , 'Ask', numeric,'#######0.0000000000'
+             Precio4: , 'Promedio', numeric,'#######0.0000000000'
+             Precio5: , 'Precio5', numeric,'#######0.0000000000'
+             Precio6: , 'Precio6', numeric,'#######0.0000000000'
+             PrecioEj: , 'PrecioEj', numeric,'#######0.0000000000'
+             FechaUltAct: , 'Ultima actualizacion', date, true
+             UsuarioUltAct:, 'Usuario Ult. Act.', autocomplete, 'Usuarios', 'Codigo,Nombre'
+          column
+             CallPut: ,          , combo, ds_CallPut
+   end
+   upper_case_fields: Codigo:
+   before_show_create_dialog: do 
+      $.set_field(CallPut:,'FUT')
+      $.set_field(Fecha:, fsys)
+      $.set_field(PrecioEj:, 0)
+      $.disable(FechaUltAct:)
+      $.disable(UsuarioUltAct:)
+   end
+   before_save: do
+       set fecha = ppl.IdxDate($.val(FechaFut:))
+       set vencimiento = ppl.SQL("Select Count(1) from dbo.MERCADOS M  Left Join dbo.PLAZOSMERCADO PM ON M.Codigo = PM.MercadoNegociacion where (M.Regulado = 'SI' and PM.FechaVto = '"+fecha+"' and M.Codigo = '"+$.val(Mercado:)+"') or (M.Codigo = '"+$.val(Mercado:)+"' and ISNULL(M.Regulado, 'NO') = 'NO')")
+       if (ppl.EqStr(vencimiento,'0'))
+           $.Alert('La fecha vencimiento no es valida')
+           false
+       else
+           $.set_field(FechaUltAct:, today)
+           $.set_field(UsuarioUltAct:, ppl.UsuarioActivo)
+           true
+       endif
+   end
+   before_show_dialog:  do
+      $.disable(FechaUltAct:)
+      $.disable(UsuarioUltAct:)
+   end
+   required: Codigo:
+   when_change: CallPut: do
+       #reset
+       $.enable FechaFut:, PrecioEj:
+       #
+       if($.val (CallPut:) = 'FUT')
+            $.disable(PrecioEj:)
+       end
+   end 
+   validates_max_length_of:
+        Codigo:, 6,true
+   validates_uniqueness_of_set: Fecha:, Codigo:, Moneda:, FechaFut:, Mercado:, CallPut:, PrecioEj:
+end
