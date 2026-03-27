@@ -10,7 +10,6 @@
     var hubConnection = null;
     var especies = [];
     var clientes = [];
-    var currentUser = '';
     var itemCount = 0;
     var reconnectAttempts = 0;
     var MAX_RECONNECT_ATTEMPTS = 10;
@@ -83,23 +82,9 @@
     function init() {
         console.log('CRTOR2: Inicializando...');
         setupEventListeners();
-        loadCurrentUser();
         loadClientes();
         loadEspecies().then(function() { addItem(); });
         setupWebSocketConnection();
-    }
-
-    // ========================================================================
-    // Load current user from session (UsuarioActivo)
-    // ========================================================================
-    function loadCurrentUser() {
-        bound.execPPL("UsuarioActivo()").then(function(result) {
-            currentUser = (typeof result === 'string') ? result.trim() : '';
-            console.log('CRTOR2: Usuario activo:', currentUser);
-        }).catch(function(err) {
-            console.error('Error obteniendo usuario:', err);
-            currentUser = '';
-        });
     }
 
     // ========================================================================
@@ -367,7 +352,6 @@
                           item.cantidad + ', ' +
                           item.precio + ', "' +
                           esc(mercado) + '", "' +
-                          esc(currentUser) + '", "' +
                           esc(observaciones) + '")';
 
             console.log('CRTOR2 PPL Call [' + (index + 1) + '/' + items.length + ']:', pplCall);
