@@ -1,0 +1,92 @@
+** ============================================================================
+** PPL WebView: Compra de Titulos (v2)
+** ============================================================================
+** Descripcion: Formulario para crear ordenes de compra de titulos
+**              con notificacion en tiempo real al monitor ESTOR2
+** ============================================================================
+
+** ============================================================================
+** Funcion: Obtener lista de clientes activos
+** ============================================================================
+def GetClientes()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(RazonSocial) as RazonSocial,
+            RTRIM(NrCuenta) as NrCuenta
+        FROM CLIENTES
+        WHERE RTRIM(Status) = 'ACT'
+        ORDER BY RazonSocial
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener lista de especies disponibles
+** ============================================================================
+def GetEspecies()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(Nombre) as Nombre,
+            RTRIM(Extendido) as Extendido,
+            RTRIM(Tipo) as Tipo,
+            RTRIM(MonedaEmision) as Moneda,
+            ISNULL(VTeorico, 0) as VTeorico,
+            ISNULL(VNominal, 0) as VNominal
+        FROM ESPECIES
+        WHERE RTRIM(Habilitada) = 'SI'
+        ORDER BY Codigo
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Crear una orden de compra de titulos
+** ============================================================================
+def CrearOrdenCompra(clienteId, especie, cantidad, precio, mercado, operador, observaciones)
+    ** Obtener proximo numero de orden
+    &sqlNextNro := <<
+        SELECT 'ORD' + RIGHT('00000' + CAST(ISNULL(MAX(CAST(REPLACE(NrOrden, 'ORD', '') AS INT)), 0) + 1 AS VARCHAR(5)), 5) FROM ORDENES
+    >>
+    &nrOrden := Query(&sqlNextNro)
+
+    ** Calcular montos
+    &importe := cantidad * precio
+    &aranceles := &importe * 0.005
+    &derechoBolsa := &importe * 0.001
+    &derechoMercado := &importe * 0.0005
+
+    ** Insertar orden de compra (Direccion = 1 = Compra)
+    &sqlInsert := "INSERT INTO ORDENES ("
+    &sqlInsert := &sqlInsert ~ "NrOrden, TipoOrden, FechaOrden, Cliente, Especie, "
+    &sqlInsert := &sqlInsert ~ "CantidadTotalOrden, PrecioLimite, Estado, Operador, "
+    &sqlInsert := &sqlInsert ~ "Direccion, Observaciones, FechaCarga, Mercado, "
+    &sqlInsert := &sqlInsert ~ "Aranceles, DerechoBolsa, DerechoMercado"
+    &sqlInsert := &sqlInsert ~ ") VALUES ("
+    &sqlInsert := &sqlInsert ~ "'" ~ &nrOrden ~ "', "
+    &sqlInsert := &sqlInsert ~ "'COMPRA', "
+    &sqlInsert := &sqlInsert ~ "GETDATE(), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ clienteId ~ "', 10), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ especie ~ "', 6), "
+    &sqlInsert := &sqlInsert ~ Str(cantidad) ~ ", "
+    &sqlInsert := &sqlInsert ~ Str(precio) ~ ", "
+    &sqlInsert := &sqlInsert ~ "'PEN', "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ operador ~ "', 30), "
+    &sqlInsert := &sqlInsert ~ "1, "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ observaciones ~ "', 255), "
+    &sqlInsert := &sqlInsert ~ "GETDATE(), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ mercado ~ "', 6), "
+    &sqlInsert := &sqlInsert ~ Str(&aranceles) ~ ", "
+    &sqlInsert := &sqlInsert ~ Str(&derechoBolsa) ~ ", "
+    &sqlInsert := &sqlInsert ~ Str(&derechoMercado)
+    &sqlInsert := &sqlInsert ~ ")"
+
+    Execute(&sqlInsert)
+
+    return ${ NrOrden = &nrOrden, Importe = &importe, Aranceles = &aranceles, DerechoBolsa = &derechoBolsa, DerechoMercado = &derechoMercado, Success = true }
+end
