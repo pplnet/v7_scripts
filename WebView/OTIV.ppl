@@ -1,0 +1,382 @@
+** ============================================================================
+** PPL WebView: Orden de Venta (OTIV) - Replica completa del dialogo
+** ============================================================================
+** Descripcion: Formulario completo para carga de ordenes de venta
+**              con todos los campos del dialogo OTIV
+**              TipoOrden=OTIV, Direccion=2, TipoOp=TIV
+**              Notificacion en tiempo real al monitor ESTOR2
+** ============================================================================
+
+** ============================================================================
+** Funcion: Obtener lista de clientes activos
+** ============================================================================
+def GetClientes()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(RazonSocial) as RazonSocial,
+            RTRIM(ISNULL(NrCuenta, '')) as NrCuenta
+        FROM CLIENTES
+        WHERE RTRIM(Status) = 'ACT'
+        ORDER BY RazonSocial
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener lista de especies habilitadas (titulos y cupones)
+** ============================================================================
+def GetEspecies()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(Nombre) as Nombre,
+            RTRIM(ISNULL(Tipo, '')) as Tipo,
+            RTRIM(ISNULL(MonedaEmision, '')) as Moneda,
+            ISNULL(VTeorico, 0) as VTeorico
+        FROM ESPECIES
+        WHERE RTRIM(Habilitada) = 'SI'
+        ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener lista de monedas (para ContraEspecie)
+** ============================================================================
+def GetMonedas()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(Nombre) as Nombre
+        FROM ESPECIES
+        WHERE RTRIM(Habilitada) = 'SI'
+        ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener lista de mercados
+** ============================================================================
+def GetMercados()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(ISNULL(Descripcion, Codigo)) as Descripcion,
+            RTRIM(ISNULL(EsNegociacion, 'NO')) as EsNegociacion,
+            RTRIM(ISNULL(EsLiquidacion, 'NO')) as EsLiquidacion
+        FROM MERCADOS
+        ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener canales
+** ============================================================================
+def GetCanales()
+    &sql := <<
+        SELECT DISTINCT
+            RTRIM(Codigo) as Codigo
+        FROM CANALES
+        ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener vehiculos
+** ============================================================================
+def GetVehiculos()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(ISNULL(Descripcion, '')) as Descripcion
+        FROM VEHICULOS
+        ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener books
+** ============================================================================
+def GetBooks()
+    &sql := <<
+        SELECT RTRIM(Codigo) as Codigo, RTRIM(ISNULL(Descripcion, '')) as Descripcion FROM BOOKS ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener operador activo
+** ============================================================================
+def GetOperador()
+    return UsuarioActivo()
+end
+
+** ============================================================================
+** Funcion: Obtener cuentas de titulo para un cliente/especie/mercado
+** ============================================================================
+def GetCuentasTitulo(clienteId, especie, mercadoLiq)
+    &sql := "SELECT RTRIM(Codigo) as Codigo FROM CUENTAS "
+    &sql := &sql ~ "WHERE Cliente='" ~ clienteId ~ "' "
+    &sql := &sql ~ "AND (Especies='" ~ especie ~ "' OR Especies LIKE '%TITULO%') "
+    &sql := &sql ~ "AND Estado='HAB' "
+    &sql := &sql ~ "AND TipoCuenta IN ('CUS','CCO') "
+    If NoVacio(mercadoLiq)
+        &sql := &sql ~ "AND Mercado='" ~ mercadoLiq ~ "' "
+    EndIf
+    &sql := &sql ~ "ORDER BY ISNULL(Permanente,'NO') DESC, Codigo ASC"
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener cuentas de moneda para un cliente/contraespecie/mercado
+** ============================================================================
+def GetCuentasMoneda(clienteId, contraEspecie, mercado2, tipoOp)
+    &sql := "SELECT RTRIM(Codigo) as Codigo FROM CUENTAS "
+    &sql := &sql ~ "WHERE Cliente='" ~ clienteId ~ "' "
+    &sql := &sql ~ "AND (Especies LIKE '%MONEDA%' "
+    If NoVacio(contraEspecie)
+        &sql := &sql ~ "OR Especies LIKE '%" ~ contraEspecie ~ "%' "
+    EndIf
+    &sql := &sql ~ ") AND Estado='HAB' "
+    &sql := &sql ~ "AND TipoCuenta IN ('CC','CA','CUS','VIS') "
+    If NoVacio(mercado2)
+        &sql := &sql ~ "AND Mercado='" ~ mercado2 ~ "' "
+    EndIf
+    If NoVacio(tipoOp)
+        &sql := &sql ~ "AND (TiposOperacion IS NULL OR TiposOperacion LIKE '%" ~ tipoOp ~ "|%') "
+    EndIf
+    &sql := &sql ~ "ORDER BY ISNULL(Permanente,'NO') DESC, Codigo ASC"
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Recalcular campos calculados de la orden
+** Retorna un diccionario con todos los valores calculados
+** ============================================================================
+def RecalcularOrden(especie, cliente, cantVN, precio, contraEspecie, mercado3, vehiculo, fechaOrden, rb5, mercadoLiq, book1)
+
+    ** Plazo
+    If rb5 = 0
+        &lotes := 0
+    Else
+        If rb5 = 1
+            &lotes := 24
+        Else
+            If rb5 = 2
+                &lotes := 48
+            Else
+                &lotes := 72
+            EndIf
+        EndIf
+    EndIf
+
+    ** Valor Teorico
+    &vpre10 := Query("SELECT ISNULL(VTeorico,0) FROM ESPECIES WHERE Codigo='" ~ especie ~ "'")
+    If &vpre10 = 0
+        &vpre10 := 1
+    EndIf
+
+    ** Cantidad VR
+    &vpre1 := cantVN * &vpre10
+
+    ** Tipo Cambio
+    If precio <> 0
+        &vcan2 := precio
+    Else
+        &vcan2 := 0
+    EndIf
+
+    ** Monto
+    &cantidadEnProceso := &vcan2 * cantVN * 1
+
+    ** Interes Clean
+    &vtxt3 := Query("SELECT RTRIM(ISNULL(InteresesC,'')) FROM ESPECIES WHERE Codigo='" ~ especie ~ "'")
+    &intereses := 0
+    &vpre7 := 0
+    &vpre8 := 1
+    &vpre13 := 0
+    &vpre14 := 0
+
+    ** Total s/Comision
+    &cantidad3 := &cantidadEnProceso + &intereses
+
+    ** Cotizacion USD
+    &cotizacion1 := 1
+
+    ** Fecha Liquidacion
+    &fechaVto := ''
+    &fechaLimite := ''
+
+    ** Cupon
+    &cupon1 := ''
+
+    ** Lamina Minima
+    &vcan17 := Query("SELECT ISNULL(LaminaMinima,0) FROM ESPECIES WHERE Codigo='" ~ especie ~ "'")
+
+    ** Tipo Cliente
+    &vtxt2 := Query("SELECT RTRIM(ISNULL(TipoCliente,'')) FROM CLIENTES WHERE Codigo='" ~ cliente ~ "'")
+
+    ** ClienteCP
+    &vtxt7 := Query("SELECT CASE WHEN Alias1='CP' OR Codigo='" ~ vehiculo ~ "' THEN '1' ELSE '0' END FROM CLIENTES WHERE Codigo='" ~ cliente ~ "'")
+    If Vacio(&vtxt7)
+        &vtxt7 := '0'
+    EndIf
+
+    ** Comisiones
+    &impuestos := 0
+    &cantidad10 := 0
+    &montoArancel := 0
+    &ivaArancel := 0
+
+    ** Cond IVA
+    &vtxt16 := ''
+    If NoVacio(vehiculo)
+        &vtxt16 := Query("SELECT RTRIM(ISNULL(CondicionIVA,'')) FROM CLIENTES WHERE Codigo='" ~ vehiculo ~ "'")
+    EndIf
+
+    ** Derechos
+    &montoGastos := 0
+    &ivaGastos := 0
+
+    ** Total
+    &totalAux1 := &cantidad3 - (&montoArancel + &ivaArancel + &montoGastos + &ivaGastos)
+
+    ** Cotizacion / Precio Real
+    &precioReal := 0
+    &precPromCompletado := 0
+
+    ** Tasa
+    &totalAux2 := 0
+    &totalAux3 := 0
+
+    ** Saldos (OTIV-specific)
+    &vcan18 := cantVN
+    &vcan28 := cantVN
+    &vcan7 := 0
+
+    ** Mon Emision
+    &vtxt39 := Query("SELECT RTRIM(ISNULL(MonedaEmision,'')) FROM ESPECIES WHERE Codigo='" ~ especie ~ "'")
+
+    ** Nr Saldos
+    &vcan9 := 0
+    &vcan39 := 0
+    &vcan8 := 0
+    &vcan38 := 0
+
+    ** Limites
+    &vcan3 := 0
+    &vcan5 := 0
+    &cantidad9 := 0
+    &vcan47 := 0
+    &vtxt19 := cliente
+    &vcan11 := 0
+    &vtxt10 := ''
+    &vcan40 := 0
+    &vtxt25 := ''
+    &vtxt26 := ''
+    &vtxt27 := book1
+    &cantidad6 := 0
+
+    If NoVacio(book1)
+        &vtxt25 := Query("SELECT RTRIM(ISNULL(Issuer,'')) FROM ESPECIES WHERE Codigo='" ~ especie ~ "'")
+        &vtxt26 := Query("SELECT RTRIM(ISNULL(EntidadEmisora,'')) FROM ESPECIES WHERE Codigo='" ~ especie ~ "'")
+        &vtxt10 := Query("SELECT RTRIM(ISNULL(Controlante,'')) FROM GRUPOSECONOMICOS WHERE Cliente='" ~ cliente ~ "'")
+    EndIf
+
+    return ${ Vpre1 = &vpre1, Vpre10 = &vpre10, CantidadEnProceso = &cantidadEnProceso, Intereses = &intereses, Cantidad3 = &cantidad3, TotalAux1 = &totalAux1, Vcan2 = &vcan2, PrecioReal = &precioReal, PrecPromCompletado = &precPromCompletado, FechaVto = &fechaVto, FechaLimite = &fechaLimite, Lotes = &lotes, Cotizacion1 = &cotizacion1, Cupon1 = &cupon1, Vcan17 = &vcan17, Vtxt3 = &vtxt3, Vtxt7 = &vtxt7, Vtxt2 = &vtxt2, Vpre7 = &vpre7, Vpre8 = &vpre8, Vpre13 = &vpre13, Vpre14 = &vpre14, TotalAux2 = &totalAux2, TotalAux3 = &totalAux3, Cantidad10 = &cantidad10, MtoArancel = &montoArancel, IvaArancel = &ivaArancel, Impuestos = &impuestos, MtoGastos = &montoGastos, IvaGastos = &ivaGastos, Vtxt16 = &vtxt16, Vcan18 = &vcan18, Vcan28 = &vcan28, Vcan7 = &vcan7, Vtxt39 = &vtxt39, Vcan9 = &vcan9, Vcan39 = &vcan39, Vcan8 = &vcan8, Vcan38 = &vcan38, Vcan3 = &vcan3, Vcan5 = &vcan5, Cantidad9 = &cantidad9, Vcan47 = &vcan47, Vtxt19 = &vtxt19, Vcan11 = &vcan11, Vtxt10 = &vtxt10, Vcan40 = &vcan40, Vtxt25 = &vtxt25, Vtxt26 = &vtxt26, Vtxt27 = &vtxt27, Cantidad6 = &cantidad6 }
+end
+
+** ============================================================================
+** Funcion: Crear una orden de venta completa con INSERT en ORDENES
+** Todos los campos del dialogo OTIV mapeados a columnas de BD
+** ============================================================================
+def CrearOrdenVenta(pEspecie, pContraEspecie, pCliente, pCantidad, pPrecio, pFechaOrden, pMercado3, pMercadoLiq, pMercado2, pBook1, pVehiculo, pAfectaLS, pCanal1, pCuenta1, pCuenta4, pCuenta5, pLeyenda1, pHoraOrden, pFeriados, pLotes, pRb1, pRb2, pRb5, pRb9, pRb10, pCb7, pCuotas, pObs)
+
+    ** Obtener proximo numero de orden
+    &sqlNextNro := <<
+        SELECT 'ORD' + RIGHT('00000' + CAST(ISNULL(MAX(CAST(REPLACE(NrOrden, 'ORD', '') AS INT)), 0) + 1 AS VARCHAR(5)), 5)
+        FROM ORDENES
+    >>
+    &nrOrden := Query(&sqlNextNro)
+
+    &operador := UsuarioActivo()
+
+    ** Plazo
+    &plazo1 := pLotes
+
+    ** Fecha Liquidacion
+    &fechaVto := ''
+    &fechaLimite := ''
+
+    ** INSERT principal
+    &sql := "INSERT INTO ORDENES ("
+    &sql := &sql ~ "NrOrden, TipoOrden, FechaOrden, FechaCarga, "
+    &sql := &sql ~ "Cliente, Especie, ContraEspecie, "
+    &sql := &sql ~ "CantidadTotalOrden, PrecioLimite, "
+    &sql := &sql ~ "Estado, Operador, Operador1, Direccion, "
+    &sql := &sql ~ "Lotes, Plazo1, RB5, "
+    &sql := &sql ~ "Mercado3, Mercado, Mercado2, "
+    &sql := &sql ~ "Book1, Vehiculo, "
+    &sql := &sql ~ "AfectaLS, Canal1, "
+    &sql := &sql ~ "Cuenta1, Cuenta4, Cuenta5, "
+    &sql := &sql ~ "Leyenda1, HoraOrden, TablaFeriados1, "
+    &sql := &sql ~ "RB1, RB2, RB9, RB10, "
+    &sql := &sql ~ "CB7, Cuotas1, "
+    &sql := &sql ~ "Observaciones"
+    &sql := &sql ~ ") VALUES ("
+    &sql := &sql ~ "'" ~ &nrOrden ~ "', "
+    &sql := &sql ~ "'OTIV', "
+    &sql := &sql ~ "'" ~ pFechaOrden ~ "', "
+    &sql := &sql ~ "GETDATE(), "
+    &sql := &sql ~ "LEFT('" ~ pCliente ~ "', 10), "
+    &sql := &sql ~ "LEFT('" ~ pEspecie ~ "', 10), "
+    &sql := &sql ~ "LEFT('" ~ pContraEspecie ~ "', 10), "
+    &sql := &sql ~ pCantidad ~ ", "
+    &sql := &sql ~ pPrecio ~ ", "
+    &sql := &sql ~ "'PEN', "
+    &sql := &sql ~ "LEFT('" ~ &operador ~ "', 30), "
+    &sql := &sql ~ "LEFT('" ~ &operador ~ "', 30), "
+    &sql := &sql ~ "2, "
+    &sql := &sql ~ pLotes ~ ", "
+    &sql := &sql ~ pLotes ~ ", "
+    &sql := &sql ~ pRb5 ~ ", "
+    &sql := &sql ~ "LEFT('" ~ pMercado3 ~ "', 10), "
+    &sql := &sql ~ "LEFT('" ~ pMercadoLiq ~ "', 10), "
+    &sql := &sql ~ "LEFT('" ~ pMercado2 ~ "', 10), "
+    &sql := &sql ~ "LEFT('" ~ pBook1 ~ "', 10), "
+    &sql := &sql ~ "LEFT('" ~ pVehiculo ~ "', 10), "
+    &sql := &sql ~ "LEFT('" ~ pAfectaLS ~ "', 10), "
+    &sql := &sql ~ "LEFT('" ~ pCanal1 ~ "', 10), "
+    &sql := &sql ~ "LEFT('" ~ pCuenta1 ~ "', 20), "
+    &sql := &sql ~ "LEFT('" ~ pCuenta4 ~ "', 20), "
+    &sql := &sql ~ "LEFT('" ~ pCuenta5 ~ "', 20), "
+    &sql := &sql ~ "LEFT('" ~ pLeyenda1 ~ "', 20), "
+    &sql := &sql ~ "LEFT('" ~ pHoraOrden ~ "', 8), "
+    &sql := &sql ~ "LEFT('" ~ pFeriados ~ "', 10), "
+    &sql := &sql ~ pRb1 ~ ", "
+    &sql := &sql ~ pRb2 ~ ", "
+    &sql := &sql ~ pRb9 ~ ", "
+    &sql := &sql ~ pRb10 ~ ", "
+    &sql := &sql ~ pCb7 ~ ", "
+    &sql := &sql ~ pCuotas ~ ", "
+    &sql := &sql ~ "LEFT('" ~ pObs ~ "', 255)"
+    &sql := &sql ~ ")"
+
+    Execute(&sql)
+
+    return ${ NrOrden = &nrOrden, TipoOrden = 'OTIV', Direccion = 2, Estado = 'PEN', Success = true }
+end
