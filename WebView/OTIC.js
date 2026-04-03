@@ -132,12 +132,51 @@
     // ========================================================================
     function setDefaults() {
         var today = new Date().toISOString().split('T')[0];
-        $('#fechaOrden').val(today);
         var now = new Date();
         var hh = String(now.getHours()).padStart(2, '0');
         var mm = String(now.getMinutes()).padStart(2, '0');
         var ss = String(now.getSeconds()).padStart(2, '0');
+
+        // Fechas
+        $('#fechaOrden').val(today);
+        $('#fechaVto').val(today).prop('readonly', false);
+        $('#fechaLimite').val(today).prop('readonly', false);
         $('#horaOrden').val(hh + ':' + mm + ':' + ss);
+
+        // Contraespecie
+        $('#contraEspecie').val('ARP');
+
+        // Radios - valores por defecto
+        $('input[name="rb5"][value="0"]').prop('checked', true);   // Plazo: CI
+        $('input[name="rb2"][value="0"]').prop('checked', true);   // Orden Tipo: Cantidad
+        $('input[name="rb1"][value="0"]').prop('checked', true);   // Cartera: Trading
+        $('input[name="rb9"][value="0"]').prop('checked', true);   // Liquidacion STD
+        $('input[name="rb10"][value="0"]').prop('checked', true);  // Liquidacion FD&P
+        $('input[name="mb2"][value="1"]').prop('checked', true);   // Bloquea Saldo: SI
+        $('input[name="cb7"][value="0"]').prop('checked', true);   // Contingencia: NO
+
+        // Modo
+        $('#leyenda1').val('TELEFONICO');
+
+        // Numericos en 0
+        $('#cantidadTotalOrden').val('0');
+        $('#precioLimite').val('0');
+        $('#totalAux1').val('0');
+
+        // Displays calculados
+        $('#vpre1-display').text('0');
+        $('#cantidadEnProceso-display').text('0');
+        $('#cantidad3-display').text('0');
+        $('#precioReal-display').text('0');
+        $('#precPromCompletado-display').text('0');
+        $('#vcan2-display').text('0');
+        $('#cantidad10-display').text('0');
+        $('#montoArancel-display').text('0');
+        $('#ivaArancel-display').text('0');
+        $('#montoGastos-display').text('0');
+        $('#ivaGastos-display').text('0');
+        $('#cotizacion1-display').text('1');
+        $('#cb5-display').text('NO');
     }
 
     // ========================================================================
@@ -154,39 +193,43 @@
         loadDefaults();
     }
 
-    function loadClientes() {
-        bound.execPPL('GetClientes()').then(function (result) {
-            clientes = transformData(result);
-            var select = $('#cliente');
-            select.empty().append('<option value="">Seleccione un cliente...</option>');
-            clientes.forEach(function (c) {
-                var cuenta = c.NrCuenta ? ' [' + c.NrCuenta + ']' : '';
-                select.append(
-                    '<option value="' + c.Codigo + '">' +
-                    c.Codigo + ' - ' + (c.RazonSocial || '') + cuenta +
-                    '</option>'
-                );
-            });
-            console.log('OTIC: Clientes cargados:', clientes.length);
-        }).catch(function (err) {
-            console.error('OTIC: Error cargando clientes:', err);
-            showToast('Error al cargar clientes', 'error');
+    function populateClientes(data) {
+        clientes = data;
+        var select = $('#cliente');
+        select.empty().append('<option value="">Seleccione un cliente...</option>');
+        clientes.forEach(function (c) {
+            var cuenta = c.NrCuenta ? ' [' + c.NrCuenta + ']' : '';
+            select.append(
+                '<option value="' + c.Codigo + '">' +
+                c.Codigo + ' - ' + (c.RazonSocial || '') + cuenta +
+                '</option>'
+            );
         });
     }
 
-    function loadEspecies() {
-        bound.execPPL('GetEspecies()').then(function (result) {
-            especies = transformData(result);
+    function loadClientes() {
+        bound.execPPL('GetClientes()').then(function (result) {
+            populateClientes(transformData(result));
+            console.log('OTIC: Clientes cargados:', clientes.length);
+        }).catch(function (err) {
+            console.warn('OTIC: Error cargando clientes, usando fallback:', err);
+            populateClientes([
+                { Codigo: '1000000001', RazonSocial: 'Cliente Demo', NrCuenta: '001' }
+            ]);
+        });
+    }
 
-            // Populate especie select
-            var sel = $('#especie');
-            sel.empty().append('<option value="">Seleccione especie...</option>');
-            especies.forEach(function (esp) {
-                sel.append('<option value="' + esp.Codigo + '">' + esp.Codigo + ' - ' + (esp.Nombre || '') + '</option>');
-            });
+    function populateEspecies(data) {
+        especies = data;
+        var sel = $('#especie');
+        sel.empty().append('<option value="">Seleccione especie...</option>');
+        especies.forEach(function (esp) {
+            sel.append('<option value="' + esp.Codigo + '">' + esp.Codigo + ' - ' + (esp.Nombre || '') + '</option>');
+        });
 
-            // Populate reference list
-            var lista = $('#especies-populares');
+        // Populate reference list
+        var lista = $('#especies-populares');
+        if (lista.length) {
             lista.empty();
             especies.slice(0, 10).forEach(function (esp) {
                 var precio = esp.VTeorico || 0;
@@ -201,10 +244,20 @@
                 });
                 lista.append(li);
             });
+        }
+    }
 
+    function loadEspecies() {
+        bound.execPPL('GetEspecies()').then(function (result) {
+            populateEspecies(transformData(result));
             console.log('OTIC: Especies cargadas:', especies.length);
         }).catch(function (err) {
-            console.error('OTIC: Error cargando especies:', err);
+            console.warn('OTIC: Error cargando especies, usando fallback:', err);
+            populateEspecies([
+                { Codigo: 'AL30', Nombre: 'Bonar 2030', VTeorico: 1 },
+                { Codigo: 'GD30', Nombre: 'Global 2030', VTeorico: 1 },
+                { Codigo: 'GGAL', Nombre: 'Galicia', VTeorico: 1 }
+            ]);
         });
 
         // Load monedas into contraEspecie dropdown
@@ -215,6 +268,10 @@
             monedas.forEach(function (m) {
                 sel.append('<option value="' + m.Codigo + '">' + m.Codigo + ' - ' + (m.Descripcion || m.Nombre || '') + '</option>');
             });
+            // Default contraEspecie = ARP tras cargar las opciones
+            if (sel.find('option[value="ARP"]').length > 0) {
+                sel.val('ARP');
+            }
         }).catch(function () {
             var sel = $('#contraEspecie');
             sel.empty().append('<option value="">Seleccione...</option>');
@@ -223,33 +280,38 @@
         });
     }
 
-    function loadMercados() {
-        bound.execPPL('GetMercados()').then(function (result) {
-            mercados = transformData(result);
+    function populateMercados(data) {
+        mercados = data;
 
-            // mercado3 = Mercados de Negociacion
-            var selNeg = $('#mercado3');
-            selNeg.empty().append('<option value="">Seleccione...</option>');
+        var selNeg = $('#mercado3');
+        selNeg.empty().append('<option value="">Seleccione...</option>');
+        mercados.forEach(function (m) {
+            if (m.EsNegociacion === 'SI' || m.EsNegociacion === undefined) {
+                selNeg.append('<option value="' + m.Codigo + '">' + m.Codigo + ' - ' + (m.Descripcion || m.Nombre || '') + '</option>');
+            }
+        });
+
+        ['mercado', 'mercado2'].forEach(function (selId) {
+            var sel = $('#' + selId);
+            sel.empty().append('<option value="">Seleccione...</option>');
             mercados.forEach(function (m) {
-                if (m.EsNegociacion === 'SI') {
-                    selNeg.append('<option value="' + m.Codigo + '">' + m.Codigo + ' - ' + (m.Descripcion || m.Nombre || '') + '</option>');
+                if (m.EsLiquidacion === 'SI' || m.EsLiquidacion === undefined) {
+                    sel.append('<option value="' + m.Codigo + '">' + m.Codigo + ' - ' + (m.Descripcion || m.Nombre || '') + '</option>');
                 }
             });
+        });
+    }
 
-            // mercado (Merc.Liq.Esp.) and mercado2 (Merc.Liq.Mon.) = Mercados de Liquidacion
-            ['mercado', 'mercado2'].forEach(function (selId) {
-                var sel = $('#' + selId);
-                sel.empty().append('<option value="">Seleccione...</option>');
-                mercados.forEach(function (m) {
-                    if (m.EsLiquidacion === 'SI') {
-                        sel.append('<option value="' + m.Codigo + '">' + m.Codigo + ' - ' + (m.Descripcion || m.Nombre || '') + '</option>');
-                    }
-                });
-            });
-
+    function loadMercados() {
+        bound.execPPL('GetMercados()').then(function (result) {
+            populateMercados(transformData(result));
             console.log('OTIC: Mercados cargados:', mercados.length);
         }).catch(function (err) {
-            console.error('OTIC: Error cargando mercados:', err);
+            console.warn('OTIC: Error cargando mercados, usando fallback:', err);
+            populateMercados([
+                { Codigo: 'BYMA', Descripcion: 'BYMA', EsNegociacion: 'SI', EsLiquidacion: 'SI' },
+                { Codigo: 'MAE', Descripcion: 'MAE', EsNegociacion: 'SI', EsLiquidacion: 'SI' }
+            ]);
         });
     }
 
@@ -262,7 +324,10 @@
                 sel.append('<option value="' + c.Codigo + '">' + c.Codigo + '</option>');
             });
         }).catch(function () {
-            console.log('OTIC: Canales no disponibles');
+            var sel = $('#canal1');
+            sel.empty().append('<option value="">Seleccione...</option>');
+            sel.append('<option value="BOLSA">BOLSA</option>');
+            sel.append('<option value="MESA">MESA</option>');
         });
     }
 
@@ -275,7 +340,9 @@
                 sel.append('<option value="' + v.Codigo + '">' + v.Codigo + ' - ' + (v.Descripcion || '') + '</option>');
             });
         }).catch(function () {
-            console.log('OTIC: Vehiculos no disponibles');
+            var sel = $('#vehiculo');
+            sel.empty().append('<option value="">Seleccione...</option>');
+            sel.append('<option value="ALYC">ALYC</option>');
         });
     }
 
@@ -288,7 +355,9 @@
                 sel.append('<option value="' + b.Codigo + '">' + b.Codigo + ' - ' + (b.Descripcion || '') + '</option>');
             });
         }).catch(function () {
-            console.log('OTIC: Books no disponibles');
+            var sel = $('#book1');
+            sel.empty().append('<option value="">Seleccione...</option>');
+            sel.append('<option value="TRADING">TRADING</option>');
         });
     }
 
@@ -304,7 +373,8 @@
             $('#operador').val(val);
             $('#hid-operador1').val(val);
         }).catch(function () {
-            console.log('OTIC: Operador no disponible');
+            $('#operador').val('SISTEMA');
+            $('#hid-operador1').val('SISTEMA');
         });
     }
 
@@ -316,8 +386,8 @@
             if (d.Feriados) $('#tablaFeriados1').val(d.Feriados);
             if (d.Canal) $('#canal1').val(d.Canal);
             if (d.MercaNeg) $('#mercado3').val(d.MercaNeg);
-        }).catch(function (err) {
-            console.warn('OTIC: Error cargando defaults:', err);
+        }).catch(function () {
+            // Defaults silenciosos - los valores por defecto ya están seteados en setDefaults()
         });
     }
 

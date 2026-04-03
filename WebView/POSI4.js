@@ -1,7 +1,7 @@
 /* ============================================================================
-   JavaScript: Posiciones y Resultados en Tiempo Real
+   JavaScript: Posiciones y Resultados - POSI4
    ============================================================================
-   Dashboard con filtros y actualizacion automatica via WebSocket
+   Dashboard con filtros, graficos de valuacion y actualizacion via WebSocket
    ============================================================================ */
 
 (function() {
@@ -13,6 +13,8 @@
     var reconnectAttempts = 0;
     var MAX_RECONNECT_ATTEMPTS = 10;
     var RECONNECT_DELAY_MS = 3000;
+    var chartUsd = null;
+    var chartArp = null;
 
     var API_BASE_URL = window.API_BASE_URL || 'https://localhost:44300';
     var HUB_URL = API_BASE_URL + '/hubs/ppl';
@@ -21,45 +23,47 @@
     // Key mapping
     // ========================================================================
     var keyMap = {
-        'especie': 'Especie',
-        'especienombre': 'EspecieNombre',
-        'contraespecie': 'ContraEspecie',
-        'vehiculo': 'Vehiculo',
-        'vehiculonombre': 'VehiculoNombre',
-        'book': 'Book',
-        'compras': 'Compras',
-        'ventas': 'Ventas',
-        'posicionneta': 'PosicionNeta',
-        'precioprom': 'PrecioProm',
-        'valuacion': 'Valuacion',
-        'cantops': 'CantOps',
-        'tipoop': 'TipoOp',
-        'nroperacion': 'NrOperacion',
-        'fechaop': 'FechaOp',
-        'cliente': 'Cliente',
-        'cantidad': 'Cantidad',
-        'precio': 'Precio',
-        'monto': 'Monto',
-        'totalespecies': 'TotalEspecies',
-        'totalvehiculos': 'TotalVehiculos',
-        'totaltitulos': 'TotalTitulos',
-        'totalfx': 'TotalFX',
-        'codigo': 'Codigo',
-        'descripcion': 'Descripcion'
+        // Posiciones
+        'especie': 'Especie', 'Especie': 'Especie',
+        'especienombre': 'EspecieNombre', 'EspecieNombre': 'EspecieNombre',
+        'contraespecie': 'ContraEspecie', 'ContraEspecie': 'ContraEspecie',
+        'book': 'Book', 'Book': 'Book',
+        'posinicial': 'PosInicial', 'PosInicial': 'PosInicial', 'posInicial': 'PosInicial',
+        'compras': 'Compras', 'Compras': 'Compras',
+        'ventas': 'Ventas', 'Ventas': 'Ventas',
+        'posicionneta': 'PosicionNeta', 'PosicionNeta': 'PosicionNeta', 'posicionNeta': 'PosicionNeta',
+        'preciofin': 'PrecioFin', 'PrecioFin': 'PrecioFin', 'precioFin': 'PrecioFin',
+        'valuacion': 'Valuacion', 'Valuacion': 'Valuacion',
+        // Resultados
+        'tipoop': 'TipoOp', 'TipoOp': 'TipoOp', 'tipoOp': 'TipoOp',
+        'nroperacion': 'NrOperacion', 'NrOperacion': 'NrOperacion', 'nrOperacion': 'NrOperacion',
+        'fechaop': 'FechaOp', 'FechaOp': 'FechaOp', 'fechaOp': 'FechaOp',
+        'cliente': 'Cliente', 'Cliente': 'Cliente',
+        'cantidad': 'Cantidad', 'Cantidad': 'Cantidad',
+        'precio': 'Precio', 'Precio': 'Precio',
+        'monto': 'Monto', 'Monto': 'Monto',
+        // Lookups
+        'codigo': 'Codigo', 'Codigo': 'Codigo',
+        'nombre': 'Nombre', 'Nombre': 'Nombre',
+        'descripcion': 'Descripcion', 'Descripcion': 'Descripcion'
     };
 
     function capitalizeKey(key) {
         if (!key) return key;
-        var lower = key.toLowerCase();
-        return keyMap[lower] || (key.charAt(0).toUpperCase() + key.slice(1));
+        // Buscar directo primero (evita lowercase innecesario), luego por lowercase
+        return keyMap[key] || keyMap[key.toLowerCase()] || (key.charAt(0).toUpperCase() + key.slice(1));
     }
 
     function transformRow(row) {
         if (!row || !Array.isArray(row)) return row;
         var obj = {};
         row.forEach(function(item) {
-            if (item && item.key !== undefined) {
-                obj[capitalizeKey(item.key)] = typeof item.value === 'string' ? item.value.trim() : item.value;
+            if (!item) return;
+            // Soportar tanto {key, value} (lowercase) como {Key, Value} (PascalCase)
+            var k = item.key !== undefined ? item.key : item.Key;
+            var v = item.value !== undefined ? item.value : item.Value;
+            if (k !== undefined) {
+                obj[capitalizeKey(String(k))] = typeof v === 'string' ? v.trim() : v;
             }
         });
         return obj;
@@ -67,37 +71,28 @@
 
     function transformData(data) {
         if (!data) return [];
-        if (data.result && Array.isArray(data.result)) data = data.result;
-        if (!Array.isArray(data)) return [];
-
-        if (data.length > 0 && Array.isArray(data[0])) {
-            return data.map(transformRow);
+        // Unwrap {result: [...]} wrapper
+        if (data.result !== undefined) data = data.result;
+        if (!Array.isArray(data)) {
+            // Single object → wrap in array
+            if (data && typeof data === 'object') return [normalizeRow(data)];
+            return [];
         }
-
-        return data.map(function(row) {
-            if (row && typeof row === 'object' && !Array.isArray(row)) {
-                var obj = {};
-                Object.keys(row).forEach(function(k) {
-                    obj[capitalizeKey(k)] = typeof row[k] === 'string' ? row[k].trim() : row[k];
-                });
-                return obj;
-            }
-            return row;
-        });
+        if (data.length === 0) return [];
+        // Array of arrays (KVP format from PPLDic)
+        if (Array.isArray(data[0])) return data.map(transformRow);
+        // Array of objects
+        return data.map(normalizeRow);
     }
 
-    // ========================================================================
-    // NrSaldo label
-    // ========================================================================
-    function saldoLabel(nrSaldo) {
-        var labels = {
-            171: 'Titulos', 172: 'Titulos',
-            31: 'FX', 51: 'FX',
-            43: 'OCT', 44: 'Rofex',
-            45: 'Int. FX Exp.', 41: 'FX DF',
-            42: 'FX NDF', 137: 'Otros', 136: 'Otros'
-        };
-        return labels[nrSaldo] || 'Saldo ' + nrSaldo;
+    function normalizeRow(row) {
+        if (!row || typeof row !== 'object') return row;
+        // If object has 'key'/'Key' props, it's a single KVP — shouldn't happen at row level
+        var obj = {};
+        Object.keys(row).forEach(function(k) {
+            obj[capitalizeKey(k)] = typeof row[k] === 'string' ? row[k].trim() : row[k];
+        });
+        return obj;
     }
 
     // ========================================================================
@@ -117,18 +112,19 @@
             }
         },
         { data: 'ContraEspecie', title: 'C.Esp.' },
+        { data: 'Book', title: 'Book' },
         {
-            data: 'Vehiculo',
-            title: 'Vehículo',
-            render: function(data, type, row) {
+            data: 'PosInicial',
+            title: 'Pos. Inicial',
+            render: function(data, type) {
                 if (type === 'display') {
-                    var nombre = row.VehiculoNombre || '';
-                    return (data || '') + (nombre ? ' - ' + nombre : '');
+                    var v = data || 0;
+                    var cls = v < 0 ? ' style="color:#dc3545"' : v > 0 ? ' style="color:#28a745"' : '';
+                    return '<span' + cls + '>' + $$.numberFormat(v, 0, false, false) + '</span>';
                 }
                 return data;
             }
         },
-        { data: 'Book', title: 'Book' },
         {
             data: 'Compras',
             title: 'Compras',
@@ -145,7 +141,7 @@
         },
         {
             data: 'PosicionNeta',
-            title: 'Posición Neta',
+            title: 'Posici\u00f3n Neta',
             render: function(data, type) {
                 if (type === 'display') {
                     var v = data || 0;
@@ -156,15 +152,15 @@
             }
         },
         {
-            data: 'PrecioProm',
-            title: 'Precio Prom.',
+            data: 'PrecioFin',
+            title: 'Precio Fin',
             render: function(data, type) {
                 return type === 'display' ? $$.numberFormat(data || 0, 4, false, false) : data;
             }
         },
         {
             data: 'Valuacion',
-            title: 'Valuación',
+            title: 'Valuaci\u00f3n',
             render: function(data, type) {
                 if (type === 'display') {
                     var v = data || 0;
@@ -172,13 +168,6 @@
                     return '<strong' + cls + '>' + $$.numberFormat(v, 2, false, false) + '</strong>';
                 }
                 return data;
-            }
-        },
-        {
-            data: 'CantOps',
-            title: 'Ops',
-            render: function(data, type) {
-                return type === 'display' ? '<span class="badge badge-secondary">' + (data || 0) + '</span>' : data;
             }
         }
     ];
@@ -195,7 +184,6 @@
         loadFilters();
         initDataTable();
         loadInitialData();
-        loadStatistics();
         setupEventListeners();
         setupWebSocketConnection();
 
@@ -206,14 +194,6 @@
     // Load filters
     // ========================================================================
     function loadFilters() {
-        bound.execPPL("GetVehiculos()").then(function(result) {
-            var vehiculos = transformData(result);
-            var select = $('#filter-vehiculo');
-            vehiculos.forEach(function(v) {
-                select.append('<option value="' + v.Codigo + '">' + v.Codigo + ' - ' + (v.Descripcion || '') + '</option>');
-            });
-        });
-
         bound.execPPL("GetBooks()").then(function(result) {
             var books = transformData(result);
             var select = $('#filter-book');
@@ -224,26 +204,36 @@
     }
 
     // ========================================================================
-    // Load data
+    // Filter params
     // ========================================================================
     function getFilterParams() {
         var fecha = $('#filter-fecha').val() || new Date().toISOString().split('T')[0];
-        var especie = $('#filter-especie').val() || '';
-        var vehiculo = $('#filter-vehiculo').val() || '';
+        var especie = ($('#filter-especie').val() || '').trim();
         var bookVal = $('#filter-book').val();
         var book = bookVal ? "'" + bookVal + "'" : '';
-        var pesos = $('#filter-pesos').val() || '0';
-        return { fecha: fecha, especie: especie, vehiculo: vehiculo, book: book, pesos: pesos };
+        var tipoEspecie = $('#filter-tipo-especie').val() || '';
+        return { fecha: fecha, especie: especie, book: book, tipoEspecie: tipoEspecie };
     }
 
+    function buildGetPosicionesCall(p) {
+        return 'GetPosiciones("' + p.fecha + '", "' + p.especie + '", "' + p.book + '", "' + p.tipoEspecie + '")';
+    }
+
+    // ========================================================================
+    // Load data
+    // ========================================================================
     function loadInitialData() {
         var p = getFilterParams();
-        var call = 'GetPosiciones("' + p.fecha + '", "' + p.especie + '", "' + p.vehiculo + '", "' + p.book + '", "' + p.pesos + '")';
-
-        bound.execPPL(call).then(function(result) {
+        bound.execPPL(buildGetPosicionesCall(p)).then(function(result) {
+            console.log('POSI4: Raw result type:', typeof result, Array.isArray(result) ? 'array[' + result.length + ']' : '');
+            if (result && (Array.isArray(result) ? result.length > 0 : true)) {
+                var sample = Array.isArray(result) ? result[0] : result;
+                console.log('POSI4: First row raw:', JSON.stringify(sample).substring(0, 300));
+            }
             posicionesData = transformData(result);
             console.log('POSI4: Posiciones cargadas:', posicionesData.length);
             if (dataTable) $$.setData(posicionesData, colsConfig);
+            renderCharts(posicionesData);
         }).catch(function(err) {
             console.error('Error cargando posiciones:', err);
             showToast('Error al cargar posiciones', 'error');
@@ -262,40 +252,102 @@
             columns: colsConfig,
             language: {
                 zeroRecords: "No se encontraron posiciones",
-                info: "Página _PAGE_ de _PAGES_",
+                info: "P\u00e1gina _PAGE_ de _PAGES_",
                 infoEmpty: "",
                 infoFiltered: "(filtrado de _MAX_ registros)",
                 search: "Buscar:",
                 lengthMenu: "Mostrar _MENU_",
-                paginate: { first: "Primera", last: "Última", next: ">", previous: "<" }
+                paginate: { first: "Primera", last: "\u00daltima", next: ">", previous: "<" }
             },
-            order: [[3, 'asc'], [4, 'asc'], [1, 'asc']]
+            order: [[3, 'asc'], [1, 'asc']]
         });
 
         $$.setDataTable(dataTable, dtSelector);
-        $$.setKeyNames(["Especie", "Vehiculo", "Book", "NrSaldo"]);
+        $$.setKeyNames(["Especie", "Book"]);
     }
 
     // ========================================================================
-    // Statistics
+    // Charts (Chart.js)
     // ========================================================================
-    function loadStatistics() {
-        var fecha = $('#filter-fecha').val() || new Date().toISOString().split('T')[0];
-        bound.execPPL('GetEstadisticasPosiciones("' + fecha + '")').then(function(result) {
-            var stats = result;
-            if (Array.isArray(result) && result.length > 0) {
-                if (Array.isArray(result[0])) stats = transformRow(result[0]);
-                else if (result[0].key !== undefined) stats = transformRow(result);
-                else stats = result[0] || result;
-            }
-            if (!stats) return;
+    function renderCharts(data) {
+        if (typeof Chart === 'undefined') {
+            console.warn('POSI4: Chart.js no disponible');
+            return;
+        }
 
-            $('#stat-especies').text(stats.TotalEspecies || 0);
-            $('#stat-vehiculos').text(stats.TotalVehiculos || 0);
-            $('#stat-titulos').text($$.numberFormat(stats.TotalTitulos || 0, 0, false, false));
-            $('#stat-fx').text($$.numberFormat(stats.TotalFX || 0, 0, false, false));
-        }).catch(function(err) {
-            console.error('Error cargando estadisticas:', err);
+        // Agrupar valuacion por especie y contraespecie
+        var usdData = {};
+        var arpData = {};
+
+        (data || []).forEach(function(row) {
+            var esp = row.Especie || '';
+            var cEsp = (row.ContraEspecie || '').toUpperCase();
+            var val = parseFloat(row.Valuacion) || 0;
+            if (val === 0) return;
+
+            if (cEsp === 'USD' || cEsp === 'D') {
+                usdData[esp] = (usdData[esp] || 0) + val;
+            } else if (cEsp === 'ARP' || cEsp === 'ARS' || cEsp === '$') {
+                arpData[esp] = (arpData[esp] || 0) + val;
+            }
+        });
+
+        chartUsd = buildBarChart('chart-usd', chartUsd, usdData, 'Valuaci\u00f3n USD');
+        chartArp = buildBarChart('chart-arp', chartArp, arpData, 'Valuaci\u00f3n ARP');
+    }
+
+    function buildBarChart(canvasId, existingChart, dataMap, label) {
+        var labels = Object.keys(dataMap).sort();
+        var values = labels.map(function(k) { return dataMap[k]; });
+        var colors = values.map(function(v) { return v >= 0 ? '#28a745' : '#dc3545'; });
+
+        if (existingChart) existingChart.destroy();
+
+        var ctx = document.getElementById(canvasId);
+        if (!ctx) return null;
+
+        return new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: label,
+                    data: values,
+                    backgroundColor: colors,
+                    borderColor: colors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                return ctx.parsed.y.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString('es-AR', { maximumFractionDigits: 0 });
+                            },
+                            font: { size: 10 }
+                        },
+                        grid: { color: '#eee' }
+                    },
+                    x: {
+                        ticks: { font: { size: 10 }, maxRotation: 45 },
+                        grid: { display: false }
+                    }
+                }
+            }
         });
     }
 
@@ -319,14 +371,14 @@
     }
 
     // ========================================================================
-    // Results detail
+    // Results detail (operaciones del dia)
     // ========================================================================
     function loadResultados(posData, row, tr) {
         if (!posData) return;
 
         var fecha = $('#filter-fecha').val() || new Date().toISOString().split('T')[0];
-        var call = 'GetResultados("' + (posData.Especie || '') + '", "' + (posData.Vehiculo || '') + '", "' +
-                   (posData.Book || '') + '", 0, "' + fecha + '")';
+        var call = 'GetResultados("' + (posData.Especie || '') + '", "' +
+                   (posData.Book || '') + '", "' + fecha + '")';
 
         bound.execPPL(call).then(function(result) {
             var ops = transformData(result);
@@ -337,7 +389,7 @@
             html += '</tr></thead><tbody>';
 
             if (!ops || ops.length === 0) {
-                html += '<tr><td colspan="7" class="text-center text-muted">Sin operaciones</td></tr>';
+                html += '<tr><td colspan="7" class="text-center text-muted">Sin operaciones en este d\u00eda</td></tr>';
             } else {
                 ops.forEach(function(o) {
                     var cls = (o.TipoOp || '').indexOf('TIC') >= 0 || o.TipoOp === 'COMPRA' ? 'badge-dark' : 'badge-secondary';
@@ -370,12 +422,10 @@
         $$.loading(true);
 
         var p = getFilterParams();
-        var call = 'GetPosiciones("' + p.fecha + '", "' + p.especie + '", "' + p.vehiculo + '", "' + p.book + '", "' + p.pesos + '")';
-
-        bound.execPPL(call).then(function(result) {
+        bound.execPPL(buildGetPosicionesCall(p)).then(function(result) {
             posicionesData = transformData(result);
             $$.setData(posicionesData, colsConfig);
-            loadStatistics();
+            renderCharts(posicionesData);
             $$.loading(false);
             showToast('Datos actualizados');
         }).catch(function(err) {
@@ -415,7 +465,7 @@
         hubConnection.on('ReceiveMessage', function(messageCode, payload) {
             console.log('POSI4: Mensaje recibido:', messageCode, payload);
             if (messageCode === 'POSI4') {
-                showToast('Operación registrada - actualizando...', 'info');
+                showToast('Operaci\u00f3n registrada - actualizando...', 'info');
                 refreshData();
             }
         });

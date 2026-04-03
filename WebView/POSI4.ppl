@@ -1,60 +1,85 @@
 ** ============================================================================
-** PPL WebView: Posiciones en Tiempo Real
+** PPL WebView: Posiciones en Tiempo Real (POSI4)
 ** ============================================================================
 ** Descripcion: Dashboard de posiciones calculadas desde OPERACIONES
-**              Agrupa compras y ventas por Especie/Vehiculo/Book
+**              Agrupa compras y ventas por Especie/Book
+**              Muestra posicion inicial (antes del dia) + movimientos del dia
 **              Actualizacion automatica via WebSocket
 ** ============================================================================
 
 ** ============================================================================
 ** Funcion: Obtener posiciones netas agrupadas
+** Pos. Inicial = acumulado antes del dia
+** Compras/Ventas = solo del dia filtrado
+** Posicion Neta = PosInicial + Compras - Ventas
 ** ============================================================================
-def GetPosiciones(fec, especie, vehiculo, book, incluyePesos)
+def GetPosiciones(fec, especie, book, tipoEspecie)
     &sql := "SELECT "
     &sql := &sql ~ "RTRIM(O.Especie) as Especie, "
     &sql := &sql ~ "RTRIM(ISNULL(E.Nombre, '')) as EspecieNombre, "
     &sql := &sql ~ "RTRIM(ISNULL(O.ContraEspecie, '')) as ContraEspecie, "
-    &sql := &sql ~ "RTRIM(ISNULL(O.Vehiculo1, '')) as Vehiculo, "
-    &sql := &sql ~ "RTRIM(ISNULL(V.Descripcion, '')) as VehiculoNombre, "
     &sql := &sql ~ "RTRIM(ISNULL(O.Book1, '')) as Book, "
-    &sql := &sql ~ "SUM(CASE WHEN O.TipoOp LIKE '%TIC%' OR O.TipoOp = 'COMPRA' THEN ISNULL(O.Cantidad, 0) ELSE 0 END) as Compras, "
-    &sql := &sql ~ "SUM(CASE WHEN O.TipoOp LIKE '%TIV%' OR O.TipoOp = 'VENTA' THEN ISNULL(O.Cantidad, 0) ELSE 0 END) as Ventas, "
-    &sql := &sql ~ "SUM(CASE WHEN O.TipoOp LIKE '%TIC%' OR O.TipoOp = 'COMPRA' THEN ISNULL(O.Cantidad, 0) ELSE -ISNULL(O.Cantidad, 0) END) as PosicionNeta, "
-    &sql := &sql ~ "CASE WHEN SUM(O.Cantidad) <> 0 THEN SUM(ISNULL(O.TotalBrutoCli1, 0)) / SUM(O.Cantidad) ELSE 0 END as PrecioProm, "
-    &sql := &sql ~ "SUM(CASE WHEN O.TipoOp LIKE '%TIC%' OR O.TipoOp = 'COMPRA' THEN ISNULL(O.TotalBrutoCli1, 0) ELSE -ISNULL(O.TotalBrutoCli1, 0) END) as Valuacion, "
-    &sql := &sql ~ "COUNT(*) as CantOps "
+
+    ** Posicion inicial: acumulado de operaciones ANTES del dia
+    &sql := &sql ~ "SUM(CASE WHEN O.FechaOp < CONVERT(datetime, '" ~ fec ~ "', 126) THEN "
+    &sql := &sql ~ "  CASE WHEN O.TipoOp LIKE '%TIC%' OR O.TipoOp = 'COMPRA' THEN ISNULL(O.Cantidad, 0) "
+    &sql := &sql ~ "       WHEN O.TipoOp LIKE '%TIV%' OR O.TipoOp = 'VENTA' THEN -ISNULL(O.Cantidad, 0) "
+    &sql := &sql ~ "       ELSE 0 END ELSE 0 END) as PosInicial, "
+
+    ** Compras del dia
+    &sql := &sql ~ "SUM(CASE WHEN O.FechaOp = CONVERT(datetime, '" ~ fec ~ "', 126) "
+    &sql := &sql ~ "  AND (O.TipoOp LIKE '%TIC%' OR O.TipoOp = 'COMPRA') THEN ISNULL(O.Cantidad, 0) ELSE 0 END) as Compras, "
+
+    ** Ventas del dia
+    &sql := &sql ~ "SUM(CASE WHEN O.FechaOp = CONVERT(datetime, '" ~ fec ~ "', 126) "
+    &sql := &sql ~ "  AND (O.TipoOp LIKE '%TIV%' OR O.TipoOp = 'VENTA') THEN ISNULL(O.Cantidad, 0) ELSE 0 END) as Ventas, "
+
+    ** Posicion neta: PosInicial + Compras - Ventas (todo junto)
+    &sql := &sql ~ "SUM(CASE WHEN O.TipoOp LIKE '%TIC%' OR O.TipoOp = 'COMPRA' THEN ISNULL(O.Cantidad, 0) "
+    &sql := &sql ~ "     WHEN O.TipoOp LIKE '%TIV%' OR O.TipoOp = 'VENTA' THEN -ISNULL(O.Cantidad, 0) "
+    &sql := &sql ~ "     ELSE 0 END) as PosicionNeta, "
+
+    ** Precio fin: ultimo precio del dia (o promedio del dia si no hay precio de cierre)
+    &sql := &sql ~ "CASE WHEN SUM(CASE WHEN O.FechaOp = CONVERT(datetime, '" ~ fec ~ "', 126) THEN O.Cantidad ELSE 0 END) <> 0 "
+    &sql := &sql ~ "  THEN SUM(CASE WHEN O.FechaOp = CONVERT(datetime, '" ~ fec ~ "', 126) THEN ISNULL(O.TotalBrutoCli1, 0) ELSE 0 END) "
+    &sql := &sql ~ "     / SUM(CASE WHEN O.FechaOp = CONVERT(datetime, '" ~ fec ~ "', 126) THEN O.Cantidad ELSE NULL END) "
+    &sql := &sql ~ "  ELSE 0 END as PrecioFin, "
+
+    ** Valuacion total
+    &sql := &sql ~ "SUM(CASE WHEN O.TipoOp LIKE '%TIC%' OR O.TipoOp = 'COMPRA' THEN ISNULL(O.TotalBrutoCli1, 0) "
+    &sql := &sql ~ "     ELSE -ISNULL(O.TotalBrutoCli1, 0) END) as Valuacion "
+
     &sql := &sql ~ "FROM OPERACIONES O "
     &sql := &sql ~ "LEFT JOIN ESPECIES E ON RTRIM(O.Especie) = RTRIM(E.Codigo) "
-    &sql := &sql ~ "LEFT JOIN VEHICULOS V ON RTRIM(O.Vehiculo1) = RTRIM(V.Codigo) "
     &sql := &sql ~ "WHERE O.FechaOp <= CONVERT(datetime, '" ~ fec ~ "', 126) "
 
-    If EqStr(incluyePesos, '0')
-        &sql := &sql ~ "AND O.Especie <> 'ARS' "
-    EndIf
-
+    ** Filtro por especie
     If NoVacio(especie)
         &sql := &sql ~ "AND O.Especie = '" ~ especie ~ "' "
     EndIf
 
-    If NoVacio(vehiculo)
-        &sql := &sql ~ "AND O.Vehiculo1 = '" ~ vehiculo ~ "' "
-    EndIf
-
+    ** Filtro por book
     If NoVacio(book)
         &sql := &sql ~ "AND O.Book1 IN (" ~ book ~ ") "
     EndIf
 
-    &sql := &sql ~ "GROUP BY O.Especie, E.Nombre, O.ContraEspecie, O.Vehiculo1, V.Descripcion, O.Book1 "
-    &sql := &sql ~ "ORDER BY O.Especie, O.Vehiculo1, O.Book1"
+    ** Filtro por tipo de especie (jerarquia)
+    If NoVacio(tipoEspecie)
+        &sql := &sql ~ "AND E.Jerarquia >= (SELECT Jerarquia FROM ESPECIES WHERE RTRIM(Codigo) = '" ~ tipoEspecie ~ "') "
+        &sql := &sql ~ "AND E.Jerarquia <= (SELECT Jerarquia + REPLICATE('9', 15 - LEN(Jerarquia)) FROM ESPECIES WHERE RTRIM(Codigo) = '" ~ tipoEspecie ~ "') "
+    EndIf
+
+    &sql := &sql ~ "GROUP BY O.Especie, E.Nombre, O.ContraEspecie, O.Book1 "
+    &sql := &sql ~ "ORDER BY O.Especie, O.Book1"
 
     &resultado := QueryTable(&sql)
     return &resultado
 end
 
 ** ============================================================================
-** Funcion: Obtener detalle de operaciones para una especie/vehiculo/book
+** Funcion: Obtener detalle de operaciones para una especie/book (solo del dia)
 ** ============================================================================
-def GetResultados(especie, vehiculo, book, nrSaldo, fec)
+def GetResultados(especie, book, fec)
     &sql := "SELECT "
     &sql := &sql ~ "RTRIM(O.TipoOp) as TipoOp, "
     &sql := &sql ~ "RTRIM(O.NrOperacion) as NrOperacion, "
@@ -65,36 +90,14 @@ def GetResultados(especie, vehiculo, book, nrSaldo, fec)
     &sql := &sql ~ "ISNULL(O.TotalBrutoCli1, 0) as Monto "
     &sql := &sql ~ "FROM OPERACIONES O "
     &sql := &sql ~ "WHERE O.Especie = '" ~ especie ~ "' "
-    If NoVacio(vehiculo)
-        &sql := &sql ~ "AND O.Vehiculo1 = '" ~ vehiculo ~ "' "
-    EndIf
     If NoVacio(book)
         &sql := &sql ~ "AND O.Book1 = '" ~ book ~ "' "
     EndIf
-    &sql := &sql ~ "AND O.FechaOp <= CONVERT(datetime, '" ~ fec ~ "', 126) "
+    &sql := &sql ~ "AND O.FechaOp = CONVERT(datetime, '" ~ fec ~ "', 126) "
     &sql := &sql ~ "ORDER BY O.FechaOp DESC, O.NrOperacion DESC"
 
     &resultado := QueryTable(&sql)
     return &resultado
-end
-
-** ============================================================================
-** Funcion: Obtener estadisticas resumidas
-** ============================================================================
-def GetEstadisticasPosiciones(fec)
-    &sql := "SELECT "
-    &sql := &sql ~ "COUNT(DISTINCT Especie) as TotalEspecies, "
-    &sql := &sql ~ "COUNT(DISTINCT Vehiculo1) as TotalVehiculos, "
-    &sql := &sql ~ "SUM(CASE WHEN TipoOp LIKE '%TIC%' OR TipoOp = 'COMPRA' THEN ISNULL(Cantidad, 0) ELSE 0 END) as TotalTitulos, "
-    &sql := &sql ~ "SUM(CASE WHEN TipoOp LIKE '%TIV%' OR TipoOp = 'VENTA' THEN ISNULL(Cantidad, 0) ELSE 0 END) as TotalFX "
-    &sql := &sql ~ "FROM OPERACIONES "
-    &sql := &sql ~ "WHERE FechaOp <= CONVERT(datetime, '" ~ fec ~ "', 126)"
-
-    &resultado := QueryTable(&sql)
-    If &resultado.count > 0
-        return &resultado.itemAt(0)
-    EndIf
-    return ${}
 end
 
 ** ============================================================================
@@ -116,6 +119,20 @@ end
 def GetBooks()
     &sql := <<
         SELECT RTRIM(Codigo) as Codigo FROM BOOKS ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener tipos de especie raiz para el filtro
+** ============================================================================
+def GetTiposEspecie()
+    &sql := <<
+        SELECT RTRIM(Codigo) as Codigo, RTRIM(ISNULL(Nombre, Codigo)) as Nombre
+        FROM ESPECIES
+        WHERE RTRIM(Codigo) IN ('TITULO', 'MONEDA', 'FONDOS')
+        ORDER BY Codigo
     >>
     &resultado := QueryTable(&sql)
     return &resultado
