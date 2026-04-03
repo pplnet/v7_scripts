@@ -1,0 +1,191 @@
+** ============================================================================
+** PPL WebView: Venta de Titulos - Operacion (1:1 replica del dialogo)
+** ============================================================================
+** Descripcion: Formulario completo para carga de operaciones de venta
+**              con notificacion en tiempo real al monitor POSI4.
+**              TipoOp = 'TIV' / 'VENTA'
+**              Sin validaciones - solo inputs, calculos y mapeo a DB.
+** ============================================================================
+
+** ============================================================================
+** Funcion: Obtener lista de clientes activos
+** ============================================================================
+def GetClientes()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(RazonSocial) as RazonSocial
+        FROM CLIENTES
+        WHERE RTRIM(Status) = 'ACT'
+        ORDER BY RazonSocial
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener lista de especies (titulos habilitados)
+** ============================================================================
+def GetEspecies()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(Nombre) as Nombre,
+            RTRIM(ISNULL(Tipo, '')) as Tipo,
+            RTRIM(ISNULL(MonedaEmision, '')) as Moneda
+        FROM ESPECIES
+        WHERE RTRIM(Habilitada) = 'SI'
+        ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener contraespecies (monedas habilitadas)
+** ============================================================================
+def GetContraEspecies()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(Nombre) as Nombre
+        FROM ESPECIES
+        WHERE RTRIM(Habilitada) = 'SI'
+        ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener vehiculos
+** ============================================================================
+def GetVehiculos()
+    &sql := <<
+        SELECT RTRIM(Codigo) as Codigo, RTRIM(Descripcion) as Descripcion
+        FROM VEHICULOS ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener mercados
+** ============================================================================
+def GetMercados()
+    &sql := <<
+        SELECT RTRIM(Codigo) as Codigo, RTRIM(ISNULL(Descripcion, Codigo)) as Descripcion
+        FROM MERCADOS ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener books
+** ============================================================================
+def GetBooks()
+    &sql := <<
+        SELECT RTRIM(Codigo) as Codigo FROM BOOKS ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener corredores
+** ============================================================================
+def GetCorredores()
+    &sql := <<
+        SELECT
+            RTRIM(Codigo) as Codigo,
+            RTRIM(ISNULL(Nombre, Codigo)) as Nombre
+        FROM CORREDORES
+        ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener operador activo
+** ============================================================================
+def GetOperador()
+    &op := UsuarioActivo()
+    return &op
+end
+
+** ============================================================================
+** Funcion: Crear operacion de venta completa
+** Recibe todos los campos del formulario expandido
+** ============================================================================
+def CrearOperacionVenta(pFechaOp, pFechaVto, pFechaPago, pCliente, pEspecie, pContraEspecie, pCantidad, pPrecio, pCorredor, pMercado4, pPlataforma, pMercado, pMercado2, pBook, pVehiculo, pNrExterno, pFeriados, pCupon1, pNrOrden1, pObs, pFormaLiq1, pFormaLiq2, pRb5, pRb9, pTipoCambio, pTotalAux8, pCb6, pCb7)
+    ** Obtener proximo numero de operacion
+    &sqlNext := "SELECT ISNULL(MAX(CAST(NrOperacion AS INT)), 0) + 1 FROM OPERACIONES"
+    &nrOperacion := Query(&sqlNext)
+
+    &operador := UsuarioActivo()
+    &importe := pCantidad * pPrecio
+
+    ** Calcular plazo en horas
+    &plazo := 0
+    If pRb5 = 0
+        &plazo := 0
+    Else
+        &plazo := pRb5 * 24
+    EndIf
+
+    &sqlInsert := "INSERT INTO OPERACIONES ("
+    &sqlInsert := &sqlInsert ~ "NrOperacion, TipoOp, FechaOp, FechaVto, FechaPago, "
+    &sqlInsert := &sqlInsert ~ "Cliente1, Especie, ContraEspecie, "
+    &sqlInsert := &sqlInsert ~ "Cantidad, Precio1, Corredor, "
+    &sqlInsert := &sqlInsert ~ "Mercado4, Mercado, Mercado2, "
+    &sqlInsert := &sqlInsert ~ "Book1, Vehiculo1, Operador, "
+    &sqlInsert := &sqlInsert ~ "NrExterno, TablaFeriados1, Cupon1, NrOrden1, "
+    &sqlInsert := &sqlInsert ~ "Observaciones, "
+    &sqlInsert := &sqlInsert ~ "FormaLiquidacion1, FormaLiquidacion2, "
+    &sqlInsert := &sqlInsert ~ "RB5, RB9, Plazo, "
+    &sqlInsert := &sqlInsert ~ "TipoCambio, TotalAux8, "
+    &sqlInsert := &sqlInsert ~ "CB6, CB7, "
+    &sqlInsert := &sqlInsert ~ "TotalBrutoCli1, "
+    &sqlInsert := &sqlInsert ~ "FechaCarga"
+    &sqlInsert := &sqlInsert ~ ") VALUES ("
+    &sqlInsert := &sqlInsert ~ "'" ~ &nrOperacion ~ "', "
+    &sqlInsert := &sqlInsert ~ "'VENTA', "
+    &sqlInsert := &sqlInsert ~ "'" ~ pFechaOp ~ "', "
+    &sqlInsert := &sqlInsert ~ "'" ~ pFechaVto ~ "', "
+    &sqlInsert := &sqlInsert ~ "'" ~ pFechaPago ~ "', "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pCliente ~ "', 10), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pEspecie ~ "', 6), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pContraEspecie ~ "', 6), "
+    &sqlInsert := &sqlInsert ~ pCantidad ~ ", "
+    &sqlInsert := &sqlInsert ~ pPrecio ~ ", "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pCorredor ~ "', 10), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pMercado4 ~ "', 6), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pMercado ~ "', 6), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pMercado2 ~ "', 6), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pBook ~ "', 10), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pVehiculo ~ "', 10), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ &operador ~ "', 30), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pNrExterno ~ "', 20), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pFeriados ~ "', 10), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pCupon1 ~ "', 10), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pNrOrden1 ~ "', 20), "
+    &sqlInsert := &sqlInsert ~ "LEFT('" ~ pObs ~ "', 255), "
+    &sqlInsert := &sqlInsert ~ pFormaLiq1 ~ ", "
+    &sqlInsert := &sqlInsert ~ pFormaLiq2 ~ ", "
+    &sqlInsert := &sqlInsert ~ pRb5 ~ ", "
+    &sqlInsert := &sqlInsert ~ pRb9 ~ ", "
+    &sqlInsert := &sqlInsert ~ &plazo ~ ", "
+    &sqlInsert := &sqlInsert ~ pTipoCambio ~ ", "
+    &sqlInsert := &sqlInsert ~ pTotalAux8 ~ ", "
+    &sqlInsert := &sqlInsert ~ pCb6 ~ ", "
+    &sqlInsert := &sqlInsert ~ pCb7 ~ ", "
+    &sqlInsert := &sqlInsert ~ &importe ~ ", "
+    &sqlInsert := &sqlInsert ~ "GETDATE()"
+    &sqlInsert := &sqlInsert ~ ")"
+
+    Execute(&sqlInsert)
+
+    return ${ NrOperacion = &nrOperacion, Importe = &importe, Success = true }
+end
