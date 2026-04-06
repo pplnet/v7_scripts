@@ -1,0 +1,98 @@
+﻿*-- Asigna una Operacion a una Provision
+*-- En Mercado4 Graba la Provision en la Operacion
+*-- En OperacionRef de Provisiones guardo el Nro de Operacion
+CrearDialogo
+   NrOperacion1: 'Provision' ;;;;;;Incluido(BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion1),'MMCPR|MMCPRV');'El Nro.de Provision Ingresado es Incorrecto';NO;;;SQLSET("Select NrOperacion from "~DBO~".OPERACIONES where TipoOp LIKE '%MMCPR%' ")
+   Vehiculo1   : "Vehiculo"  ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"'"))
+   TipoOp1     : 'Clase '    ;;;;NO;;EqStr(Dialogo.TipoOp1,Dialogo.TipoOp2);'La Clase de Provision no coincide con el Tipo de Operaci¦n';NO;;BuscarCampo('OPERACIONES','TipoOp2','NrOperacion',Dialogo.NrOperacion1);
+   Cantidad1   : 'Importe'   ;;;;NO;;Dialogo.Cantidad1=Dialogo.Cantidad2;'Los Importes no coinciden !!!';NO;;BuscarCampo('OPERACIONES','Cantidad','NrOperacion',Dialogo.NrOperacion1);
+   NrOperacion2: 'Operacion' ;1;2;;;;;;;;;SqlSet("Select NrOperacion from "~DBO~".OPERACIONES Where TipoOp like 'MM%'  and TipoOp Not In ('MMCPRV','MMPCCM','MMPCCV','MMPV') ")
+   TipoOp2     : 'TipoOp'    ;;;;NO;;;;;;BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion2);
+   Cantidad2   : 'Importe'   ;;;;NO;;;;;;BuscarCampo('OPERACIONES','Cantidad','NrOperacion',Dialogo.NrOperacion2);
+FinDialogo
+
+
+If not Ok
+ Cancelar
+EndIf
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+*-- Verifico todas las Condiciones de la Asignacion
+SQL.ADD(" SELECT O.* FROM "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B")
+SQL.ADD(" WHERE O.NrOperacion='"~Dialogo.NrOperacion1~"'  ")
+SQL.ADD(" and O.NrOperacion=B.NrOperacion  ")
+SQL.ADD(" and (B.NrBit=20 or B.NrBit=50) and Valor='1' ")
+
+acn(x1,0)
+
+Recorrer SQL
+
+  acn(x1,1)
+
+  IF NoVacio(FBN['OperacionRef'])
+     Cancelar('La Provision se afecto anteriormente a otra Operaci¦n !!!')
+  EndIf
+
+  ACT(A1,FBN['Vehiculo1'])
+  ACT(A2,FBN['Cliente1'])
+  ACT(A3,FBN['Especie'])
+
+  SQL.ADD(" SELECT * FROM "~DBO~".OPERACIONES O , "~DBO~".OPERACIONESBITS B ")
+  SQL.ADD(" WHERE O.NrOperacion='"~Dialogo.NrOperacion2~"'  ")
+  SQL.ADD(" and O.NrOperacion=B.NrOperacion  ")
+  SQL.ADD(" and (B.NrBit=20 or B.NrBit=50) and Valor='1' ")
+
+  acn(x1,0)
+
+  Recorrer SQL
+     acn(x1,1)
+
+     IF NoVacio(FBN['Mercado3'])
+        Cancelar('La Operaci¦n se afecto anteriormente a otra Provisi¦n !!!')
+     EndIf
+
+     IF Not EqStr(Val(A1),FBN['Vehiculo1'])   
+        Cancelar('Los Vehiculos no Coinciden !!!')
+     EndIf
+
+     IF Not EqStr(Val(A2),FBN['Cliente1'])   
+        Cancelar('Las Entidades no Coinciden !!!')
+     EndIf
+
+     IF Not EqStr(Val(A3),FBN['Especie'])   
+        Cancelar('Las Monedas no Coinciden !!!')
+     EndIf
+  Proximo 
+Proximo 
+
+IF VAL(x1)=1
+   * Estan en la instancia correcta
+   Message('Actualizando Provisi¦n '~Dialogo.NrOperacion1~' ... ')
+
+   SQL.ADD(" UPDATE "~DBO~".OPERACIONES ")
+   SQL.ADD(" Set OperacionRef='"~Dialogo.NrOperacion2~"'  ")
+   SQL.ADD(" WHERE NrOperacion='"~Dialogo.NrOperacion1~"'  ")
+   SQL.NEW
+   SQL.EXEC
+
+   Message('Actualizando la Operaci¦n '~Dialogo.NrOperacion2~' ... ')
+ 
+   SQL.ADD(" UPDATE "~DBO~".OPERACIONES ")
+   SQL.ADD(" Set Mercado3='"~Dialogo.NrOperacion1~"'  ")
+   SQL.ADD(" WHERE NrOperacion='"~Dialogo.NrOperacion2~"'  ")
+   SQL.NEW
+   SQL.EXEC
+
+   * Actualizo la Instancia de la Operacion a Supervision
+   ACT(i3,Dialogo.NrOperacion2)
+   (.'MODIINSTAN'.)      
+Else 
+   MessageBox('Las Operaciones Deben Estar en Back Office o Terminal')
+EndIf

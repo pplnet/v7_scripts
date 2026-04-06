@@ -1,0 +1,90 @@
+﻿CrearDialogo
+  Fecha1      : 'Fecha'       ;;;;NO;;;;;;FSYS
+  NrOperacion1: 'CONU'        ;;;;;;;;;;;;;;"TipoOp In ('CONU') and   FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' and (FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"'  or CB1=1)  and CB2=1"  
+  Vehiculo1   : 'Vehiculo'    ;;;;NO;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar un Vehiculo';NO;Var('VEHICULODE');
+  Fecha4      : 'Pri mes'     ;;;;NO;NO;;;;;PriDeMes(Dialogo.Fecha1,NO,'ARG')
+  Fecha2      : 'Fecha 1Mes'  ;;;;NO;NO;;;;;PriDeMes(Habiles(Dialogo.Fecha1,-1,'ARG',SI),SI)
+  Fecha3      : 'Fecha FMes'  ;;;;NO;NO;;;;;FinDeMes(Habiles(Dialogo.Fecha1,-1,'ARG',SI),SI)    
+  
+FinDialogo
+
+if not ok
+  Cancelar
+endif
+
+SQL.ADD(" Select * From ")
+SQL.ADD(" (Select O.NrOperacion, Cliente1, Especie, TipoOp, Cantidad, Book1, FechaOp, CB1, FechaVto, ")
+SQL.ADD("  (Select "~DBO~".SaldoCONU(O.NrOperacion,'"~IdxDate(Dialogo.Fecha1)~"',1)) as Saldo, ")
+SQL.ADD("  (Select "~DBO~".SaldoCONU(O.NrOperacion,'"~IdxDate(Dialogo.Fecha1)~"',2)) as Utilizado ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB ")
+SQL.ADD(" where (FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"'  or CB1=1) and CB2=1 ")
+SQL.ADD("   and O.NrOperacion = OB.NrOperacion ")
+SQL.ADD("   and OB.NrBit in ('10','70') and OB.Valor = '1' ")
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD("  and O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Endif
+   
+SQL.ADD("and TipoOp in ('CONU') ) as Aux")
+SQL.ADD(" Where Saldo > 0  ")
+watch(SQL.Batch)
+
+ recorrer SQL
+ 
+    acn(a:fac,1)
+    act(b:fac,FBN['NrOperacion'])
+    act(c:fac,FBN['Cliente1'])
+    act(d:fac,FBN['Especie'])
+    acn(e:fac,FBN['Cantidad'])
+    act(f:fac,FBN['FechaOp'])
+    If FBN['CB1'] = 1
+       act(g:fac,'')    
+    Else
+        act(g:fac,FBN['FechaVto'])
+    Endif
+    act(h:fac,FBN['Book1'])
+    acn(i:fac,FBN['Saldo'])
+    acn(j:fac,FBN['Utilizado'])    
+    acn(k:fac,FBN['Saldo'])
+    scn(ca:1,1)
+Proximo
+
+If Val(ca:1)>0 
+   **- Armo la lista de las transacciones que puede seleccionar
+   CrearListBox ; 'Arial,8,';'Cancelacion Total/Parcial ICL - CONU'
+       'Accion ?'              ;a:1..a:Fac   ;SI;;;60;COMBO;'Ok|Rechaza'       
+       'Operacion'             ;b:1..b:Fac   ;NO;;;70 ;STRING;;
+       'Cliente'               ;c:1..c:Fac   ;NO;;;70 ;STRING;;
+       'Especie'               ;d:1..d:Fac   ;NO;;;70 ;STRING;;
+       'Monto Original'        ;e:1..e:Fac   ;NO;;;100 ;NUMERO;'##,###,###,###.##';
+       'Fecha Op'              ;f:1..f:Fac   ;NO;;;80 ;STRING;;
+       'Fecha Vto'             ;g:1..g:Fac   ;NO;;;80 ;STRING;
+       'Book'                  ;h:1..h:Fac   ;NO;;;60 ;STRING;
+       'Imp. utilizado'        ;j:1..j:Fac   ;NO;;;100 ;NUMERO;'##,###,###,###.##';              
+       'Saldo Capital'         ;i:1..i:Fac   ;NO;;;100 ;NUMERO;'##,###,###,###.##';       
+       'Imp. a Cancelar'       ;k:1..k:Fac   ;Val(a:FLB)=0;Val(k:FLB)<=Val(i:FLB);'El importe a Cancelar es Mayor al Dispionible';100 ;NUMERO;'##,###,###,###.##';RGB(175,200,228)
+    FinListBox
+
+    IF NOT OK 
+       Cancelar
+    ENDIF
+
+   If Ok
+   **- Recorro las filas para ver cual esta seleccionada, genero Fila en Cuotas
+      Recorrer&i 1, FAC
+            If Val(a:&i) = 0
+               ACN(CT:1, SQL("Select Max(NrCuota) From "~DBO~".CUOTAS Where NrOperacion='"~Val(b:&i)~"' ")+1) 
+               
+               message('Generando CUOTA Precancelacion ... ')
+               SQL.ADD(" INSERT INTO "~DBO~".CUOTAS ( ")
+               SQL.ADD(" NrOperacion, NrCuota, Radio1, Fecha1, Cantidad1, Cantidad2, NrOperacion1 ")
+               SQL.ADD(" ) VALUES ( ")
+               SQL.ADD(" '"~Val(b:&i)~"', "~Val(CT:1)~",  '4', '"~IdxDate(Dialogo.Fecha1)~"', "~FSTR((-1*Val(k:&i)),0,2)~", "~FSTR(0,0,2)~",'"~Val(b:&i)~"'")
+               SQL.ADD(" ) ")
+               SQL.NEW
+               SQL.EXEC
+            Endif
+      Proximo
+   Endif
+  Else
+  Messagebox('No se encontraron operaciones para PreCancelar')
+Endif

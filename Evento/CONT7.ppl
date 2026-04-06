@@ -1,0 +1,66 @@
+﻿*MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:       'Fecha'       ;1;1;;;;;;;fsys
+  Vehiculo1:   'Vehiculo'     ;2;;;NO;;;;;Var('VEHICON')
+  ListaTabla1: 'Operaciones'  ;1;2;;;;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES' 
+  Check1:      'Contab.Procesada' ;3;1;;NO;NO;
+  Radio1:       'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos'   ; 4;1;;NO;NO;;;;4;
+FinDialogo
+
+If Not Ok
+   Raise('Evento Cancelado')
+Endif
+message('--- Asientos de Movimientos no Operativos ---')
+ACT(TA:1, Var('TIPASIMNOP'))
+ACT(ML:1, Var('MONELOCA'))
+ACT(VC:1, Dialogo.Vehiculo1)
+ACD(FE:1, Habiles(Dialogo.Fecha1,-Var('FVALORCONT'),'ARG'))
+
+SQL.ADD("SELECT T.NrTrans, T.Fecha3, T.Vehiculo1, T.Cuenta1, T.CuentaContable2 CConcepto, T.Cuenta2, ")
+SQL.ADD("T.Cantidad1, T.Fecha1, MA.Codigo CodAsi, T.TipoTr2, T.ConceptoPago, T.Especie, T.Cliente1 Cliente, E.Issuer,T.Cliente1, ")
+SQL.ADD("'TIC' as TipoOp, T.Especie Moneda, T.Mercado1 Mercado ")
+SQL.ADD("FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".MODELOSASIENTO MA, "~DBO~".ESPECIES E ")
+SQL.ADD("WHERE T.TipoTr2 in ('DENOP','RENOP','TRNOP') ")
+SQL.ADD("AND T.Fecha3 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("AND T.Especie = E.Codigo ")
+SQL.ADD("AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+SQL.ADD("AND MA.Habilitado = 'SI' ")
+SQL.ADD("AND MA.TipoAsiento = '"~Val(TA:1)~"' ")
+SQL.ADD("AND IsNull(T.CB7,'0') = '0'")
+watch(SQL.Batch)
+ACN(XX:2,0)
+ACN(XX:1,0)
+Recorrer SQL
+    ACN(CO:1,0)
+    ACD(FV:1, fbn('Fecha1'))
+    ACD(FD:1, Dialogo.Fecha1)
+    ACT(VH:1, fbn('Vehiculo1'))
+    ACT(TO:1, fbn('CodAsi'))
+    ACT(TI:1, fbn('TipoTr2'))
+    ACT(NR:1, '')
+    ACT(NR:2, fbn('NrTrans'))
+    ***---(.'GENASIENTO'.)
+    ACN(CK:1, 0)
+    ACN(CK:1, 0)
+    **Cuando no es MLASA me fijo que contabilice el concepto para saber si llamamos a generar el asiento, para MLASA dejamos como estaba y llama siempre.
+    #ifdef MLASA
+        ACN(CO:1,1)
+    #else
+        let &merCtaPte fbn('Mercado')
+        ACN(CO:1,Iif(EqStr(BuscarCampo('CNCONCEPTOSPAGOCOBRO','NoCont','Codigo',fbn('ConceptoPago')),'NO') OR Vacio(BuscarCampo('CNCONCEPTOSPAGOCOBRO','NoCont','Codigo',fbn('ConceptoPago'))),1,0))
+    #endif
+    If val(CO:1)=1
+        IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+            ACN(CK:1, 1)
+            IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrTrans2 = '"~fbn('NrTrans')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+                ACN(CK:1, 0)
+            ENDIF
+        ENDIF
+        let &codAsi fbn('CodAsi')
+        IF Val(CK:1) = 0
+            Message(fbn('NrTrans')~'  - Modelo: '~fbn('CodAsi'))
+            SQL.GenerarAsientoOp(&codAsi,'','','',Val(NA:1),Val(FV:1),fbn('Vehiculo1'),,,,,,fbn('TipoTr2'),,fbn('NrTrans'),,,,,fsys,Dialogo.Fecha1)
+            SQL.EXEC
+        ENDIF
+    EndIf
+Proximo

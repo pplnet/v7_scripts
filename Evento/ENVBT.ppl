@@ -1,0 +1,143 @@
+﻿CrearDialogo
+    NrTrans1  : 'NrTrans'       ; ; ; ; ; ;
+    Fecha1    : 'Fecha'         ; ; ; ; ; ;;;;FSYS;;;
+FinDialogo
+
+SQL.ADD( "SELECT Cliente1, Cuenta1, Especie, Cantidad1, Cantidad11, Cantidad12, Cantidad13, Cantidad14, Cantidad15, RB7, Fecha1, Mercado1")
+SQL.ADD("FROM "~DBO~".TRANSACCIONES2 ")
+SQL.ADD("WHERE NrTrans='"~Dialogo.NrTrans1~"'")
+
+Recorrer SQL
+
+
+   #ifdef BIND
+     * Viene desde Cobro/Pago de Cupon
+    
+     
+       * Parámetros Salida
+       * RR:1  'OK/NOK  
+       * RR:2  'Mensaje'  
+
+       * Parámetros entrada
+       * RR:10  'Referencia'  
+       * RR:11  'Sucursal'  
+       * RR:12  'Cuenta(1a7)'    
+       * RR:13  'SubOperacion-Cuenta (9a10)'
+       * RR:14  'Moneda'
+       * RR:15  'Importe'
+       * RR:16  'Observaciones'
+       * RR:17  'Importe a Bloquear'
+       * RR:18  'Importe a Debitar / Acreditar'
+       * RR:19  'Cliente'
+       * RR:20  'Cuenta'
+       * RR:21  'Especie'
+       * RR:22  'Importe Bloqueado'
+       * RR:23  'Importe Debitado / Acreditado'
+       * RR:24  'Tipo operacion'
+       * RR:25  'Mercado'
+       * RR:26  'Tipo Transferencia'
+       * RR:27  'Capital'
+       * RR:28  'Comisiones'
+       * RR:29  'Derechos'
+       * RR:30  'Iva'
+       * RR:31  'Intereses'
+       * RR:32  'Cod Evento (producto)'
+       * RR:33  'Fecha Valor'
+       * RR:34  'Referencia Corte'
+       * RR:35  'Referencia Accion'
+       * RR:36  'Transaccion'
+       * RR:37  'Fecha Cont'
+       * RR:38  'Modulo' 
+       * RR:39  'Relacion'
+       * RR:40  'Tipo: 1 Resta_Liquidacion/'
+       * RR:41  'Referencia CAMEST'
+       * RR:47  'Capital Accion'
+       * RR:48  'Comisiones Accion'
+       * RR:49  'Derechos Accion'
+       * RR:50  'Iva Accion'
+       * RR:51  'Intereses Accion'
+       * RR:57  'Capital Cupon'
+       * RR:58  'Comisiones Cupon'
+       * RR:59  'Derechos Cupon'
+       * RR:60  'Iva Cupon'
+       * RR:61  'Intereses Cupon'
+       * RR:67  'Capital Camest'
+       * RR:68  'Comisiones Camest'
+       * RR:69  'Derechos Camest'
+       * RR:70  'Iva Camest'
+       * RR:71  'Intereses Camest'
+      *BUSCAR CUENTA, CLIENTE
+       * Cliente / Especie / Cuenta / 
+       *  Interfase Bantotal
+       BorrarCeldas(rr:1..rr:50)
+       ACT(rr:10, Dialogo.NrTrans1~'|')
+       ACT(rr:12, Copy(FBN("Cuenta1"),1,7))
+       ACT(rr:13, Copy(FBN("Cuenta1"),9,2))
+       ACN(rr:17, 0)
+       ACN(rr:18,FBN('Cantidad1'))
+       ACT(rr:19, FBN('Cliente1'))
+       ACT(rr:20, FBN('Cuenta1'))
+       ACT(rr:21, FBN('Especie'))
+       ACT(rr:25, FBN('Mercado1'))
+       ACT(rr:26, 'TRN')
+       *BUSCAR TRN
+       ACT(rr:27, FBN('Cantidad11'))
+       ACT(rr:28, FBN('Cantidad12'))
+       ACT(rr:29, FBN('Cantidad13'))
+       ACT(rr:30, FBN('Cantidad14') + FBN('Cantidad15'))
+       ACT(rr:31, '0')
+      
+       ACT(rr:33, FBN('Fecha1'))
+       ACT(rr:34, '')
+       
+       *RB7 = 0 Titulo Privado/ RB7 = 1 Titulo Publico
+       if FBN('RB7') = 0
+       ACT(rr:32, '3')
+       else ACT(rr:32, '4')
+       endif                                     
+
+*        ACT(rr:35, '')
+*        ACT(rr:47, FBN('Cantidad11'))
+*        ACT(rr:48, FBN('Cantidad12'))
+*        ACT(rr:49, FBN('Cantidad13'))
+*        ACT(rr:50, FBN('Cantidad14')+ FBN('Cantidad15'))
+*        ACT(rr:51, '0')
+       ACT(rr:1,'NOK')
+       (.'GRAVOUCONS'.)
+       ACT(rr:1,'OK')
+       If Eqstr(val(rr:1),'OK')
+          ACN(rr:15, ABS(Val(rr:18)))
+          if Val(rr:18)<0
+             * Debito de Saldo
+             ACT(rr:24, 'DB')
+             BorrarCeldas(rr:1..rr:2)     
+             (.'DEBISALCTA'.)
+            if Eqstr(Val(rr:1),'OK')
+                acn(rr:23, val(rr:18))
+            endif      
+          else
+             if Val(rr:18)>0
+                * Credito de Saldo
+                ACT(rr:24, 'CR')
+                BorrarCeldas(rr:1..rr:2)
+                (.'ACRESALCTA'.)
+                if Eqstr(Val(rr:1),'OK')
+                    acn(rr:23, val(rr:18))
+                endif                   
+             endif
+          endif   
+       endif
+       
+       if Eqstr(Val(rr:1),'OK')
+          (.'VOUCONSSTA'.)
+       else
+          SQL.ADD("UPDATE "~DBO~".VOUCONSOLIDADOS   " )
+          SQL.ADD("SET DetalleError ='"~VAL(rr:2)~"' ")
+          SQL.ADD("WHERE Id='"~FSTR(VAL(rr:9),1,0)~"'")
+          SQL.NEW
+          SQL.EXEC
+          *MessageBox(VAL(rr:2))
+       endif
+                             
+  #endif
+PROXIMO

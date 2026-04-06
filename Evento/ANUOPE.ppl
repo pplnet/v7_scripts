@@ -1,0 +1,138 @@
+﻿(.'CONECTASIS'.)
+if Eqstr(Var('BORRAOPAUT'),'SI')
+  * Marcade Procesa
+  ACN(p:1, 1)
+  Message("Borrando operaciones en Anulacion manual")
+
+  #ifdef MLASA
+    SQL.ADD("SELECT TipoOp, NrOperacion, NrExterno, IsNull(NroAltaMAE,'NA') NroAltaMAE, NroBajaMAE, FechaVto, RB6 Fuente, CB7 NoMae, RB7 FuenteBaja, Operador ")
+    SQL.ADD("  FROM "~DBO~".OPERACIONES WHERE Exists ")
+    SQL.ADD("           (SELECT 1 FROM "~DBO~".OPERACIONESBITS OB ")
+    SQL.ADD("             WHERE OPERACIONES.NrOperacion=OB.NrOperacion   ")
+    SQL.ADD("             and OB.NrBit=30 ")
+    SQL.ADD("             and OB.Valor=1 )")
+    **watch(SQL.BATCH())
+    Recorrer SQL
+       If Incluido(FBN['TipoOp'],'TIC|TIV')
+         BorrarCeldas(A1..A2)
+         if SQL("SELECT 1 FROM "~DBO~".OPEXTERNAS WHERE NrExterno='"~FBN['NrExterno']~"' and TipoAbm='B' and Estado ='PRO' ")=1 y [[NoVacio(FBN['NroBajaMAE']) y FBN['NoMae']=0] o FBN['NoMae']=1]
+           * Pidieron la baja
+           if Val(p:1)=1
+             * Procesa
+             ACT(A1, DealCancelResp(SI, fbn['NrExterno'], fbn['NrOperacion'], ''))
+* FJL 19/12/19 - Se cambia por modificacion respuesta NOK
+*             if Eqstr(val(A1),'OK')
+             if EqStr(Copy(Val(a:1),1,2),'OK')
+               SQL.ADD("DELETE "~DBO~".OPERACIONES ")
+               SQL.ADD(" WHERE NrOperacion='"~FBN['NrOperacion']~"' ")
+               SQL.New
+               SQL.Exec
+             endif
+           else
+             MessageBox('Op. '~FBN['NrOperacion']~' - Pidio baja Raiden')
+             MessageBox('DealCancelResp(SI) op.'~FBN['NrOperacion']~'. Si OK Delete')
+           endif
+         else
+           if [[Vacio(FBN['NroBajaMAE']) y FBN['NoMae']=0] o FBN['NoMae']=1] y FBN['Fuente']=2
+             SQL.ADD("SELECT Tipo, Descripcion FROM "~DBO~".EXCEPCIONES WHERE NrOperacion='"~FBN['NrOperacion']~"' ")
+             Recorrer SQL
+               ACT(A2, VAL(A2)~FBN['Tipo']~' - '~FBN['Descripcion']~'|')
+             Proximo
+             if Vacio(Val(A2))
+               ACT(A2,'ERRORSISEX: Operacion rechazada manualmente|')
+             endif
+             if Val(p:1)=1
+               ACT(A1, DealCreateResp(NO, FBN['NrExterno'], FBN['NrOperacion'], FBN['NroAltaMAE'], FBN['FechaVto'], VAL(A2)))
+* FJL 19/12/19 - Se cambia por modificacion respuesta NOK
+*               if Eqstr(val(A1),'OK')
+               if EqStr(Copy(Val(a:1),1,2),'OK')
+                 SQL.ADD("DELETE "~DBO~".OPERACIONES ")
+                 SQL.ADD(" WHERE NrOperacion='"~FBN['NrOperacion']~"' ")
+                 SQL.New
+                 SQL.Exec
+               endif
+             else
+               MessageBox('DealCreateResp(NO) op.'~FBN['NrOperacion']~'. Si OK Delete')
+             endif
+           else   
+** FJL 25/10/19 - Radien III
+** FJL 13/03/20 - Se agrega esta pregunta por baja pases STD-BYMA
+             if EqStr(Mayusculas2(VAR('SISEXT1')),'RAIDEN')
+               if FBN['FuenteBaja']=0 o FBN['FuenteBaja']=1
+* FJL 02/10/20 - Se agrega control para no informar bajas a raiden de operaciones que no tienen NrExterno 
+                 if NoVacio(FBN['NrExterno'])
+                   if Val(p:1)=1
+                     ACT(A1, DealCancelSiopelCont(FBN['NrExterno'], FBN['NrOperacion'], FBN['Operador']))
+* FJL 01/11/19 - Por ahora las borra directamente xq no estamos 
+* FJL 19/12/19 - Se cambia por modificacion respuesta NOK
+*                     if Eqstr(val(A1),'OK')
+                     if EqStr(Copy(Val(a:1),1,2),'OK')
+                       SQL.ADD("DELETE "~DBO~".OPERACIONES ")
+                       SQL.ADD(" WHERE NrOperacion='"~FBN['NrOperacion']~"' ")
+                       SQL.New
+                       SQL.Exec
+                     else
+                       MessageBox('DealCancelSiopelCont() op.'~FBN['NrOperacion']~'. Si OK Delete')
+                     endif
+                   endif
+                 else
+                   * No tiene NrExterno
+                   if Val(p:1)=1
+                     SQL.ADD("DELETE "~DBO~".OPERACIONES ")
+                     SQL.ADD(" WHERE NrOperacion='"~FBN['NrOperacion']~"' ")
+                     SQL.New
+                     SQL.Exec
+                   else
+                     MessageBox('Delete op.'~FBN['NrOperacion'])
+                   endif
+                 endif
+               endif
+             else
+               if Val(p:1)=1
+                 SQL.ADD("DELETE "~DBO~".OPERACIONES ")
+                 SQL.ADD(" WHERE NrOperacion='"~FBN['NrOperacion']~"' ")
+                 SQL.New
+                 SQL.Exec
+               else
+                 MessageBox('Delete op.'~FBN['NrOperacion'])
+               endif
+             endif   
+           endif   
+         endif   
+       else
+         * No es TIC-TIV
+         if Val(p:1)=1
+           SQL.ADD("DELETE "~DBO~".OPERACIONES ")
+           SQL.ADD(" WHERE NrOperacion='"~FBN['NrOperacion']~"' ")
+           SQL.New
+           SQL.Exec
+         else
+           MessageBox('No TIC-TIV - Delete op.'~FBN['NrOperacion'])
+         endif
+       ENDIF
+    Proximo     
+  #else
+    if Val(p:1)=1
+       SQL.ADD(" Select OB.* From "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB ")
+       SQL.ADD("  Where O.NrOperacion = OB.NrOperacion  ")
+       SQL.ADD("    and OB.NrBit=30  ")
+       SQL.ADD("    and OB.Valor = 1  ")
+       Recorrer SQL
+           try     
+             SQL.ADD("DELETE "~DBO~".OPERACIONES WHERE Exists ")
+             SQL.ADD("           (SELECT 1 FROM "~DBO~".OPERACIONESBITS OB ")
+             SQL.ADD("             WHERE OPERACIONES.NrOperacion=OB.NrOperacion   ")
+             SQL.ADD("               and OPERACIONES.NrOperacion='"~FBN['NrOperacion']~"'")
+             SQL.ADD("               and OB.NrBit = 30 ")
+             SQL.ADD("               and OB.Valor = 1 )")
+             SQL.New
+             SQL.Exec
+           catch
+             Message('Se está intentando eliminar una operacion liquidada '~fbn['NrOperacion'])
+           end 
+       Proximo   
+    else
+       MessageBox('No MLASA - Delete todas no liquidadas en Instancia 30')
+    endif
+  #endif
+Endif

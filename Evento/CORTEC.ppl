@@ -1,0 +1,205 @@
+﻿*Este evento actualiza los Saldos y Posiciones, 
+*se supone que la especie ya esta actualizada.
+* HojaVisible(SI)
+MostrarCuadroDeMensajes
+CrearDialogo
+  Especie1   :'Especie'    ;;;;;;NoVacio(Dialogo.Especie1) y DesciendeDeEspecie(Dialogo.Especie1,'TITULO') y NOT DesciendeDeEspecie(Dialogo.Especie1,'CUPON');'Especie Invalida';NO;;;;;;"Status = 'HAB' "
+  Entero1    :'Nr.Cupon'   ;;;;;;Dialogo.Entero1>=0;'Cupon Invalido';NO;0;Num(BuscarCampo('ESPECIES','Cupon','Codigo',Dialogo.Especie1))+IIF(Dialogo.Check5=1 O Dialogo.Check6=1,0,-1)
+***---  Entero1    :'Nr.Cupon'   ;;;;;;Dialogo.Entero1>=0;'Cupon Invalido';NO;0;BuscarCampo('ESPECIES','Cupon','Codigo',Dialogo.Especie1)+IIF(Dialogo.Check5=1,0,-1)
+  Entero2    :'CuponINI'   ;2;2;;;NO;Dialogo.Entero2>=0;'Cupon Inicial Invalido';NO;0;Dialogo.Entero1
+  Fecha1     :'F.Corte'    ;3;1;;NO;;Dialogo.Fecha1 <= Fsys;'Fecha Invalida';NO;;IIF(Dialogo.Check5=1,FechaMaduracion(Dialogo.Especie1),SQL(" SELECT FechaCorte FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' "))
+  Vehiculo1  :'Vehiculo'   ;;;;;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar un Vehiculo';NO;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='')"),SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+  Check1     :'Saldos'     ;;;;;;;;;1
+  Check4     :'Vigentes'   ;;;;;;;;;1
+  Check3     :'Pendientes' ;;;;;;;;;1
+  Check2     :'Posicion'   ;;;;NO;NO;;;;1;IIF(Dialogo.Check1=1,1,0)
+  Check5     :'ZeroCoupon' ;9;1 ;;NO;SI;;;;;IIF(EqStr('SI',BuscarCampo('ESPECIES','ZeroCoupon','Codigo',Dialogo.Especie1)),1,0)
+  Check6     :'UltCupon'   ;10;1;;NO;SI;;;;;IIF(SQL("Select Max(CAST(NrCupon AS INT)) from "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' ")=Num(BuscarCampo('ESPECIES','Cupon','Codigo',Dialogo.Especie1)) Y ValorTeorico2(Dialogo.Especie1,Dialogo.Fecha1) = 0,1,0);
+FinDialogo
+
+If Not Ok
+   Cancelar
+endif
+
+*Custodia
+ACN(a:1, Dialogo.Check1)
+*Posicion
+ACN(b:1, Dialogo.Check2)
+*Fallas
+ACN(c:1, Dialogo.Check3)
+*Vigentes
+ACN(d:1, Dialogo.Check4)
+
+If Vacio(BuscarCampo('ESPECIES','Alias3','Codigo',Dialogo.Especie1)) 
+   Cancelar('La Especie no tiene el Cupon Asociado.')
+endif
+
+If Not EqStr(BuscarCampo('ESPECIES','Status','Codigo',Dialogo.Especie1),'HAB')
+   Cancelar('La Especie debe estar Habilitada.')
+endif
+
+If EqStr(BuscarCampo('ESPECIES','EsCupon','Codigo',Dialogo.Especie1),'SI')
+   Cancelar('La Especie es un Cupon.')
+endif
+
+If Num(BuscarCampo('ESPECIES','Cupon','Codigo',Dialogo.Especie1))-1 <> Dialogo.Entero1 y Dialogo.Check5=0 y Dialogo.Check6=0
+   Cancelar('No Coincide el Nro. de Cupon corriente.')
+endif
+
+ACT(X:100, SQL(" SELECT Estado FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' "))
+If Eqstr(Val(x:100), 'PEN')
+   Cancelar('El cupon no fue procesado.')
+endif
+
+
+If Dialogo.Check5=0
+   *- No es Zero Coupon
+   SQL.ADD(" SELECT A.*, E.Jerarquia, E.Nombre, E.Tipo, E.Alias3,E.Valor10 ")
+   SQL.ADD(" FROM "~DBO~".ESPECIES E, "~DBO~".AGENDACUPONES A ")
+   SQL.ADD(" WHERE A.Especie = E.Codigo ") 
+   SQL.ADD(" AND   A.Especie = '"~Dialogo.Especie1~"'") 
+   SQL.ADD(" AND   A.NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' ")
+Else 
+   *- Es Zero Coupon
+   SQL.ADD(" SELECT E.Codigo as Especie, ")
+   SQL.ADD("        E.Fecha  as FechaCorte, ")
+   SQL.ADD("        E.Fecha  as FechaPago, ")
+   SQL.ADD("        100      as PorAmCapital,")
+   SQL.ADD("        0        as PorRenta, ")
+   SQL.ADD("        0        as PorAmIntCap, ")
+   SQL.ADD("        0        as IntsCapitalizados, ")
+   SQL.ADD("        E.Jerarquia, ")
+   SQL.ADD("        1        as VTeoricoAnt, ")
+   SQL.ADD("        E.Nombre, ")
+   SQL.ADD("        E.Tipo, ")
+   SQL.ADD("        E.Alias3, ")
+   SQL.ADD("        E.Valor10 ")
+   SQL.ADD(" FROM "~DBO~".ESPECIES E  ")
+   SQL.ADD(" WHERE E.Codigo  = '"~Dialogo.Especie1~"' ") 
+EndIf
+
+
+Recorrer SQL
+   *--------------------------- Especie Origen ----------------------------*
+   ACT(a2, fbn['Jerarquia'])
+   ACT(b2, FBN['Especie'])
+
+   *Nr Cupon
+   ACN(c2, Dialogo.Entero1)
+   ACT(d2, fbn['Nombre'])
+
+   *VT Corte
+   ACN(e2, fbn('VTeoricoAnt'))
+
+   *Fecha de Corte
+   ACD(g2, fbn('FechaCorte'))
+
+   *Fecha de Pago
+   ACD(h2, fbn('FechaPago'))
+
+   ACT(j2, Dialogo.Vehiculo1)
+
+   *Amortizacion
+   ACN(K:2, fbn('PorAmCapital'))
+
+   *Renta
+   ACN(l2, fbn('PorRenta'))
+
+   *Cap Int
+   ACN(m2, fbn('PorAmIntCap'))
+
+   *Nr Cupon
+   ACN(n2, Dialogo.Entero1)
+
+   *Tipo de Especie
+   ACT(o2, fbn['Tipo'])
+
+   *-----------------------------Nuevo Cupon--------------------------------*
+   ACN(c3, Val(c2))
+   If Dialogo.Check5=0
+      *Cupon Actual + 1
+      ACN(c3, Val(c2)+1)
+   EndIF
+
+   ACN(E:99, Round(Val(e2), 7) - Round((Val(K:2)/100), 7))
+
+   IF Val(E:99) <= 0
+       ***---Ya Amortizo todo el capital, => no hay proximo cupon
+       ACN(C:3, 0)
+   ENDIF
+
+   *VT Actual - (%Amort /100 )
+   ACN(e3, Val(e2)-(Val(K:2)/100))
+
+   ACN(f3, Val(K:2)/100)
+
+   *---------------------------- Especie Cupon -----------------------------*
+   ACT(b4, fbn('Alias3'))
+
+   * Fecha Proximo Corte
+   ACD(h4, ProxCupon2(Val(b2),Fsys))
+
+   * Cupon Nuevo
+   ACN(c4, Val(c3))
+
+   *- ci2: Intereses Capitalizados
+   ACN(ci2,FBN['IntsCapitalizados'])
+
+   *- in1: Coeficiente Indice (1 si no tiene indice)
+   ACN(in1,FBN['Valor10'])
+
+Proximo
+
+*---------------- Inserto Cotizacion de Cupon si no es zero coupon --------------------*
+If Dialogo.Check5=0  
+   ACN(cx:1, SQL("SELECT COUNT(*) FROM "~DBO~".COTIZACIONES WHERE Codigo = '"~Val(b:4)~"' AND Fecha = "~IdxDate2(Dialogo.Fecha1)~" ") )
+   If Val(cx:1)=0
+      * Inserto Cotizacion
+      SQL.ADD(" INSERT INTO "~DBO~".COTIZACIONES ( ")
+      SQL.ADD(" Codigo, Fecha, CallPut, Precio1 ")
+      SQL.ADD(" ) VALUES ( ")
+      SQL.ADD(" '"~Val(b:4)~"', "~IdxDate2(Dialogo.Fecha1)~", 'CON', "~Fstr( (Val(K:2)+Val(l2)+Val(m2))/100,0,8)~" ")
+      SQL.ADD(" ) ")
+      SQL.NEW
+   Else
+      * Actualizo Cotizacion
+      SQL.ADD(" UPDATE "~DBO~".COTIZACIONES SET ")
+      SQL.ADD(" Precio1 = "~Fstr((Val(K:2)+Val(l2)+Val(m2))/100,0,8)~" ")
+      SQL.ADD(" WHERE Codigo = '"~Val(b:4)~"' AND Fecha = "~IdxDate2(Dialogo.Fecha1)~" ")
+      SQL.NEW
+   Endif
+Endif
+
+
+ACT(st1,SQL("SELECT SType FROM "~DBO~".ESPECIES WHERE Codigo='"~Dialogo.Especie1~"' "))
+
+If Not EqStr(Mayusculas2(val(st1)),'FIJA')
+   SQL.ADD("UPDATE "~DBO~".ESPECIES ")
+   SQL.ADD("SET Alias4 = 'TASA_ESTIMADA'  ")
+   SQL.ADD("WHERE Codigo = '"~Dialogo.Especie1~"' ")
+   SQL.NEW
+EndIf
+Message(' Actualizando Especie ')
+SQL.EXEC
+
+*-----------------------------------------------------------------*
+*- Momentaneo, por el saldo inicial
+ACN(c2, Dialogo.Entero2)
+
+IF Val(a:1)=1
+   message('Corte de Saldos. ')
+   *--LLAMA A CORTE DE POSICION
+   (.'CCUPONSAL'.)
+ENDIF
+IF Val(d:1)=1
+   message('Corte de Operaciones a Liquidar. ')
+   *Las Operaciones a Liquidar - Futuros Ejercicios y Opciones.
+   (.'CCUPONALIQ'.)
+ENDIF
+IF Val(c:1)=1
+   message('Corte de Operaciones Pendientes. ')
+   (.'CCUPONVENC'.)
+ENDIF
+
+*--Corte de Posicion sin saldo
+(.'CCUPONPOS2'.)

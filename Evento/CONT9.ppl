@@ -1,0 +1,56 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:       'Fecha'       ;1;1;;;;;;;fsys
+  Vehiculo1:   'Vehiculo'     ;2;;;NO;;;;;Var('VEHICON')
+  ListaTabla1: 'Operaciones'  ;1;2;;;;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES' 
+  Check1:      'Contab.Procesada' ;3;1;;NO;NO;
+  Radio1:       'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos'   ; 4;1;;NO;NO;;;;4;
+FinDialogo
+
+If Not Ok
+   Raise('Evento Cancelado')
+Endif
+
+IF Dialogo.Radio1 = 2 O Dialogo.Radio1 = 4
+    message('--- Asientos Al Vto. Futuros ---')
+    ACD(FE:1, Habiles(Dialogo.Fecha1,-Var('FVALORCONT'),'ARG'))
+    ACT(TA:1, Var('TIPASIRVT'))
+    ACT(VC:1, Dialogo.Vehiculo1)
+    ACN(NA:1, Var('ASINUM'))
+    SQL.ADD(" SELECT O.NrOperacion, O.TipoOp, O.FechaVto Fecha, O.Vehiculo1, O.Cantidad as Cantidad, MA.Codigo CodAsi, C.Jerarquia, ")
+    SQL.ADD(" C.PaisDir, O.Cuenta1, O.TotalBrutoCli1 as TotalNetoCli1, O.ContraEspecie, O.Especie, O.FechaOp, ")
+    SQL.ADD(" O.Precio1 as PorDerechoMercado, O.Mercado4, ")
+    SQL.ADD(" '#Op:' + O.NrOperacion + ',' + rtrim(O.TipoOp) + ',' + rtrim(O.Especie) Leyenda,   ")
+    SQL.ADD(" O.Cliente1 as  Cliente ")
+    SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".MODELOSASIENTO MA, "~DBO~".CLIENTES C ")
+    SQL.ADD(" WHERE  C.Codigo  = O.Cliente1 ")
+    SQL.ADD(" AND O.TipoOp = MA.TipoOp AND MA.TipoAsiento = '"~Var('TIPASIRVT')~"' AND O.TipoOp in ('FXCF','FXVF') ")
+    SQL.ADD(" AND 0=(Select count(*) from OPERACIONESBITS B where B.NrOperacion=O.NrOperacion  AND ((B.NrBit = 1 and B.Valor = '1') or (B.NrBit = 31 and B.Valor = '1') or (B.NrBit = 30 and B.Valor = '1'))) ")
+    SQL.ADD(" AND (O.PaseCB = 0 or O.PaseCB is Null)  ")
+    SQL.ADD(" AND O.FechaVto = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+    SQL.ADD(" AND MA.Habilitado = 'SI' ")
+    Recorrer SQL
+      ACD(FV:1, fbn('Fecha'))
+      ACD(FD:1, Dialogo.Fecha1)
+      ACT(VH:1, fbn('Vehiculo1'))
+      ACT(TO:1, fbn('CodAsi'))
+      ACT(TI:1, fbn('TipoOp'))
+      ACT(NR:1, fbn('NrOperacion'))
+      ACT(NR:2, '')
+      ACN(CO:1, COTIZACIONC(fbn('ContraEspecie'),,,,fbn('FechaOp'),25,SI,VAR('MONELOCA')))
+      ***---(.'GENASIENTO'.)
+      ACN(CK:1, 0)
+      IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+         ACN(CK:1, 1)
+         IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrOperacion = '"~fbn('NrOperacion')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+            ACN(CK:1, 0)
+         ENDIF
+      ENDIF
+      IF Val(CK:1) = 0
+         Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+         SQL.GenerarAsientoOp(fbn('CodAsi'), fbn('NrOperacion'),'','',Val(NA:1),Val(FV:1),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,Fsys,Dialogo.Fecha1)
+         SQL.EXEC
+      ENDIF
+    Proximo
+ENDIF

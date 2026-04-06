@@ -1,0 +1,181 @@
+﻿*** GCVARB. Generacion de Compras Ventas para Arbitrajes (FX)
+CrearDialogo
+  NrOperacion1 : "Operacion" ;;;;;;NoVacio(Dialogo.NrOperacion1);'Debe Ingresar una Operacion';NO;
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+If Not Incluido(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'FXAS|FXAT|FXASV|FXATV|')
+   Cancelar('La operacion N? '~Dialogo.NrOperacion1~' No es un Arbitraje')
+endif
+
+* Verifico que se encuentre en Back Office o Terminal
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+
+If VAL(X1)<>20 y VAL(X1)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+If Ok
+
+   Message(' --- Generando Compra/Venta desde Arbitraje ...')
+   * Toma la operacion verificando que no se hayan generado las compras/ventas
+   SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+   SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' and (RB1='0' or RB1 IS NULL)")
+
+   ACN(A1,0)
+   Recorrer SQL
+
+     ACN(A1,1)
+
+     *** Determina los tipos de operacion a utilizar ***
+     *** Z1 operacion contado, z2 operacion futuro ****    
+
+     ** FXAS : FXCS y FXVS
+     If EqStr(FBN['TipoOp'],'FXAS')     
+        ACT(z1,'FXCS')        
+        ACT(z2,'FXVS')        
+     endif
+
+     ** FXAT o FXREPO: FXCT y FXVT
+     If EqStr(FBN['TipoOp'],'FXAT') o EqStr(FBN['TipoOp'],'FXREPO')
+        ACT(z1,'FXCT')        
+        ACT(z2,'FXVT')        
+     endif
+
+     ** FXASV : FXCSV y FXVSV
+     If EqStr(FBN['TipoOp'],'FXASV')     
+        ACT(z1,'FXCSV')        
+        ACT(z2,'FXVSV')        
+     endif
+
+     ** FXATV O FXREPV: FXCTV y FXVTV
+     If EqStr(FBN['TipoOp'],'FXATV') O EqStr(FBN['TipoOp'],'FXREPV')
+        ACT(z1,'FXCTV')        
+        ACT(z2,'FXVTV')        
+     endif
+
+     *** Z3 Nro. Operacion Contado
+     ACT(z3,GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',FBN['Vehiculo1'])))
+
+     *** Z4: Calcula el Plazo de la Especie
+     ACN(Z4,FBN['FechaVto']-FBN['FechaOp'])
+
+     *** Z5: Calcula el Plazo2 de la ContraEspecie
+     ACN(Z5,FBN['FechaPago']-FBN['FechaOp'])
+
+         
+     *** Z6: Recupero CB6: Modo Cotizacion ContraEspecie/ARP DIRECTO 
+     ACN(Z6,1)
+     IF EqStr(SQL(" Select Modo from "~DBO~".MODOESPECIES where Especie1='"~FBN['ContraEspecie']~"' and Especie2='ARP' "),'INV')
+        ACN(Z6,0)
+     ENDIF
+
+     *** Z16: Recupero CB6: Modo Cotizacion Especie/ARP DIRECTO 
+     ACN(Z16,1)
+     IF EqStr(SQL(" Select Modo from "~DBO~".MODOESPECIES where Especie1='"~FBN['Especie']~"' and Especie2='ARP' "),'INV')
+        ACN(Z16,0)
+     ENDIF
+
+     ** Z9: Precio de Compra   Z7: Precio de Venta   Z8: Monto el Pesos
+     IF EqStr(FBN['ContraEspecie'],'USD') 
+        ACN(Z7,COTIZACIONC(FBN['ContraEspecie'],,,,FBN['FechaOp'],1,SI,'ARP'))
+        ACN(z8,FBN['TotalBrutoCli1']*Val(z7))
+        ACN(z9,Val(z8)/FBN['Cantidad'])
+
+        IF VAL(Z6)=0
+           ACN(Z7,1/COTIZACIONC(FBN['ContraEspecie'],,,,FBN['FechaOp'],1,SI,'ARP'))
+           ACN(z8,FBN['TotalBrutoCli1']/Val(z7))
+           ACN(z9,Val(z8)*FBN['Cantidad'])
+        ENDIF
+     ELSE 
+        ACN(Z9,COTIZACIONC(FBN['Especie'],,,,FBN['FechaOp'],1,SI,'ARP'))
+        ACN(z8,FBN['Cantidad']*Val(z9))
+        ACN(z7,Val(z8)/FBN['TotalBrutoCli1'])
+
+        IF VAL(Z16)=0
+           ACN(Z9,1/COTIZACIONC(FBN['Especie'],,,,FBN['FechaOp'],1,SI,'ARP'))
+           ACN(z8,FBN['Cantidad']/Val(z9))
+           ACN(z7,Val(z8)*FBN['TotalBrutoCli1'])
+        ENDIF
+     ENDIF
+
+     Message(' ---- Generando Operacion de Compra ...')     
+     *** Graba las operaciones de compra ****
+     SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ")
+     SQL.ADD("(TipoOp, NrOperacion, Especie, Cliente1, Cantidad, Precio1, ")
+     SQL.ADD(" TotalBrutoCli1, TotalNetoCli1, ContraEspecie, ")
+     SQL.ADD(" FechaOp, FechaVto, FechaPago, Plazo, Plazo2, ")
+     SQL.ADD(" Operador, Vehiculo1, ")
+     SQL.ADD(" ValorRB1, Puesto, Observac2, OperacionRef, TablaFeriados1, ")
+     SQL.ADD(" Precio4, RB7, CB6, ")
+     SQL.ADD(" UsrInput, FechaCarga,Vehiculo2,MB4,RB10,Arbitraje,RB3) ") 
+     SQL.ADD("Values")
+     SQL.ADD("('"~Val(z1)~"', '"~Val(z3)~"', '"~FBN['Especie']~"', ")
+     SQL.ADD(" '"~FBN['Cliente1']~"', "~Fstr(FBN['Cantidad'],0,4)~", "~Fstr(Val(z9),0,7)~", ")
+     SQL.ADD(" "~Fstr(Val(z8),0,4)~", "~Fstr(Val(z8),0,4)~", 'ARP', ")
+     SQL.ADD(" '"~IdxDate(FBN['FechaOp'])~"', '"~IdxDate(FBN['FechaVto'])~"', ")
+     SQL.ADD(" '"~IdxDate(FBN['FechaPago'])~"', "~Fstr(VAL(Z4),2,0)~", "~Fstr(VAL(Z5),2,0)~", ")
+     SQL.ADD(" '"~FBN['Operador']~"', '"~FBN['Vehiculo1']~"', ")
+     SQL.ADD(" '"~FBN['ValorRB1']~"', '"~FBN['Puesto']~"', ")
+     SQL.ADD(" '"~FBN['Observac2']~"', '"~FBN['NrOperacion']~"', '"~FBN['TablaFeriados1']~"', ")
+     SQL.ADD(" "~Fstr(Val(z9),0,7)~", '"~FBN['RB7']~"', '"~Fstr(VAL(Z16),1,0)~"', ")     
+     SQL.ADD(" '"~FBN['UsrInput']~"', '"~IdxDate(FSYS)~"', '"~FBN['Vehiculo2']~"', '"~FBN['MB4']~"', ")
+     SQL.ADD(" '"~FBN['RB10']~"','1','"~FBN['RB3']~"') ")
+     SQL.NEW
+
+     * Insert de Instancias: Deja la Operacion en Terminal
+     (.'ALTAINSTER'.)
+
+     *** Z3 Nro. Operacion Futuro
+     ACT(z3,GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',FBN['Vehiculo1'])))
+
+     Message(' ---- Generando Operacion de Venta ...')     
+     *** Graba la operacion de venta ****
+     SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ")
+     SQL.ADD("(TipoOp, NrOperacion, Especie, Cliente1, Cantidad, Precio1, ")
+     SQL.ADD(" TotalBrutoCli1, TotalNetoCli1, ContraEspecie, ")
+     SQL.ADD(" FechaOp, FechaVto, FechaPago, Plazo, Plazo2, ")
+     SQL.ADD(" Operador, Vehiculo1, ")
+     SQL.ADD(" ValorRB1, Puesto, Observac2, OperacionRef, TablaFeriados1, ")
+     SQL.ADD(" Precio4, RB7, CB6, ")
+     SQL.ADD(" UsrInput, FechaCarga,Vehiculo2,MB4,RB10,Arbitraje,RB3) ") 
+     SQL.ADD("Values")
+     SQL.ADD("('"~Val(z2)~"', '"~Val(z3)~"', '"~FBN['ContraEspecie']~"',  ")
+     SQL.ADD(" '"~FBN['Cliente1']~"', "~Fstr(FBN['TotalBrutoCli1'],0,4)~", "~Fstr(Val(z7),0,7)~", ")
+     SQL.ADD(" "~Fstr(Val(z8),0,4)~", "~Fstr(Val(z8),0,4)~", 'ARP', ")
+     SQL.ADD(" '"~IdxDate(FBN['FechaOp'])~"', '"~IdxDate(FBN['FechaVto'])~"', ")
+     SQL.ADD(" '"~IdxDate(FBN['FechaPago'])~"', "~Fstr(VAL(Z4),2,0)~", "~Fstr(VAL(Z5),2,0)~", ")
+     SQL.ADD(" '"~FBN['Operador']~"', '"~FBN['Vehiculo1']~"', ")
+     SQL.ADD(" '"~FBN['ValorRB1']~"', '"~FBN['Puesto']~"', ")
+     SQL.ADD(" '"~FBN['Observac2']~"', '"~FBN['NrOperacion']~"', '"~FBN['TablaFeriados2']~"', ")
+     SQL.ADD(" "~Fstr(Val(z7),0,7)~", '"~FBN['RB7']~"', '"~Fstr(VAL(Z6),1,0)~"', ")     
+     SQL.ADD(" '"~FBN['UsrInput']~"', '"~IdxDate(FSYS)~"', '"~FBN['Vehiculo2']~"', '"~FBN['MB4']~"', ")
+     SQL.ADD(" '"~FBN['RB10']~"','1','"~FBN['RB3']~"') ")
+     SQL.NEW
+
+     * Insert de Instancias: Deja la Operacion en Terminal
+     (.'ALTAINSTER'.)
+
+     *** Marco la Operacion de Arbitraje como Generada Indicador RB1
+     SQL.ADD(" UPDATE "~DBO~".OPERACIONES SET RB1 = '1' ")
+     SQL.ADD(" Where (NrOperacion = '"~FBN['NrOperacion']~"')  ")
+     SQL.NEW    
+     SQL.EXEC
+   proximo
+
+   IF VAL(A1)=0
+      MessageBox('Se han generado con anterioridad las Operaciones de Compra y Venta para esta Operacion !!!')
+   ENDIF
+endif

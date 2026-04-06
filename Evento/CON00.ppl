@@ -1,0 +1,122 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:    'Fecha'                            ;1;;;;;Dialogo.Fecha1<=FSys;'Fecha inválida';SI;Fsys
+  *Lista1:    'Vehiculos'   ; 3;;;;;;;;;;SQLSET("Select Codigo from "~DBO~".VEHICULOS")
+  Vehiculo1:   'Vehiculo'                       ;2;;;NO;;;;;Var('VEHICON')
+  Radio1:    'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos' ; 4;1;;NO;NO;;;;4;
+  Radio2:   'Reval TIT|Mensual|Diario'          ;;;;NO;;;;;Var('RETIDIARIO');;;;;;;;;;;;
+  Check1:   'Regenera Pos'                      ;;;;NO;NO;;;;1
+FinDialogo
+
+If Not Ok
+   Cancelar('Evento Cancelado')
+Endif
+
+***Si llamamos desde CONT00 no regeneramos posiciones por default, agregamos check1 para manejarlo
+If EqStr(Var('ACTPOS'),'SI') Y Dialogo.Check1 = 1
+    * Revaluar operaciones y transacciones en dolares
+    Message('Regenera posiciones de Ops/Tr en dolares')
+    EjecutarEvento('REGPOS', Fecha1=Dialogo.Fecha1,Check1=1)
+
+    * Reset Precio
+    Message('Resetea precio posicion')
+    EjecutarEvento('RESPCO', Fecha1=Dialogo.Fecha1,Especie1='',Check3=1,Check4=1,Check1=1,Check2=1 )
+EndIf
+
+IF Eqstr(Var('CONTAPROCE'), 'SI')
+    ACN(CK:1, 1)
+ELSE
+    ACN(CK:1, 0)
+ENDIF
+
+SQL.ADD(" Update "~DBO~".VARIABLES Set Valor='SI' Where Codigo='GENASIENTO' ")
+SQL.NEW
+SQL.EXEC
+
+ACD(FE:1, Habiles(Fsys,-Var('FVALORCONT'),'ARG'))
+ACN(X:1, SQL("Select 1 from "~DBO~".VARIABLES where Codigo = 'DIASCONT' "))
+IF Val(X:1) = 1
+   ACN(X:1, Trunc(Var('DIASCONT'),0))
+ENDIF
+IF Val(X:1) < 1
+   ACN(X:1, 1)
+ENDIF
+ACD(X:2, Habiles(PriDeMes(Dialogo.Fecha1,SI)-1,Val(X:1),'ARG'))
+
+***---Anulacion de Asientos
+EjecutarEvento2('ANUASI', Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha1, Lista2='', ListaTabla1='', Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Concertacion
+EjecutarEvento2('CONT1', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Liquidacion
+EjecutarEvento('CONT2', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Liquidacion Gastos
+*01/02/2023 - Se descarta el evento CONT22. Los gastos se contabilizan ahora en el evento CONT2.
+*EjecutarEvento('CONT22', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Asientos de Custodia
+EjecutarEvento('CONT3', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+
+***---Cintia 270524 - Asientos por cambio de book
+EjecutarEvento('CONT19', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio2=Dialogo.Radio2, Vehiculo1=Dialogo.Vehiculo1)
+
+***---IF Dialogo.Fecha1 >= Val(X:2) Y Dialogo.Fecha1 <= Habiles(PriDeMes(Dialogo.Fecha1,SI)-1,Var('FVALORCON'),'ARG') Y [Num(Dialogo.Radio1)=0 O Num(Dialogo.Radio1)=4]
+*IF Dialogo.Fecha1 = Val(X:2)
+    ***---Asientos de Revaluo Fin de Mes por Operaciones Contado a Liquidar
+    *    EjecutarEvento('CONT4', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Radio2=1)
+    *ELSE
+    
+*ENDIF    
+***---Asientos de Revaluo Diario
+EjecutarEvento('CONT4', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Radio2=Dialogo.Radio2, Vehiculo1=Dialogo.Vehiculo1)
+*ENDIF
+***---Llamada a TITOFIN
+EjecutarEvento('TITGEN', Fecha1=Dialogo.Fecha1, Vehiculo1=Dialogo.Vehiculo1)
+***---Asientos de Resultado Realizado Diario
+EjecutarEvento('CONT18', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Radio2=Dialogo.Radio2, Vehiculo1=Dialogo.Vehiculo1)
+***---Asientos de Devengados
+EjecutarEvento('CONT15', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Asientos de Vencimiento
+EjecutarEvento('CONT16', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Revaluo Movimientos Pendientes de moneda
+EjecutarEvento('CONT5', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Asientos de Corte de Cupon
+EjecutarEvento('CONT6', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Movimientos No Operativos
+EjecutarEvento('CONT7', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+
+***---Asientos de MTM y de Fixing
+EjecutarEvento('CONT8', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Vencimiento Futuros
+EjecutarEvento('CONT9', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Revaluo NDF Fin de Mes
+EjecutarEvento('CONT11', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1)
+***---Cobro/Pago NDF
+EjecutarEvento('CONT10', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1, Fecha2=FinDeMes(PriDeMes(Dialogo.Fecha1)-1))
+
+***---Asientos de Cobro de Dividendos
+EjecutarEvento('CONT17', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1, Fecha2=FinDeMes(PriDeMes(Dialogo.Fecha1)-1))
+***---Transferencia de Cartera
+EjecutarEvento('CONT14', Fecha1=Dialogo.Fecha1, ListaTabla1='', Check1=Val(CK:1), Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1, Fecha2=FinDeMes(PriDeMes(Dialogo.Fecha1)-1))
+***---ContraAsientos de Operaciones
+EjecutarEvento('CONT40', Fecha1=Dialogo.Fecha1, NrBOperacion = '', Vehiculo1=Dialogo.Vehiculo1)
+***---ContraAsientos de Transacciones
+EjecutarEvento('CONT41', Fecha1=Dialogo.Fecha1, NrBTrans1='', Vehiculo1=Dialogo.Vehiculo1)
+
+#ifdef MLASA
+    ***---Interes Devengado ICL
+    EjecutarEvento('CONT12', Fecha1=Dialogo.Fecha1, Vehiculo1=Dialogo.Vehiculo1, Radio1=Dialogo.Radio1)
+    ***---Capitalizacion Interes ICL
+    EjecutarEvento('CONT13', Fecha1=Dialogo.Fecha1, Vehiculo1=Dialogo.Vehiculo1, Radio1=Dialogo.Radio1)
+#else
+***---Marcar asientos con errores
+EjecutarEvento('CONT99', Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha1, Radio1=0, NrUnicoAsiento1='', ListaTabla1='', ListaTabla2='')
+***---Balanceo de asientos
+EjecutarEvento('BALASI', Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha1, Radio1=0)
+#endif
+
+SQL.ADD(" Update "~DBO~".VARIABLES Set Valor='NO' Where Codigo='GENASIENTO' ")
+SQL.NEW
+SQL.EXEC
+SQL.ADD(" Update "~DBO~".VARIABLES Set Valor='SI' Where Codigo='CONTAPROCE' ")
+SQL.NEW
+SQL.EXEC
+

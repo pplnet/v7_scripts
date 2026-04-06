@@ -1,0 +1,55 @@
+﻿
+**// Se actualiza los campos que pudieron haber sido modificados
+SQL.ADD(" Select NrOperacion3, FechaOp2, Book1, Book2, FechaVto, FechaPago, Plazo, TipoTasa, Precio1, TotalIntereses, Operador, ")
+SQL.ADD("        TasaImp1, ValorRB1, TotalIVA, Spread, TotalNetoCli1, TotalNetoCli2, TotalBrutoCli1, TotalImpuestos, TotalRetenciones,  ")
+SQL.ADD("        Cotizacion1, Cotizacion2, TotalAux2, TotalAux3, TotalAux4, TablaFeriados1, MB4, RB11, TotalGastos, ImporteImp, ImpGastos2 ")
+SQL.ADD(" From "~DBO~".OPERACIONES ")
+SQL.ADD(" Where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Recorrer SQL
+   ACT(OP:1, FBN('NrOperacion3'))
+   SQL.ADD("  Update "~DBO~".OPERACIONES ")
+   SQL.ADD("  Set")
+   SQL.ADD("    FechaOp2 = '"~IdxDate(FBN('FechaOp2'))~"', Book1 = '"~FBN('Book2')~"'                 , Book2 = '"~FBN('Book1')~"', ")
+   SQL.ADD("    FechaVto = '"~IdxDate(FBN('FechaVto'))~"', FechaPago = '"~IdxDate(FBN('FechaPago'))~"', Plazo = "~FBN('Plazo')~", ")
+   SQL.ADD("    TipoTasa = '"~FBN('TipoTasa')~"'         , Precio1 = "~FBN('Precio1')~"               , TotalIntereses = "~FBN('TotalIntereses')~", ")
+   SQL.ADD("    Operador = '"~FBN('Operador')~"'         , TasaImp1 = "~FBN('TasaImp1')~"             , ValorRB1 = "~FBN('ValorRB1')~", ")
+   SQL.ADD("    MB4 = "~FBN('MB4')~"                     , TablaFeriados1 = '"~FBN('TablaFeriados1')~"',RB11 = "~FBN('RB11')~", ")
+   SQL.ADD("    Cotizacion1 = "~FBN('Cotizacion1')~"     , Cotizacion2 = '"~FBN('Cotizacion2')~"'     , TotalIVA = "~FBN('TotalIVA')~", ")
+   SQL.ADD("    TotalAux2 = "~FBN('TotalAux2')~"         , TotalAux3 = "~FBN('TotalAux3')~"           , TotalAux4 = "~FBN('TotalAux4')~", ")
+   SQL.ADD("    Spread = "~FBN('Spread')~"               , TotalNetoCli1 = "~FBN('TotalNetoCli1')~"   , TotalNetoCli2 = "~FBN('TotalNetoCli2')~", ")
+   SQL.ADD("    TotalGastos = "~FBN('TotalGastos')~"     , TotalBrutoCli1 = "~FBN('TotalBrutoCli1')~" , TotalRetenciones = "~FBN('TotalRetenciones')~", ")
+   SQL.ADD("    ImporteImp = "~FBN('ImporteImp')~"       , TotalImpuestos = "~FBN('TotalImpuestos')~" , ImpGastos2 = "~FBN('ImpGastos2')~", ")
+   **// Marco que la operacion fue modificada
+   SQL.ADD("    Impresa = '1' ")
+   SQL.ADD("  Where NrOperacion = '"~Val(OP:1)~"' ")
+   SQL.NEW
+Proximo
+
+
+**// Si la Op opera con Vehiculo extranjero (PISA) va a instancia de confirmacion, sino a vinculadas en espera
+If Incluido(Val(VH:1), VAR('VEHIEXTRAN')) O Incluido(Val(VH:3), VAR('VEHIEXTRAN'))
+   SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='0' where NrOperacion = '"~VAL(OP:1)~"' ")
+   SQL.NEW
+   SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='1' where NrOperacion = '"~VAL(OP:1)~"' and NrBit=19 ")
+   SQL.NEW
+Else
+   SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='0' where NrOperacion = '"~VAL(OP:1)~"' ")
+   SQL.NEW
+   SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='1' where NrOperacion = '"~VAL(OP:1)~"' and NrBit=15 ")
+   SQL.NEW
+Endif
+
+**// Se graba excepcion
+SQL.ADD(" Insert into "~DBO~".EXCEPCIONES ")
+SQL.ADD(" (NrOperacion, Fecha, Tipo, Descripcion) Values ")
+SQL.ADD(" ('"~Val(OP:1)~"', '"~IdxDate(FSYS)~"','MODEVENTO','"~BuscarCampo('EVENTOS','Nombre','Codigo',CodigoInforme)~" "~Hora(Ahora)~"') ")
+SQL.NEW
+
+SQL.EXEC
+
+**// Actualiza movimientos y devengados
+SQL.ActualizarMovimientos3(VAL(OP:1),SI,NO,NO,NO,SI)
+SQL.EXEC
+
+**// Calculo de TTN
+EjecutarEvento('TTNOP',NrOperacion1=val(OP:1), Entero1 = 0,NrOperacion2='',Lista1='')

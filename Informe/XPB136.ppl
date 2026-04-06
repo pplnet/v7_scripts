@@ -1,0 +1,414 @@
+﻿ACT(VH:1, SQLSet(" Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+
+CrearDialogo
+  Fecha1:   'D.Fecha'   ;1;1;;;;;;;PRIDEMES(fsys)
+  Fecha2:   'H.Fecha'   ;1;2;;;;;;;fsys
+  Radio1:  'Tipo|Debitos|Creditos|Ambos' ;2;1;;;;;;;2
+  Radio2:  'Tipo Cta|Cta.Cte|Interm|Recaud|C.Ahorro|Todos' ;3;1;;;;;;;4
+  Check1:  'Incluye Pagadoras';4;1;;;;;;;1
+  Lista1:   'Vehiculos' ; 5;1;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"), Val(VH:1))
+  Lista2:   'Bancos'    ;  ;1;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CLIENTES WHERE Sector='BAN' ");
+  Lista3:   'Cuentas'   ; 0;2;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS  WHERE Comitente IN ("~Pipe2Comillas(Dialogo.Lista2)~") "~IIF(NOVACIO(Dialogo.Lista1)," AND Cliente IN ("~Pipe2Comillas(Dialogo.Lista1)~")",iif(NoVacio(UsrVehiculos(UsuarioActivo))," AND Cliente IN (Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"') " ) )~"  ");
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+CrearFont(1,"Arial, 8,")
+CrearFont(2,"Arial, 8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,10,")
+CrearFont(5,"Arial, 8,BI")
+
+ACT(a:1, 'Vehiculos: '~iif(vacio(Dialogo.Lista1),'Todos',Pipe2Comillas(Dialogo.Lista1)))
+ACT(a:2, 'Bancos: '~iif(vacio(Dialogo.Lista2),'Todos',Pipe2Comillas(Dialogo.Lista2)))
+ACT(a:3, 'Cuentas: '~iif(vacio(Dialogo.Lista3),'Todas',Pipe2Comillas(Dialogo.Lista3)))
+ACT(a:4, 'Tipo de Movimientos: '~iif(Dialogo.Radio1=0,'Debitos',iif(Dialogo.radio1=1,'Creditos','Debitos y Creditos')))
+ACT(a:5, 'Tipo de Cuenta: '~iif(Dialogo.Radio2=0,'Cuenta Corriente',iif(Dialogo.radio2=1,'Intermedia',iif(Dialogo.Radio2=2,'Recaudadora',iif(Dialogo.Radio2=3,'C.Ahorro','Todas')))))
+If Dialogo.Check1=0
+  ACT(a:5, Val(a:5)~' - No incluye Cuentas Pagadoras.')
+Else
+  ACT(a:5, Val(a:5)~' - Incluye Cuentas Pagadoras.')
+Endif
+SetFont(a:1..a:5,2)
+ACT(c:6, 'Extracto Bancario FPA '~Dialogo.Fecha1~' al '~Dialogo.Fecha2)
+SetFont(c:6,3)
+
+SetFilaActual(7)
+************************************************************************************************************************
+SQL.ADD("  SELECT /*+ RULE */ FechaMov,VehiculoFPA, Numero, CuentaFPA, Alias3, TipoCuenta,Op,")
+SQL.ADD("  BancoFPA, RazonSocial, Nombre,  MonedaFPA ,Descripcion, NrTrans, Tipotr2, ")
+SQL.ADD("  DescripcionC, NrComprob ,Cantidad, NrDatanet, NrMovDatanet, Estado from (")
+
+SQL.ADD("  SELECT /*+ RULE */ M.FechaMov, V.Codigo VehiculoFPA, C.Numero, C.Codigo CuentaFPA, C.Alias3, C.TipoCuenta,0 Op,")
+SQL.ADD("  B.Codigo BancoFPA, B.RazonSocial, E.Nombre, E.Codigo MonedaFPA, V.Descripcion, T.NrTrans, ")
+SQL.ADD("  T.TipoTr2, CN.Descripcion DescripcionC, M.NrComprob, M.Cantidad, CO.NrDatanet, CO.NrMovDatanet, 'Pendiente' Estado ")
+SQL.ADD("  FROM "~DBO~".MOVPENDIENTES M, "~DBO~".TRANSACCIONES2 T, "~DBO~".CUENTAS C, "~DBO~".CONCILIACIONES CO, ")
+SQL.ADD("  "~DBO~".CNCONCEPTOSPAGOCOBRO CN , "~DBO~".VEHICULOS V, "~DBO~".CLIENTES B, "~DBO~".ESPECIES E ")
+SQL.ADD("  WHERE M.NrOperacion = T.NrTrans")
+SQL.ADD("  AND   M.Especie     = E.Codigo ")
+SQL.ADD("  AND   C.Comitente   = B.Codigo ")
+SQL.ADD("  AND   M.Cuenta      = C.Codigo ")
+SQL.ADD("  AND   M.Nroperacion  = CO.NrOperacion (+)")
+SQL.ADD("  AND   T.ConceptoPago = CN.Codigo (+)")
+SQL.ADD("  AND   T.Vehiculo1    = V.Codigo ")
+SQL.ADD("  AND   M.FechaMov >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("  AND   M.FechaMov <= "~IdxDate2(Dialogo.Fecha2)~" ")
+SQL.ADD("  AND   E.Tipo         = 'MON' ")
+SQL.ADD("  AND   T.TipoTr2    IN ('CRVM','DEVM','TRANSF')  ")
+If NoVacio(Dialogo.Lista1)
+  SQL.ADD(" AND V.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND V.Codigo IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+If NoVacio(Dialogo.Lista2)
+  SQL.ADD(" AND B.Codigo IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+If NoVacio(Dialogo.Lista3)
+  SQL.ADD(" AND C.Codigo IN ("~Pipe2Comillas(Dialogo.Lista3)~") ")
+Endif
+If Dialogo.Radio1=0
+  SQL.ADD(" AND M.Cantidad < 0 ")
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" AND M.Cantidad > 0 ")
+Endif
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT')")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC')")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA')")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+SQL.ADD("  UNION all")
+
+*********************************************************************************************************
+*/Pendientes Y Operaciones.
+
+SQL.ADD("  SELECT /*+ RULE */ M.FechaMov, V.Codigo VehiculoFPA, C.Numero, C.Codigo CuentaFPA, C.Alias3, C.TipoCuenta,1 Op,")
+SQL.ADD("  B.Codigo BancoFPA, B.RazonSocial, E.Nombre, E.Codigo MonedaFPA, V.Descripcion, T.NrOperacion NrTrans, ")
+SQL.ADD("  T.TipoOp TipoTr2, ' ' DescripcionC, M.NrComprob, -M.Cantidad, CO.NrDatanet, CO.NrMovDatanet, 'Pendiente' Estado ")
+SQL.ADD("  FROM "~DBO~".MOVPENDIENTES M, "~DBO~".OPERACIONES T, "~DBO~".CUENTAS C, "~DBO~".CONCILIACIONES CO, ")
+SQL.ADD("  "~DBO~".VEHICULOS V, "~DBO~".CLIENTES B, "~DBO~".ESPECIES E ")
+SQL.ADD("  WHERE M.NrOperacion = T.NrOperacion")
+SQL.ADD("  AND   M.Especie     = E.Codigo ")
+SQL.ADD("  AND   C.Comitente   = B.Codigo ")
+SQL.ADD("  AND   M.Cuenta      = C.Codigo            ")
+SQL.ADD("  AND   M.Nroperacion = CO.NrOperacion (+)")
+SQL.ADD("  AND   M.EnteCustodia= V.Codigo ")
+SQL.ADD("  AND   M.FechaMov >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("  AND   M.FechaMov <= "~IdxDate2(Dialogo.Fecha2)~" ")
+SQL.ADD("  AND   E.Tipo        = 'MON' ")
+If NoVacio(Dialogo.Lista1)
+  SQL.ADD(" AND   M.EnteCustodia IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND M.EnteCustodia IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+If NoVacio(Dialogo.Lista2)
+  SQL.ADD(" AND B.Codigo IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+If NoVacio(Dialogo.Lista3)
+  SQL.ADD(" AND C.Codigo IN ("~Pipe2Comillas(Dialogo.Lista3)~") ")
+Endif
+If Dialogo.Radio1=0
+  SQL.ADD(" AND M.Cantidad > 0 ")
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" AND M.Cantidad < 0 ")
+Endif
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT')")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC')")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA')")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+SQL.ADD("  UNION all")
+*********************************************************************************************************
+*/Pendientes Y Operaciones/Transacciones.
+SQL.ADD("  SELECT /*+ RULE */ M.FechaMov ,  V.Codigo VehiculoFPA , C.Numero, C.Codigo CuentaFPA, C.Alias3, C.TipoCuenta,1 Op, ")
+SQL.ADD("  B.Codigo BancoFPA, B.RazonSocial, E.Nombre, E.Codigo MonedaFPA, V.Descripcion, O.NrOperacion NrTrans, ")
+SQL.ADD("  O.TipoOp TipoTr2, CN.Descripcion DescripcionC, M.NrComprob, M.Cantidad, CO.NrDatanet, CO.NrMovDatanet, 'Pendiente' Estado ")
+SQL.ADD("  FROM "~DBO~".MOVPENDIENTES M, "~DBO~".TRANSACCIONES2 T, "~DBO~".CONCILIACIONES CO, "~DBO~".CUENTAS C, "~DBO~".OPERACIONES O,")
+SQL.ADD("  "~DBO~".CNCONCEPTOSPAGOCOBRO CN  , "~DBO~".VEHICULOS V, "~DBO~".CLIENTES B, "~DBO~".ESPECIES E  ")
+SQL.ADD("  WHERE M.NrOperacion  = T.NrTrans  ")
+SQL.ADD("  AND   T.NrOperacionRef1 = O.NrOperacion ")
+SQL.ADD("  AND   M.Especie      = E.Codigo   ")
+SQL.ADD("  AND   C.Comitente    = B.Codigo   ")
+SQL.ADD("  AND   M.Cuenta       = C.Codigo   ")
+SQL.ADD("  AND   T.ConceptoPago = CN.Codigo  (+)")
+SQL.ADD("  AND   M.Nroperacion  = CO.NrOperacion (+)")
+SQL.ADD("  AND   M.NrMov        = CO.NrMovimiento (+) ")
+SQL.ADD("  AND   M.EnteCustodia = V.Codigo ")
+SQL.ADD("  AND   M.FechaMov >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("  AND   M.FechaMov <= "~IdxDate2(Dialogo.Fecha2)~" ")
+SQL.ADD("  AND   E.Tipo         = 'MON' ")
+If NoVacio(Dialogo.Lista1)
+  SQL.ADD(" AND   M.EnteCustodia IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND M.EnteCustodia IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+If NoVacio(Dialogo.Lista2)
+  SQL.ADD(" AND B.Codigo IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+If NoVacio(Dialogo.Lista3)
+  SQL.ADD(" AND C.Codigo IN ("~Pipe2Comillas(Dialogo.Lista3)~") ")
+Endif
+If Dialogo.Radio1=0
+  SQL.ADD(" AND M.Cantidad < 0 ")
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" AND M.Cantidad > 0 ")
+Endif
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT')")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC')")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA')")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+SQL.ADD("  UNION all")
+*/Ejecutados Y Operaciones.
+SQL.ADD("  SELECT /*+ RULE */ M.FechaMov ,  V.Codigo VehiculoFPA , C.Numero, C.Codigo CuentaFPA, C.Alias3, C.TipoCuenta,1 Op, ")
+SQL.ADD("  B.Codigo BancoFPA, B.RazonSocial, E.Nombre, E.Codigo MonedaFPA, V.Descripcion, O.NrOperacion NrTrans, ")
+SQL.ADD("  O.TipoOp TipoTr2, CN.Descripcion DescripcionC, M.NrComprob, M.Cantidad, CO.NrDatanet, CO.NrMovDatanet, 'Ejecutado' Estado ")
+SQL.ADD("  FROM "~DBO~".MOVEJECUTADOS M, "~DBO~".TRANSACCIONES2 T, "~DBO~".CONCILIACIONES CO, "~DBO~".CUENTAS C, "~DBO~".OPERACIONES O,")
+SQL.ADD("  "~DBO~".CNCONCEPTOSPAGOCOBRO CN  , "~DBO~".VEHICULOS V, "~DBO~".CLIENTES B, "~DBO~".ESPECIES E  ")
+SQL.ADD("  WHERE M.NrOperacion  = T.NrTrans  ")
+SQL.ADD("  AND   T.NrOperacionRef1 = O.NrOperacion ")
+SQL.ADD("  AND   M.Especie      = E.Codigo   ")
+SQL.ADD("  AND   C.Comitente    = B.Codigo   ")
+SQL.ADD("  AND   M.Cuenta       = C.Codigo   ")
+SQL.ADD("  AND   T.ConceptoPago = CN.Codigo  (+)")
+SQL.ADD("  AND   M.Nroperacion  = CO.NrOperacion (+)")
+SQL.ADD("  AND   M.NrMov        = CO.NrMovimiento (+) ")
+SQL.ADD("  AND   M.EnteCustodia = V.Codigo ")
+SQL.ADD("  AND   M.FechaMov >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("  AND   M.FechaMov <= "~IdxDate2(Dialogo.Fecha2)~" ")
+SQL.ADD("  AND   E.Tipo         = 'MON' ")
+If NoVacio(Dialogo.Lista1)
+  SQL.ADD(" AND   M.EnteCustodia IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND M.EnteCustodia IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+If NoVacio(Dialogo.Lista2)
+  SQL.ADD(" AND B.Codigo IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+If NoVacio(Dialogo.Lista3)
+  SQL.ADD(" AND C.Codigo IN ("~Pipe2Comillas(Dialogo.Lista3)~") ")
+Endif
+If Dialogo.Radio1=0
+  SQL.ADD(" AND M.Cantidad < 0 ")
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" AND M.Cantidad > 0 ")
+Endif
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT')")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC')")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA')")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+SQL.ADD("  UNION all")
+
+*********************************************************************************************************
+SQL.ADD("  SELECT /*+ RULE */ M.FechaMov ,  V.Codigo VehiculoFPA , C.Numero, C.Codigo CuentaFPA, C.Alias3, C.TipoCuenta,0 Op, ")
+SQL.ADD("  B.Codigo BancoFPA, B.RazonSocial, E.Nombre, E.Codigo MonedaFPA, V.Descripcion, T.NrTrans, ")
+SQL.ADD("  T.TipoTr2, CN.Descripcion DescripcionC, M.NrComprob, M.Cantidad, CO.NrDatanet, CO.NrMovDatanet, 'Ejecutado' Estado ")
+SQL.ADD("  FROM "~DBO~".MOVEJECUTADOS M, "~DBO~".TRANSACCIONES2 T, "~DBO~".CONCILIACIONES CO, "~DBO~".CUENTAS C,  ")
+SQL.ADD("  "~DBO~".CNCONCEPTOSPAGOCOBRO CN  , "~DBO~".VEHICULOS V, "~DBO~".CLIENTES B, "~DBO~".ESPECIES E  ")
+SQL.ADD("  WHERE M.NrOperacion  = T.NrTrans  ")
+SQL.ADD("  AND   M.Especie      = E.Codigo   ")
+SQL.ADD("  AND   C.Comitente    = B.Codigo   ")
+SQL.ADD("  AND   M.Cuenta       = C.Codigo   ")
+SQL.ADD("  AND   T.ConceptoPago = CN.Codigo  (+)")
+SQL.ADD("  AND   M.Nroperacion  = CO.NrOperacion (+)")
+SQL.ADD("  AND   T.Vehiculo1    = V.Codigo ")
+SQL.ADD("  AND   M.NrMov        = CO.NrMovimiento (+) ")
+SQL.ADD("  AND   M.FechaMov >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("  AND   M.FechaMov <= "~IdxDate2(Dialogo.Fecha2)~" ")
+SQL.ADD("  AND   T.TipoTr2    IN ('CRVM','DEVM','TRANSF')  ")
+SQL.ADD("  AND   E.Tipo         = 'MON' ")
+If NoVacio(Dialogo.Lista1)
+  SQL.ADD(" AND V.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND V.Codigo IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+If NoVacio(Dialogo.Lista2)
+  SQL.ADD(" AND B.Codigo IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+If NoVacio(Dialogo.Lista3)
+  SQL.ADD(" AND C.Codigo IN ("~Pipe2Comillas(Dialogo.Lista3)~") ")
+Endif
+If Dialogo.Radio1=0
+  SQL.ADD(" AND M.Cantidad < 0 ")
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" AND M.Cantidad > 0 ")
+Endif
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT')")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC')")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA')")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+SQL.ADD("  ) ")
+SQL.ADD(" ORDER BY VehiculoFPA, BancoFPA, CuentaFPA, MonedaFPA, FechaMov ")
+
+ACT(va:1,'')
+ACT(ba:1,'')
+ACT(ea:1,'')
+ACT(ca:1,'')
+
+Recorrer SQL
+
+  If Not Eqstr(fbn('VehiculoFPA'),Val(va:1)) o Not Eqstr(fbn('BancoFPA'),Val(ba:1)) o Not Eqstr(fbn('CuentaFPA'),Val(ca:1)) o Not Eqstr(fbn('MonedaFPA'),Val(ea:1))
+    If Not Eqstr(Val(va:1),'')
+      ACT(a:fac, 'Saldo Final -->')
+      ACN(f:fac,  SUM(f:Val(fi:1)..f:fac))
+      SetFont(a:fac..g:fac,5)
+      FormatoCeldas(f:fac, EXE('F2'))
+      ifa
+      SaltarHoja
+    Endif
+    message('Vehiculo: '~fbn('Descripcion')~'  Banco: '~fbn('RazonSocial'))
+    message('_____  Cuenta: '~fbn('Alias3')~' Numero: '~fbn('Numero')~'  (FPA: '~fbn('CuentaFPA')~')')
+    ACT(a:fac, 'Banco: '~fbn('RazonSocial'))
+    ACT(e:fac, 'Vehiculo: '~fbn('Descripcion'))
+    ACT(tc:1, iif(eqstr(fbn('TipoCuenta'),'CC'),'Cuenta Corriente', iif(eqstr(fbn('TipoCuenta'),'CA'),'Caja de Ahorro',iif(eqstr(fbn('TipoCuenta'),'VIS'),'Cuenta Vista',IIF(eqstr(fbn('TipoCuenta'),'CUS'),'Cuenta Custodia')))))
+    ACT(a:fac+1, 'Extracto de '~Val(tc:1)~' en '~fbn('Nombre'))
+    ACT(e:fac+1, 'Cuenta: '~fbn('Alias3')~' Numero: '~fbn('Numero')~'  (FPA: '~fbn('CuentaFPA')~')')
+    SetFont(a:fac..g:fac+1,2)
+    AgregarMarco(a:fac..h:fac+1,0,0,Exe('COLOR6'))
+    SetFilaActual(fac+2)
+
+    ACT(a:fac,   'Transaccion')
+    ACT(b:fac,   'Tipo')
+    ACT(b:fac+1, 'Transaccion')
+
+    ACT(c:fac,   'Concepto')
+    ACT(d:fac,   'Fecha')
+    ACT(d:fac+1, 'Valor')
+    ACT(e:fac,   'Comprobante')
+    ACT(f:fac,   'Importe')
+    ACT(g:fac,   'Mov Datanet')
+    ACT(h:fac,   'Estado')
+    SetFont(a:fac..g:fac+1,2)
+    AlinearCeldas(a:fac..g:fac+1,'C')
+    AgregarMarco(a:fac..h:fac+1,0,0,Exe('COLOR8'))
+    ifa
+    ifa
+    ACT(a:fac, 'Saldo Inicial -->')
+    ACN(f:fac,  SaldoD(fbn('VehiculoFPA'),fbn('MonedaFPA'),,,,,,fbn('CuentaFPA'),1,Dialogo.Fecha1-1) )
+    SetFont(a:fac..g:fac,5)
+    FormatoCeldas(f:fac, EXE('F2'))
+    ACN(fi:1,fac)
+    ifa
+  Endif
+
+   ACT(a:fac, fbn('NrTrans'))
+
+   If fbn('Op') =0
+      ACLT(a:fac, fbn('NrTrans'))
+   Else
+      ACLO(a:fac, fbn('NrTrans'))
+   Endif
+
+   ACT(b:fac, fbn('TipoTr2'))
+
+   if Incluido(fbn('DescripcionC'),'DEVM|CRVM|TRANSF')
+       ACT(c:fac, fbn('DescripcionC'))
+   else
+      ACT(c:fac, 'Liquidacion de Operaciones')
+   endif
+
+   ACT(c:fac, fbn('DescripcionC'))
+   ACD(d:fac, fbn('FechaMov'))
+   ACN(e:fac, fbn('NrComprob'))
+   ACN(f:fac, fbn('Cantidad'))
+   ACT(g:fac, fbn('NrDatanet')~' ('~fstr(fbn('NrMovDatanet'),0,0)~')' )
+   ACT(h:fac, fbn('Estado'))
+
+  FormatoCeldas(e:fac, EXE('F0'))
+  FormatoCeldas(f:fac, EXE('F2'))
+  SetFont(a:fac..g:fac,1)
+  ACT(va:1,fbn('VehiculoFPA'))
+  ACT(ba:1,fbn('BancoFPA'))
+  ACT(ea:1,fbn('MonedaFPA'))
+  ACT(ca:1,fbn('CuentaFPA'))
+Proximo
+
+ifa
+ACT(a:fac, 'Saldo Final -->')
+ACN(f:fac,  SUM(f:Val(fi:1)..f:fac))
+SetFont(a:fac..g:fac,5)
+FormatoCeldas(f:fac, EXE('F2'))
+
+ifa
+ifa
+
+ACO(1,10)
+ACO(2,11)
+ACO(3,16)
+ACO(4,10)
+ACO(5,10)
+ACO(6,10)
+ACO(7,10)
+
+Impresion(1,2)
+Impresion(4,1)
+SetMargins(0,0,0,2)
+LimitesVision(h:fac+2)

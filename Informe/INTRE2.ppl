@@ -1,0 +1,237 @@
+﻿CrearDialogo
+    Fecha1: 'Fecha Desde' ;;;;;;;;;PriDeMes(Fsys);;;;;;
+    Fecha2: 'Fecha Hasta' ;;;;;;;;;Fsys;;;;;;
+    Lista1: 'Vehiculo'    ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where TipoVehiculo = 'DIV'"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"'"));;;;;
+    Cliente1: 'Banco'     ;;;;;;;;;;BuscarCampo('CUENTAS','Comitente','Codigo',Dialogo.Cuenta1);;;;"Alias3 IN (Select Distinct Banco from SALDOSBANCARIOS)";;;;
+    Cuenta1 : 'Cuenta'    ;;;;;;Vacio(Dialogo.Cuenta1) O IF(NoVacio(BuscarCampo('SALDOSBANCARIOS','NrCuenta','NrCuenta',BuscarCampo('CUENTAS','Numero','Codigo',Dialogo.Cuenta1))),SI,NO);'La cuenta no registra saldos';NO;;BuscarCampo('CUENTAS','Codigo','Numero',BuscarCampo('CUENTAS','Numero','Comitente',Dialogo.Cliente1));;;;"Numero IN (SELECT Distinct NrCuenta FROM SALDOSBANCARIOS)";;;;;;  
+    Radio1  : 'Expresado en|ARP|USD'  ;;;;;;;;;0;;;
+    Radio2  : 'Consolidado|SI|NO' ;;;;;NO;;;;1;;;
+FinDialogo
+
+If Not Ok
+    Cancelar
+Endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,12,B')
+CrearFont(4, 'Arial,8,BI')
+
+let &moneLocal Var('MONELOCA')
+let &moneExtr Var('MONEEXTR')
+
+ACT(D:1,'INTERESES REMUNERADAS')
+SetFont(D:1,3)
+
+SetFilaActual(3)
+
+ACT(A:fac,'Fecha Desde: '~Dialogo.Fecha1)
+ifa
+ACT(A:fac,'Fecha Hasta: '~Dialogo.Fecha2)
+ifa
+If NoVacio(Dialogo.Lista1)
+    ACT(A:fac,'Vehiculos: '~Dialogo.Lista1)
+Else
+    ACT(A:fac,'Vehiculos: Todos')
+Endif
+ifa
+IF NoVacio(Dialogo.Cliente1)
+    ACT(A:fac,'Banco: '~Dialogo.Cliente1)
+ELSE
+    ACT(A:fac,'Banco: Todos')
+ENDIF
+ifa
+ACT(A:fac,'Cuenta: '~IIF(NoVacio(Dialogo.Cuenta1),Dialogo.Cuenta1,'Todas'))
+ifa
+ACT(A:fac,'Expresado en: '~IIF(Dialogo.Radio1 = 0,'ARP','USD'))
+*ifa
+*ACT(A:fac,'Consolidado: '~IIF(Dialogo.Radio2 = 0,'SI','NO'))
+SetFont(A:FAC-6..A:fac,4)
+ifa
+ifa
+
+IF Dialogo.Radio1 = 0
+    let &Expresado 'ARP'
+ELSE
+    let &Expresado 'USD'
+ENDIF
+
+let &Vehiculo ''
+let &PrimerRegistro 1
+let &TotalSaldoDiaVehiculo 0
+let &TotalCantidadVehiculo 0
+let &TotalInteresesVehiculo 0
+let &TotalCantidadGeneral 0
+let &TotalInteresesGeneral 0
+let &TotalSaldoGenVehiculo 0
+let &NuevoVehiculo 1
+
+
+ifa
+ACT(A:fac,'Operacion')
+ACT(B:fac,'Banco')
+ACT(C:fac,'Cuenta')
+ACT(D:fac,'Fecha Origen')
+ACT(E:fac,'Fecha Vto')
+ACT(F:fac,'Moneda')
+ACT(G:fac,'Tasa Coloc.')
+ACT(H:fac,'Plazo')
+ACT(I:fac,'Saldo Dia')
+ACT(J:fac,'Saldo Promedio')
+ACT(K:fac,'Interes Generado')
+ACT(L:fac,'Tipo Cambio')
+AgregarMarco(a:fac..L:fac,1,3,Exe('COLOR'))
+SetFont(a:fac..L:fac,2)
+
+IF Dialogo.Radio2 = 1
+    SQL.ADD(" SELECT Vehiculo1, NrOperacion, Cliente1, FechaOp, FechaVto, Especie, Plazo, Cantidad, TotalIntereses, Precio1, Cuenta1, TotalNetoCli1 ")
+ELSE
+    SQL.ADD(" SELECT 'Consolidado' Vehiculo1, NrOperacion, Cliente1, FechaOp, FechaVto, Especie, Plazo, Cantidad, TotalIntereses, Precio1, Cuenta1, TotalNetoCli1 ")
+ENDIF
+SQL.ADD(" FROM "~DBO~".OPERACIONES ")
+SQL.ADD(" WHERE FechaOp Between '"~IdxDate(Dialogo.Fecha1)~"' AND '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" AND TipoOp = 'MMRPAC' ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND Vehiculo1 in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Cuenta1)
+    SQL.ADD(" AND Cuenta1 = '"~Dialogo.Cuenta1~"' ")
+ENDIF
+IF NoVacio(Dialogo.Cliente1)
+    SQL.ADD(" AND Cliente1 = '"~Dialogo.Cliente1~"' ")
+ENDIF
+SQL.ADD(" ORDER BY Vehiculo1 ")
+Recorrer SQL
+    IF Not Eqstr(fbn('Vehiculo1'),&Vehiculo)
+        IF &PrimerRegistro = 0
+            ACT(A:fac,'Total '~&Vehiculo)
+            ACN(I:fac,&TotalSaldoDiaVehiculo)
+            ACN(J:fac,&TotalCantidadVehiculo)
+            ACN(K:fac,&TotalInteresesVehiculo)
+            AgregarMarco(a:fac..K:fac,1,3,Exe('COLOR'))
+            SetFont(a:fac..K:fac,2)
+            ifa
+            IF Not Eqstr('',&Vehiculo)
+                ifa
+            ENDIF
+            let &TotalSaldoDiaVehiculo 0
+            let &TotalCantidadVehiculo 0
+            let &TotalInteresesVehiculo 0
+        ELSE
+            let &PrimerRegistro 0
+        ENDIF 
+        let &Vehiculo fbn('Vehiculo1')
+        let &NuevoVehiculo 1
+    ENDIF
+    IF &NuevoVehiculo = 1
+        ACT(A:fac,'Vehiculo: '~fbn('Vehiculo1'))
+        AgregarMarco(a:fac..K:fac,1,3)
+        SetFont(a:fac..a:fac,2)
+        ifa
+        let &NuevoVehiculo 0
+    ENDIF
+    ACT(A:fac,fbn('NrOperacion'))
+    ACLO(A:fac,fbn('NrOperacion'))
+    ACT(B:fac,fbn('Cliente1'))
+    let &Banco Val(B:fac)
+    ACT(C:fac,fbn('Cuenta1'))
+    let &Cuenta Val(C:fac)
+    ACD(D:fac,fbn('FechaOp'))
+    ACD(E:fac,fbn('FechaVto'))
+    ACT(F:fac,fbn('Especie'))
+    let &Moneda fbn('Especie')
+    ACT(G:fac,Fstr(fbn('Precio1'),0,8))
+    let &TasaColocacion fbn('Precio1')
+    ACT(H:fac,Fstr(fbn('Plazo'),0,0))
+    IF Eqstr(&Expresado,fbn('Especie'))
+        let &TipoCambio 1
+        let &TipoCambioDisplay 1
+    ELSE
+        IF Eqstr(fbn('Especie'), &moneLocal)
+            let &TipoCambio 1/CotizacionBNA(&moneExtr,fbn('FechaVto'),1)        
+        ELSE
+            let &TipoCambio CotizacionBNA(&moneExtr,fbn('FechaVto'),1)        
+        ENDIF
+        let &tipoCambioDisplay CotizacionBNA(&moneExtr,fbn('FechaVto'),1)
+    ENDIF
+    
+    let &OperacionRef fbn('NrOperacion')
+    
+*    SQL.ADD(" SELECT Cantidad, TotalIntereses ")
+*    SQL.ADD(" FROM "~DBO~".OPERACIONES ")
+*    SQL.ADD(" WHERE TipoOp = 'MMCCR' ")
+*    SQL.ADD(" AND FechaOp = '"~IdxDate(Dialogo.Fecha2)~"' ")
+*    SQL.ADD(" AND OperacionRef = '"~&OperacionRef~"' ")
+*    Recorrer SQL
+*        DFA
+*        ACN(H:fac,fbn('Cantidad')*&TipoCambio)
+*        ACN(I:fac,fbn('TotalIntereses')*&TipoCambio)
+*        ACL(I:fac,'DETREM',Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,NrOperacion1=&OperacionRef,Precio1=&TipoCambio,Radio1=Dialogo.Radio1)
+*    Proximo
+    
+    *Cantidad: Traigo la cantidad de la ultima MMCCR cuya FechaOp menor o igual a fecha hasta
+    SQL.ADD(" SELECT Cantidad, TotalNetoCli1 ")
+    SQL.ADD(" FROM "~DBO~".OPERACIONES ")
+    SQL.ADD(" WHERE TipoOp = 'MMCCR' ")
+    SQL.ADD(" AND OperacionRef = '"~&OperacionRef~"' ")
+    SQL.ADD(" AND FechaOp = ( ")
+    SQL.ADD(" SELECT Max(FechaOp) FROM "~DBO~".OPERACIONES ")
+    SQL.ADD(" WHERE TipoOp = 'MMCCR' ")
+    SQL.ADD(" AND OperacionRef = '"~&OperacionRef~"' ")
+    SQL.ADD(" AND FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+    SQL.ADD(" ) ")
+    Recorrer SQL
+        DFA
+        ACN(I:fac,fbn('TotalNetoCli1')*&TipoCambio)
+        ACN(J:fac,fbn('Cantidad')*&TipoCambio)
+    Proximo
+    
+    *TotalIntereses: Sumo los intereses de todas las MMCCR cuya FechaOp menor o igual a fecha hasta
+    SQL.ADD(" SELECT SUM(TotalIntereses) TotalIntereses")
+    SQL.ADD(" FROM "~DBO~".OPERACIONES ")
+    SQL.ADD(" WHERE TipoOp = 'MMCCR' ")
+    SQL.ADD(" AND FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+    SQL.ADD(" AND OperacionRef = '"~&OperacionRef~"' ")
+    Recorrer SQL
+        DFA
+        ACN(K:fac,fbn('TotalIntereses')*&TipoCambio)
+        ACL(K:fac,'DETREM',Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,NrOperacion1=&OperacionRef,Precio1=&TipoCambioDisplay,Radio1=Dialogo.Radio1,String1=&Banco,Precio2=&TasaColocacion,String2=&Moneda,String3=&Cuenta)        
+    Proximo
+    
+    ACT(L:fac,IIF(&TipoCambio <> 1,Fstr(&TipoCambioDisplay,0,8),'--'))
+    let &TotalSaldoDiaVehiculo &TotalSaldoDiaVehiculo+Val(I:fac)
+    let &TotalSaldoGenVehiculo &TotalSaldoGenVehiculo+Val(I:fac)
+    let &TotalCantidadVehiculo &TotalCantidadVehiculo+Val(J:fac)
+    let &TotalInteresesVehiculo &TotalInteresesVehiculo+Val(K:fac)
+    let &TotalCantidadGeneral &TotalCantidadGeneral+Val(J:fac)
+    let &TotalInteresesGeneral &TotalInteresesGeneral+Val(K:fac)
+    SetFont(a:fac..L:fac,1)
+Proximo
+
+ifa
+ACT(A:fac,'Total '~&Vehiculo)
+ACN(I:fac,&TotalSaldoDiaVehiculo)
+ACN(J:fac,&TotalCantidadVehiculo)
+ACN(K:fac,&TotalInteresesVehiculo)
+AgregarMarco(a:fac..L:fac,1,3,Exe('COLOR'))
+SetFont(a:fac..K:fac,2)
+ifa
+ACT(A:fac,'Total General')
+ACN(I:fac,&TotalSaldoGenVehiculo)
+ACN(J:fac,&TotalCantidadGeneral)
+ACN(K:fac,&TotalInteresesGeneral)
+AgregarMarco(a:fac..L:fac,1,3,Exe('COLOR6'))
+SetFont(a:fac..L:fac,2)
+
+ACO(1,9)
+ACO(3,12)
+ACO(4,8)
+ACO(8,4)
+ACO(9,12)
+ACO(10,12)
+ACO(11,12)
+
+ACT(A:fac+2,'Fin del informe')
+SetFont(a:fac+2,4)
+
+LimitesVision(M:fac+2)

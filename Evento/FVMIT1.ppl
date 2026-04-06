@@ -1,0 +1,468 @@
+﻿**-- FVMITE: Minuta Diaria Terceros FECHA VALOR
+HojaVisible(SI)
+CrearDialogo
+  Fecha1         : 'Fecha Inicio'           ;1;1;;;;Dialogo.Fecha1<Fsys y EsHabil(Dialogo.Fecha1,'ARG');'Fecha de Inicio Incorrecta';NO;FSYS;
+  Fecha2         : 'Fecha Fin'              ;1;2;;NO;;EsHabil(Dialogo.Fecha2,'ARG');'Fecha de Fin Incorrecta';NO;FSYS;
+  Vehiculo1      : 'Vehiculo'               ;2;1;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))];'El VEHICULO es INVALIDO';NO;
+  Cliente1       : 'ContraParte'            ;2;2;;;;NOVACIO(Dialogo.Cliente1);'Debe ingresar un Veh¡culo Contraparte';NO;;;;
+  Especie1       : 'Moneda'                 ;3;1;;;;NOVACIO(Dialogo.Especie1) y DESCIENDEDEESPECIE(Dialogo.Especie1,'MONEDA') y ESTERMINAL(Dialogo.Especie1,ESPECIE) y INCLUIDO(Dialogo.Especie1,VAR('LISCONTRA'));'Debe Ingresar una Especie V lida';NO;;;;
+  Radio2         : 'Tipo_Saldo|Pasivo|Activo'     ;;;;;;Dialogo.Radio2>=0;'Indique Colocaci¢n o Toma';NO;0;
+  Cantidad1      : 'V_Nominal'              ;;;;;;Dialogo.Cantidad1>0;'El Valor Nominal DEBE SER POSITIVO';NO;;;;;"###,###,###,###,###.##"
+  Entero1        : 'Plazo'                  ;;;;NO;;Dialogo.Entero1>0;'El PLAZO debe ser SUPERIOR a 0 D¡a';NO;;Dialogo.Fecha2-Dialogo.Fecha1
+  Radio1         : 'UT_Tasa Int|360|365'    ;;;;NO;;Dialogo.Radio1>=0;'UNIDAD DE TIEMPO TASA DE INTERES INVALIDA';NO;;IIF(EqStr(SQL("Select DISTINCT Divisor from "~DBO~".IMPTERCEROS where Vehiculo='"~Dialogo.Vehiculo1~"' and Cliente='"~Dialogo.Cliente1~"' and Estado='HAB' "),'360'),0,1)
+  String         : 'Pares HAB'              ;;;;NO;NO;EqStr('HAB',Dialogo.String);'El Par de Vehiculos no esta habilitado para Operar';NO;;SQL(" Select DISTINCT Estado from "~DBO~".IMPTERCEROS where Vehiculo='"~Dialogo.Vehiculo1~"' and Cliente='"~Dialogo.Cliente1~"' and Estado='HAB' ")
+  String1        : 'Especies HAB'           ;;;;NO;NO;Incluido(Dialogo.Especie1,Dialogo.String1);'La Especie no esta Habilitada para este Par de Vehiculos !!!';NO;;SQL(" Select DISTINCT ListaEspecies from "~DBO~".IMPTERCEROS where Vehiculo='"~Dialogo.Vehiculo1~"' and Cliente='"~Dialogo.Cliente1~"' and Estado='HAB' ")
+  Precio1        : 'TTn '                   ;;;;NO;NO;;;;0;;
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+*--- Verifico que no se hayan generado la minuta diaria
+* Obtengo Todos los Pares de Vehiculos CB6=1 => Todos los Originales
+SQL.ADD(" SELECT * ")
+SQL.ADD("from "~DBO~".OPERACIONES O")
+SQL.ADD("where O.TipoOp='TEMIND' and O.FechaOp='"~IdxDate(Dialogo.Fecha2)~"' and ")
+SQL.ADD(" O.Especie    ='"~Dialogo.Especie1~"'  and ")
+SQL.ADD(" O.Vehiculo1  = '"~Dialogo.Vehiculo1~"' and ")
+SQL.ADD(" O.Cliente1   = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("Order By O.Vehiculo1,O.Vehiculo2,O.Especie ")
+
+Recorrer SQL
+  Cancelar('Error, Se ha genarado la minuta diaria para el dia de la fecha !!!')
+Proximo
+*---
+
+ACT(y1,Dialogo.Vehiculo1)
+ACT(y2,Dialogo.Cliente1)
+ACT(y3,Dialogo.Especie1)
+ACN(y4,Dialogo.Radio2)
+ACN(y5,Dialogo.Radio1)
+ACN(y6,Dialogo.Cantidad1)
+
+*-- Para todas las fechas entre la Fecha Valor y la del Sistema
+* ACD(aa1,Dialogo.Fecha1)
+
+ACD(aa1,HABILES(FinDeMes(Dialogo.Fecha1-35,NO,'ARG'),1,'ARG',SI))
+*ACN(aa2,DifDias(val(aa1),HABILES(FSYS,-1,'ARG',SI),'ARG',SI)+1)
+
+ACN(aa2,DifDias(val(aa1),FSYS-1,'ARG',SI)+1)
+
+**-- 1er. Fila => Operacion Fecha Valor
+**-- a:NrOperacion  b: Fecha c: Capital  d: Acumulado e:FechaVto f:Plazo g:Interes h:Interes Acumulado
+**-- i:Tasa j:Un.Tiempo
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(1)
+ACT(z:fac,'Fecha : '~Var('FECHASYS'))
+SetFont(z:fac..z:fac,1)
+
+ACT(a:FAC, "Ajuste Fecha Valor Operaciones entre Terceros")
+
+SetFont(a:fac..a:fac,3)
+SetFilaActual(3)
+
+ACT(a:fac  ,'Vehiculo1: '~Dialogo.Vehiculo1~'  '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+ACT(a:fac+1,'Cliente1: '~Dialogo.Cliente1~'  '~BuscarCampo('Clientes','RazonSocial','Codigo',Dialogo.Cliente1))
+ACT(a:fac+2,'Especie  : '~Dialogo.Especie1~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie1))
+
+SetFilaActual(fac+3)
+
+ACT(d:fac,'Flujo Original')
+ACT(i:fac,'Flujo Corregido')
+AgregarMarco(a:FAC..g:FAC,2,0,Exe('COLOR'))
+AgregarMarco(h:FAC..m:FAC,2,0,Exe('COLOR'))
+SetFont(a:fac..o:fac,3)
+
+SetFilaActual(fac+1)
+
+ACT(a:fac,'NrOperacion')
+ACT(b:fac,'F.Inicio')
+ACT(c:fac,'Capital')
+ACT(d:fac,'Interes')
+ACT(e:fac,'Int.Acumulado')
+ACT(f:fac,'F.Vto')
+ACT(g:fac,'Plazo')
+ACT(h:fac,'Cap.Ajustado')
+ACT(i:fac,'Interes')
+ACT(j:fac,'Int.Acumulado')
+ACT(k:fac,'Tasa')
+ACT(l:fac,'U.T.')
+ACT(m:fac,'Int.Cap.')
+ACT(n:fac,'FV.Per')
+
+AgregarMarco(a:FAC..n:FAC,2,0,Exe('COLOR'))
+
+* Ajusto el ancho de las columnas
+ACO(1,8)
+ACO(2,6)
+ACO(3,10)
+ACO(4,10)
+ACO(5,10)
+ACO(6,6)
+ACO(7,3)
+ACO(8,10)
+ACO(9,10)
+ACO(10,10)
+ACO(11,6)
+ACO(12,3)
+ACO(13,10)
+
+SetFont(a3..r:fac,2)
+
+
+* z1=0 TodoOk   z2: Comienzo listado z3: Renglon del FV
+* X3: Acumulado de Mov. Fecha Valor X5: Cantidad de Minutas Mensuales
+ACN(Z1,0)
+ACN(Z14,0)
+ACN(Z2,fac)
+
+* 1er. dia de la barrida
+ACD(aa3,VAL(aa1))
+
+Recorrer&j 1,VAL(aa2)
+
+    Message('Procesando Fecha '~VAL(aa1)~' ....')
+
+    * Incluyo el mov. fecha valor en la lista
+    IF VAL(aa1)=Dialogo.Fecha1
+       ifa
+       ACN(Z3,fac)
+       ACD(b:fac,Dialogo.Fecha1)
+       ACN(c:fac,Dialogo.Cantidad1*IIF(Dialogo.Radio2=0,-1,1))
+       ACD(f:fac,Dialogo.Fecha2)
+       ACN(e:fac,VAL(e:fac-1))
+       ACN(g:fac,Dialogo.Entero1)
+       ACN(j:fac,VAL(j:fac-1))
+       acn(x3,val(x3)+val(c:fac))
+       AgregarMarco(a:FAC..n:FAC,2,0,Exe('COLOR'))
+    ENDIF
+
+    *-- Recalculo todas las Minutas Diarias desde la Fecha Valor
+    SQL.ADD(" SELECT O.* ")
+    SQL.ADD(" from "~DBO~".OPERACIONES O")
+    SQL.ADD(" where (O.TipoOp='TEMIND' or O.TipoOp='TEMINM') and ")
+    SQL.ADD(" O.FechaOp='"~IdxDate(val(aa1))~"' and ")
+    SQL.ADD(" O.Especie ='"~Dialogo.Especie1~"'  and ")
+    SQL.ADD(" O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' and ")
+    SQL.ADD(" O.Cliente1 = '"~Dialogo.Cliente1~"' and ")
+    SQL.ADD(" FechaOp=FechaCarga ")
+    SQL.ADD(" Order By O.FechaOp,O.TipoOp DESC,O.NrOperacion ")
+
+    ACN(X1,0)
+
+    * Fecha Valor
+    ACN(X4,0)
+    ACN(X5,0)
+
+    * Minutas Diarias para una fecha
+    Recorrer SQL
+
+       SCN(X1,1)
+
+       Message('Recalculando la Minuta de Diaria Nro. '~FBN['NrOperacion']~' de Fecha '~FBN['FechaOp']~' .... ')          
+
+       * Obtengo el Nuevo Saldo de la Minuta Diaria
+       ACT(a:FAC, FBN['NrOperacion'])
+       ACLO(a:fac,FBN['NrOperacion'])
+       ACD(b:FAC, val(aa1))
+
+      * Se toma el Monto Capitalizable
+      IF Eqstr(FBN['TipoOp'],'TEMINM')
+         ACN(c:FAC, FBN['TotalBrutoCli1']*IIF(EqStr(FBN['MB3'],'0'),-1,1))
+         ACN(d:fac,FBN['TotalIntereses']*IIF(EqStr(FBN['MB3'],'0'),-1,1)) 
+
+         ACD(f:fac,FBN['FechaVto'])
+         ACN(g:fac,FBN['Plazo'])
+
+         ACN(h:fac,VAL(c:fac))    
+         ACN(i:fac,VAL(d:fac))    
+
+         ACN(X4,1)
+         SCN(X5,1)
+
+         ACT(AV1,Dialogo.Vehiculo1)
+         ACT(AV2,Dialogo.Cliente1)
+
+         * Monto Minuta Mensual
+         ACN(Z11,VAL(Z14))
+
+         Message(' Z11 '~Fstr(val(z11),0,2))
+
+         If VAL(aa1)>Dialogo.Fecha1
+            SQL.ADD(" SELECT Sum(CASE MB3 WHEN '0' THEN -TotalIntereses ELSE TotalIntereses END) as TotalIntereses ")
+            SQL.ADD(" from "~DBO~".OPERACIONES O")
+            SQL.ADD(" where O.TipoOp='TEMIND' and ")
+            SQL.ADD(" O.FechaVto>='"~IdxDate(val(aa3))~"' and ")
+            SQL.ADD(" O.FechaVto<'"~IdxDate(val(aa1))~"' and ")
+            SQL.ADD(" O.Especie ='"~Dialogo.Especie1~"'  and ")
+            SQL.ADD(" O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' and ")
+            SQL.ADD(" O.Cliente1  = '"~Dialogo.Cliente1~"'  and ")
+            SQL.ADD(" FechaOp>FechaCarga ")
+
+            Recorrer SQL
+               Message('Intereses M.Fecha Valor a Sumar '~Fstr(FBN['TotalIntereses'],0,0))
+               dfa
+               ACN(n:fac,FBN['TotalIntereses'])
+            Proximo      
+         EndIf
+
+         * Calculo los Interes de la Minuta Sumando la Minuta FechaValor
+         SCN(z11,VAL(n:fac))
+
+         IF VAL(Z14)>0
+            ACT(AV1,Dialogo.Cliente1)
+            ACT(AV2,Dialogo.Vehiculo1)
+         ENDIF
+ 
+         * Obtengo el Nro de Caso para la Minuta Vinculada AB6: Caso
+         (."CASOVINCU".)    
+
+         Message('Calculando los Impuestos para Operacion Directa ')
+ 
+         ACT(AV1,Dialogo.Vehiculo1)
+         ACT(AV2,Dialogo.Cliente1)
+
+         * Determina los Impuestos de Vinculadas
+         * Y5 : Imp.Ret.IVA  Y6 : Alicuota de IVA  Y12: Alicuota Percepcion  Y13: Importe  de Percepcion
+         * Y16: IvaNeto  Y17: MontoCapitalizable Y19:TTN
+         * I1: Tasa Impuesto Extr I2: Importe de Impuesto Ext
+         * W1: Tasa WH  W2: Importe de WH Directa  
+
+         (."IMPVINTER".)
+
+         Message('* Interes +(Iva-Retencion)')
+         ACN(m:fac,VAL(Z14)+VAL(Y16))  
+
+         Message(' Intereses Capitalizable  1 '~Fstr(val(m:fac),0,2))         
+
+         If VAL(aa1)>Dialogo.Fecha1
+            SCN(m:fac,VAL(n:fac)) 
+            ACN(Z8,val(z8)-VAL(c:fac))
+         EndIf
+
+         ACD(aa3,VAL(aa1))
+         *----------
+         Message('Antes z8 '~Fstr(val(z8),0,2))
+         Message('m:fac    '~Fstr(val(m:fac),0,2))
+         ACN(Z8,val(z8)+VAL(m:fac))
+         Message('Despues z8 '~Fstr(val(z8),0,2))
+
+         ACN(l:fac,IIF(EqStr(FBN['RB8'],'0'),360,365))
+         ACN(k:fac,FBN['Precio1'])
+
+         ACN(Z14,0)
+         ***
+         dfa
+      Else 
+         ACN(c:FAC,VAL(c:fac)+(FBN['Cantidad']*IIF(EqStr(FBN['MB3'],'0'),-1,1)))
+         ACN(d:fac,VAL(d:fac)+(FBN['TotalIntereses']*IIF(EqStr(FBN['MB3'],'0'),-1,1)))
+         ACN(e:fac,VAL(e:fac-1)+VAL(d:fac))
+
+         ACD(f:fac,FBN['FechaVto'])
+         ACN(g:fac,FBN['Plazo'])
+
+         *-- Capital Acum=Cap.Acumulado anterior+Capital+Ajuste Dev.Interes Minuta Mensual
+         *MessageBox('Capital '~Fstr(val(x3),0,2))
+         *MessageBox('Capital Acum.Anterior '~Fstr(val(c:fac),0,2))
+         *MessageBox('Ajuste Dev.Interes Minuta Mensual '~Fstr(val(z8),0,2))
+
+         ACN(h:fac,VAL(x3)+VAL(c:fac)+VAL(z8))
+
+         ACN(l:fac,IIF(EqStr(FBN['RB8'],'0'),360,365))
+         ACN(k:fac,FBN['Precio1'])
+         ACN(i:fac,FBN['Precio1']*VAL(h:fac)*VAL(g:fac)/(100*VAL(l:fac)) )
+         ACN(j:fac,VAL(j:fac-1)+VAL(i:fac))
+      EndIf
+    Proximo 
+
+    * Si el ultimo mov. es una fecha valor
+    IF VAL(X1)=VAL(X5) y VAL(X1)>0
+       ifa
+       ACN(e:fac,VAL(e:fac-1)+VAL(d:fac))
+ 
+       *-- Capital Acum=Cap.Acumulado anterior+Capital+Ajuste Dev.Interes Minuta Mensual
+       ACN(h:fac,VAL(x3)+VAL(c:fac)+VAL(z8))
+
+       ACN(i:fac,VAL(k:fac)*VAL(h:fac)*VAL(g:fac)/(100*VAL(l:fac)) )
+       ACN(j:fac,VAL(j:fac-1)+VAL(i:fac))
+    EndIf
+ 
+    IF VAL(X1)=0 
+      Message('No encontro operacion para la fecha '~VAL(aa1))
+
+      * Recupero la Tasa para esa Fecha
+      SQL.ADD("SELECT * ")
+      SQL.ADD("from "~DBO~".TASASTERCEROS ")
+      SQL.ADD("where Vehiculo='"~Dialogo.Vehiculo1~"' and ")
+      SQL.ADD(" Cliente='"~Dialogo.Cliente1~"' and ")
+      SQL.ADD(" Especie ='"~Dialogo.Especie1~"' and ")
+      SQL.ADD(" Fecha='"~IdxDate(VAL(aa1))~"' " )              
+
+      ACN(X2,0)
+
+      Recorrer SQL
+         ACN(k:fac,FBN['Tasa'])
+         ACN(X2,1)
+         Break
+      Proximo     
+     
+      If VAL(x2)=0
+         IFA
+      EndIf
+
+      Message('Recupero Tasa '~Fstr(VAL(k:fac),0,2)~' de Fecha '~VAL(aa1)~' .... ')          
+
+      * No existia una Minuta Diaria para Esa Fecha => Inicializo los valores
+      * Inicializo en la 1er. fila los datos de la minuta fecha valor
+
+      ACD(b:FAC, val(aa1))
+
+
+      *-- Capital Acum=Cap.Acumulado anterior+Capital+Ajuste Dev.Interes Minuta Mensual
+      ACN(e:fac,VAL(e:fac-1)+VAL(d:fac))
+      ACN(h:fac,VAL(x3)+VAL(c:fac)+val(z8))
+      ACD(f:fac,HABILES(Val(aa1),1,'ARG',SI))
+      ACN(g:fac,VAL(f:fac)-VAL(aa1))
+      ACN(l:fac,IIF(Dialogo.Radio1=0,360,365))
+      ACN(i:fac,Val(h:fac)*VAL(g:fac)*VAL(k:fac)/(100*VAL(l:fac)) )
+      ACN(j:fac,VAL(j:fac-1)+VAL(i:fac))
+
+      * Si no encontro la tasa cancela
+      If Val(h:fac)<>0 y val(k:fac)=0 
+         Message('Debe ingresar la Tasa para el d¡a '~VAL(aa1)~', El Proceso ser  Cancelado ....')
+         ACN(Z1,1)
+         Break
+      EndIf
+    ENDIF
+
+    * Incluyo el mov. fecha valor en la lista
+*    IF VAL(aa1)>=Dialogo.Fecha1 
+       * z14: Acumulado para recalculo de Minuta Mensual
+       ACN(Z14,VAL(Z14)+VAL(i:fac))
+*    EndIf
+    ACD(aa1,HABILES(VAL(aa1),1,'ARG',SI))
+Proximo   
+
+If VAL(Z1)=0
+
+   ACT(y1,Dialogo.Vehiculo1)
+   ACT(y2,Dialogo.Cliente1)
+   ACT(y3,Dialogo.Especie1)
+   ACN(y4,Dialogo.Radio2)
+   ACN(y5,Dialogo.Radio1)
+   ACN(y6,Dialogo.Cantidad1)
+
+   * Calculo la Diferencia de Intereses
+   SetFilaActual(fac+2)
+   ACT(a:fac  ,'*** A J U S T E:')
+   ACN(j:fac,VAL(j:fac-2)-VAL(e:fac-2))
+
+   * Signo del Interes
+   ACT(Z10,IIF(VAL(j:fac)>0,'1','0') )
+
+   ACN(j:fac,IIF(VAL(j:fac)<0,-VAL(j:fac),VAL(j:fac)) )
+
+   ACN(l:fac,IIF(Dialogo.Radio1=0,360,365))
+   ACN(k:fac,(VAL(j:fac)*IIF(Dialogo.Radio1=0,36000,36500))/(VAL(y6)*VAL(g:val(z3))) ) 
+
+   CrearDialogo
+      Fecha1         : 'Fecha Inicio'           ;1;1;;NO;;Dialogo.Fecha1<Fsys y EsHabil(Dialogo.Fecha1,'ARG');'Fecha de Inicio Incorrecta';NO;VAL(b:val(z3))  ;
+      Fecha2         : 'Fecha Fin'              ;1;2;;NO;;EsHabil(Dialogo.Fecha2,'ARG');'Fecha de Fin Incorrecta';NO;FSYS;
+      Vehiculo1      : 'Vehiculo'               ;2;1;;NO;;NOVACIO(Dialogo.Vehiculo1);'El VEHICULO es INVALIDO';NO;VAL(y1)
+      Cliente1       : 'ContraParte'            ;2;2;;NO;;NOVACIO(Dialogo.Cliente1);'Debe ingresar un Veh¡culo Contraparte';NO;VAL(y2);;;
+      Especie1       : 'Moneda'                 ;3;1;;NO;;NOVACIO(Dialogo.Especie1) y DESCIENDEDEESPECIE(Dialogo.Especie1,'MONEDA') y ESTERMINAL(Dialogo.Especie1,ESPECIE) y INCLUIDO(Dialogo.Especie1,VAR('LISCONTRA'));'Debe Ingresar una Especie V lida';NO;VAL(y3);;;
+      Radio2         : 'Tipo_Saldo|Pasivo|Activo'     ;3;2;;NO;;Dialogo.Radio2>=0;'Indique Colocaci¢n o Toma';NO;VAL(y4);
+      Cantidad1      : 'V_Nominal'              ;4;1;;NO;;Dialogo.Cantidad1>0;'El Valor Nominal DEBE SER POSITIVO';NO;VAL(y6);;;;"###,###,###,###,###.##"
+      Entero1        : 'Plazo'                  ;4;2;;NO;;;;;;Dialogo.Fecha2-Dialogo.Fecha1
+      Radio1         : 'UT_Tasa Int|360|365'    ;5;1;;NO;;Dialogo.Radio1>=0;'UNIDAD DE TIEMPO TASA DE INTERES INVALIDA';NO;val(y5);
+      Cantidad2      : 'Inter¿s'                ;7;1;;NO;;;;;VAL(j:fac);
+      Radio3         : 'Tipo_Inter¿s|Pasivo|Activo'     ;7;2;;NO;;Dialogo.Radio3>=0;'Indique Colocaci¢n o Toma';NO;VAL(z10);
+      Precio1        : 'Tasa %'                 ;8;1;;NO;;Dialogo.Precio1>=0;'La TASA DE INTERES debe ser POSITIVA'; NO;VAL(k:fac);
+   FinDialogo
+
+   if not Ok
+      * Cancelar
+   Else
+
+      * Si acepta ingreso al minuta diaria
+      Message('Obteniendo los Nros. de Operaciones a Generar .... ')          
+ 
+      *-- Z3 Nro. Minuta Diaria 
+      ACT(z3,GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',Dialogo.Vehiculo1)))
+
+      ACT(AV1,Dialogo.Vehiculo1)
+      ACT(AV2,Dialogo.Cliente1)
+      ACT(AE1,Dialogo.Especie1)
+      ACD(AF1,Dialogo.Fecha1)
+
+      ACT(Z7,Fstr(VAL(Y4),0,0))
+
+      IF EqStr(VAL(Z7),'1')
+         ACT(AV1,Dialogo.Cliente1)
+         ACT(AV2,Dialogo.Vehiculo1)
+      ENDIF
+
+      * Obtengo el Nro de Caso para la Minuta Vinculada AB6: Caso
+      (."CASOVINCU".)    
+
+      Message('Calculando los Impuestos para Operacion Directa ')
+
+      ACT(AV1,Dialogo.Vehiculo1)
+      ACT(AV2,Dialogo.Cliente1)
+
+      * Determina los Impuestos de Vinculadas
+      * Y5 : Imp.Ret.IVA  Y6 : Alicuota de IVA  Y12: Alicuota Percepcion  Y13: Importe  de Percepcion
+      * Y16: IvaNeto  Y17: MontoCapitalizable Y19:TTN
+      * I1: Tasa Impuesto Extr I2: Importe de Impuesto Ext
+      * W1: Tasa WH  W2: Importe de WH Directa  
+
+      (."IMPVINTER".)
+
+      Message('Generando Minuta de Diaria .... ')          
+      SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ")
+      SQL.ADD("(TipoOp, NrOperacion,FechaOp,Vehiculo1,Cliente1,Especie, ")
+      SQL.ADD(" MB3,Cantidad,TotalIntereses,Plazo,")
+      SQL.ADD(" FechaVto,Precio1,RB8,")
+      SQL.ADD(" FechaCarga,UsrInput,Operador,")
+      SQL.ADD(" Precio4,Precio2,TotalAux1,")
+      SQL.ADD(" RB6,TasaPrecan,RB3 ) ") 
+      SQL.ADD("Values")
+      SQL.ADD("('TEMIND','"~Val(z3)~"','"~IdxDate(Dialogo.Fecha1)~"','"~Dialogo.Vehiculo1~"','"~Dialogo.Cliente1~"','"~Dialogo.Especie1~"',")
+      SQL.ADD(" '"~Val(z7)~"', "~Fstr(Dialogo.Cantidad1,0,2)~","~Fstr(Dialogo.Cantidad2,10,2)~","~Fstr(Dialogo.Entero1,0,0)~",")
+      SQL.ADD(" '"~IdxDate(Dialogo.Fecha2)~"',"~Fstr(Dialogo.Precio1,0,5)~",'"~Fstr(Dialogo.Radio1,0,0)~"',")
+      SQL.ADD(" '"~IdxDate(Fsys)~"','"~USUARIOACTIVO~"','"~USUARIOACTIVO~"',")
+      SQL.ADD(" "~Fstr(VAL(Y19),0,5)~","~Fstr(VAL(Y15),0,5)~","~Fstr(VAL(W1),0,5)~", ")
+      SQL.ADD(" '"~Fstr(Val(AB6),0,0)~"', "~Fstr(Val(I1),0,2)~",'1' ) ")
+      SQL.NEW 
+      SQL.EXEC
+
+      * Insert de Instancias: Recibe z3: Nro.Op.
+      (."ALTAINSSU".)
+
+   EndIf
+EndIf
+
+ACT(z1,'Fecha : '~Var('FECHASYS'))
+SetFont(z1..z1,1)
+
+ACT(a1, "Ajuste Fecha Valor Operaciones entre Terceros")
+
+ACT(a3,'Vehiculo1: '~Dialogo.Vehiculo1~'  '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+ACT(a4,'Cliente1: '~Dialogo.Cliente1~'  '~BuscarCampo('Clientes','RazonSocial','Codigo',Dialogo.Cliente1))
+ACT(a5,'Especie  : '~Dialogo.Especie1~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie1))
+
+SetFont(a1..a5,1)
+
+Impresion(1,2)
+SetFilaActual(fac+1)
+
+ACT(a:FAC, 'FIN DE LISTADO')
+
+SetFont(a:val(z2)..q:fac,1)
+FormatoCeldas(g:Val(z2)..g:fac,Exe('F0'))
+FormatoCeldas(l:Val(z2)..l:fac,Exe('F0'))
+LimitesVision(n:fac)

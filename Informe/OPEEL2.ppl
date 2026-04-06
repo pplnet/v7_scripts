@@ -1,0 +1,165 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+
+  Vehiculo2  : "Grupo"     ;;;;Vacio(Dialogo.Vehiculo1);;Not EsTerminal(Dialogo.Vehiculo2, Vehiculos);'Debe ingresar un Grupo';NO;;;;;;"TipoVehiculo <> 'DIV'";
+  Vehiculo1  : "Vehiculo"  ;;;;Vacio(Dialogo.Vehiculo2);;EsTerminal(Dialogo.Vehiculo1, Vehiculos) o Vacio (Dialogo.Vehiculo1);'Debe ingresar un Vehiculo';NO;;;;;;"TipoVehiculo = 'DIV'";;
+  Fecha1     :'F.Desde'  ;;;;;;Dialogo.Fecha1<>0 y Dialogo.Fecha1<=Dialogo.Fecha2;'Debe Ingresar Fecha Desde y debe ser la menor';NO;FSys
+  Fecha2     :'F.Hasta'  ;;;;;;Dialogo.Fecha2<>0 y Dialogo.Fecha2>=Dialogo.Fecha1;'Debe Ingresar Fecha Hasta y debe ser la mayor';NO;FSys
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+  else
+   If [SQL("Select Count(*) from "~DBO~".VEHICULOS ") <> SQL("Select Count(*) from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"' ")] y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,8,B")
+
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+
+SetFilaActual(3)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2,2)
+ACT(a:fac, 'Operaciones eliminadas de un periodo')
+SetFont(a:fac..a:fac,3)
+SetFilaActual(fac+2)
+ACN(w1,fac)
+
+*if NoVacio(Dialogo.Vehiculo1)
+*   ACT(a:fac+1, 'Vehiculo: '~Dialogo.Vehiculo1)
+*  else
+*   ACT(a:fac+1, 'Vehiculo: Todos')
+*endif
+
+if NoVacio (Dialogo.Vehiculo2)
+   ACT(a:FAC+1, 'Grupo : '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo2))
+else
+   ACT(a:FAC+1, 'Grupo : Todos')
+endIf
+
+
+if NoVacio (Dialogo.Vehiculo1)
+   ACT(a:FAC+2, 'Vehiculo : '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+else
+   ACT(a:FAC+2, 'Vehiculo : Todos')
+endIf
+
+
+ACT(a:fac+3, 'F.Desde: '~Dialogo.Fecha1)
+ACT(a:fac+4, 'F.Hasta: '~Dialogo.Fecha2)
+
+SetFilaActual(fac+6)
+ACT(a:fac, 'F.Baja')
+ACT(b:fac, 'Numero')
+ACT(c:fac, 'Fecha Op.')
+ACT(d:fac, 'Fecha Vto.')
+ACT(e:fac, 'Especie')
+ACT(f:fac, 'Tipo Op.')
+ACT(g:fac, 'Cliente')
+ACT(h:fac, 'Cantidad')
+ACT(i:fac, 'Precio/Tasa')
+ACT(j:fac, 'Vehiculo')
+ACT(k:fac, 'Operador')
+ACT(l:fac, 'Usr.Baja')
+AlinearCeldas(a:fac..g:fac,'I')
+AlinearCeldas(h:fac..i:fac,'D')
+AlinearCeldas(j:fac..n:fac,'I')
+SetFont(a:5..n:fac,2)
+AgregarMarco(a:fac..l:fac,2,0,Exe('COLOR'))
+
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(z1, "Vehiculo1 = '"~Dialogo.Vehiculo1~"' and ")
+endif
+
+SQL.ADD("Select TipoOp, NrOperacion, FechaOp, FechaVto, Especie, FechaEj, PrecioEj, PaseCB, Cliente1, Cantidad, Precio1, Vehiculo1, Operador, Arbitraje, CB5, FechaDel, UsuarioDel")
+SQL.ADD(" from "~DBO~".BOPERACIONES where "~Val(z1) ~" ")
+if Dialogo.Fecha1=Dialogo.Fecha2
+   SQL.ADD(" FechaDel >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaDel < '"~IdxDate(Dialogo.Fecha2+1)~"'")
+else
+   SQL.ADD(" FechaDel >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaDel < '"~IdxDate(Dialogo.Fecha2+1)~"'")
+endif
+
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("and Vehiculo1='"~Dialogo.Vehiculo1~"'")
+EndIf
+
+If NoVacio(Dialogo.Vehiculo2)
+   SQL.ADD("and Vehiculo1 in("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+EndIf
+
+SQL.ADD("order by NrOperacion")
+
+Recorrer SQL
+
+  SCN(z2,1)
+  ACT(z3, ' ')
+  ACT(a:fac, fbn('FechaDel'))
+  ACT(b:fac, fbn('NrOperacion'))
+  ACT(c:fac, fbn('FechaOp'))
+  ACT(d:fac, fbn('FechaVto'))
+  ACT(e:fac, fbn('Especie')~' '~fbn('FechaEj')~' '~fbn('PrecioEj'))
+  ACT(f:fac, fbn('TipoOp'))
+  if Incluido(fbn('TipoOp'),'TIC|TIFC|TIV|TIFV') y fbn('PaseCB')=1
+    ACT(f:fac, Val(f:fac)~' x Pase')
+  endif
+  if Incluido(fbn('TipoOp'),'TIC|TIFC|TIV|TIFV') y fbn('CB5')=1
+    ACT(f:fac, Val(f:fac)~' (Of.)')
+  endif
+  if Incluido(fbn('TipoOp'),'FXC|FXV|FXCT|FXVT|FXA|FXAT') y fbn('PaseCB')=1
+    ACT(f:fac, Val(f:fac)~' x Pase')
+  endif
+  if Incluido(fbn('TipoOp'),'FXC|FXV|FXCT|FXVT') y fbn('Arbitraje')=1
+    ACT(f:fac, Val(f:fac)~' x Arb.')
+  endif
+  ACT(g:fac, fbn('Cliente1'))
+  ACN(h:fac, fbn('Cantidad'))
+  ACN(i:fac, fbn('Precio1'))
+  ACT(J:fac, fbn('Vehiculo1'))
+  ACT(k:fac, fbn('Operador'))
+  ACT(l:fac, fbn('UsuarioDel'))
+  AlinearCeldas(c:fac..d:fac,'D')
+  FormatoCeldas(i:fac..i:fac,Exe('F7'))
+  * link con consulta de operaciones
+  ACLBO(b:fac,Val(b:fac))
+Proximo
+
+SetFont(a:Val(w1)+7..n:fac,1)
+
+ACO(1,12)
+ACO(2,7)
+ACO(3,7)
+ACO(4,7)
+ACO(5,10)
+ACO(6,6)
+ACO(7,8)
+ACO(8,8)
+ACO(9,8)
+ACO(10,6)
+ACO(11,6)
+ACO(12,6)
+ACO(13,8)
+ACO(14,8)
+
+Impresion(1,2)
+SetFilaActual(fac+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:fac, 2)
+LimitesVision(m:fac)
+RangoTitulo(a:1..l:fac, Val(w1)+5)
+*AgregarBMP(a1, Exe('LOGO'), Exe('ESCALOGO'))
+ACT(a5, 'Cantidad de Operaciones : '~FStr(Val(z2), 4, 0))
+SetFont(a4..a5,2)

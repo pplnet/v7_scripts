@@ -1,0 +1,230 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Cliente1  : 'Banco'   ;;;;;;NoVacio(Dialogo.Cliente1) y DesciendeDeCliente(Dialogo.Cliente1,'BANCOS');'Debe Ingresar un banco';NO;
+  Fecha1    : 'Fecha'   ;;;;;;Dialogo.Fecha1>0;;;FSys
+FinDialogo
+if not Ok 
+  Cancelar
+endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+
+SetFilaActual(4)
+ACT(a:FAC, 'Limites - Lineas de Credito Activas')
+ACT(a:FAC+2, 'Banco:')
+ACT(a:FAC+3, 'Pat.Neto Local:')
+ACT(a:FAC+4, 'Pat.Neto Off-Shore:')
+ACT(a:FAC+5, 'R.P.C.:')
+ACT(a:FAC+6, 'Linea Total Grupo:')
+ACT(f:FAC+2, 'Origen:')
+ACT(f:FAC+3, 'Bce. al:')
+ACT(f:FAC+4, 'Suc.Argen.:')
+ACT(f:FAC+5, 'Suc.Exter.:')
+
+ACT(b:FAC+2, BuscarCampo('CLIENTES','RazonSocial','Codigo',Dialogo.Cliente1))
+if DesciendeDeCliente(Dialogo.Cliente1,'BLOCAL')
+  ACT(g:FAC+2, 'Local')
+  if EqStr(BuscarCampo('CLIENTES','PaisDir','Codigo',Dialogo.Cliente1),'ARG') o Vacio(BuscarCampo('CLIENTES','PaisDir','Codigo',Dialogo.Cliente1))
+    ACN(b:FAC+3, BuscarCampo('CLIENTES','Patrimonio','Codigo',Dialogo.Cliente1)/1000)
+    ACN(b:FAC+4, 0)
+    if BuscarCampo('CLIENTES','RPC','Codigo',Dialogo.Cliente1)>0
+      ACN(b:FAC+5, BuscarCampo('CLIENTES','RPC','Codigo',Dialogo.Cliente1)/1000)
+    else
+      ACN(b:FAC+5, BuscarCampo('CLIENTES','Patrimonio','Codigo',Dialogo.Cliente1)*0.15/1000)
+    endif
+    ACD(g:FAC+3, BuscarCampo('CLIENTES','FechaBal','Codigo',Dialogo.Cliente1))
+    ACT(g:FAC+4, 'SI')
+    ACN(x1, 1)
+    ACN(x2, Val(b:FAC+5))
+    SQL.ADD("Select Codigo, Patrimonio, FechaBal, RPC, PaisDir from "~DBO~".CLIENTES C, "~DBO~".GRUPOSECONOMICOS G")
+    SQL.ADD("where Controlante = '"~Dialogo.Cliente1~"' ")
+    SQL.ADD("and Cliente <> '"~Dialogo.Cliente1~"' ")
+    SQL.ADD("and Codigo = Cliente ")
+    recorrer SQL
+      DFA
+      if Not [EqStr(FBN['PaisDir'], 'ARG') o Vacio(FBN['PaisDir'])]
+        ACT(g:FAC+5, 'SI')
+      endif
+    proximo
+  endif
+  ACN(b:FAC+6, SQL("Select Monto from "~DBO~".LIMASIGNADOS where Limite = 'ACLTOT' and Cliente = '"~Dialogo.Cliente1~"' and Vehiculo is Null")/1000)
+else
+  ACT(g:FAC+2, 'Extranjero')
+  ACN(b:FAC+4, BuscarCampo('CLIENTES','Patrimonio','Codigo',Dialogo.Cliente1)/1000)
+  ACT(g:FAC+4, 'NO')
+  ACT(g:FAC+5, 'NO')
+  SQL.ADD("Select Codigo, Patrimonio, FechaBal, RPC, PaisDir from "~DBO~".CLIENTES C, "~DBO~".GRUPOSECONOMICOS G")
+  SQL.ADD("where Controlante = '"~Dialogo.Cliente1~"' ")
+  SQL.ADD("and Cliente <> '"~Dialogo.Cliente1~"' ")
+  SQL.ADD("and Codigo = Cliente ")
+*  SQL.ADD("and PaisDir = 'ARG' ")
+  recorrer SQL
+    DFA
+    if EqStr(FBN['PaisDir'], 'ARG') o Vacio(FBN['PaisDir'])
+      ACN(b:FAC+3, FBN['Patrimonio']/1000)
+      if FBN['RPC']>0
+        ACN(b:FAC+5, FBN['RPC']/1000)
+      else
+        ACN(b:FAC+5, FBN['Patrimonio']*0.15/1000)
+      endif
+      ACD(g:FAC+3, FBN['FechaBal'])
+      ACT(g:FAC+4, 'SI')
+    else
+      ACT(g:FAC+5, 'SI')
+    endif
+  proximo
+  SCN(b:FAC+6, SQL("Select Monto from "~DBO~".LIMASIGNADOS where Limite = 'ACOTOT' and Cliente = '"~Dialogo.Cliente1~"' and Vehiculo is Null")/1000)
+endif
+
+FormatoCeldas(b:FAC+3..b:FAC+6,Exe('F0'))
+SetFont(a:FAC..j:FAC+6,2)
+
+SetFilaActual(FAC+8)
+ACT(a:FAC, 'Empresas Controladas')
+SetFont(a:FAC,2)
+AgregarMarco(a:FAC..j:FAC,1,0,Exe('COLOR'))
+
+SetFilaActual(FAC+2)
+ACT(b:FAC, 'Linea')
+ACT(b:FAC+1, 'Total')
+ACT(c:FAC, 'Linea')
+ACT(c:FAC+1, 'Clean')
+ACT(d:FAC, 'Linea')
+ACT(d:FAC+1, 'Garantias')
+ACT(e:FAC, 'Linea')
+ACT(e:FAC+1, 'Trade')
+ACT(f:FAC, 'Linea')
+ACT(f:FAC+1, 'Prestamos')
+ACT(g:FAC, 'Vencim.')
+ACT(h:FAC, 'Fecha Inicio')
+ACT(h:FAC+1, 'Gestion')
+ACT(i:FAC, 'Monto en')
+ACT(i:FAC+1, 'Gestion')
+ACT(j:FAC, 'Observaciones')
+SetFont(a:FAC..j:FAC+1,2)
+AlinearCeldas(a:FAC..i:FAC+1,'C')
+AgregarMarco(a:FAC..j:FAC+1,1,2)
+
+SetFilaActual(FAC+2)
+SQL.ADD("Select * from "~DBO~".LIMASIGNADOS where Cliente = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and Vehiculo is Not Null ")
+SQL.ADD("and Limite in ('ACLTOT','ACLGAR','ACLTRA','ACLPRE','ACOTOT','ACOGAR','ACOTRA','ACOPRE') ")
+SQL.ADD("order by Vehiculo")
+recorrer SQL
+  if EqStr(FBN['Vehiculo'],Val(a:FAC-1))
+    DFA
+  else
+    if NoVacio(Val(a:FAC-1))
+      DFA
+      if Val(b:FAC)>Val(d:FAC)+Val(e:FAC)+Val(f:FAC)
+        ACN(c:FAC, Val(b:FAC)-(Val(d:FAC)+Val(e:FAC)+Val(f:FAC)))
+      endif
+      FormatoCeldas(b:FAC..f:FAC,Exe('F0'))
+      FormatoCeldas(i:FAC..i:FAC,Exe('F0'))
+      SetFont(a:FAC..j:FAC,1)
+      IFA
+    endif
+    ACT(a:FAC, FBN['Vehiculo'])
+  endif
+  if Incluido(FBN['Limite'],'ACLTOT|ACOTOT')
+    ACN(b:FAC, FBN['Monto']/1000)
+    ACD(g:FAC, FBN['FVencimiento'])
+  endif
+  if Incluido(FBN['Limite'],'ACLGAR|ACOGAR')
+    ACN(d:FAC, FBN['Monto']/1000)
+  endif
+  if Incluido(FBN['Limite'],'ACLTRA|ACOTRA')
+    ACN(e:FAC, FBN['Monto']/1000)
+  endif
+  if Incluido(FBN['Limite'],'ACLPRE|ACOPRE')
+    ACN(f:FAC, FBN['Monto']/1000)
+  endif
+proximo
+if NoVacio(Val(a:FAC))
+  if Val(b:FAC)>Val(d:FAC)+Val(e:FAC)+Val(f:FAC)
+    ACN(c:FAC, Val(b:FAC)-(Val(d:FAC)+Val(e:FAC)+Val(f:FAC)))
+  endif
+  FormatoCeldas(b:FAC..f:FAC,Exe('F0'))
+  FormatoCeldas(i:FAC..i:FAC,Exe('F0'))
+  SetFont(a:FAC..j:FAC,1)
+endif
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Empresas Vinculadas')
+SetFont(a:FAC,2)
+AgregarMarco(a:FAC..g:FAC,1,0,Exe('COLOR'))
+
+SetFilaActual(FAC+2)
+ACT(b:FAC, 'Linea')
+ACT(b:FAC+1, 'Otorgada')
+ACT(c:FAC, Pad('',15)~'Utilizacion')
+ACT(c:FAC+1, 'Local')
+ACT(d:FAC+1, 'Extranjera')
+ACT(e:FAC, 'Vencim.')
+ACT(e:FAC+1, 'Operacion')
+ACT(f:FAC, 'Observaciones')
+SetFont(a:FAC..f:FAC+1,2)
+AlinearCeldas(a:FAC..e:FAC+1,'C')
+AlinearCeldas(c:FAC..d:FAC,'I')
+AgregarMarco(a:FAC..b:FAC+1,1,2)
+AgregarMarco(c:FAC..d:FAC,1)
+AgregarMarco(c:FAC+1..d:FAC+1,1,2)
+AgregarMarco(e:FAC..e:FAC+1,1,2)
+AgregarMarco(f:FAC..g:FAC+1,1)
+
+SetFilaActual(FAC+2)
+SQL.ADD("Select Cliente2,Cantidad1,Fecha2,RB1 from "~DBO~".TRANSACCIONES2 T , "~DBO~".GRUPOSECONOMICOS G ")
+SQL.ADD("where Cliente1 = Cliente ")
+SQL.ADD("and Controlante = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and Fecha1 <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("and Fecha2 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("and TipoTr2 = 'ACV' ")
+SQL.ADD("union ")
+SQL.ADD("Select Cliente2,Cantidad1,Fecha2,RB1 from "~DBO~".TRANSACCIONES2 ")
+SQL.ADD("where Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and (Select Count(*) from "~DBO~".GRUPOSECONOMICOS where Cliente = Cliente1)=0 ")
+SQL.ADD("and Fecha1 <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("and Fecha2 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("and TipoTr2 = 'ACV' ")
+SQL.ADD("order by Cliente2,Fecha2")
+recorrer SQL
+  if FBN['Fecha2']=Val(e:FAC-1) y EqStr(FBN['Cliente2'],Val(a:FAC-1))
+    DFA
+  else
+    if Vacio(Val(a:FAC))
+      ACT(a:FAC, FBN['Cliente2'])
+      ACN(b:FAC, SQL("Select Monto from "~DBO~".LIMASIGNADOS where Limite = 'ACEV' and Cliente = '"~Dialogo.Cliente1~"' and Vehiculo is Null")/1000)
+      ACD(e:FAC, FBN['Fecha2'])
+    endif
+  endif
+  if FBN['RB1']=0
+    SCN(c:FAC, FBN['Cantidad1']/1000)
+  else
+    SCN(d:FAC, FBN['Cantidad1']/1000)
+  endif
+  FormatoCeldas(b:FAC..d:FAC,Exe('F0'))
+  SetFont(a:FAC..f:FAC,1)
+proximo
+if Vacio(Val(a:FAC))
+  if SQL("Select Monto from "~DBO~".LIMASIGNADOS where Limite = 'ACEV' and Cliente = '"~Dialogo.Cliente1~"' and Vehiculo is Null")>0
+    IFA
+    ACN(b:FAC, SQL("Select Monto from "~DBO~".LIMASIGNADOS where Limite = 'ACEV' and Cliente = '"~Dialogo.Cliente1~"' and Vehiculo is Null")/1000)
+    FormatoCeldas(b:FAC..d:FAC,Exe('F0'))
+    SetFont(a:FAC..f:FAC,1)
+  endif
+endif
+SetFilaActual(FAC+2)
+
+ACO(1,11)
+ACO(2,7)
+ACO(3,7)
+ACO(4,7)
+ACO(5,7)
+ACO(6,7)
+ACO(7,7)
+ACO(8,7)
+ACO(9,7)
+ACO(10,13)
+
+LimitesVision(j:FAC)

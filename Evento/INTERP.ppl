@@ -1,0 +1,201 @@
+﻿* CALCULO DE FACTORES DE DESCUENTO PARA TASAS VARIABLES.
+* Recupero cada tasa va ESTA INTERPOLACION ES PARA PLAZOS MENORES A UN ANIO
+HojaVisible(si)
+ModoReproceso(SinDialogo)
+CrearDialogo
+ Fecha1   : 'Fecha'     ;;;;;;Dialogo.Fecha1<>0;'Ingrese una fecha de valuacion';NO;Fsys;
+FinDialogo
+
+If not ok
+   Cancelar
+EndIf
+
+
+ACT(a3, 'TipoTasa')
+ACT(b3, 'Fecha ')
+ACT(c3, 'ti(0,s)')
+ACT(d3, 's ')
+ACT(e3, 'FD(t,s)')
+ACT(f3, 'FD (borrar)')
+ACT(g3, 'FDt-1/FDt -1')
+ACT(h3, 'TasaImplicita')
+
+
+
+SQL.ADD("Select DISTINCT TT.PrecioRef from "~DBO~".TASASDIA TD, "~DBO~".TIPOSTASA TT Where ")
+SQL.ADD("TD.TipoTasa=TT.Codigo AND")
+***---SQL.ADD("TD.Fecha ='"~IdxDate(Dialogo.Fecha1)~"' and TD.Especie='USD' ")
+SQL.ADD("TD.Fecha ='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" ORDER BY TT.PrecioRef ")
+
+Recorrer SQL
+
+   SQL.ADD("Select TD.*,TT.DayCount from "~DBO~".TASASDIA TD, "~DBO~".TIPOSTASA TT Where ")
+   SQL.ADD("TD.TipoTasa=TT.Codigo  and TT.PrecioRef='"~Trim(Mirt(FBN['PrecioRef']))~"' AND")
+   SQL.ADD("TD.Fecha= '"~IdxDate(Dialogo.Fecha1)~"'   ")
+   SQL.ADD("ORDER BY TD.PlazoHasta")
+   ACN(x1,0)
+
+   SetFilaActual(4)
+
+   ACN(z3,3)
+
+   ACT(a:fac,'Hoy')
+   ACD(b:fac,Dialogo.Fecha1)
+  
+   *-- Recorrer valores
+   Recorrer SQL
+
+      ACT(a:fac,FBN['TipoTasa'])
+
+      Message(val(a:fac))
+
+      ACN(an2,360)  
+      IF EqStr(FBN['DayCount'],'ACT')
+         acn(dc1,0)
+         ACN(an2,360)  
+      EndIf
+      IF EqStr(FBN['DayCount'],'365')
+         acn(dc1,1)
+         ACN(an2,360)  
+      EndIf
+      IF EqStr(FBN['DayCount'],'36A')
+         acn(dc1,2)
+      EndIf
+      IF EqStr(FBN['DayCount'],'360')
+         acn(dc1,3)
+      EndIf
+      IF EqStr(FBN['DayCount'],'30E')
+         acn(dc1,4)
+      EndIf
+
+      
+      *---- Para DayCount Actual la el dia de la fecha de vto coincide con el dia de valuacion
+     
+      IF Incluido(FBN['DayCount'],'ACT|365|36A')
+         *- Segun el plazo, fijo la fecha de vto
+         IF Dia(Dialogo.Fecha1+FBN['PlazoHasta'])=Dia(Dialogo.Fecha1) o FBN['PlazoHasta']<=14
+            ACD(fl2,Dialogo.Fecha1+FBN['PlazoHasta'] )
+         Else 
+            acn(di1,Dia(Dialogo.Fecha1))
+***---            acn(me1,Mes(Dialogo.Fecha1+FBN['PlazoHasta']))
+***---            acn(an1,Anio(Dialogo.Fecha1+FBN['PlazoHasta']))
+            ***---Meses a sumar
+            ACN(MS:1, Trunc(fbn('PlazoHasta') / 30))
+            ***---Anios a sumar
+            ACN(AN:99, Trunc(Val(MS:1) / 12))
+            IF Val(MS:1) < 12
+                ACN(ME:1, Mes(Dialogo.Fecha1) + Val(MS:1))
+                IF Val(ME:1) > 12
+                    ***---Cambia de anio
+                    ACN(ME:1, Val(ME:1) - 12)
+                    SCN(AN:99, 1)
+                ENDIF
+            ELSE
+                ***---Suma mas de 1 anio
+                ACN(ME:1, Mes(Dialogo.Fecha1) + Val(MS:1) - (12 * Val(AN:99)))
+                IF Val(ME:1) > 12
+                    ***---Cambia de anio
+                    ACN(ME:1, Val(ME:1) - 12)
+                    SCN(AN:99, 1)
+                ENDIF
+            ENDIF
+            IF Val(AN:99) = 0
+                ACN(AN:1, Anio(Dialogo.Fecha1))
+            ELSE
+                ACN(AN:1, Anio(Dialogo.Fecha1) + Val(AN:99))
+            ENDIF
+
+***---            If val(me1)=Mes(Dialogo.Fecha1) y val(an1)=Anio(Dialogo.Fecha1)
+               *-- No cambio de mes ni anio
+***---               scn(me1,1)
+***---            EndIf
+
+            Repetir 
+               ACT(fl1,Pad0(FSTR(val(di1),0,0),2)~'/'~Pad0(FSTR(val(me1),0,0),2)~'/'~Pad0(FSTR(val(an1),0,0),2) )
+               ACD(fl2,Fecha(val(fl1)) )
+               ACT(fl3,val(fl2))
+               IF EqSTr(Copy(val(fl3),1,2),'00')
+                  *- Fecha invalida, busco el siguiente dia 
+                  scn(di1,1)
+                  If val(di1)>31
+                     acn(di1,1)               
+                     scn(me1,1)               
+                  EndIf
+                  If val(me1)>12            
+                     acn(me1,1)               
+                     scn(an1,1)               
+                  EndIf
+               Else 
+                  Break
+               EndIf
+            Proximo
+         EndIf
+      ELSE  
+         *---- para el resto de los day counts sumo los dias exactos del plazo
+         ACD(fl2,Dialogo.Fecha1+FBN['PlazoHasta'] )
+      EndIf
+      ACD(b:fac,val(fl2))
+      ACN(c:fac,FBN['Valor1'])
+
+      If FBN['PlazoHasta']<val(an2)
+         *-- Corto Plazo
+         *- s: Fecha de Vto - FechadeVAluacion/DayCount
+         ACN(d:fac,(val(b:fac)-Dialogo.Fecha1)/IIF(val(dc1)>1,360,365))
+         *- Cálculo de factores de descuentos para plazos con cotización => Verificar cual de las dos usar
+         *- Dejo la del excel para que den igual los calculos 
+         *---e:fac segun formula de Carolina
+         ACN(e:fac,(1+(val(c:fac)/100))^-val(d:fac))
+         *---e:fac segun formula del excel de ejemplo FD(t,s1/12) : =+(1+'datos ingresados al sistema'!E14*'datos ingresados al sistema'!D14)^-1
+         ACN(e:fac,(1+val(c:fac)*val(d:fac)/100)^-1)
+         If val(x1)>1
+            ACN(g:fac,val(e:fac-1)/val(e:fac) -1 )
+            ACN(h:fac,(val(g:fac)/(val(d:fac)-val(d:fac-1)))*100 )
+         EndIf
+      EndIf
+      If FBN['PlazoHasta']=val(an2)  
+         SCN(x1,1)
+         ACN(in1,fac)
+         *- s: Fecha de Vto - FechadeVAluacion/DayCount
+         ACN(d:fac,(val(b:fac)-Dialogo.Fecha1)/IIF(val(dc1)>1,360,365))
+
+         ACN(e:fac,1/(1+val(c:fac)/100) )
+         If val(x1)>1
+            ACN(g:fac,val(e:fac-1)/val(e:fac) -1 )
+            ACN(h:fac,(val(g:fac)/(val(d:fac)-val(d:fac-1)))*100 )
+         EndIf
+      EndIf
+      
+      If FBN['PlazoHasta']>val(an2)
+         SCN(x1,1)
+
+         *-- Largo Plazo
+         * i: ti*(0,s) (1+ti(0,s)/100*1/2)^2-1)
+         ACN(i:fac,(1+(val(c:fac)/100)/2)^2 -1)
+
+         ACN(i:fac,val(i:fac)*100)
+
+         ACN(c:fac,val(i:fac))
+
+         *- s: Fecha de Vto - FechadeVAluacion/DayCount
+         ACN(d:fac,(val(b:fac)-Dialogo.Fecha1)/IIF(val(dc1)>1,360,365))
+
+         *- FD(t,s) Cálculo de factores de descuentos para plazos con cotización 
+         * Se va calculando por anios => FD(t,1)= 1/(1+ti*(0,1)) FD(t,2)= 1-ti*(0,2)* FD(t,1)/(1+ti*(0,2))
+         * FD(t,3)= 1-ti*(0,3)*FD(t,1)- ti*(0,3)*FD(t,2)/(1+ti*(0,3))
+         ACN(e:fac, (1-(val(c:fac)/100)*Sum(e:val(in1)..e:fac-1))/(1+ (val(c:fac)/100)) )    
+         If val(x1)>1
+            ACN(g:fac,val(e:fac-1)/val(e:fac) -1 )
+            ACN(h:fac,(val(g:fac)/(val(d:fac)-val(d:fac-1)))*100 )
+         EndIf   
+      EndIf
+      SQL.ADD(" UPDATE "~DBO~".TASASDIA SET ")
+      SQL.ADD(" Valor2="~Fstr(val(c:fac),0,8)~", ")
+      SQL.ADD(" Valor3="~Fstr(val(d:fac),0,8)~", ")
+      SQL.ADD(" Valor4="~Fstr(val(e:fac),0,8)~", ") 
+      SQL.ADD(" Valor5="~Fstr(val(h:fac),0,8)~"  ")
+      SQL.ADD(" WHERE TipoTasa='"~FBN['TipoTasa']~"' and  Fecha='"~IdxDate(FBN['Fecha'])~"' ")
+      SQL.NEW
+      SQL.EXEC
+   Proximo
+Proximo

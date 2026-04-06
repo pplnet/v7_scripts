@@ -1,0 +1,199 @@
+﻿ACT(VH:1, SQLSet(" Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+
+CrearDialogo
+ Fecha1:  'F.Bajada'    ; 1;1;;;;Dialogo.Fecha1<=FSYS ;'Fecha Incorrecta';NO;FSys
+ Radio1:  'Estado|Conciliados|Pendientes|Todos';;;;;;;;;2
+ Lista1:  'Vehiculos'   ; 4;1;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"), Val(VH:1))
+ Lista3  : 'CtasPag/Rec/Int';-2;2;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS  WHERE (Pagadora='SI' OR TipoCuenta IN ('REC','INT') ) "~IIF(NOVACIO(Dialogo.Lista1)," AND Cliente IN ("~Pipe2Comillas(Dialogo.Lista1)~")",iif(NoVacio(UsrVehiculos(UsuarioActivo))," AND Cliente IN ("~Pipe2Comillas(Val(VH:1))~")") )~"  ");
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+CrearFont(1,"Arial, 8,")
+CrearFont(2,"Arial, 8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,10,")
+CrearFont(5,"Arial, 8,BI")
+
+
+ACT(a:1, 'F.Bajada: '~Dialogo.Fecha1)
+ACT(a:2, 'Vehiculos: '~iif(vacio(Dialogo.Lista1),'Todos',Pipe2Comillas(Dialogo.Lista1)))
+ACT(a:3, 'Cuentas Principales: '~iif(vacio(Dialogo.Lista3),'Todas',Pipe2Comillas(Dialogo.Lista3)))
+If Dialogo.Radio1=0
+  ACT(a:4, 'Estado: Conciliados')
+Endif
+If Dialogo.Radio1=1
+  ACT(a:4, 'Estado: Pendientes')
+Endif
+If Dialogo.Radio1=2
+  ACT(a:4, 'Estado: Conciliados y Pendientes')
+Endif
+
+ACT(c:6, 'Estado de Conciliacion de Cuentas Pagadoras y Recaudadoras')
+SetFont(a:1..a:5,2)
+SetFont(c:6,3)
+
+SetFilaACtual(7)
+
+SQL.ADD(" SELECT M.NrDatanet, M.NrMovDatanet, D.FechaBajada, D.Archivo, M.FechaAcreditacion, ")
+SQL.ADD(" M.FechaIngreso, M.TipoMov, M.Importe, MH.Vehiculo, M.Cuenta, M.DC, CH.Codigo, CH.Numero, ")
+SQL.ADD(" MH.NrDatanet NrDatanetH, MH.NrMovDatanet NrMovDatanetH, MH.FechaAcreditacion FechaAcreditacionH, ")
+SQL.ADD(" MH.FechaIngreso FechaIngresoH, MH.TipoMov TipoMovH, MH.Importe ImporteH, MH.Cuenta CuentaH, ")
+SQL.ADD(" MH.DC DCH, EX.Fecha, EX.Operador, DH.FechaBajada FechaBajadaH, DH.Archivo ArchivoH, CH.Pagadora, CH.TipoCuenta, ")
+SQL.ADD(" CD.Tipo, CD.Descripcion, CDH.Tipo TipoH, CDH.Descripcion DescripcionH, TD.Descripcion DescripcionTD, TDH.Descripcion DescripcionTDH ")
+SQL.ADD(" FROM "~DBO~".MOVDATANET M, "~DBO~".DATANET D, "~DBO~".CUENTAS C, "~DBO~".EXTRACTOS EX, ")
+SQL.ADD(" "~DBO~".MOVDATANET MH, "~DBO~".DATANET DH, "~DBO~".CUENTAS CH, "~DBO~".CODIGOSDATANET CD, ")
+SQL.ADD(" "~DBO~".CODIGOSDATANET CDH, "~DBO~".TIPOSCODIGODATANET TD, "~DBO~".TIPOSCODIGODATANET TDH ")
+SQL.ADD(" WHERE MH.NrDatanet    =  DH.NrDatanet ")
+SQL.ADD(" AND   MH.Cuenta       =  CH.Numero   ")
+SQL.ADD(" AND   MH.NrDatanet    =  EX.HNrDatanet    ")
+SQL.ADD(" AND   MH.NrMovDatanet =  EX.HNrMovDatanet  ")
+SQL.ADD(" AND   MH.TipoMov      =  CDH.Codigo        ")
+SQL.ADD(" AND   CDH.Tipo        =  TDH.Codigo        ")
+SQL.ADD(" AND   EX.MNrDatanet   =  M.NrDatanet       ")
+SQL.ADD(" AND   EX.MNrMovDatanet=  M.NrMovDatanet    ")
+SQL.ADD(" AND   EX.MNrDatanet   =  D.NrDatanet       ")
+SQL.ADD(" AND   M.Cuenta        =  C.Numero          ")
+SQL.ADD(" AND   M.TipoMov       =  CD.Codigo         ")
+SQL.ADD(" AND   CD.Tipo         =  TD.Codigo         ")
+SQL.ADD(" AND   DH.FechaBajada  =  "~Idxdate2(Dialogo.Fecha1)~" ")
+If NoVAcio(Dialogo.Lista1)
+  SQL.ADD(" AND MH.Vehiculo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND MH.Vehiculo IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+If NoVAcio(Dialogo.Lista3)
+  SQL.ADD(" AND CH.Codigo  IN ("~Pipe2Comillas(Dialogo.Lista3)~")  ")
+Else
+  SQL.ADD(" AND (CH.Pagadora='SI' OR CH.TipoCuenta IN ('REC','INT') )  ")
+Endif
+If Dialogo.Radio1=0
+  SQL.ADD(" AND M.NrDatanet is not null ")
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" AND M.NrDatanet is null ")
+Endif
+SQL.ADD(" ORDER By MH.Vehiculo, CH.Codigo, MH.NrDatanet, MH.NrMovDatanet ")
+
+
+ACT(va:1,'')
+ACT(ca:1,'')
+
+Recorrer SQL
+  If Not Eqstr(fbn('Vehiculo'),Val(va:1))
+    MESSAGE('Vehiculo: '~fbn('Vehiculo'))
+    ACT(a:fac, 'Vehiculo: '~fbn('Vehiculo'))
+    SetFont(a:fac,3)
+    ACT(ca:1,'')
+  Endif
+
+  If Not Eqstr(fbn('Codigo'),Val(ca:1))
+    ifa
+    MESSAGE('Cuenta: '~fbn('Codigo')~' - Nro: '~fbn('Numero')~' // Cta.Datanet: '~fbn('CuentaH'))
+    ACT(a:fac, 'Cuenta: '~fbn('Codigo')~' - Nro: '~fbn('Numero')~' // Cta.Datanet: '~fbn('CuentaH')~Iif(Eqstr(fbn('Pagadora'),'SI'),'  (Pagadora)',IIF(Eqstr(fbn('TipoCuenta'),'INT'),' (Intermedia)',' (Recaudadora)')))
+    SetFont(a:fac,5)
+    AgregarMarco(a:fac..u:fac,1,0,RGB(162,222,251))
+    ifa
+    ACT(a:fac,   'Extracto')
+    ACT(b:fac,   'NrMov')
+    ACT(c:fac,   'Fecha')
+    ACT(c:fac+1, 'Bajada')
+    ACT(d:fac,   'Archivo')
+    ACT(e:fac,   'Codigo')
+    ACT(e:fac+1, 'Datanet')
+    ACT(f:fac,   'Tipo')
+    ACT(g:fac,   'Importe')
+    ACT(h:fac,   'Fecha')
+    ACT(h:fac+1, 'Valor')
+    ACT(i:fac,   'Fecha')
+    ACT(i:fac+1, 'Proceso')
+
+    ACT(j:fac,   'Cuenta')
+    ACT(k:fac,   'Extracto')
+    ACT(l:fac,   'NrMov')
+    ACT(m:fac,   'Fecha')
+    ACT(m:fac+1, 'Bajada')
+    ACT(n:fac,   'Archivo')
+    ACT(o:fac,   'Codigo')
+    ACT(o:fac+1, 'Datanet')
+    ACT(p:fac,   'Tipo')
+    ACT(q:fac,   'Importe')
+    ACT(r:fac,   'Fecha')
+    ACT(r:fac+1, 'Valor')
+    ACT(s:fac,   'Fecha')
+    ACT(s:fac+1, 'Proceso')
+    ACT(t:fac,   'Fecha')
+    ACT(t:fac+1, 'Conciliacion')
+    ACT(u:fac,   'Operador')
+
+    AgregarMarco(a:fac..i:fac+1,1,0,RGB(199,207,207))
+    AgregarMarco(j:fac..u:fac+1,1,0,RGB(199,207,207))
+    AlinearCeldas(a:fac..u:fac+1,'C')
+    SetFont(a:fac..z:fac+1, 2)
+    ifa
+    ifa
+  Endif
+
+  ACT(a:fac,  fbn('NrDatanetH'))
+  ACN(b:fac,  fbn('NrMovDatanetH'))
+  ACD(c:fac,  fbn('FechaBajadaH'))
+  ACT(d:fac,  fbn('ArchivoH'))
+  If NoVacio(fbn('TipoMovH'))
+    ACT(e:fac,  fbn('TipoMovH')~'-'~fbn('DescripcionH'))
+    ACT(f:fac,  fbn('TipoH')~'-'~fbn('DescripcionTDH'))
+  Endif
+  ACN(g:fac,  fbn('ImporteH')*IIF(Eqstr(fbn('DCH'),'D'),-1,1))
+  ACD(h:fac,  fbn('FechaAcreditacionH'))
+  ACD(i:fac,  fbn('FechaIngresoH'))
+
+  If NoVacio(fbn('NrDatanet'))
+    ACT(j:fac,   fbn('Cuenta'))
+    ACT(k:fac,   fbn('NrDatanet'))
+    ACN(l:fac,   fbn('NrMovDatanet'))
+    ACD(m:fac,   fbn('FechaBajada'))
+    ACT(n:fac,   fbn('Archivo'))
+    ACT(o:fac,   fbn('TipoMov')~'-'~fbn('Descripcion'))
+    ACT(p:fac,   fbn('Tipo')~'-'~fbn('DescripcionTD'))
+    ACN(q:fac,   fbn('Importe')*IIF(Eqstr(fbn('DC'),'D'),-1,1))
+    ACD(r:fac,   fbn('FechaAcreditacion'))
+    ACD(s:fac,   fbn('FechaIngreso'))
+    ACD(t:fac,   fbn('Fecha'))
+    ACT(u:fac,   fbn('Operador'))
+    SetFont(a:fac..z:fac, 1)
+  Else
+    If Not Incluido(fbn('TipoH'), VAR('CPBD021')) 
+      ACT(j:fac, ' <- El tipo de movimiento no figura en la lista de Cuentas Recaudadoras/Pagadoras para conciliar.')
+      SetFont(j:fac, 5)
+    Endif
+  Endif
+
+  FormatoCeldas(b:fac, EXE('F0'))
+  FormatoCeldas(l:fac, EXE('F0'))
+  FormatoCeldas(g:fac, EXE('F2'))
+  FormatoCeldas(q:fac, EXE('F2'))
+  ACT(va:1,fbn('Vehiculo'))
+  ACT(ca:1,fbn('Codigo'))
+Proximo
+
+ifa
+ifa
+
+ACO(2,4)
+ACO(5,15)
+ACO(6,12)
+ACO(7, 9)
+ACO(10,9)
+ACO(12,4)
+ACO(15,15)
+ACO(16,12)
+ACO(17, 8)
+ACO(22, 1)
+
+LimitesVision(v:fac+2)
+SetPrintFit(3,58)
+Impresion(4,1)
+Impresion(1,2)

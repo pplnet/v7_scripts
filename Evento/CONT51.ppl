@@ -1,0 +1,152 @@
+﻿MostrarCuadroDeMensajes
+ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1:   'Fecha'    ; 1; ;;;;;;;fsys
+  Lista1:   'Vehiculos'; 3;1;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+message('--- Asientos de Resultados Realizados Bonos Propios ---')
+
+SQL.ADD(" Select O.NrOperacion, O.Precio1, O.Cantidad, O.Vehiculo1, O.FechaOp ")
+SQL.ADD("  ")
+SQL.ADD(" From "~DBO~".OPERACIONES O ")
+SQL.ADD(" Where Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+*Agustin Cocciardi | 19/08/2022
+*La linea de abajo está tirando error porque la celda Y:2 no está inicializada. Se deja comentada para poder pasarse.
+*SQL.ADD(" AND NrSaldo IN ("~Val(Y:2)~") ")
+If NoVAcio(Dialogo.Lista1)
+   SQL.ADD(" AND (Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") OR Vehiculo1 is null OR Vehiculo1 = '' OR Vehiculo1 = ' ' )")
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+   SQL.ADD(" AND Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+   Endif
+Endif
+SQL.ADD(" AND Vehiculo1 Not IN ("~Pipe2Comillas(Var('VLIQUIDAA'))~") ")
+Recorrer SQL
+    ACD(FV:1, fbn('FechaOp'))
+*MessageBox(fbn('Especie'))
+*  IF SQL(" Select 1 From "~DBO~".OPERACIONES Where FechaVto = '"~IdxDate(Dialogo.Fecha1)~"' AND TipoOp IN ('SEVS','SECS') AND Vehiculo1 = '"~fbn('Vehiculo')~"' AND Especie = '"~fbn('Especie')~"' AND Book1 = '"~fbn('Book')~"' ") = 1
+  ***---Realizado en Moneda Fuerte
+  ***---ACN(RZ:1, fbn('CRMFDAY'))
+  ***---CR ya resta FT y RT, entonces lo sumo porque ya esta incluido en el asiento de RXT a fin de mes
+  ***---ACN(RZ:1, fbn('CRMFDAY') + fbn('FTMFDAY') + fbn('RTMFDAY'))
+  ACN(RZ:1, fbn('CRMFDAY') + fbn('FTMFDAY'))
+  *acaACN(RZ:1, fbn('CRMFDAY') + fbn('RTMFDAY'))
+  ***---Interes Realizado del mes en Moneda Fuerte
+  ***---ACN(IZ:1, fbn('IRMFDAY'))
+  ACN(IZ:1, fbn('YRMFDAY'))
+  ***---Se contabiliza el interes del mes que se realiza, eso se guarda en INMFDAY, con el signo contrario.
+  *ACN(IZ:1, -fbn('INMFDAY'))
+*  IF fbn('IRMEDAY') > 0
+*      ACN(IX:1, 0)
+*      ACN(IX:2, 0)
+*      ACN(IX:3, 0)
+*      ACN(IX:4, 0)
+*      ACN(IZ:1, 0)
+*      ACN(IZ:2, 0)
+*      ACN(IZ:3, 0)
+*      ACN(IZ:4, 0)
+*      SQL.ADD(" Select INMEACU, INMFACU, INMCACU, INMLACU ")
+*      SQL.ADD(" From "~DBO~".RESULTADOS2 R ")
+*      SQL.ADD(" Where NrSaldo = "~Fstr(fbn('NrSaldo'), 0, 0)~" ")
+*      SQL.ADD(" AND Vehiculo = '"~fbn('Vehiculo')~"' ")
+*      SQL.ADD(" AND Especie = '"~fbn('Especie')~"' ")
+*      SQL.ADD(" AND Fecha = (Select Max(Fecha) From "~DBO~".RESULTADOS2 R2 ")
+*      SQL.ADD("              Where R.Especie = R2.Especie ")
+*      SQL.ADD("              AND R.Vehiculo = R2.Vehiculo ")
+*      SQL.ADD("              AND R.NrSaldo = R2.NrSaldo ")
+*      SQL.ADD("              AND Fecha <= '"~IdxDate(Val(V:2))~"') ")
+*      Recorrer SQL
+*          DFA
+*          ACN(IX:1, fbn('INMFACU'))
+*          ACN(IX:2, fbn('INMLACU'))
+*          ACN(IX:3, fbn('INMCACU'))
+*          ACN(IX:4, fbn('INMEACU'))
+*      Proximo
+*      ACN(IZ:1, fbn('IRMFDAY') - Val(IX:1))
+*      ACN(IZ:2, fbn('IRMLDAY') - Val(IX:2))
+*      ACN(IZ:3, fbn('IRMCDAY') - Val(IX:3))
+*      ACN(IZ:4, fbn('IRMEDAY') - Val(IX:4))
+*  ENDIF
+  ***---DC Interes Realizado + DC Realizada de la Posicion + DC Revaluo Realizado
+  ***---ACN(DZ:1, fbn('CIMFDAY') + fbn('KRMFDAY') + fbn('RTMFDAY'))
+  ***---ACN(DZ:1, fbn('CIMFDAY') + fbn('XRMFDAY'))
+  ACN(DZ:1, fbn('XRMFDAY'))
+IF Eqstr(fbn('Especie'), 'EDN AD') Y Eqstr(fbn('Vehiculo'), 'I201')
+*  MessageBox(fbn('CIMFDAY'))
+*  MessageBox(fbn('KRMFDAY'))
+*  MessageBox(fbn('RTMFDAY'))
+*  MessageBox(Val(DZ:1))
+ENDIF
+  ***---Realizado en Moneda Local
+  ***---ACN(RZ:2, fbn('CRMLDAY') + fbn('FTMLDAY') + fbn('RTMLDAY'))
+  ACN(RZ:2, fbn('CRMLDAY') + fbn('FTMLDAY'))
+  *acaACN(RZ:2, fbn('CRMLDAY') + fbn('RTMLDAY'))
+  ***---Interes Realizado en Moneda Local
+  ***---ACN(IZ:2, fbn('IRMLDAY'))
+  ACN(IZ:2, fbn('YRMLDAY'))
+  *ACN(IZ:2, -fbn('INMLDAY'))
+  ***---RTMLDAY esta dentro de KRMLDAY
+  ***---DKMLDAY es DC NO Realizada de la Posicion
+  ***---DC Interes Realizado + DC Realizada de la Posicion + DC Revaluo Realizado
+  ***---ACN(DZ:2, fbn('CIMLDAY') + fbn('KRMLDAY') + fbn('RTMLDAY'))
+  ***---ACN(DZ:2, fbn('CIMLDAY') + fbn('XRMLDAY'))
+  ACN(DZ:2, fbn('XRMLDAY'))
+  ***---Realizado en Moneda Grupo
+  ***---ACN(RZ:3, fbn('CRMCDAY') + fbn('FTMCDAY') + fbn('RTMCDAY'))
+  ACN(RZ:3, fbn('CRMCDAY') + fbn('FTMCDAY'))
+  *acaACN(RZ:3, fbn('CRMCDAY') + fbn('RTMCDAY'))
+  ***---Interes Realizado en Moneda Grupo
+  ***---ACN(IZ:3, fbn('IRMCDAY'))
+  ACN(IZ:3, fbn('YRMCDAY'))
+  *ACN(IZ:3, -fbn('INMCDAY'))
+  ***---DC Interes Realizado + DC Realizada de la Posicion
+  ***---ACN(DZ:3, fbn('CIMCDAY') + fbn('KRMCDAY') + fbn('RTMCDAY'))
+  ***---ACN(DZ:3, fbn('CIMCDAY') + fbn('XRMCDAY'))
+  ACN(DZ:3, fbn('XRMCDAY'))
+  ***---Realizado en Moneda Emision
+  ACN(RZ:4, fbn('CRMEDAY'))
+  ***---Interes Realizado en Moneda Emision
+  ***---ACN(IZ:4, fbn('IRMEDAY'))
+  ACN(IZ:4, fbn('YRMEDAY'))
+  *ACN(IZ:4, -fbn('INMEDAY'))
+  ACT(ES:1, fbn('Especie'))
+  ACT(VH:1, fbn('Vehiculo'))
+  SQL.ADD(" Select MA.Codigo From "~DBO~".MODELOSASIENTO MA ")
+  SQL.ADD(" Where MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIRZ'))~") ")
+  SQL.ADD("   AND MA.Habilitado = 'SI' ")
+  SQL.ADD("   AND MA.Entorno = '"~SIGLA~"' ")  
+  Recorrer SQL
+     DFA
+     Message(Val(a:&i)~' - Modelo: '~fbn('Codigo'))
+     ***---ACD(FV:1, Dialogo.Fecha1)
+     **//(.'FECHAVALOR'.)
+     ACT(MD:1, fbn('Codigo'))
+     SQL.ADD(" select E.Codigo Especie, V.Codigo Vehiculo, E.Nombre, E.Cotiza, E.Tipo, V.Valor1, V.Valor2, ")
+     SQL.ADD(" E.Cotiza Moneda, E.Cotiza ContraEspecie, '' Observaciones, '' Cliente1, V.Codigo Vehiculo1, ")
+     SQL.ADD(" "~Fstr(Abs(Val(CT:1)), 0, 0)~" Cantidad, E.Alias8, V.Alias4 MonLocalVeh ")
+     SQL.ADD(" From "~DBO~".ESPECIES E, "~DBO~".VEHICULOS V ")
+     SQL.ADD(" Where E.Codigo = '"~Val(ES:1)~"' ")
+     SQL.ADD(" AND V.Codigo = '"~Val(VH:1)~"' ")
+     Recorrer SQL
+        DFA
+        ACN(CK:1, 0)
+        IF Dialogo.Fecha1 < Fsys
+           ACN(CK:1, 1)
+           IF Vacio(SQL(" Select A.NrUnicoAsiento From "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1 Where A.NrUnicoAsiento = A1.NrUnicoAsiento AND A1.Alias7 = '"~fbn('Especie')~"' AND A.Modelo = '"~Val(MD:1)~"' AND A.Estado = 'E' AND (A.NrAsiento Is Null OR A.NrAsiento = '' OR A.NrAsiento = ' ') AND A.FechaValor = '"~IdxDate(Val(FV:1))~"' AND A.Vehiculo = '"~fbn('Vehiculo')~"' "))
+              ACN(CK:1, 0)
+           ENDIF
+        ENDIF
+        IF Val(CK:1) = 0
+           let &modeloContable Val(MD:1)
+           SQL.GenerarAsientoOp(Val(MD:1), '','','',810,Val(FV:1),fbn('Vehiculo'),,,,,,,,,,,,,fsys,Dialogo.Fecha1)
+           SQL.EXEC
+        ENDIF
+     Proximo
+  Proximo
+*  ENDIF
+Proximo

@@ -1,0 +1,106 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+   Cliente1  : "Cliente"        ; 1;1;;;;;;;
+   Fecha1    : "Fecha Desde"    ; 2;1;;;;Dialogo.Fecha1<=Fsys y Dialogo.Fecha1<>0 ;'Debe Ingresar Fecha Desde';NO;Fsys
+   Fecha2    : "Fecha Hasta"    ; 3;1;;;;Dialogo.Fecha2<=Fsys y Dialogo.Fecha2<>0 y Dialogo.Fecha2 >=Dialogo.Fecha1;'Ingresar Fecha Hasta Correcta';NO;FSys   
+FinDialogo
+
+IF Not Ok
+   Cancelar
+ENDIF
+
+SQL.ADD(" Select O.Cliente1, O.Especie, O.ContraEspecie, O.Cantidad, O.Vehiculo1, O.PorArancel, ")
+SQL.ADD(" O.Precio1, O.NrOperacion, O.TotalNetoCli1, O.TotalIntereses, O.TotalBrutoCli1, O.TotalGastos, O.TotalIvaAdi, ")
+SQL.ADD(" O.FechaOp, O.FechaVto, O.TipoOp, C.RazonSocial, C.CondicionIVA, C.Res3125, C.Res3337, E.Nombre, ")
+SQL.ADD(" O.Mercado, O.Mercado4, O.TotalAux2 Comision, TotalAux4 PorcIVA, TotalIVA, TotalAux3 ComisionAnt ")
+SQL.ADD(" from "~DBO~".OPERACIONES O,  "~DBO~".CLIENTES C, "~DBO~".ESPECIES E, "~DBO~".OPERACIONESBITS OB ")
+SQL.ADD("  WHERE O.NrOperacion = OB.NrOperacion ")
+SQL.ADD("    and O.Cliente1    = C.Codigo ")
+SQL.ADD("    and O.Especie     = E.Codigo ")
+SQL.ADD("    and OB.Valor = '1' and OB.NrBit in (7,10) ")
+SQL.ADD("    and TipoOp  in ('TIC','TIV') ")
+SQL.ADD("    and NrOrden1 <> '' ")
+SQL.ADD("    and 0 = (select Count(*) from "~DBO~".MOVEJECUTADOS M where M.NrOperacion = O.NrOperacion) ")
+SQL.ADD("    and FechaOp  >= '"~IdxDate(Dialogo.Fecha1)~"'  and  FechaOp <=  '"~IdxDate(Dialogo.Fecha2)~"'  ")
+If Novacio(Dialogo.Cliente1)
+   SQL.ADD("    and Cliente1 = '"~Dialogo.Cliente1~"'                   ")
+Endif
+
+watch(SQL.Batch)
+Recorrer SQL
+
+  ACN(z:1, 1)
+  ACT(a:fac, fbn('Cliente1')~' - '~fbn('RazonSocial'))
+  ACT(aa:fac, fbn('Cliente1'))
+  ACT(ab:fac, fbn('RazonSocial'))
+  ACT(b:fac, fbn('NrOperacion'))
+  ACT(c:fac, fbn('TipoOp'))
+  ACD(d:fac, fbn('FechaOp'))
+  ACD(e:fac, fbn('FechaVto'))
+  ACT(f:fac, fbn('Especie')~' - '~fbn('Nombre'))
+  ACT(ff:fac, fbn('Especie'))
+  ACN(g:fac, fbn('Cantidad'))
+  ACN(h:fac, fbn('Precio1'))
+  ACN(i:fac, fbn('ComisionAnt'))
+  ACN(j:fac, fbn('Comision'))
+  ACN(jj:fac, fbn('Comision'))  
+  ACN(ak:fac, MontoImpuesto('IVARGCOM',fbn('FechaOp'),3,fbn('CondicionIVA'))/100 )
+  ACN(bk:fac, IIF(EQSTR(fbn('RES3125'),'SI'),MontoImpuesto('IVA3125',fbn('FechaOp'),3,fbn('CondicionIVA'))/100,0) )
+  ACN(ck:fac, IIF(EQSTR(fbn('RES3337'),'SI'),MontoImpuesto('IVA3337',fbn('FechaOp'),3,fbn('CondicionIVA'))/100,0) ) 
+  ACN(kk:fac, val(ak:fac)+val(bk:fac)+val(ck:fac) )
+  ACN(k:fac, fbn('PorcIVA')*100)
+  ACN(l:fac, fbn('TotalIVA'))
+  ACN(m:fac, fbn('TotalBrutoCli1'))
+  ACN(n:fac, fbn('TotalNetoCli1'))
+  ACN(o:fac, fbn('PorArancel'))
+  ACN(p:fac, fbn('TotalGastos'))
+  ACN(q:fac, fbn('TotalIvaAdi'))  
+Proximo
+
+If Val(z:1)=0
+  Cancelar('No hay operaciones para modificar. Las operaciones no deben estar liquidadas ')
+Endif
+
+CrearListBox ; 'Arial,8,';'Modificacion Comisiones '~iif(Vacio(Dialogo.Cliente1),'del '~Dialogo.Fecha1~' hasta '~Dialogo.Fecha2,'Cliente: '~Val(ab:1)~' del '~Dialogo.Fecha1~' hasta '~Dialogo.Fecha2)
+   'Actualizar'    ; x:1..x:fac ;SI;SI;; 80;CHECK ;RGB(255,255,213);
+   'Cliente'       ; a:1..a:fac ;NO;SI;;150;STRING;;RGB(232,232,255); 
+   'Operacion'     ; b:1..b:fac ;NO;SI;; 70;STRING;;RGB(232,232,255); 
+   'TipoOp'        ; c:1..c:fac ;NO;SI;; 50;STRING;;RGB(232,232,255); 
+   'FechaOp'       ; d:1..d:fac ;NO;SI;; 70;FECHA;RGB(232,232,255); 
+   'FechaVto'      ; e:1..e:fac ;NO;SI;; 70;FECHA;RGB(232,232,255); 
+   'Especie'       ; f:1..f:fac ;NO;SI;;100;STRING;;RGB(232,232,255); 
+   'Cantidad'      ; g:1..g:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255);
+   'Precio'        ; h:1..h:fac ;NO;;;70 ;NUMERO;'###.########';RGB(232,232,255); 
+   'Monto   '      ; m:1..m:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255);   
+   'Monto Neto'    ; n:1..n:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255);
+   '% Comision'    ; o:1..o:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255);         
+   'Comision Ant.' ; i:1..i:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255);  
+   'Comision    '  ; j:1..j:fac ;Val(x:FLB)=1;;;80 ;NUMERO;'##,###,###.##';RGB(255,255,213); 
+   '% IVA    '     ; k:1..k:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255);IIF(Val(x:FLB)=1,Val(kk:flb)*100,Val(k:flb) )
+   'IVA'           ; l:1..l:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255);IIF(Val(x:FLB)=1,(Val(j:flb)*Val(k:flb)/100),Val(l:flb) )
+   'Derechos  '    ; p:1..p:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255);   
+   'IVA Derechos'  ; q:1..q:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255);      
+   
+FinListBox
+
+if not ok
+    Cancelar('Evento Cancelado.')
+Endif
+
+Recorrer&i 1, fac
+  If Val(x:&i)=1      
+      * Procesa
+      * --- Actualiza las cuentas de la operacion
+      SQL.ADD(" UPDATE "~DBO~".OPERACIONES SET ")
+      SQL.ADD(" TotalAux2  = '"~Fstr(Val(j:&i),0,2)~"', ")
+      SQL.ADD(" TotalAux3  = '"~Fstr(Val(jj:&i),0,2)~"', ")
+      SQL.ADD(" TotalAux4  = '"~Fstr(Val(kk:&i),0,2)~"', ")
+      SQL.ADD(" TotalIVA   = '"~Fstr(Val(l:&i),0,2)~"' ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:&i)~"' ")
+      SQL.NEW
+      SQL.EXEC
+      SQL.ActualizarMovimientos3(Val(B:&i),SI,NO,NO,SI,NO)
+      SQL.EXEC
+
+  Endif
+Proximo

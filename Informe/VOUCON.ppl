@@ -1,0 +1,244 @@
+﻿CrearDialogo
+  Fecha1   : 'D.Confir';;;;;;;;;FSYS
+  Fecha2   : 'H.Confir';;;;;;;;;FSYS
+  Cliente1 : 'Cliente';
+  Mercado1 : 'Mercado';
+  Vehiculo1: 'Vehiculo';
+FinDialogo
+If Not OK
+  Cancelar
+EndIf
+
+CrearFont(1,'Arial,8,')
+CrearFont(2,'Arial,8,B')
+
+if Eqstr(Dialogo.Mercado1,Var('MERCAACMC'))
+   Cancelar('El Mercado es Incorrecto ')
+Endif
+
+SetFilaActual(4)
+ACN(W1,FAC)
+
+ACT(A:FAC,'Vouchers Confirmados')
+ACT(A:FAC+1,'Fecha Desde: '~Dialogo.Fecha1)
+ACT(A:FAC+2,'Fecha Hasta: '~Dialogo.Fecha2)
+ACT(A:FAC+3,'Cliente: '~Iif(NoVacio(Dialogo.Cliente1),Dialogo.Cliente1,'Todos'))
+ACT(A:FAC+4,'Mercado: '~Iif(NoVacio(Dialogo.Mercado1),Dialogo.Mercado1,'Todos'))
+ACT(A:FAC+5,'Vehiculo: '~Iif(NoVacio(Dialogo.Vehiculo1),Dialogo.Vehiculo1,'Todos'))
+
+ACT(A:FAC+7,'Cliente')
+ACT(B:FAC+7,'Especie')
+ACT(C:FAC+7,'Nr.Compr.')
+ACT(d:fac+7,'Nr.Operac.')
+ACT(E:FAC+7,'Merc.')
+ACT(F:FAC+7,'Mod.Liq.')
+ACT(G:FAC+7,'Fecha')
+ACT(H:FAC+7,'F.Op. Orig.')
+ACT(I:FAC+7,'F.Vto. Orig')
+ACT(J:FAC+7,'Cant.Especie')
+ACT(K:FAC+7,'Cant.Moneda')
+ACT(L:FAC+7,'Observaciones')
+
+AlinearCeldas(G:FAC+7..K:FAC+7,'D')
+SetFont(A:FAC..L:FAC+7,2)
+AgregarMarco(A:FAC+7..L:FAC+7,2,0,EXE('COLOR'))
+SetFilaActual(FAC+7)
+
+Message('Procesando Transacciones')
+
+SQL.ADD(" Select O.FechaOp, O.FechaVto, T.* ")
+*-i
+SQL.ADD(" from "~DBO~".TRANSACCIONES2 T LEFT OUTER JOIN  "~DBO~".OPERACIONES  O ON T.NrOperacionRef1 = O.NrOperacion   WHERE ")
+*SQL.ADD(" from "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONES O  T.NrOperacionRef1 = O.NrOperacion  WHERE ")
+*-f
+SQL.ADD(" T.Mercado1  not in("~Pipe2Comillas(VAR('MERCAACMC'))~") and")
+
+If NoVacio(Dialogo.Cliente1)
+    SQL.ADD(" T.Cliente1='"~Dialogo.Cliente1~"' and ")
+    If NoVacio(Dialogo.Mercado1)
+        SQL.ADD(" T.Mercado1='"~Dialogo.Mercado1~"' and")
+    EndIf
+  Else
+    If NoVacio(Dialogo.Mercado1)
+        SQL.ADD(" T.Mercado1='"~Dialogo.Mercado1~"' and ")
+    EndIf
+EndIf
+if NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD(" T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' and ")
+endif
+SQL.ADD(" (T.Fecha3 Between '"~IdxDate(DIALOGO.FECHA1)~"' and '"~IdxDate(DIALOGO.FECHA2)~"') and ")
+SQL.ADD(" T.CB9='1' and T.TipoTr2 in ('DEP','RET','COMP','MATCH','TRACTA') and    ")
+*-i
+*SQL.ADD(" T.NrOperacionRef1 *= O.NrOperacion                              ")
+*SQL.ADD(" and EXISTS (Select * FROM "~DBO~".OPERACIONESBITS B WHERE           ")
+SQL.ADD(" EXISTS (Select * FROM "~DBO~".OPERACIONESBITS B WHERE           ")
+*-F
+SQL.ADD(" T.NrTrans = B.NrOperacion and B.NrBit=70 and B.Valor='1' )          ")
+SQL.ADD(" ORDER BY T.Cliente1, T.Especie, T.Especie1, T.NrTrans              ")
+Recorrer SQL   
+  If Not EqStr(FBN['Cliente1'],Val(V1)) o Not EqStr(FBN['Especie'],Val(V2)) o Not EqStr(FBN['Especie1'],Val(V2))
+    If FAC>Val(W1)+7
+      IFA
+    EndIf
+    If Not EqStr(FBN['Cliente1'],Val(V1))
+      ACT(V1, FBN['Cliente1'])
+      ACT(A:FAC,Val(V1))
+    Else
+      DFA
+    EndIf
+    ACT(V2,FBN['Especie'])
+    ACT(V3,' ')
+    ACT(V3,FBN['Especie1'])
+    ACT(B:FAC,Val(V2))
+    If EqStr(FBN['TipoTr2'],'MATCH')
+      ACT(B:FAC,Val(B:FAC)~'/'~Val(V3))
+    EndIf
+    SetFont(A:FAC..B:FAC,2)
+  EndIf
+  ACT(C:FAC, FBN['NrTrans'])
+  ACLT(c:FAC, FBN['NrTrans'])
+  ACT(D:FAC, FBN['NrOperacionRef1'])
+  if EqStr(Copy(FBN['NrOperacionRef1'],1,1),'V')
+    ACLT(d:FAC, FBN['NrOperacionRef1'])
+  else
+    ACLO(d:FAC, FBN['NrOperacionRef1'])
+  endif
+  ACT(E:FAC, FBN['Mercado1'])
+  If EqStr(FBN['TipoTr2'],'MATCH')
+    ACT(F:FAC, 'Match')
+  EndIf
+  If Incluido(FBN['TipoTr2'],'DEP|RET')
+    If Incluido(FBN['Mercado1'],'CE|CRYL')
+      If EqStr(Copy(FBN['NrOperacionRef1'],1,1),'I')
+        ACT(F:FAC, 'STD')
+      Else
+        BorrarCeldas(R1..R3)
+        ACT(R1,SQL(" Select TipoOp FROM "~DBO~".OPERACIONES WHERE NrOperacion = '"~FBN['NrOperacionRef1']~"' "))
+        If CeldaVacia(R1)
+          If Incluido(Val(R1),'TIC|TIV|LICITA|RESCAT')
+            ACT(R2,SQL(" Select FormaLiquidacion2 FROM "~DBO~".OPERACIONES WHERE NrOperacion = '"~FBN['NrOperacionRef1']~"' ") )
+            If VAL(R2)=0
+              ACT(F:FAC, 'FD&P')
+            EndIf
+            If VAL(R2)=2
+              ACT(F:FAC, 'FOP')
+            EndIf
+          EndIf
+          If Incluido(Val(R1),'TIFC|TIFV')
+            ACT(R3,SQL(" Select FormaLiquidacion1 FROM "~DBO~".OPERACIONES WHERE NrOperacion = '"~FBN['NrOperacionRef1']~"' "))
+            If VAL(R3)=0
+              ACT(F:FAC, 'FD&P')
+            EndIf
+            If VAL(R3)=2
+              ACT(F:FAC, 'FOP')
+            EndIf
+          EndIf
+        EndIf
+      EndIf
+    Else
+      if NoVacio(fbn('NrOperacionRef1')) y Incluido(Copy(fbn('NrOperacionRef1'),1,2),'FX|FA')
+        ACN(x3, BuscarCampo('OPERACIONES','FormaLiquidacion1','NrOperacion',fbn('NrOperacionRef1')))
+        ACT(x4, BuscarCampo('OPERACIONES','TipoOp','NrOperacion',fbn('NrOperacionRef1')))
+        ACT(x5, BuscarCampo('OPERACIONES','Especie','NrOperacion',fbn('NrOperacionRef1')))
+        if Val(x3)=0
+          ACT(f:FAC, 'STD')
+        endif
+        if Incluido(Val(x4),'FXC|FXCT|FXA|FXAT')
+          if Val(x3)=1
+            if EqStr(fbn('Especie'),Val(x5))
+              ACT(f:FAC, 'Conf.')
+            else
+              ACT(f:FAC, 'DVP')
+            endif
+          endif
+          if Val(x3)=2
+            if EqStr(fbn('Especie'),Val(x5))
+              ACT(f:FAC, 'RVP')
+            else
+              ACT(f:FAC, 'Conf.')
+            endif
+          endif
+        else
+          if Val(x3)=1
+            if EqStr(fbn('Especie'),Val(x5))
+              ACT(f:FAC, 'DVP')
+            else
+              ACT(f:FAC, 'Conf.')
+            endif
+          endif
+          if Val(x3)=2
+            if EqStr(fbn('Especie'),Val(x5))
+              ACT(f:FAC, 'Conf.')
+            else
+              ACT(f:FAC, 'RVP')
+            endif
+          endif
+        endif
+      else
+        If FBN['CB6']=1
+          ACT(F:FAC, 'DVP')
+        EndIf
+        If FBN['CB7']=1
+          ACT(F:FAC, 'RVP')
+        EndIf
+        If FBN['CB8']=1
+          ACT(F:FAC, 'Conf.')
+        EndIf
+        If CeldaVacia(E:FAC)
+          ACT(F:FAC, 'STD')
+        EndIf
+      EndIf
+    EndIf
+  EndIf
+  ACD(G:FAC, FBN['Fecha2'])
+  ACD(H:FAC, FBN['FechaOp'])
+  ACD(I:FAC, FBN['FechaVto'])
+
+  If DesciendeDeEspecie(FBN['Especie'],'TITULO')
+    ACN(X2,10)
+  Else
+    ACN(X2,11)
+  EndIf
+  If Incluido(FBN['TipoTr2'],'RET')
+    ACN(Val(X2):FAC, -FBN['Cantidad1'])
+  EndIf
+  If Incluido(FBN['TipoTr2'],'DEP|COMP')
+    ACN(Val(X2):FAC, FBN['Cantidad1'])
+  EndIf
+  If Incluido(FBN['TipoTr2'],'MATCH')
+    ACN(J:FAC, -FBN['Cantidad1'])
+    ACN(K:FAC, -FBN['Cantidad2'])
+  EndIf
+  If Incluido(FBN['TipoTr2'],'TRACTA')
+    ACN(Val(X2):FAC, FBN['Cantidad1'])
+  EndIf
+  SetFont(C:FAC..L:FAC,1)
+Proximo
+FormatoCeldas(J:Val(W1)+7..K:FAC,EXE('F2'))
+
+ACO(1,8)
+ACO(2,10)
+ACO(3,7)
+ACO(4,7)
+ACO(5,5)
+ACO(6,6)
+ACO(7,8)
+ACO(8,8)
+ACO(9,8)
+ACO(10,12)
+ACO(11,12)
+ACO(12,15)
+
+SetFont(V1..Z3,1)
+If Val(W2)>0
+  SetFont(AA:1..AE:Val(W2),1)
+EndIf
+
+SetFilaActual(FAC+2)
+ACT(A:FAC, 'Fin del informe')
+SetFont(A:FAC, 2)
+AgregarBMP(A1,EXE('LOGO'),EXE('ESCALOGO'))
+SetFont(L:3,2)
+Impresion(1,2)
+LimitesVision(L:FAC)
+RangoTitulo(A:1..L:FAC, Val(W1)+6)

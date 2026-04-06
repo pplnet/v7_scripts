@@ -1,0 +1,124 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+   Fecha1: 'D.Fecha'  ;;;;;;;;;fsys
+   Fecha2: 'H.Fecha'  ;;;;;;;;;fsys
+FinDialogo
+
+
+If not ok
+   Cancelar
+Endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+
+ACT(A:1, 'MTM NDF por Operacion del '~dialogo.Fecha1~' al '~dialogo.Fecha2)
+SETFONT(A:1, 2)
+
+SetFilaActual(3)
+ACT(a:fac, 'NrOperacion')
+ACT(b:fac, 'Cliente')
+ACT(c:fac, 'FechaOp')
+ACT(d:fac, 'Especie')
+ACT(e:fac, 'FechaEj')
+ACT(f:fac, 'Precio')
+ACT(g:fac, 'Cantidad')
+ACT(i:fac, 'PrecioAyer')
+ACT(j:fac, 'PrecioHoy')
+ACT(k:fac, 'Resultado')
+ACT(l:fac, 'Book')
+SETFONT(A:fac..z:fac, 2)
+AgregarMarco(A:fac..z:fac,1,1,exe('COLOR6'))
+AlinearCeldas(A:fac..z:fac,'C')
+
+SQL.ADD("SELECT P.*, O.TipoCambio3, O.FechaVto2 FROM "~DBO~".MOVPOSEJE P, "~DBO~".OPERACIONES O ")
+SQL.ADD("WHERE  P.NrOperacion = O.NrOperacion ")
+SQL.ADD("AND    P.FechaMov    = O.FechaOp     ")
+SQL.ADD("AND    P.FechaMov <= "~IDXDATE2(Dialogo.Fecha2)~" ")
+SQL.ADD("AND    P.FechaEj  >  "~IDXDATE2(Dialogo.Fecha1)~" ")
+SQL.ADD("AND    P.NrSaldo IN (41,42) ")
+SQL.ADD("AND    P.Especie <> '"~VAR('MONELOCA')~"' ")
+SQL.ADD("order  by P.NrSaldo, P.Book, P.Especie, O.FechaEj,  P.NrOperacion ")
+
+ACN(fi:1,0)
+* Saldo
+ACN(rs:2, 0)
+* Book
+ACT(rs:3, '')
+* Especie
+ACT(rs:4, '')
+* FechaEj
+ACD(rs:5, 0)
+* Vehiculo
+ACT(rs:6, '')
+
+Recorrer SQL
+  If fbn('NrSaldo')=42 y Val(fi:1)=0
+     * Marco donde comienza saldo 42, para luego generar revaluos
+     ACN(fi:2, fac)
+     ACN(fi:1,1)
+  Endif
+  message(fbn('NrOperacion'))
+  ACT(a:fac, fbn('NrOperacion'))
+  ACLO(a:fac, fbn('NrOperacion'))
+  ACT(b:fac, fbn('Cliente'))
+  ACD(c:fac, fbn('FechaMov'))
+  ACT(d:fac, fbn('Especie'))
+  ACD(e:fac, fbn('FechaEj'))
+  ACN(f:fac, fbn('Precio'))
+  ACN(g:fac, fbn('Cantidad'))
+  ACT(l:fac, fbn('Book'))
+
+* --- No visibles para el informe --- *
+  ACN(m:fac, fbn('NrSaldo'))
+  ACT(n:fac, fbn('Book'))
+  ACT(o:fac, fbn('Especie'))
+  ACD(p:fac, fbn('FechaEj'))
+* ----------------------------------- *
+
+  ACN(x:2, fbn('Cantidad'))
+  ACD(x:1, IIF(Dialogo.Fecha2<fbn('FechaVto2'),Dialogo.Fecha2,fbn('FechaVto2')) )
+  Recorrer&i Dialogo.Fecha1, Val(x:1)
+     ACD(h:fac, &i)
+     If &i=fbn('FechaMov')
+        ACN(i:fac, fbn('Precio'))
+     Else
+        ACN(i:fac, COTIZACION(fbn('Especie'),,fbn('FechaEj'),,&i-1,5,SI,SI))
+     Endif
+
+     If &i=fbn('FechaVto2') y fbn('NrSaldo')=42
+        ACN(j:fac, fbn('TipoCambio3'))
+     Else
+        * No Aplica para DF Saldo=41
+        ACN(j:fac, COTIZACION(fbn('Especie'),,fbn('FechaEj'),,&i,5,SI,SI))
+     Endif
+     ACN(k:fac, VAL(x:2)*(Val(j:fac)-Val(i:fac) ))
+     ifa
+  Proximo
+ 
+  ACN(rs:2, fbn('NrSaldo'))
+  * Book
+  ACT(rs:3, fbn('Book'))
+  * Especie
+  ACT(rs:4, fbn('Especie'))
+  * FechaEj
+  ACD(rs:5, fbn('FechaEj'))
+  * vEHICULO
+  ACT(rs:6, fbn('Vehiculo'))
+Proximo
+
+SETFONT(A:4..k:fac, 1)
+Formatoceldas(f:4..f:fac,EXE('F9'))
+Formatoceldas(i:4..j:fac,EXE('F9'))
+Formatoceldas(g:4..g:fac,EXE('F2'))
+Formatoceldas(k:4..k:fac,EXE('F2'))
+
+ifa
+ACT(a:fac, 'Fin del Informe.')
+SETFONT(A:fac, 2)
+ifa
+ACT(a:fac, 'USUARIOACTIVO')
+
+LimitesVision(l:FAC)
+ImPRESION(1,2)
+ImPRESION(4,1)

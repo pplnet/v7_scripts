@@ -1,0 +1,409 @@
+﻿** Generacion datos RTI Valores negociables --> para BOFA sin Transacciones 
+HOJAVISIBLE(NO)
+MostrarCuadroDeMensajes
+CrearDialogo
+   Label1    : ''                ;1;1;;;;;;;;'Ingrese Periodo a Generar';;;
+   Entero1   : 'Año'             ;;1;;;;Dialogo.Entero1>=2004 y Dialogo.Entero1<=2050;'Debe Ingresar un anio valido';NO;Anio(Fsys);;;;'####'
+   Entero2   : 'Mes'             ;;1;;;;Dialogo.Entero2>=1 y Dialogo.Entero2<=12;'Debe Ingresar un mes valido';NO;Mes(Fsys);;;;'##'
+   String1   : 'Periodo'         ;;1;;NO;NO;;;;'01/'~PAD0(Dialogo.Entero2,2)~'/'~PAD0(Dialogo.Entero1,4);'01/'~PAD0(Dialogo.Entero2,2)~'/'~PAD0(Dialogo.Entero1,4)
+   Fecha1    : 'Fecha desde'     ;;1;;NO;;;;;Fecha(Dialogo.String1);Fecha(Dialogo.String1)
+   Fecha2    : 'Fecha hasta'     ;;1;;NO;;;;;FinDeMes(Dialogo.Fecha1,SI);FinDeMes(Dialogo.Fecha1,SI)
+FinDialogo 
+
+
+If Not Ok
+   Cancelar
+endif   
+
+** verificar si esta generado y preguntar para borrar
+
+** AA 21-10-2025 Incluir Pais de la especie para tomar la monedaVN de CONFIGVALEXTERNOS
+
+Message(' - Borrando Archivos RTI - UIFRTI - UIFRTIOTR')
+SQL.NEW
+SQL.ADD("Delete from "~DBO~".UIFRTI Where Periodo='"~PAD0(Dialogo.Entero1,4)~PAD0(Dialogo.Entero2,2)~"' ")
+SQL.NEW
+SQL.ADD("Delete from "~DBO~".UIFRTIOTR Where Periodo='"~PAD0(Dialogo.Entero1,4)~PAD0(Dialogo.Entero2,2)~"' ")
+SQL.NEW
+SQL.EXEC
+
+ACT(pe:1,PAD0(Dialogo.Entero1,4)~PAD0(Dialogo.Entero2,2))
+
+SQL.ADD("Select O.NrOperacion, TipoOp,")
+SQL.ADD("Case O.TipoOp when 'TIC' Then 'Recibida' Else 'Emitida' End Transferencia, C.Persona, ")
+SQL.ADD(" O.FechaVto FechaLiq, Case when O.Mercado in ("~Pipe2Comillas(VAR('UIFRTIMER'))~") then M.DescUIF else 'Otra' end EntExterior,  ")
+SQL.ADD(" Case when O.Mercado not in ("~Pipe2Comillas(VAR('UIFRTIMER'))~") then M.Descripcion else '' end DenomExterior, ")
+** AA 24-09-2025 se incorpora DescUIF
+**SQL.ADD("  TE.Descripcion EspecieTransf , ")
+SQL.ADD("  TE.DescUIF EspecieTransf , ")
+#ifdef MLASA
+SQL.ADD(" Deposdelcomitente CodComitente , ")
+**SQL.ADD(" CodDepCajaValores ComitArgentina, ")
+** AA 05-12-2025 Comitente para UIF se toma del Cliente Vehiculo
+SQL.ADD(" ComitArgUIF ComitArgentina, ")
+SQL.ADD(" '"~VAR('VEHICULODE')~"' Cliente, (select ISO from "~DBO~".ESPECIES Where Codigo=E.MonedaEmision) MonedaVN,")
+#else
+SQL.ADD(" C.CodComitente , (select Top(1) NrDepositante from "~DBO~".CUENTAS Where Cliente = O.Cliente1 and Comitente = '"~VAR('VEHICULODE')~"' and TipoCuenta = 'CUS' and NrDepositante is not Null) as ComitArgentina, ")
+SQL.ADD(" O.Cliente1 Cliente, (select ISO from "~DBO~".ESPECIES Where Codigo=O.ContraEspecie)  MonedaVN,")
+#endif
+SQL.ADD(" E.Nombre DenomEspecieOtra, O.Especie TickerVN,  O.Cantidad CantidadVN, ")
+SQL.ADD(" C.CUIT NroCUIT, Case when E.ISIN <> '' Then 'ISIN' when E.CUSIP <> '' Then 'CUSIP' else 'Otro' End TipoEspecieVN, ")
+SQL.ADD(" Case when E.ISIN <> '' Then E.ISIN when E.CUSIP <> '' Then E.CUSIP else 'SinCodigo' End CodEspecieVN, ")
+SQL.ADD(" Case When C.Jerarquia like '"~VAR('JERFONDOS')~"%' Then 'FCI' When C.Sector = 'PUB' Then 'Organismo Publico' When C.TipoInscripcion = 'FDI' Then 'Fideicomiso' Else 'Otro' End TipoCliente, ")
+SQL.ADD(" Case When C.Persona = 'NO' Then 'Persona jurídica' When C.Persona = 'SI' Then 'Persona humana' Else 'SinTipoPersona' End TipoPersona, ")
+SQL.ADD(" Deposdelcomitente NroCuentaDepos, C.Pais, E.PaisOrigen PaisEspecie, ")
+**SQL.ADD(" (Select Top(1) Precio1 From COTIZACIONES CO Where Codigo = O.Especie AND Moneda = 'ARP' AND Fecha <= O.FechaVto Order By Fecha Desc) CotizMonedaVN, ")
+#ifdef MLASA
+SQL.ADD(" (select count(*)+1 from "~DBO~".INTEGRANTESUIF IT where IT.Codigo = C.Codigo) as CantidadCli, C.RazonSocial DenomPersona, ")
+SQL.ADD(" CU.Numero NroCtaTransferencia, Case when O.Mercado in ("~Pipe2Comillas(VAR('UIFRTIMER'))~") then M.PaisUIF /*'06'*/ else '80' end PaisCtaTransferencia, 'NO' ComparteComit , ")
+SQL.ADD(" (Select RazonSocial from "~DBO~".CLIENTES CL where CL.Codigo=O.Cliente1) as DenNoComparteComit ")
+#else
+SQL.ADD(" (select count(*) from "~DBO~".INTEGRANTESCLI IT where IT.Codigo = C.Codigo) as CantidadCli, C.RazonSocial DenomPersona, ")
+SQL.ADD(" CU.Numero NroCtaTransferencia, CO.Pais PaisCtaTransferencia, 'NO' ComparteComit , '"~VAR('RTICONTEXT')~"' DenNoComparteComit ")
+#endif
+SQL.ADD("  From "~DBO~".OPERACIONES O  ")
+#ifdef MLASA
+SQL.ADD("  LEFT OUTER JOIN "~DBO~".CLIENTES C on '"~VAR('VEHICULODE')~"'=C.Codigo ")
+#else
+SQL.ADD("  LEFT OUTER JOIN "~DBO~".CLIENTES C on O.Cliente1=C.Codigo ")
+#endif
+SQL.ADD("  LEFT JOIN "~DBO~".CUENTAS CU on O.Cuenta2=CU.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("       Left JOIN "~DBO~".TIPOESPECIE TE WITH (NOLOCK) ON  E.Tipo=TE.Codigo ")
+SQL.ADD("Where  B.Valor='1' and B.Nrbit not in (30)")
+SQL.ADD("  and O.FechaOp between "~IdxDate2(Dialogo.Fecha1)~" and "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("  and O.Mercado in  ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+SQL.ADD(" and O.TipoOp In  ('TIC','TIV') ")
+#ifdef MLASA
+#else
+SQL.ADD("UNION ")
+SQL.ADD(" Select NrTrans Nroperacion, TipoTr2 TipoOp, ")
+SQL.ADD("'Recibida' Transferencia, C.Persona, ")
+SQL.ADD("T.Fecha1 FechaLiq, Case when T.Mercado1 in ("~Pipe2Comillas(VAR('UIFRTIMER'))~") then M.DescUIF else 'Otra' end EntExterior, ")
+SQL.ADD(" Case when T.Mercado1 not in ("~Pipe2Comillas(VAR('UIFRTIMER'))~") then M.Descripcion else '' end DenomExterior, ")
+** AA 24-09-2025 se incorpora DescUIF
+**SQL.ADD("  TE.Descripcion EspecieTransf , ")
+SQL.ADD("  TE.DescUIF EspecieTransf , ")
+SQL.ADD(" C.CodComitente, (select Top(1) NrDepositante from "~DBO~".CUENTAS Where Cliente = T.Cliente1 and Comitente = '"~VAR('VEHICULODE')~"' and TipoCuenta = 'CUS' and NrDepositante is not Null) as ComitArgentina, ")
+SQL.ADD(" T.Cliente1 Cliente, 'ARS' MonedaVN, E.Nombre DenomEspecieOtra, T.Especie TickerVN,  T.Cantidad1 CantidadVN, ")
+SQL.ADD(" C.CUIT NroCUIT, Case when E.ISIN <> '' Then 'ISIN' when E.CUSIP <> '' Then 'CUSIP' else 'Otro' End TipoEspecieVN, ")
+SQL.ADD(" Case when E.ISIN <> '' Then E.ISIN when E.CUSIP <> '' Then E.CUSIP else 'SinCodigo' End CodEspecieVN, ")
+SQL.ADD(" Case When C.Jerarquia like '008001%' Then 'FCI' When C.Sector = 'PUB' Then 'Organismo Publico' When C.TipoInscripcion = 'FDI' Then 'Fideicomiso' Else 'Otro' End TipoCliente, ")
+SQL.ADD(" Case When C.Persona = 'NO' Then 'Persona jurídica' When C.Persona = 'SI' Then 'Persona humana' Else 'SinTipoPersona' End TipoPersona, ")
+SQL.ADD("  CU.Numero NroCuentaDepos, C.Pais, E.PaisOrigen PaisEspecie, ")
+**SQL.ADD(" (Select Top(1) Precio1 From COTIZACIONES CO Where Codigo = T.Especie AND Moneda = 'ARP' AND Fecha <= T.Fecha1 Order By Fecha Desc) CotizMonedaVN, ")
+SQL.ADD(" (select count(*) from INTEGRANTESCLI IT where IT.Codigo = C.Codigo) as CantidadCli, C.RazonSocial DenomPersona, ")
+SQL.ADD(" CU.Numero NroCtaTransferencia, CO.Pais PaisCtaTransferencia, 'NO' ComparteComit , '"~VAR('RTICONTEXT')~"' DenNoComparteComit  ")
+SQL.ADD(" from "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD("  LEFT OUTER JOIN "~DBO~".CLIENTES C on T.Cliente1=C.Codigo ")
+SQL.ADD("  LEFT JOIN "~DBO~".CUENTAS CU on Cuenta1=CU.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON Especie=E.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON T.Mercado1=M.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  NrTrans=B.NrOperacion ")
+SQL.ADD("       Left JOIN "~DBO~".TIPOESPECIE TE WITH (NOLOCK) ON  E.Tipo=TE.Codigo ")
+SQL.ADD(" where B.Valor='1' and B.NrBit not in (30)  and TipoTr2 in ('TRNOP','DRT') ")
+SQL.ADD("   and T.Fecha1 between "~IdxDate2(Dialogo.Fecha1)~" and "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("   and T.Mercado1 in ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+SQL.ADD(" UNION ")
+SQL.ADD(" Select NrTrans Nroperacion, TipoTr2 TipoOp, ")
+SQL.ADD(" 'Emitida' Transferencia, C.Persona, ")
+SQL.ADD("T.Fecha1 FechaLiq, Case when T.Mercado1 in ("~Pipe2Comillas(VAR('UIFRTIMER'))~") then M.DescUIF else 'Otra' end EntExterior, ")
+SQL.ADD(" Case when T.Mercado1 not in ("~Pipe2Comillas(VAR('UIFRTIMER'))~") then M.Descripcion else '' end DenomExterior, ")
+** AA 24-09-2025 se incorpora DescUIF
+**SQL.ADD("  TE.Descripcion EspecieTransf , ")
+SQL.ADD("  TE.DescUIF EspecieTransf , ")
+SQL.ADD(" C.CodComitente, (select Top(1) NrDepositante from "~DBO~".CUENTAS Where Cliente = T.Cliente1 and Comitente = '"~VAR('VEHICULODE')~"' and TipoCuenta = 'CUS' and NrDepositante is not Null) as ComitArgentina, ")
+SQL.ADD(" T.Cliente1 Cliente, 'ARS' MonedaVN, E.Nombre DenomEspecieOtra, T.Especie TickerVN,  T.Cantidad1 CantidadVN, ")
+SQL.ADD(" C.CUIT NroCUIT, Case when E.ISIN <> '' Then 'ISIN' when E.CUSIP <> '' Then 'CUSIP' else 'Otro' End TipoEspecieVN, ")
+SQL.ADD(" Case when E.ISIN <> '' Then E.ISIN when E.CUSIP <> '' Then E.CUSIP else 'SinCodigo' End CodEspecieVN, ")
+SQL.ADD(" Case When C.Jerarquia like '008001%' Then 'FCI' When C.Sector = 'PUB' Then 'Organismo Publico' When C.TipoInscripcion = 'FDI' Then 'Fideicomiso' Else 'Otro' End TipoCliente, ")
+SQL.ADD(" Case When C.Persona = 'NO' Then 'Persona jurídica' When C.Persona = 'SI' Then 'Persona humana' Else 'SinTipoPersona' End TipoPersona, ")
+SQL.ADD("  CU.Numero NroCuentaDepos, C.Pais, E.PaisOrigen PaisEspecie, ")
+**SQL.ADD(" (Select Top(1) Precio1 From COTIZACIONES CO Where Codigo = T.Especie AND Moneda = 'ARP' AND Fecha <= T.Fecha1 Order By Fecha Desc) CotizMonedaVN, ")
+SQL.ADD(" (select count(*) from INTEGRANTESCLI IT where IT.Codigo = C.Codigo) as CantidadCli, C.RazonSocial DenomPersona, ")
+SQL.ADD(" CU.Numero NroCtaTransferencia, CO.Pais PaisCtaTransferencia, 'NO' ComparteComit , '"~VAR('RTICONTEXT')~"' DenNoComparteComit  ")SQL.ADD(" from "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD("  LEFT OUTER JOIN "~DBO~".CLIENTES C on T.Cliente2=C.Codigo ")
+SQL.ADD("  LEFT JOIN "~DBO~".CUENTAS CU on Cuenta1=CU.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON Especie=E.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON T.Mercado2=M.Codigo ")
+SQL.ADD("       Left JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  NrTrans=B.NrOperacion ")
+SQL.ADD("       Left JOIN "~DBO~".TIPOESPECIE TE WITH (NOLOCK) ON  E.Tipo=TE.Codigo ")
+SQL.ADD(" where B.Valor='1' and B.NrBit not in (30) and TipoTr2 in ('TRNOP','DRT') ")
+SQL.ADD("   and T.Fecha1 between "~IdxDate2(Dialogo.Fecha1)~" and "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("   and T.Mercado2 in ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+#endif
+watch(sql.batch)
+ACN(xy1,0)
+Recorrer SQL
+
+   BorrarCeldas(x:1..x:10)
+** Generar 1 regstro por operacion en UIFRTI (incluye el dato del Cliente/Persona)
+
+** Buscar si es persona fisica datos de tabla Persona. definir que primer integrante debe ser titular
+   ACT(ap:1,'')
+   ACT(ap:2,'')
+   ACT(ap:3,'')
+   ACT(ap:4,'')
+
+   If EqStr(FBN['Persona'],'SI')
+       SQL.ADD("Select ICL.TipoPoder,ICL.FAlta FechaAlta,ICL.TipoDocumento,ICL.NrDocumento, Apellido, Nombre, Sexo, Nacionalidad,Pais, CodigoPEP, FechaNacimiento,  ")
+       SQL.ADD("CodigoPostal,Provincia,Localidad,Direccion Calle,Numero Altura, ")
+       SQL.ADD("P.EmpleadoGobierno,P.Telefono")
+       #ifdef MLASA
+           SQL.ADD("from INTEGRANTESUIF ICL ")
+           SQL.ADD("left join PERSONASUIF P with (nolock) on ICL.TipoDocumento=P.TipoDocumento and ICL.NrDocumento=P.NrDocumento ")
+       #else
+           SQL.ADD("from INTEGRANTESCLI ICL ")
+           SQL.ADD("left join PERSONAS P with (nolock) on ICL.TipoDocumento=P.TipoDocumento and ICL.NrDocumento=P.NrDocumento ")
+       #endif
+       SQL.ADD(" Where ICL.Codigo='"~FBN['Cliente']~"' and ICL.NrDocumento= (select Isnull(substring(CUIT,3,8),'00000000') from CLIENTES where Codigo='"~FBN['Cliente']~"') ")
+       
+       watch(sql.batch)
+       Recorrer SQL
+         ACT(ap:1,Trim(FBN['Apellido']))
+         ACT(ap:2,Trim(FBN['Nombre']))
+         ACT(ap:3,Trim(FBN['TipoDocumento']))
+         #ifdef BIND
+           IF Incluido(FBN['TipoDocumento'],'CUI|CIL')
+              ACT(x1,Trim(Mirt(iif(EqStr(Copy(FBN['NrDocumento'],3,1),'0'),Copy(FBN['NrDocumento'],4,7),Copy(FBN['NrDocumento'],3,8)))))
+           ELSE
+              ACT(x1,Trim(FBN['NrDocumento']))
+           ENDIF   
+         #else
+            #ifdef BACS
+              IF Incluido(FBN['TipoDocumento'],'CUI|CIL')
+                 ACT(x1,Trim(Mirt(iif(EqStr(Copy(FBN['NrDocumento'],3,1),'0'),Copy(FBN['NrDocumento'],4,7),Copy(FBN['NrDocumento'],3,8)))))
+              ELSE
+                 ACT(x1,Trim(FBN['NrDocumento']))
+              ENDIF   
+            #else 
+              ACT(x1,Trim(FBN['NrDocumento']))
+            #endif
+         #endif          
+         ACT(ap:4,Val(X1))
+       Proximo
+
+   endif
+ 
+   
+   ACT(no:1,FBN['NrOperacion'])
+   Message('--- #Op : '~Val(no:1)~' Tipo : '~FBN['TipoOp']~' Especie : '~FBN['TickerVN']~' Cliente : '~FBN['Cliente'])
+   SQL.ADD("Insert into "~DBO~".UIFRTI (")
+               
+   SQL.ADD("Periodo, ")
+   SQL.ADD("NrOperacion, ")
+   SQL.ADD("Cliente, ")
+   SQL.ADD("Transferencia, ")
+   SQL.ADD("FechaLiq, ")
+   SQL.ADD("EntidadDep, ")
+   SQL.ADD("DenomEntidadOtra, ")
+   SQL.ADD("NroCtaTransferencia, ")
+   SQL.ADD("PaisCtaTransferencia, ")
+   SQL.ADD("NroCuentaDepos, ")
+   SQL.ADD("NroCuentaComit, ")
+   SQL.ADD("EspecieTransf, ")
+   SQL.ADD("DenomEspecieOtra, ")
+   SQL.ADD("TickerVN, ")
+   SQL.ADD("TipoEspecieVN, ")
+   SQL.ADD("CodEspecieVN, ")
+   SQL.ADD("CotizMonedaVN, ")
+   SQL.ADD("MonedaVN, ")
+   SQL.ADD("CantidadVN, ")
+   SQL.ADD("ComparteComit, ")
+   SQL.ADD("DenNoComparteComit, ")
+   SQL.ADD("CantidadCli, ")
+   SQL.ADD("TipoCliente, ")
+   SQL.ADD("NroCUIT, ")
+   SQL.ADD("TipoPersona, ")
+   SQL.ADD("DenomPersona, ")
+   SQL.ADD("Apellido, ")
+   SQL.ADD("Nombre, ")
+   SQL.ADD("TipoDoc, ")
+   SQL.ADD("NroDoc ")
+                 
+   SQL.ADD(") values (")
+   
+   *Periodo
+   SQL.ADD(" '"~Val(pe:1)~"', ")                 
+   *NrOperacion
+   SQL.ADD(" '"~Val(no:1)~"', ")
+   *Cliente
+   SQL.ADD(" '"~FBN['Cliente']~"', ")   
+   *Transferencia
+   SQL.ADD(" '"~FBN['Transferencia']~"', ")
+   *FechaLiq
+   SQL.ADD(" '"~IdxDate(FBN['FechaLiq'])~"', ")
+   *EntidadDep
+   *SQL.ADD(" '"~FBN['EntidadDep']~"', ")
+   SQL.ADD(" '"~FBN['EntExterior']~"', ")
+   *DenomEntidadOtra
+   SQL.ADD(" '"~FBN['DenomExterior']~"', ")
+   *NroCtaTransferencia
+   SQL.ADD(" '"~FBN['NroCtaTransferencia']~"', ")
+   *PaisCtaTransferencia
+   SQL.ADD(" '"~FBN['PaisCtaTransferencia']~"', ")
+   *NroCuentaDepos
+   SQL.ADD(" "~FStr(FBN['NroCuentaDepos'],0,0)~", ")
+   *NroCuentaComit
+   SQL.ADD(" "~FStr(FBN['ComitArgentina'],0,0)~", ")
+   *EspecieTransf
+   SQL.ADD(" '"~FBN['EspecieTransf']~"', ")
+   *DenomEspecieOtra
+   SQL.ADD(" '"~FBN['DenomEspecieOtra']~"', ")
+   *TickerVN
+   SQL.ADD(" '"~FBN['TickerVN']~"', ")
+   *TipoEspecieVN
+   SQL.ADD(" '"~FBN['TipoEspecieVN']~"', ")
+   *CodEspecieVN
+   SQL.ADD(" '"~FBN['CodEspecieVN']~"', ")
+   *CotizMonedaVN
+   ** AA 25-10-2025 - se incorpora MONPAIS en CONFIGVALEXTERNOS para determinar la monedaFPA (PaisEspecie)
+   ACT(x3,Trim(SQL(" Select Valor from CONFIGVALEXTERNOS where CodigoProceso='UIF' and Atributo='MONPAIS' AND ValorSistemaExterno ='"~FBN['PaisEspecie']~"'")))
+   ** AA 25-10-2025 BOFA Debe ser el valor de la cotización del día anterior al día de la liquidación a reportar, pero como máximo 30 días para atrás, de lo contrario va en ceros
+   ACN(zx1,100*SQL("Select Top(1) Precio1 From COTIZACIONES CO Where Codigo = '"~FBN['TickerVN']~"' AND Moneda = '"~Val(x3)~"' AND Fecha between "~IdxDate2(FBN['FechaLiq']-31)~" and "~IdxDate2(FBN['FechaLiq']-1)~" Order By Fecha Desc"))
+   **ACN(zx1,FBN['CotizMonedaVN']*100)
+   ACN(zx2,TRUNC(Val(zx1),0))
+   SQL.ADD(" "~FStr(Val(zx2)/100,0,2)~", ")
+   *MonedaVN
+   ** AA 25-10-2025 se toma la especie de la relacion Pais en CONFIGVALEXTERNOS
+   ACT(x2,Trim(SQL(" Select Valor from CONFIGVALEXTERNOS where CodigoProceso='UIF' and Atributo='MONEDA' AND ValorSistemaExterno ='"~Val(x3)~"'")))
+   SQL.ADD(" '"~Val(x2)~"', ")
+   *CantidadVN
+   SQL.ADD(" "~FStr(FBN['CantidadVN'],0,2)~", ")
+   *ComparteComit
+   SQL.ADD(" '"~FBN['ComparteComit']~"', ")
+   *DenNoComparteComit
+   SQL.ADD(" '"~FBN['DenNoComparteComit']~"', ")
+   *CantidadCli
+   SQL.ADD(" "~FStr(FBN['CantidadCli'],0,0)~", ")
+   *TipoCliente
+   SQL.ADD(" '"~FBN['TipoCliente']~"', ")
+   *NroCUIT
+   SQL.ADD(" "~FStr(FBN['NroCUIT'],0,0)~", ")
+   *TipoPersona
+   SQL.ADD(" '"~iif(EqStr(FBN['Pais'],VAR('PAISARG')),FBN['TipoPersona'],FBN['TipoPersona']~' extranjera')~"', ")
+   *DenomPersona
+   SQL.ADD(" '"~FBN['DenomPersona']~"', ")
+   *Apellido
+   SQL.ADD(" '"~Val(ap:1)~"', ")
+   *Nombre
+   SQL.ADD(" '"~Val(ap:2)~"', ")
+   *TipoDoc 
+   SQL.ADD(" '"~Val(ap:3)~"', ")              
+   *NroDoc 
+   SQL.ADD(" '"~Val(ap:4)~"' ")
+                 
+   SQL.ADD(")")
+   SQL.NEW
+   SQL.EXEC
+                 
+
+** Generar 1 registro por cada integrante del cliente de cada operacion en UIFRTIOTR
+  * If EqStr(FBN['Persona'],'SI')
+       ACN(NI:1,0)
+       *SQL.ADD("Select ICL.TipoPoder,ICL.FAlta FechaAlta,ICL.TipoDocumento,ICL.NrDocumento OtroDoc, Case When isnumeric("~(PAD0(ICL.NrDocumento,0)~")=1 then ICL.NrDocumento else 0 end NrDocumento, ")
+       SQL.ADD("Select ICL.TipoPoder,ICL.FAlta FechaAlta,ICL.TipoDocumento,ICL.NrDocumento,  ")       
+       SQL.ADD("'Persona humana' TipoPersona, Apellido,Nombre, Sexo, Nacionalidad,P.Pais, CodigoPEP, FechaNacimiento,  ")
+       SQL.ADD("CodigoPostal,Provincia,Localidad,Direccion Calle,Numero Altura, NrIntegrante, ICL.Codigo Cliente, ")
+       SQL.ADD("P.EmpleadoGobierno,P.Telefono, Isnull(P.Cuit,'') CUIT ")
+       #ifdef MLASA
+           SQL.ADD("from INTEGRANTESUIF ICL ")
+           SQL.ADD("left join PERSONASUIF P with (nolock) on ICL.TipoDocumento=P.TipoDocumento and ICL.NrDocumento=P.NrDocumento ")
+       #else
+           SQL.ADD("from INTEGRANTESCLI ICL ")
+           SQL.ADD("left join PERSONAS P with (nolock) on ICL.TipoDocumento=P.TipoDocumento and ICL.NrDocumento=P.NrDocumento ")
+       #endif
+       SQL.ADD(" Where ICL.Codigo='"~FBN['Cliente']~"' and ICL.NrDocumento <> (select Isnull(substring(CUIT,3,8),'00000000') from CLIENTES where Codigo='"~FBN['Cliente']~"') ")
+       
+       watch(sql.batch)
+       Recorrer SQL
+
+       Message('--- #Op : '~Val(no:1)~' Cliente : '~FBN['Cliente']~' Integrante : '~FBN['TipoPoder'])
+         
+       
+         ACT(po:1,Trim(SQL(" Select Valor from CONFIGVALEXTERNOS where CodigoProceso='UIF' and Atributo='TIPOINTEGRANTE' AND ValorSistemaExterno ='"~FBN['TipoPoder']~"'")))
+         SCN(NI:1,1)
+
+         SQL.ADD("Insert into "~DBO~".UIFRTIOTR (")         
+         SQL.ADD("Periodo, ")
+         SQL.ADD("NrOperacion, ")
+         SQL.ADD("NroIntegrante, ")
+         SQL.ADD("Vinculo, ")
+         SQL.ADD("NroCUIT, ")
+         SQL.ADD("TipoPersona, ")
+         SQL.ADD("Apellido, ")
+         SQL.ADD("Nombre, ")
+         SQL.ADD("TipoDoc, ")
+         SQL.ADD("NroDoc ")
+                 
+         SQL.ADD(") values (")
+            
+         *Periodo
+         SQL.ADD(" '"~Val(pe:1)~"', ")
+         *NrOperacion
+         SQL.ADD(" '"~Val(no:1)~"', ")
+         *NroIntegrante
+         SQL.ADD(" '"~FStr(Val(NI:1),0,0)~"', ")
+         *Vinculo
+         SQL.ADD(" '"~Val(po:1)~"', ")
+         *NroCUIT
+         #ifdef BIND
+           IF NoVacio(FBN['CUIT'])
+              ACT(x1,Trim(FBN['CUIT']))
+           ELSE
+              ACT(x1,Trim(FBN['NrDocumento']))
+           ENDIF   
+         #else
+            #ifdef BACS
+              IF NoVacio(FBN['CUIT'])
+                 ACT(x1,Trim(FBN['CUIT']))
+              ELSE
+                 ACT(x1,Trim(FBN['NrDocumento']))
+              ENDIF   
+            #else 
+              ACT(x1,FStr(FBN['CUIT'],0,0))
+            #endif
+         #endif                            
+         SQL.ADD(" "~Val(X1)~", ")
+         *TipoPersona
+         SQL.ADD(" '"~iif(EqStr(FBN['Pais'],VAR('PAISARG')),FBN['TipoPersona'],FBN['TipoPersona']~' extranjera')~"', ")
+         *Apellido
+         SQL.ADD(" '"~FBN['Apellido']~"', ")
+         *Nombre
+         SQL.ADD(" '"~FBN['Nombre']~"', ")
+         *TipoDoc 
+         SQL.ADD(" '"~FBN['TipoDocumento']~"', ")              
+         *NroDoc 
+         #ifdef BIND
+           IF Incluido(FBN['TipoDocumento'],'CUI|CIL')
+              ACT(x1,Trim(Mirt(iif(EqStr(Copy(FBN['NrDocumento'],3,1),'0'),Copy(FBN['NrDocumento'],4,7),Copy(FBN['NrDocumento'],3,8)))))
+           ELSE
+              ACT(x1,Trim(FBN['NrDocumento']))
+           ENDIF   
+         #else
+            #ifdef BACS
+              IF Incluido(FBN['TipoDocumento'],'CUI|CIL')
+                 ACT(x1,Trim(Mirt(iif(EqStr(Copy(FBN['NrDocumento'],3,1),'0'),Copy(FBN['NrDocumento'],4,7),Copy(FBN['NrDocumento'],3,8)))))
+              ELSE
+                 ACT(x1,Trim(FBN['NrDocumento']))
+              ENDIF   
+            #else 
+              ACT(x1,Trim(FBN['NrDocumento']))
+            #endif
+         #endif                   
+         SQL.ADD(" '"~Val(X1)~"' ")        
+         
+         SQL.ADD(")")
+         SQL.NEW
+         SQL.EXEC
+         
+       Proximo
+
+  * endif
+
+Proximo

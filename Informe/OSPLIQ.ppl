@@ -1,0 +1,115 @@
+﻿CrearDialogo
+  Lista1     : "Vehiculo" ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Fecha1     : 'Fecha'    ;;;;;;;;;FSys
+  Lista2     : 'Instancias'  ;1;2;;;;;;;;;SQLSET("Select Nombre from "~DBO~".INSTANCIAS Where Tabla='OPERACIONES' Order By Nombre ")
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+If NoVacio(UsrVehiculos(UsuarioActivo))
+   ACT(zz6,SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+Else
+   ACT(zz6,SQLSET("Select V.Codigo FROM "~DBO~".VEHICULOS V where (Status='HAB' or Status Is Null or Status='') ") )
+EndIf
+
+*-- Veo solamente los tipos seleccionados
+SetListaClaves(2)
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+ACT(a3, 'Liquidacion de Operaciones del dia')
+ACT(a4, 'Fecha : '~Dialogo.Fecha1)
+ACT(a5, 'Vehiculo : '~Copy(Dialogo.Lista1,1,160))
+if Vacio(Dialogo.Lista1)
+  ACT(a5, 'Vehiculo : Todos')
+endif
+If NoVacio(Dialogo.Lista2)
+   ACT(a:6,'Instancias: '~Dialogo.Lista2)
+Else
+   ACT(a:6,'Cualquier Instancia')
+EndIf
+
+ACT(a7, 'FechaOp')
+ACT(b7, 'Vehiculo')
+ACT(c7, 'Nr.Oper.')
+ACT(d7, 'Tipo Op.')
+ACT(e7, 'Instancia')
+ACT(f7, 'Cliente')
+ACT(g7, 'Especie')
+ACT(h7, 'Cantidad')
+AgregarMarco(a7..h7,1,0,Exe('COLOR'))
+ACT(i7, 'E.Liquida')
+ACT(j7, 'Cantidad')
+ACT(k7, 'Concepto')
+AgregarMarco(i7..k7,1,0,Exe('COLOR'))
+
+SetFilaActual(7)
+SQL.ADD(" Select O.TipoOp, O.Especie Esp, O.Cantidad Can, M.Cantidad, O.Vehiculo1, M.Especie, O.Cliente1, FechaOp, O.NrOperacion, M.Leyenda,B.NrBit,I.Nombre from ")
+SQL.ADD(" "~DBO~".OPERACIONES O, "~DBO~".MOVPENDIENTES M, "~DBO~".OPERACIONESBITS B, "~DBO~".INSTANCIAS I ")
+SQL.ADD(" where M.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' and M.NrSaldo=1 and M.NrOperacion=O.NrOperacion")
+SQL.ADD(" and  O.NrOperacion = B.NrOperacion and B.NrBit=I.NrInstancia and B.Valor=1 ")
+If NoVacio(Dialogo.Lista2)
+   SQL.ADD(" and I.Nombre In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+EndIf
+SQL.ADD("and O.Vehiculo1 In ("~Pipe2Comillas(val(zz6))~") ")
+if NoVacio(Dialogo.Lista1)
+  SQL.ADD("and O.Vehiculo1 in ("~Pipe2Comillas(Dialogo.Lista1)~")")
+endif
+SQL.ADD(" AND I.Tabla = 'OPERACIONES' ")
+
+SQL.ADD("union all ")
+
+SQL.ADD("Select O.TipoOp, O.Especie Esp, O.Cantidad Can, M.Cantidad, O.Vehiculo1, M.Especie, O.Cliente1, FechaOp, O.NrOperacion, M.Leyenda,B.NrBit,I.Nombre ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M , "~DBO~".OPERACIONESBITS B, "~DBO~".INSTANCIAS I ")
+SQL.ADD("where M.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' and M.NrSaldo=1 and M.NrOperacion=O.NrOperacion")
+SQL.ADD(" and  O.NrOperacion = B.NrOperacion and B.NrBit=I.NrInstancia and B.Valor=1 ")
+If NoVacio(Dialogo.Lista2)
+   SQL.ADD(" and I.Nombre In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+EndIf
+SQL.ADD("and O.Vehiculo1 In ("~Pipe2Comillas(val(zz6))~") ")
+if NoVacio(Dialogo.Lista1)
+  SQL.ADD("and O.Vehiculo1 in ("~Pipe2Comillas(Dialogo.Lista1)~")")
+endif
+SQL.ADD(" AND I.Tabla = 'OPERACIONES' ")
+SQL.ADD("order by 5,9")
+
+ACT(z1, '')
+
+Recorrer SQL
+  if not EqStr(fbn('NrOperacion'), Val(z1))
+    ACT(a:fac, fbn('FechaOp'))
+    ACT(b:fac, fbn('Vehiculo1'))
+    ACT(c:fac, fbn('NrOperacion'))
+    ACLO(c:fac, fbn('NrOperacion'))
+    ACT(d:fac, fbn('TipoOp'))
+    ACT(f:fac, fbn('Cliente1'))
+    ACT(g:fac, fbn('Esp'))
+    ACN(h:fac, fbn('Can'))
+    ACT(z1, fbn('NrOperacion'))
+    ACT(z3, FBN['NrBit'])
+    ACT(e:fac, FBN['Nombre'])
+  endif
+  ACT(i:fac, fbn('Especie'))
+  ACN(j:fac, -fbn('Cantidad'))
+  ACT(k:fac, fbn('Leyenda'))
+  SetFont(a:fac..z:fac, 2)
+proximo
+
+FormatoCeldas(h:1..j:FAC,Exe('F2')) 
+LimitesVision(l:fac+1)
+ACO(1, 8)
+ACO(2, 8)
+ACO(3, 8)
+ACO(4, 5)
+ACO(5, 12)
+ACO(6, 8)
+ACO(7, 5)
+ACO(8, 8)
+ACO(9, 8)
+ACO(10, 8)
+ACO(11, 15)
+SetFont(a1..z7, 1)
+AgregarMarco(i7..k:fac,1)
+Impresion(1,2)

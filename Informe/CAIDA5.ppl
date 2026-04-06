@@ -1,0 +1,662 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Vehiculo2  : "Grupo"                   ;;;;Vacio(Dialogo.Lista1);;;;;;;;;;"TipoVehiculo <> 'DIV'";
+  NrOperacion1 : "Nr.Operacion"          ;1;2;;;;;;;;;;
+  Lista1     : "Vehiculo"                ;;1;;Vacio(Dialogo.Vehiculo2);;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where TipoVehiculo = 'DIV'"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"'"));;;;;
+  Especie1   : "Especie"                 ;;;
+  Book1      : "Book"                    ;;; 
+  Fecha1     : "F.Desde"                 ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha Desde';NO;FSys
+  Fecha2     : "F.Hasta"                 ;5;2;;;;Dialogo.Fecha2<>0;'Debe Ingresar la Fecha Hasta';NO;FSys+365
+  Radio1     : "Expresado|Pesos|Dolares" ;;1;;;;;;;0
+  Radio2     : "Consolidado|Si|No"       ;;;;;;;;;1 
+FinDialogo
+
+If Not Ok
+  Cancelar
+EndIf
+
+***--- Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+   ACT(zz6,Dialogo.Lista1)
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+   EndIf
+EndIf
+
+***---ARP = Var('MONELOCA')
+***---USD = Var('MONEEXTR')
+ACT(ML:1, Var('MONELOCA'))
+ACT(ME:1, Var('MONEEXTR'))
+ACT(im:1, iif(Dialogo.Radio1=0,Val(ml:1),Val(me:1)))
+ACN(fi:1, 0)
+ACN(ff:1, 0)
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+
+SetFilaActual(4)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,1)
+
+ACT(a:FAC, "Caida de Prestamos")
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(5)
+ACN(w1,FAC)
+
+******------ Encabezado ------******
+
+If NoVacio(Dialogo.Vehiculo2)
+  ACT(a:FAC+1, 'Grupo : '~Dialogo.Vehiculo2)
+Else
+  If NoVacio(Dialogo.Lista1)
+    ACT(a:FAC+1, 'Vehiculo/s : '~Dialogo.Lista1) 
+  Else 
+    ACT(a:FAC+1, 'Vehiculo : Todos')
+  Endif
+Endif
+
+If NoVacio(Dialogo.Especie1)
+  ACT(a:FAC+2, 'Especie : '~Dialogo.Especie1~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie1))
+Else
+  ACT(a:FAC+2, 'Especie : Todos')
+EndIf
+
+If NoVacio(Dialogo.Book1)
+  ACT(a:FAC+3, 'Book : '~Dialogo.Book1~' '~BuscarCampo('Books','Descripcion','Codigo',Dialogo.Book1))
+Else
+  ACT(a:FAC+3, 'Book : Todos')
+EndIf
+
+ACT(a:FAC+4, 'Fecha Desde: '~Dialogo.Fecha1)
+ACT(a:FAC+5, 'Fecha Hasta: '~Dialogo.Fecha2)
+ACT(a:FAC+6, 'Expresado en '~iif(Dialogo.Radio1 = 0,'Pesos','Dolares'))
+ACT(a:FAC+7, 'Consolidado '~iif(Dialogo.Radio2 = 1,'No','Si'))
+
+If NoVacio(Dialogo.NrOperacion1)
+  ACT(b:FAC+1, 'NrOperacion : '~Dialogo.NrOperacion1)
+Else
+  ACT(b:FAC+1, 'NrOperacion : Todos')
+Endif
+
+SetFont(a:fac..N:FAC+7,2)
+
+SetFilaActual(FAC+9)
+
+ACT(a:FAC, 'Vehiculo')
+ACT(b:FAC, '    Cliente')
+ACT(c:FAC, 'Especie')
+ACT(d:FAC, 'Monto Amort.')
+ACT(e:FAC, ' Tasa')
+ACT(f:FAC, 'Tipo de')
+ACT(g:FAC, ' FechaOP')
+ACT(h:FAC, 'FechaVto')
+ACT(i:FAC, 'Plazo')
+ACT(j:FAC, '  Monto Final')
+ACT(k:FAC, 'Total x Dia')
+ACT(l:FAC, 'Tipo Oper')
+ACT(m:FAC, 'Num. Oper')
+
+ACT(d:FAC+1, 'Moneda Orig.')
+ACT(f:FAC+1, ' Tasa')
+ACT(i:FAC+1, 'Rem.')
+ACT(j:FAC+1, 'Moneda Orig.')
+ACT(K:FAC+1, ' en '~iif(Dialogo.Radio1=0,'Pesos','Dolares'))
+
+AlinearCeldas(a:FAC..m:FAC+1,'I')
+SetFont(a:fac..m:FAC+1,2)
+AgregarMarco(a:FAC..m:FAC+1,2,0,Exe('COLOR'))
+
+******------ Consultas ------******
+
+SetFilaActual(FAC+1)
+
+***---Multiple Vto                                   ======================================= MV ===========
+
+If Dialogo.Radio2=1
+    SQL.ADD("Select O.Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+Else
+    SQL.ADD("Select 'Consolidado' Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+EndIf
+
+SQL.ADD("C.Fecha2 Vto, ")
+SQL.ADD("C.Cantidad1 Cant,L.RazonSocial, O.TipoTasa, C.Cantidad3 Interes, C.Precio2 Tasa,  O.TotalBrutoCli1,   ")
+SQL.ADD(" O.TotalNetoCli1, O.ContraEspecie, O.TotalBrutoCli2, O.Book1, O.Vehiculo1 Vehiculo, O.FechaPago, ")
+SQL.ADD(" C.Precio4 Sprd, O.MB3, C.Cantidad4 as ONAmort  ")
+SQL.ADD(" from "~DBO~".CUOTAS C, "~DBO~".OPERACIONES  O, "~DBO~".CLIENTES L ")
+SQL.ADD("where O.NrOperacion = C.NrOperacion ")
+SQL.ADD(" and L.Codigo = O.Cliente1 ")
+SQL.ADD(" and L.Jerarquia NOT LIKE '"~VAR('JERVINCUL')~"%' ")
+SQL.ADD(" and ( O.TipoOp In ('MMONM','MMPCLM','MMPEM','MMPIM','MMPOSM','MMSCMV','MMSIMV','MMFCMV','MMFIMV','MMLEAS') or (O.TipoOp In ('MMSELN') and O.MB3 ='1'))   ")
+
+
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo2)
+    SQL.ADD("and O.Vehiculo1 in("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+  EndIf
+EndIf
+
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+SQL.ADD(" and  C.Fecha2 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and  C.Fecha2 <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+
+If NoVacio(Dialogo.Book1)
+  SQL.ADD(" and O.Book1 = '"~Dialogo.Book1~"' ")
+EndIf
+
+if NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+endif
+
+
+SQL.ADD(" Union All")
+
+***---Unico Vto.                                             ======================================= UV ===========
+
+If Dialogo.Radio2=1
+    SQL.ADD("Select O.Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ") 
+Else
+    SQL.ADD("Select 'Consolidado' Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+EndIf
+
+
+SQL.ADD(" O.FechaVto Vto, ") 
+SQL.ADD(" O.Cantidad Cant , L.RazonSocial, O.TipoTasa, O.TotalIntereses Interes, O.Precio1 Tasa,    ")
+SQL.ADD("O.TotalBrutoCli1, O.TotalNetoCli1, O.ContraEspecie, O.TotalBrutoCli2, O.Book1, O.Vehiculo1 Vehiculo, ")
+SQL.ADD(" O.FechaPago, O.Spread Sprd, O.MB3, 0 as ONAmort  ")
+SQL.ADD(" from "~DBO~".OPERACIONES  O, "~DBO~".CLIENTES L  ")
+SQL.ADD(" Where  O.TipoOp In ('MMDC','MMPLME','MMPCCV','MMDPAC') ")
+
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo2)
+    SQL.ADD("and O.Vehiculo1 in("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+  EndIf
+EndIf
+
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+
+if NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+endif
+
+SQL.ADD(" and L.Codigo = O.Cliente1 ")
+SQL.ADD(" and L.Jerarquia NOT LIKE '"~VAR('JERVINCUL')~"%' ")
+SQL.ADD(" and  O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and  O.FechaVto <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+
+If NoVacio(Dialogo.Book1)
+  SQL.ADD(" and O.Book1 = '"~Dialogo.Book1~"' ")
+EndIf
+
+SQL.ADD(" Union All")
+
+If Dialogo.Radio2=1
+    SQL.ADD("Select O.Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+Else
+    SQL.ADD("Select 'Consolidado' Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+EndIf
+
+SQL.ADD(" O.FechaOp2 Vto, ") 
+SQL.ADD(" O.Cantidad Cant, L.RazonSocial, O.TipoTasa, O.TotalIntereses Interes, O.Precio1 Tasa, ")
+SQL.ADD(" O.TotalBrutoCli1, O.TotalNetoCli1, O.ContraEspecie, O.TotalBrutoCli2, O.Book1, O.Vehiculo1 Vehiculo, ")
+SQL.ADD(" O.FechaPago, 0 Sprd, O.MB3, 0 as ONAmort  ")
+SQL.ADD(" from "~DBO~".OPERACIONES  O, "~DBO~".CLIENTES L  ")
+SQL.ADD("where O.TipoOp In ('FXREPO') ")
+
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo2)
+    SQL.ADD("and O.Vehiculo1 in("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+  EndIf
+EndIf
+
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+
+if NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+endif
+
+SQL.ADD(" and L.Codigo = O.Cliente1 ")
+SQL.ADD(" and L.Jerarquia NOT LIKE '"~VAR('JERVINCUL')~"%' ")
+SQL.ADD(" and  O.FechaOp2 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and  O.FechaOp2 <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+
+If NoVacio(Dialogo.Book1)
+  SQL.ADD(" and O.Book1 = '"~Dialogo.Book1~"' ")
+EndIf
+
+SQL.ADD(" Union All")
+
+If Dialogo.Radio2=1
+    SQL.ADD("Select O.Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+Else
+    SQL.ADD("Select 'Consolidado' Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+EndIf
+
+SQL.ADD(" O.FechaOp2 Vto, ")
+SQL.ADD(" O.Cantidad Cant, L.RazonSocial, O.TipoTasa, O.TotalIntereses Interes, O.Precio1 Tasa,  ")
+SQL.ADD(" O.TotalBrutoCli1, O.TotalNetoCli1, O.ContraEspecie, O.TotalBrutoCli2, O.Book1, O.Vehiculo1 Vehiculo, ")
+SQL.ADD(" O.FechaPago, 0 Sprd,  O.MB3, 0 as ONAmort ")
+SQL.ADD(" from "~DBO~".OPERACIONES  O, "~DBO~".CLIENTES L  ")
+SQL.ADD("where O.TipoOp In ('FXCT','FXVT') ")
+
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo2)
+    SQL.ADD("and O.Vehiculo1 in("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+  EndIf
+EndIf
+
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+
+if NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+endif
+
+SQL.ADD(" and L.Codigo = O.Cliente1 ")
+SQL.ADD(" and L.Jerarquia NOT LIKE '"~VAR('JERVINCUL')~"%' ")
+SQL.ADD(" and  O.FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and  O.FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+
+If NoVacio(Dialogo.Book1)
+  SQL.ADD(" and O.Book1 = '"~Dialogo.Book1~"' ")
+EndIf
+
+SQL.ADD(" Union All")
+
+If Dialogo.Radio2=1
+    SQL.ADD("Select O.Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+Else
+    SQL.ADD("Select 'Consolidado' Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+EndIf
+
+SQL.ADD(" O.FechaEj Vto, ")
+SQL.ADD(" O.Cantidad Cant, L.RazonSocial, O.TipoTasa, O.TotalIntereses Interes, O.Precio1 Tasa,  ")
+SQL.ADD(" O.TotalBrutoCli1, O.TotalNetoCli1, O.ContraEspecie, O.TotalBrutoCli2, O.Book1, O.Vehiculo1 Vehiculo, ")
+SQL.ADD(" O.FechaPago, 0 Sprd,  O.MB3, 0 as ONAmort   ")
+SQL.ADD(" from "~DBO~".OPERACIONES  O, "~DBO~".CLIENTES L  ")
+SQL.ADD("where O.TipoOp In ('SECT','SEVT') ")
+
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo2)
+    SQL.ADD("and O.Vehiculo1 in("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+  EndIf
+EndIf
+
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+
+if NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+endif
+
+SQL.ADD(" and L.Codigo = O.Cliente1 ")
+SQL.ADD(" and L.Jerarquia NOT LIKE '"~VAR('JERVINCUL')~"%' ")
+SQL.ADD(" and  O.FechaOp2 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and  O.FechaOp2 <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+
+If NoVacio(Dialogo.Book1)
+  SQL.ADD(" and O.Book1 = '"~Dialogo.Book1~"' ")
+EndIf
+
+SQL.ADD(" Union All")
+
+If Dialogo.Radio2=1
+    SQL.ADD("Select O.Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+Else
+    SQL.ADD("Select 'Consolidado' Vehiculo1, O.Especie, O.FechaOp, O.TipoOp, O.NrOperacion, ")
+EndIf
+
+SQL.ADD(" O.FechaEj Vto, ")
+SQL.ADD(" O.Cantidad Cant, L.RazonSocial, O.TipoTasa, O.TotalIntereses Interes, O.Precio1 Tasa,  ")
+SQL.ADD(" O.TotalBrutoCli1, O.TotalNetoCli1, O.ContraEspecie, O.TotalBrutoCli2, O.Book1, O.Vehiculo1 Vehiculo, ")
+SQL.ADD(" O.FechaPago, 0 Sprd,  O.MB3,  0 as ONAmort ")
+SQL.ADD(" from "~DBO~".OPERACIONES  O, "~DBO~".CLIENTES L  ")
+SQL.ADD(" where O.TipoOp In ('SERP') ")
+
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo2)
+    SQL.ADD("and O.Vehiculo1 in("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+  EndIf
+EndIf
+
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+
+if NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+endif
+
+SQL.ADD(" and L.Codigo = O.Cliente1 ")
+SQL.ADD(" and L.Jerarquia NOT LIKE '"~VAR('JERVINCUL')~"%' ")
+SQL.ADD(" and  O.FechaEj >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and  O.FechaEj <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+
+If NoVacio(Dialogo.Book1)
+  SQL.ADD(" and O.Book1 = '"~Dialogo.Book1~"' ")
+EndIf
+
+If Dialogo.Radio2=1
+    SQL.ADD(" order by 1, 6 ")
+Else
+    SQL.ADD(" order by 6 ")
+EndIf
+
+ACN(ac2,0)
+ACN(ac:3,0)
+ACT(Z:2, '')
+
+******------ Recorrer consultas ------******
+
+Recorrer SQL
+ If Val(ac:1) <> FBN['Vto'] O Val(ac:1) <> FBN['FechaPago']
+  If EqStr(FBN['TipoOp'], 'SECT') O EqStr(FBN['TipoOp'], 'SEVT') O EqStr(FBN['TipoOp'], 'FXCT') O EqStr(FBN['TipoOp'], 'FXVT')   
+    If Val(ac:1) <> FBN['FechaPago'] 
+      If val(ac:2) = 1
+        ACN(k:fac-1,val(ac:3))   
+        SetFont(k:FAC-1..k:FAC-1,2)
+        FormatoCeldas(k:fac-1..k:fac-1,Exe('F2'))
+      EndIF
+      ACN(ac:3,0)
+    EndIf
+  Else
+    If Val(ac:1) <> FBN['Vto']      
+      If val(ac:2) = 1        
+        ACN(k:fac-1,val(ac:3))   
+        SetFont(k:FAC-1..k:FAC-1,2)
+        FormatoCeldas(k:fac-1..k:fac-1,Exe('F2'))
+      EndIF
+      ACN(ac:3,0)
+    EndIf
+  EndIf
+ 
+  If EqStr(FBN['TipoOp'], 'SECT') O EqStr(FBN['TipoOp'], 'SEVT') O EqStr(FBN['TipoOp'], 'FXCT') O EqStr(FBN['TipoOp'], 'FXVT')   
+    ACD(ac:1, FBN['FechaPago']) 
+  Else    
+    ACD(ac:1, FBN['Vto'])
+  EndIf
+ ENDif 
+  ***--- Corte y Totales por Vehiculo
+
+  If Not EqStr(FBN['Vehiculo1'], Val(z:2)) Y Not CeldaVacia(Z:2)
+    SetFilaActual(FAC+1)
+    (.'CALCULATOT'.) 
+    SetFilaActual(FAC+2)
+ 
+    ACT(a:FAC, 'Vehiculo')
+    ACT(b:FAC, '    Cliente')
+    ACT(c:FAC, 'Especie')
+    ACT(d:FAC, 'Monto Amort.')
+    ACT(e:FAC, ' Tasa')
+    ACT(f:FAC, 'Tipo de')
+    ACT(g:FAC, ' FechaOP')
+    ACT(h:FAC, 'FechaVto')
+    ACT(i:FAC, 'Plazo')
+    ACT(j:FAC, '  Monto Final')
+    ACT(k:FAC, 'Total x Dia')
+    ACT(l:FAC, 'Tipo Oper')
+    ACT(m:FAC, 'Num. Oper')
+
+    ACT(d:FAC+1, 'Moneda Orig.')
+    ACT(f:FAC+1, ' Tasa')
+    ACT(i:FAC+1, 'Rem.')
+    ACT(j:FAC+1, 'Moneda Orig.')
+    ACT(K:FAC+1, ' en '~iif(Dialogo.Radio1=0,'Pesos','Dolares'))
+
+    AlinearCeldas(a:FAC..m:FAC+1,'I')
+    SetFont(a:fac..m:FAC+1,2)
+    AgregarMarco(a:FAC..m:FAC+1,2,0,Exe('COLOR'))
+   
+    SetFilaActual(FAC+2)
+  EndIf  
+   
+  ACT(a:FAC, Copy(BuscarCampo('Vehiculos','Descripcion','Codigo', FBN['Vehiculo']),1,23))
+  ACT(b:FAC, Copy(FBN['RazonSocial'],1,28))
+  ACT(c:FAC, FBN['Especie'])
+  ACN(e:FAC, FBN['Tasa'] + FBN['Sprd'] )
+  ACT(f:FAC, FBN['TipoTasa'])
+  ACD(g:FAC, FBN['FechaOp'])
+  
+  If EqStr(FBN['TipoOp'], 'SECT') O EqStr(FBN['TipoOp'], 'SEVT') O EqStr(FBN['TipoOp'], 'FXCT') O EqStr(FBN['TipoOp'], 'FXVT')   
+    ACD(h:FAC, FBN['FechaPago']) 
+  Else
+    ACD(h:FAC, FBN['Vto'])
+  EndIf
+
+  ACN(i:FAC, Val(h:FAC)-Fsys)
+  
+  ***--- Si TipoOp = SECT o SEVT o SERP, se trae el monto spot/futuro o importe bruto/a liquidar en vez de la cantidad
+
+  If EqStr(FBN['TipoOp'], 'SECT') O EqStr(FBN['TipoOp'], 'SEVT')  
+    ACN(d:FAC, FBN['TotalBrutoCli1'])
+    ACN(j:FAC, FBN['TotalNetoCli1'])
+    ACT(MN:1, fbn('ContraEspecie'))
+    ACN(CT:1, CotizacionC(FBN['ContraEspecie'],,,,Fsys,1,SI,Val(im:1)))
+    SCN(ac:3, val(j:fac)* Val(CT:1))
+  Else
+    If EqStr(FBN['TipoOp'], 'SERP')
+      ACN(d:FAC, FBN['TotalBrutoCli1'])
+      ACN(j:FAC, FBN['TotalBrutoCli2'])
+      ACT(MN:1, fbn('ContraEspecie'))
+      ACN(CT:1, CotizacionC(FBN['ContraEspecie'],,,,Fsys,1,SI,Val(im:1)))
+      SCN(ac:3, val(j:fac)* Val(CT:1))
+    Else
+       If EqStr(FBN['TipoOp'], 'MMONM')  
+          ACN(d:FAC, FBN['ONAmort'])
+          ACN(j:FAC, FBN['Interes']+FBN['ONAmort'])
+          ACT(MN:1, fbn('Especie'))
+          ACN(CT:1, CotizacionC(FBN['Especie'],,,,Fsys,1,SI,Val(im:1)))
+          SCN(ac:3, val(j:fac)* Val(CT:1))         
+       Else 
+          ACN(d:FAC, FBN['Cant'])
+          ACN(j:FAC, FBN['Interes']+FBN['Cant'])
+          ACT(MN:1, fbn('Especie'))
+          ACN(CT:1, CotizacionC(FBN['Especie'],,,,Fsys,1,SI,Val(im:1)))
+          SCN(ac:3, val(j:fac)* Val(CT:1))
+       EndIf 
+    EndIf
+  EndIf
+
+
+
+
+*****---- Cotizaciones utilizadas en el informe, segun la especie en la que esta expresada el informe -----*****
+
+  IF Not Eqstr(Val(MN:1), Val(IM:1))
+     ACN(BD:1, 0)
+     Recorrer&k Val(FI:1), Val(FF:1)
+         IF Eqstr(Val(T:&k), Val(MN:1))
+            ACN(BD:1, 1)
+            Break
+         ENDIF
+     Proximo
+     IF Val(BD:1) = 0
+         SCN(FF:1, 1)
+         ACT(T:Val(FF:1), Val(MN:1))
+         ACN(U:Val(FF:1), Val(CT:1))
+     ENDIF
+  ENDIF
+
+  ACT(l:FAC, FBN['TipoOp'])
+  ACT(m:FAC, FBN['NrOperacion'])
+  ACLO(m:FAC, FBN['NrOperacion'])
+  ACN(ac2,1)
+  
+  ***--- Totales: W:9, Y:9, Z:9 = Suma de monto de las operaciones, segun la especie, luego pasada a la moneda del informe
+  ***--- PP:1, PP:2, PP:3 = Suma de plazos promedios ponderados, segun la especie
+  ***--- TP:1, TP:2, TP:3 = Suma de las tasas promedios, segun la especie (MODIF: Tasa * Plazo Remanente * Monto Final)
+  ***--- (MODIF) TP:5, TP:6, TP:7 = Suma de Monto Final * Plazo Remanente 
+  ***--- PP:4 = Suma total de los plazos prom. ponderados, segun la moneda del informe; TP:4/TP:8 = Suma total de tasas, segun la moneda del informe
+  
+  If EqStr(fbn['Especie'],Val(ML:1))
+    ACN(ce:1, CotizacionC(FBN['Especie'],,,,Fsys,1,SI, Val(im:1)))
+    
+    SCN( z:9, Val(j:fac))
+    SCN(pp:1, Val(j:fac) * Val(i:fac))
+   
+    ***--- Nueva Formula TPP (ARP)---***
+    SCN(tp:1, Val(j:fac) * Val(e:fac) * Val(i:fac))
+    SCN(tp:5, Val(j:fac) * Val(i:fac))
+    ****------****
+   
+    SCN(pp:4, Val(j:fac) * Val(i:fac) * Val(ce:1))   
+   
+    ***--- Modificacion ---***        
+    SCN(tp:4, Val(j:fac) * Val(i:fac) * Val(e:fac) * Val(ce:1))  
+    SCN(tp:8, Val(i:fac) * Val(j:fac) * Val(ce:1))
+    ****--------****
+
+  Else
+    If EqStr(fbn['Especie'],Val(ME:1))
+      ACN(ce:1, CotizacionC(FBN['Especie'],,,,Fsys,1,SI,Val(im:1)))
+    
+      SCN( x:9, Val(j:fac))
+      SCN(pp:2, Val(j:fac) * Val(i:fac))
+      
+      ***---Nueva Formula TPP (USD)---***
+      SCN(tp:2, Val(j:fac) * Val(e:fac) * Val(i:fac))
+      SCN(tp:6, Val(j:fac) * Val(i:fac))
+      ****------****
+      
+      SCN(pp:4, Val(j:fac) * Val(i:fac) * Val(ce:1))   
+      
+      ***--- Modificacion ---***        
+      SCN(tp:4, Val(j:fac) * Val(i:fac) * Val(e:fac) * Val(ce:1))  
+      SCN(tp:8, Val(i:fac) * Val(j:fac) * Val(ce:1))
+      ****--------****
+
+   Else
+      If EqStr(FBN['TipoOp'], 'SERP') O EqStr(FBN['TipoOp'], 'SEVT') O EqStr(FBN['TipoOp'], 'SECT')
+        ACN(ce:2,CotizacionC(FBN['ContraEspecie'],,,,Fsys,1,SI,Val(im:1)))
+               
+        SCN( w:9, Val(j:fac) * Val(ce:2))
+        SCN(pp:3, Val(j:fac) * Val(i:fac) * Val(ce:2))
+        
+        ***---Nueva Formula TPP (OTRAS)---***
+        SCN(tp:3, Val(j:fac) * Val(e:fac) * Val(i:fac) *  Val(ce:2))
+        SCN(tp:7, Val(j:fac) * Val(i:fac) * Val(ce:2))
+        ****--------****
+        
+        SCN(pp:4, Val(j:fac) * Val(i:fac) * Val(ce:2))   
+        
+        ***--- Modificacion ---***        
+        SCN(tp:4, Val(j:fac) * Val(i:fac) * Val(e:fac) * Val(ce:2))  
+        SCN(tp:8, Val(i:fac) * Val(j:fac) * Val(ce:2))
+        ****--------****
+      
+      Else 
+        ACN(ce:1,CotizacionC(FBN['Especie'],,,,Fsys,1,SI,Val(im:1)))
+                  
+        SCN( w:9, Val(j:fac) * Val(ce:1))
+        SCN(pp:3, Val(j:fac) * Val(i:fac) * Val(ce:1))
+        
+        ***--- Nueva Formula TPP ---***
+        SCN(tp:3, Val(j:fac) * Val(e:fac) * Val(i:fac) * Val(ce:1))
+        SCN(tp:7, Val(j:fac) * Val(i:fac) * Val(ce:1)) 
+        ****--------****
+        
+        SCN(pp:4, Val(j:fac) * Val(i:fac) * Val(ce:1))   
+
+        ***--- Modificacion ---***        
+        SCN(tp:4, Val(j:fac) * Val(i:fac) * Val(e:fac) * Val(ce:1))  
+        SCN(tp:8, Val(i:fac) * Val(j:fac) * Val(ce:1))
+        ****--------****
+
+      EndIf
+    EndIf
+  EndIf
+
+  SetFont(a:FAC..m:FAC,1)
+  FormatoCeldas(i:fac..i:fac,"0")
+  FormatoCeldas(d:fac..d:fac,Exe('F2'))
+  FormatoCeldas(j:fac..k:fac,Exe('F2'))
+  ACT(z:2, FBN['Vehiculo1'])     
+Proximo
+If val(ac2) = 1
+  ACN(k:fac,val(ac:3))    
+  SetFont(k:FAC..k:FAC,2)
+  FormatoCeldas(k:fac..k:fac,Exe('F2'))
+EndIf
+
+Ifa
+
+SetFilaActual(FAC+1)
+(.'CALCULATOT'.) 
+SetFilaActual(FAC+2)
+
+ACT(a:FAC, 'Especie')
+ACT(b:FAC, 'Cotizacion')
+SetFont(a:FAC..b:FAC,2)
+AgregarMarco(a:FAC..b:FAC,2,0,Exe('COLOR'))
+
+SetFilaActual(FAC+1)
+ACN(vv:1, FAC)
+Recorrer&j Val(fi:1)+1, val(ff:1)
+  ACT(a:FAC, Val(T:&j)) 
+  ACN(b:FAC, Val(U:&j))
+  IFA
+Proximo
+AgregarMarco(a:Val(vv:1)..b:FAC-1,2,0)
+FormatoCeldas(b:Val(vv:1)..b:FAC-1,EXE('F8'))
+
+* Vehiculo
+ACO(1,13)
+* Cliente
+ACO(2,18)
+* Especie 
+ACO(3,9)
+* Monto
+ACO(4,11)
+* Tasa
+ACO(5,9)
+* Tipo de tasa
+ACO(6,5)
+* Fecha Operacion
+ACO(7,7)
+* Fecha Vto
+ACO(8,7)
+* Plazo
+ACO(9,4)
+* Monto Final
+ACO(10,11)
+* Total
+ACO(11,11)
+* Tipo Operacion
+ACO(12,7)
+* Numero
+ACO(13,7)
+
+ALINEARCELDAS(b:FAC,'I') 
+Impresion(1,2)
+ACT(a:FAC+1, 'FIN DE LISTADO')
+SetPrintFit(3,80)
+SetFont(a:FAC+1, 2)
+LimitesVision(m:FAC)
+RangoTitulo(a1..m:FAC, 12)

@@ -1,0 +1,134 @@
+﻿* DPEJRC: Ejercicio de Range Collar
+CrearDialogo
+  NrOperacion1 : "Operacion"                ;1;1;;;;NoVacio(Dialogo.NrOperacion1);'Debe Ingresar una Operacion';NO;
+  Entero1      : "Nro.Settlement"           ;;;;;;Dialogo.Entero1>0;'El Nro. de Settlement es Incorrecto';NO
+  Fecha1       : "F Real Ej."               ;;;;NO;;Dialogo.Fecha1>=Dialogo.Fecha4;'La Fecha de Ejercicio Real para esta Operacion es Invalida';NO;Fsys
+  Radio2       : "Tipo|Consumer|Producer"   ;;;;NO;;;;;;BuscarCampo('Operaciones','MB1','NrOperacion',Dialogo.NrOperacion1)
+  Precio3      : "Call_Strike"              ;;;;NO;;;;;;BuscarCampo('Operaciones','TipoCambio2','NrOperacion',Dialogo.NrOperacion1)
+  Precio2      : "Fl_Pr_Call"               ;;;;;;;;;;;;;"###,###,###.########"
+  Entero2      : "Doas_Call"                ;;;;;;Dialogo.Entero2+Dialogo.Entero4<=Dialogo.Entero3;'La Cant. de Doas de Resultado Incorrecto';NO;
+  Especie1     : "Commodity"                ;1;2;;NO;;;;;;BuscarCampo('Operaciones','Especie','NrOperacion',Dialogo.NrOperacion1)
+  Fecha4       : "Fecha Settlement"         ;2;2;;NO;;;;;;SQL(" Select Fecha1 from "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(Dialogo.Entero1,2,0)~" ")
+  Precio4      : "Fade Out"                 ;;;;NO;;;;;;BuscarCampo('Operaciones','PrecioEj','NrOperacion',Dialogo.NrOperacion1) 
+  Entero3      : "Doas_Habiles"             ;;;;NO;;;;;;SQL("Select Plazo2 from "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(Dialogo.Entero1,2,0)~" ")
+  Precio6      : "Put_Strike"               ;;;;NO;;;;;;BuscarCampo('Operaciones','TipoCambio3','NrOperacion',Dialogo.NrOperacion1)
+  Precio5      : "Fl_Pr_Put"                ;;;;;;;;;;;;;"###,###,###.########"
+  Entero4      : "Doas_Put"                 ;;;;;;Dialogo.Entero2+Dialogo.Entero4<=Dialogo.Entero3;'La Cant. de Doas de Resultado Incorrecto';NO;
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+If Not Incluido(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'DPRC|')
+   Cancelar('La operacion No '~Dialogo.NrOperacion1~' No es Range Collar')
+endif
+
+* Verifico que se encuentre en Back Office o Terminal
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+
+If VAL(X1)<>20 y VAL(X1)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+* Verifico que no se haya pasado la fecha de liquidacion
+(.'DCFMODI'.)
+
+If Dialogo.Fecha1>VAL(D1)
+   Cancelar('La Operacion ya fue Liquidada, No se puede Modificar !!!')
+EndIf
+
+If Ok
+   * X1: Recupero la Operacion
+   acn(x1,0)
+
+   SQL.ADD("Select * from "~DBO~".CUOTAS ")
+   SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   SQL.ADD("and NrCuota = "~Fstr(Dialogo.Entero1,2,0)~" ")
+
+*  SQL.ADD("and (Precio1 is Null or Precio1=0) ")
+
+   Recorrer SQL
+     acn(x1,1)
+
+     *-- Evaluacion del Resultado Por Unidad de Calls y Puts
+     *-- Z3: Res. Unit. Puts     Z4: Res. Unit. Calls
+     ACN(Z3,0)
+     ACN(Z4,0)
+
+     *-- Verifico las Condiciones de Ejercicio Para el Call
+     **  Verifico los Floating Price con el Fade Out
+     IF (Dialogo.Precio2-Dialogo.Precio3)>=0 y [Dialogo.Radio2=1 o Dialogo.Precio2<=Dialogo.Precio4]
+        ACN(Z4,(Dialogo.Precio2-Dialogo.Precio3))
+     EndIF
+
+     IF (Dialogo.Precio6-Dialogo.Precio5)>=0 y [Dialogo.Radio2=0 o Dialogo.Precio5>=Dialogo.Precio4]
+         ACN(Z3,(Dialogo.Precio6-Dialogo.Precio5))
+     EndIf
+
+     * Invierto los resultados para la parte de la venta
+     IF Dialogo.Radio2=0 
+        *-- Consumer
+        *-- Compra de Call y Venta de Put
+        ACN(Z3,-VAL(Z3))
+     ELSE 
+        *-- Producer 
+        *-- Compra de Put y Venta de Call
+        ACN(Z4,-VAL(Z4))
+     ENDIF
+
+     *** Calculo el Resultado TOTAL 
+     ACN(Z2,((VAL(Z3)*Dialogo.Entero4)+(VAL(Z4)*Dialogo.Entero2))*FBN['Cantidad1'])
+
+     IF VAL(Z3)=0     
+        Acn(a1,MessageBox('Con estos Valores el Resultado del Put ser# 0 ...',2,1))
+     EndIf
+
+     IF VAL(Z4)=0     
+        Acn(a2,MessageBox('Con estos Valores el Resultado del Call ser# 0 ...',2,1))
+     EndIf
+
+     If Val(a1)<>2 y Val(a2)<>2
+        Message('Actualizando la Opcion  .... ')
+
+        *** Marca la operacion como ejercida ***
+        SQL.ADD("Update "~DBO~".CUOTAS ")
+        SQL.ADD("Set ")
+        SQL.ADD("Precio1   = "~Fstr(Dialogo.Precio5,0,8)~", ")
+        SQL.ADD("Precio2   = "~Fstr(VAL(Z3),0,8)~", ")
+        SQL.ADD("Cantidad2 = "~Fstr(Dialogo.Entero4,3,0)~", ")
+        SQL.ADD("Precio3   = "~Fstr(Dialogo.Precio2,0,8)~", ")
+        SQL.ADD("Precio4   = "~Fstr(VAL(Z4),0,8)~", ")
+        SQL.ADD("Cantidad3 = "~Fstr(Dialogo.Entero2,3,0)~", ")
+        SQL.ADD("Total1    = "~Fstr(VAL(Z2),0,8)~" ")
+        SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+        SQL.ADD("and NrCuota = "~Fstr(Dialogo.Entero1,2,0)~" ")
+        SQL.NEW
+        SQL.EXEC
+
+        *-- Insert de Mov.Pendientes. El Resultado invierte el signo porque se ve desde el cliente
+        * EjecutarEvento('IMOVPE',NrOperacion1=Dialogo.NrOperacion1,Fecha1=FBN['Fecha2'],Cliente1=BuscarCampo('Operaciones','Cliente1','NrOperacion',Dialogo.NrOperacion1),Especie1=BuscarCampo('Operaciones','ContraEspecie','NrOperacion',Dialogo.NrOperacion1),Vehiculo1=BuscarCampo('Operaciones','Vehiculo1','NrOperacion',Dialogo.NrOperacion1),Entero1=1,Precio1=-VAL(Z2),String='Resultado Settlement',Entero2=9,Entero3=Dialogo.Entero1,String1='CUOTAS')
+
+        *** Actualiza movimientos y limites ****
+        SQL.ActualizarMovimientos(Dialogo.NrOperacion1,SI)
+        SQL.EXEC
+
+
+        * Actualizo la Instancia de la Operacion a Supervision
+        (.'MODIINSTAN'.)      
+     EndIf
+   proximo
+
+   If Val(x1)=0
+      Cancelar('La operacion No '~Dialogo.NrOperacion1~' No puede ser Ejercida')
+   endif
+endif

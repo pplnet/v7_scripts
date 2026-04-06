@@ -1,0 +1,174 @@
+﻿***********************************************************************
+*HojaVisible(SI)
+CrearDialogo
+  Fecha1    : 'Fecha'       ;;;;;;;;;Fsys
+  Entero1   : 'Copias'      ;;;;;;;;;1
+  Lista1    : 'Vehiculos'   ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+FinDialogo
+if not Ok
+  Cancelar
+endif
+
+
+CrearFont(1,"Arial,8,B")
+
+*SQL.ADD("Select T.* from "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS O ")
+*SQL.ADD("where  T.NrTrans = O.NrOperacion ")
+*SQL.ADD(" and   O.NrBit = 2 and O.Valor ='1' ")
+*SQL.ADD(" and   T.TipoTr2 In ('RET','DEP') ")
+*SQL.ADD(" and  not (T.NrOperacionRef2 = '' or NrOperacionRef2 is Null ) ")
+*recorrer SQL
+*  SQL.ADD("Update "~DBO~".OPERACIONESBITS")
+*  SQL.ADD("set Valor='0' where NrOperacion='"~fbn('NrTrans')~"' and NrBit=2")
+*  SQL.NEW
+*  SQL.ADD("Update "~DBO~".OPERACIONESBITS")
+*  SQL.ADD("set Valor='1' where NrOperacion='"~fbn('NrTrans')~"' and NrBit=3")
+*  SQL.NEW
+*  SQL.EXEC
+*proximo
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+   ACT(zz6,Dialogo.Lista1)
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+   EndIf
+EndIf
+
+
+SQL.ADD("Select T.* from "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS O ")
+SQL.ADD("where  T.NrTrans = O.NrOperacion ")
+SQL.ADD(" and   O.NrBit = 2 and O.Valor ='1' ")
+SQL.ADD(" and   T.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and   T.TipoTr2 In ('RET','DEP') ")
+*SQL.ADD(" and  (T.NrOperacionRef2 = '' or NrOperacionRef2 is Null ) ")
+SQL.ADD(" and  T.Cuenta2 Is Not Null ")
+If NoVacio(Val(zz6))
+   SQL.ADD("   and Vehiculo1 In ("~Pipe2Comillas(Val(zz6))~") ")
+EndIf
+
+SQL.ADD(" order by T.NrOperacionRef1, T.NrTrans ")
+
+Recorrer SQL
+  ACT(aa:FAC, fbn['NrTrans'])
+  ACT(ab:FAC, fbn['Fecha2'])
+  ACT(ac:FAC, fbn['Cliente1'])
+  ACT(ad:FAC, fbn['TipoTr2'])
+  ACT(ae:FAC, fbn['Especie'])
+
+  if EqStr(fbn['TipoTr2'],'RET')
+     ACN(af:FAC, -fbn['Cantidad1'])
+  else
+     ACN(af:FAC, fbn['Cantidad1'])
+  endif
+
+  ACT(ag:FAC, fbn['NrOperacionRef1'])
+  if Not EqStr(Val(ag:FAC),Val(v1))
+    SCN(z1,1)
+    ACT(a:Val(z1), Val(ag:FAC))
+    ACT(b:Val(z1), Val(ab:FAC))
+    ACT(c:Val(z1), Val(ac:FAC))
+    ACT(d:Val(z1), BuscarCampo('OPERACIONES','TipoOp','NrOperacion',fbn['NrOperacionRef1']))
+    ACT(e:Val(z1), BuscarCampo('OPERACIONES','Especie','NrOperacion',fbn['NrOperacionRef1']))
+    ACN(f:Val(z1), BuscarCampo('OPERACIONES','Cantidad','NrOperacion',fbn['NrOperacionRef1']))
+    ACT(g:Val(z1), BuscarCampo('OPERACIONES','ContraEspecie','NrOperacion',fbn['NrOperacionRef1']))
+    ACT(h:Val(z1), fbn('NrOperacionRef2'))
+    ACT(v1, Val(ag:FAC))
+  endif
+proximo
+
+
+if Val(z1)=0
+  Cancelar('No existen Cartas para imprimir')
+else
+  ACO(1,7)
+  ACO(2,8)
+  ACO(3,8)
+  ACO(4,5)
+  ACO(5,5)
+  ACO(6,13)
+  ACO(7,5)
+  FormatoCeldas(f:1..f:Val(z1),Exe('F2'))
+
+  ListBox(a:1..g:Val(z1),'Nr.Oper. Fecha Liq. Cliente    Tipo   Especie        Cantidad Moneda')
+
+  if Ok
+    recorrerSel
+      if Incluido(Val(d:FilaCiclo),Exe('CARTA1C')) o Incluido(Val(d:FilaCiclo),Exe('CARTA1V'))
+         if Vacio(Val(h:FilaCiclo))
+            ACT(i:FilaCiclo, GetNumerador(20))
+            recorrer&i 1,FAC
+              if EqStr(Val(ag:&i),Val(a:FilaCiclo))
+                 SQL.ADD("Update "~DBO~".TRANSACCIONES2 ")
+                 SQL.ADD("Set    NrOperacionRef2 = '"~Val(i:FilaCiclo)~"' ")
+                 SQL.ADD("where  NrTrans = '"~Val(aa:&i)~"' ")
+                 SQL.NEW
+              endif
+          proximo
+          SQL.EXEC
+          recorrer&i 1, Dialogo.Entero1
+            LinkearHoja('CARTA1',1,NrOperacion1=Val(a:FilaCiclo),NrOperacion2=Val(i:FilaCiclo),Fecha1=Dialogo.Fecha1,Check1=1)
+          proximo
+        else
+          recorrer&i 1, Dialogo.Entero1
+            LinkearHoja('CARTA1',1,NrOperacion1=Val(a:FilaCiclo),NrOperacion2=Val(h:FilaCiclo),Fecha1=Dialogo.Fecha1,Check1=0)
+          proximo
+        endif
+      else
+        if Incluido(Val(d:FilaCiclo),Exe('CARTA2')) o EqStr(Val(d:FilaCiclo),'MMP')
+           ACT(i:FilaCiclo, GetNumerador(20))         
+                  
+           recorrer&i 1,FAC
+            *** Claudia 26.02.99
+            *   If EqStr(Val(ag:&i),Val(a:FilaCiclo)) y Vacio(Val(h:FilaCiclo))
+            ***---------------------------------- 
+            if EqStr(Val(ag:&i),Val(a:FilaCiclo)) 
+            
+              SQL.ADD("Update "~DBO~".TRANSACCIONES2 ")
+              SQL.ADD("Set    NrOperacionRef2 = '"~Val(i:FilaCiclo)~"' ")
+              SQL.ADD("where  NrTrans = '"~Val(aa:&i)~"' ")
+              SQL.NEW
+            endif
+           proximo
+          SQL.EXEC
+          recorrer&i 1, Dialogo.Entero1
+            LinkearHoja('CARTA2',1,NrOperacion1=Val(a:FilaCiclo),NrOperacion2=Val(i:FilaCiclo),Fecha1=Dialogo.Fecha1,Check1=1)
+          proximo
+        else
+          MessageBox('Carta no definida para Operacion '~Val(d:FilaCiclo))
+*          ACT(j:FilaCiclo, 'Error Carta')
+        endif
+      endif
+      if Vacio(Val(j:FilaCiclo))
+        recorrer&i 1,FAC
+          if EqStr(Val(ag:&i),Val(a:FilaCiclo))
+            SQL.ADD("Insert Into "~DBO~".INSTANCIASOP ")
+            SQL.ADD("( NrOperacion, NrInstancia, Usuario, Fecha ) ")
+            SQL.ADD(" Values ")
+            SQL.ADD("( '"~Val(aa:&i)~"', 2, '"~UsuarioActivo~"', ")
+          *  SQL.ADD("  '"~IdxDate(Hoy)~" "~Hora(Ahora)~"' ) ")
+            SQL.ADD(SQLFechaStr(Hoy~' '~Hora(Ahora))~")")
+            SQL.NEW
+
+            SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+            SQL.ADD("SET Valor = '0' ")
+            SQL.ADD("where NrOperacion = '"~Val(aa:&i)~"' ")
+            SQL.ADD("and NrBit = 2 ")
+            SQL.NEW
+
+            SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+            SQL.ADD("SET Valor = '1' ")
+            SQL.ADD("where NrOperacion = '"~Val(aa:&i)~"' ")
+            SQL.ADD("and NrBit = 3 ")
+            SQL.NEW
+          endif
+        proximo
+        SQL.EXEC
+      endif
+    proximo
+  endif
+endif
+
+FormatoCeldas(af:1..af:Val(z1),Exe('F2'))
+SetFont(a:1..az:FAC,1)

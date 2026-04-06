@@ -1,0 +1,357 @@
+﻿*#define PRUEBA
+*Este evento actualiza los Saldos y Posiciones, se supone que la especie ya esta actualizada.
+*HojaVisible(SI)
+CrearDialogo
+  Especie1   :'Especie'                ;;;;;;NoVacio(Dialogo.Especie1) y DesciendeDeEspecie(Dialogo.Especie1,'TITULO') y NOT DesciendeDeEspecie(Dialogo.Especie1,'CUPON');'Debe Ingresar una Especie Valida';NO;;;;;;"Status = 'HAB' "
+  Mercado1   :'Casa_Custodia'          ;1;2;;;; 
+  Fecha1     :'F.Corte'                ;2;1;;NO;;Dialogo.Fecha1<>0 y Dialogo.Fecha1>=SQL(" SELECT FechaCorte FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' ");'La fecha ingresada es anterior a la fecha de corte del proximo cupon.';SI;FSys;SQL(" SELECT FechaCorte FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' ")
+* FJL 14/03/23 - Por issue de BACS - Tiene que traer Fecha Pago de la agenda (o FSYS)
+*  Fecha2     :'F.Pago'                 ;3;1;;;;Dialogo.Fecha2<>0;'Fecha de Pago Invalida';NO;;IIF(SQL(" Select FechaPago From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1, 0, 0)~"' ") >= Fsys, ProxCupon2(Dialogo.Especie1, Fsys), Fsys)
+  Fecha2     :'F.Pago'                 ;3;1;;;;Dialogo.Fecha2<>0;'Fecha de Pago Invalida';NO;;IIF(SQL(" Select FechaPago From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1, 0, 0)~"' ") >= Fsys, SQL(" Select FechaPago From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1, 0, 0)~"' "), Fsys)
+  Especie2   :'Pago en'                ;;;;NO;;NoVacio(Dialogo.Especie2) Y SQL("Select COUNT(*) from "~DBO~".ESPECIES where Codigo='"~Dialogo.Especie2~"' and Status='HAB' and "~DBO~".EsTerminalEspecie(Codigo)=1 and "~DBO~".DesciendeDeEspecie(Codigo,'MONEDA')=1") = 1;'Debe ser moneda terminal y estar habilitada';NO;;Buscarcampo('ESPECIES','MonedaEmision','Codigo',Dialogo.Especie1)
+  Entero3    : 'num cupon'             ;;;;NO;NO;;;;;BuscarCampo('ESPECIES','Cupon','Codigo',Dialogo.Especie1)
+  Entero1    :'Nr.Cupon'               ;;;;;;Dialogo.Entero1>=0;'Debe Ingresar el Numero de Cupon';NO;0;IIF(Dialogo.Entero3 = SQL(" Select Max(convert(int, NrCupon)) From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' and Estado = 'PRO' "), Dialogo.Entero3, Dialogo.Entero3-1)
+  Vehiculo1  :'Vehiculo'               ;;;;;;NoVacio(Dialogo.Vehiculo1);'Vehiculo invalido';NO;VAR('VEHICULODE')
+
+  Check1     :'Saldos'                 ;;;;NO;;;;;1
+  Check3     :'Pendientes'             ;;;;NO;;;;;1
+  Check2     :'Posicion'               ;;;;NO;;;;;1
+  Check4     :'Oper. A-1465'           ;;;;;;;;;1
+  Check5     :'Pases y Futuros'        ;;;;;;;;;1
+  Entero2    :'CupActual'              ;;;;;;Dialogo.Entero2>=0;'Debe Ingresar el Numero de Cupon Nuevo';NO;0;IIF(Dialogo.Entero3>0, Dialogo.Entero1+1,0)
+
+  Check6     :'Aj.Indice'    ;8;2;;NO;Dialogo.Check7=1;;;;0;Dialogo.Check7;
+  Fecha3     :'F.Inicio'     ; ; ;;NO;Dialogo.Check7=1;;;;;BuscarCampo('ESPECIES','FEmision','Codigo',Dialogo.Especie1);
+  Especie4   :'Indice'       ; ; ;;NO;Dialogo.Check7=1;;;;;Dialogo.Especie5;
+  Precio2    :'Indice Corte' ; ; ;;NO;Dialogo.Check7=1;Dialogo.Precio2>=0 o Dialogo.Check7=0;'Indice Invalido';NO;;IIF(Dialogo.Check7=1, Cotizacion(Dialogo.Especie5,,,,Dialogo.Fecha1,1,SI), 0)
+  Precio3    :'Indice Inicio'; ; ;;NO;Dialogo.Check7=1;Dialogo.Precio3>=0 o Dialogo.Check7=0;'Indice Invalido';NO;;IIF(Dialogo.Check7=1, Cotizacion(Dialogo.Especie5,,,,Dialogo.Fecha3,1,SI), 0)
+  Radio2     : 'Muestra Grilla|SI|NO'  ;;1;;;;;;;0
+  Radio1     : "Tipo Cliente|"~Var('LABEL')~"|Caja|Todos" ;;;;NO;NO;;;;2;
+  ListaTabla1: 'Clientes'              ;;;;;;;;;;;;;;IIF(Dialogo.Radio1<>2," "~IIF(Dialogo.Radio1=0," TipoCliente='"~VAR('CLISUD')~"' or TipoCliente Is Null"," TipoCliente='"~VAR('CLICAJA')~"' "),"1=1" );'Codigo' ; 'Codigo;RazonSocial' ; 'VCLIENTES01'
+  Check7     : 'Aj.Ind.ACUPON'         ;;;;NO;NO;;;;;SQL(" Select CB5 From "~DBO~".TRANSACCIONES2 Where TipoTr2 = 'ACUPON' AND Especie = '"~Dialogo.Especie1~"' AND Cupon1 = "~Fstr(Dialogo.Entero1, 0, 0)~" ");
+  Especie5   : 'Esp.Indice-ACUPON'     ;;;;NO;NO;;;;;SQL(" Select Especie3 From "~DBO~".TRANSACCIONES2 Where TipoTr2 = 'ACUPON' AND Especie = '"~Dialogo.Especie1~"' AND Cupon1 = "~Fstr(Dialogo.Entero1, 0, 0)~" ");
+  Check8     : 'Batch'                 ;;;;NO;NO;;;;0
+FinDialogo
+
+If Not OK
+   Cancelar
+EndIf
+
+If Dialogo.Check8=0
+ *  If Dialogo.Fecha1>fsys 
+ *     Cancelar('La Fecha de Corte no puede ser mayor a la fecha del dia.')
+ *  Endif
+   **   AA -13/03/2018 el if esta al reves
+   **   If Dialogo.Fecha2>=Dialogo.Fecha1
+   If Dialogo.Fecha2<Dialogo.Fecha1   
+      Cancelar('La Fecha de Pago no puede ser Inferior a la Fecha de Corte.')
+   Endif
+Else
+   ACN(er:1,0)
+   If Dialogo.Fecha1>fsys 
+      ACN(er:1,1)
+      ** Grabar mensaje en log de corrida Batch
+      Cancelar      
+   Endif
+   If Dialogo.Fecha2<Dialogo.Fecha1
+      ACN(er:1,1)
+      ** Grabar mensaje en log de corrida Batch
+      Cancelar      
+   Endif
+Endif
+
+
+** AA 06/03/2018 er:1=0 no hay Error
+If Val(er:1)=0
+
+  *** Fin de Aviso...
+  *- Si la Fecha de Pago=Fecha de Corte => Confirmo la generacion del Movimiento Ejecutado
+  *- Para todos los saldos distintos de los bloqueos de Caja de Valores
+  If Dialogo.Fecha1<=Dialogo.Fecha2
+    If Dialogo.Check8=0
+      acn(jo1,MessageBox(" Desea Generar el Movimiento de Pago en Forma Automatica? ",3,2))
+    Else
+      ** SI --> 6, NO --> 7
+      ACN(JO:1,7)
+    Endif
+   
+    *- jo1=1 -> Algunos Bits AV y Otros MV ch1=2 Todos MV 
+    IF NO
+      * NO HAY BONIFICACIONES PROQUE SE LA CALCULA LA COMISION EN EL CORTE PARA CONTABILIZAR
+      * 09/11/2004
+      IF Val(JO:1) = 6
+        ***---Si es automatico, solicito %Bonificacion Comisiones
+        Recorrer&k 1, 1000
+           CrearListBox      ; 'MS Sans Serif,8,';'INGRESE %BONIFICACION DE COMISIONES'
+             '%Bonif.Comision'   ;A:1..A:1;;Val(A:1) >= 0 Y Val(A:1) <= 100;'% Bonificacion Invalida';70;NUMERO;'###.####';RGB(234,92,77)
+           FinListBox
+           IF Not Ok
+               Cancelar('Proceso Cancelado')
+           ENDIF
+           IF Val(A:1) = 0
+               IF MessageBox('%Bonificacion de Comisiones en Cero. Confirma?', 3, 2) = 6
+                   Break
+               ENDIF
+           ELSE
+               Break
+           ENDIF
+        Proximo
+        ACN(BC:1, Val(A:1))
+      ENDIF
+    ENDIF
+    ACN(A:1, 0)
+    ACN(BC:1, Val(A:1))
+  EndIf
+
+  ACT(dz1, VAR('MONELOCA'))
+  ACT(dz2, VAR('MONEEXTR'))
+  ACT(dz3, VAR('CTAMOD23'))
+  ACT(dz4, VAR('COMCCRENTA'))
+  ACT(dz5, VAR('COMCCAMOR'))
+  ACT(dz6, VAR('BLOQDOMINC'))
+  ACT(dz7, VAR('CUPON'))
+** FJL 14/03/25 - BIND Issue 7163 - No usar IVA General
+*   ACT(dz10, VAR('IVA'))
+** FJL 23/05/25 - BIND Issue 7163 - IVA distinto para titulos privados
+  if DesciendeDeEspecie(Dialogo.Especie1,'PRIVA')
+    act(dy:10, 'Priva')
+    ACT(dz10, VAR('IVACOMTPRI'))
+  else
+    act(dy:10, 'Publico')
+    ACT(dz10, VAR('IVACOMTPUB'))
+  endif
+  ACT(dz11, VAR('RNI'))
+  ACT(dz12, VAR('RG3337'))
+  ACT(dz13, VAR('SALLIBRECU'))
+  ACT(dz14, VAR('LIBREDISP'))
+  ACT(dz15, VAR('BLOQGARA'))
+  ACT(dz16, VAR('BLOQUEOS'))
+  ACT(dz17, VAR('SALPARK'))
+  
+  *- dz41: comision de renta de caja de valores
+  ACT(dz41, VAR('COMCCCVALO'))
+
+  *- dz21: Especies a las que se le cobre iva para comision cv
+  ACT(dz21, VAR('ESPIVACOCV'))
+
+  *- dz20: IVA comision cv
+  ACT(dz20, '0')
+
+  Recorrer&j 1,Elementos(val(dz21))
+    *- Por cada elemento de la lista, verifico si la especie esta incluida
+    If Incluido(ItemLista(val(dz21),&j),Ascendientes('ESPECIES',Dialogo.Especie1))
+      ACT(dz20, VAR('IVACOMCV'))
+      Break
+    EndIf
+  Proximo
+
+  *Custodia
+  ACN(a:1, Dialogo.Check1)
+  *Posicion
+  ACN(b:1, Dialogo.Check2)
+  *Fallas
+  ACN(c:1, Dialogo.Check3)
+
+  If Vacio(BuscarCampo('ESPECIES','Alias9','Codigo',Dialogo.Especie1))
+    If Dialogo.Check8=0
+      Cancelar('La Especie no tiene el Cupon Asociado.')
+    Else
+      ACN(er:1,1)
+      ** Grabar mensaje en log de corrida Batch
+      Cancelar      
+    Endif
+  endif
+
+  If Not EqStr(BuscarCampo('ESPECIES','Status','Codigo',Dialogo.Especie1),'HAB')
+    If Dialogo.Check8=0
+      Cancelar('La Especie debe estar Habilitada.')
+    Else
+      ACN(er:1,1)
+      ** Grabar mensaje en log de corrida Batch
+      Cancelar      
+    Endif      
+  endif
+
+  If EqStr(BuscarCampo('ESPECIES','EsCupon','Codigo',Dialogo.Especie1),'SI')
+    If Dialogo.Check8=0
+      Cancelar('La Especie es un Cupon.')
+    Else
+      ACN(er:1,1)
+      ** Grabar mensaje en log de corrida Batch
+      Cancelar
+    Endif   
+  endif
+
+* MB 13/02/2006
+*  If EqStr(BuscarCampo('ESPECIES','ZeroCoupon','Codigo',Dialogo.Especie1),'SI')
+*    Cancelar('La Especie No tiene Cupones.')
+*  endif
+
+  ACT(X:100, SQL(" SELECT Estado FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' "))
+  if Eqstr(Val(x:100), 'PEN')
+    IF Dialogo.Check8=0
+      Cancelar('Debe actualizar la especie antes de cortar el cupon')
+    Else
+      ACN(er:1,1)
+      ** Grabar mensaje en log de corrida Batch      
+      Cancelar      
+    Endif
+  endif
+
+  ** AA 06/03/2018 er:1=0 no hay Error
+  If Val(er:1)=0
+
+    SQL.ADD(" SELECT A.*, E.Jerarquia, E.Nombre, E.Tipo, E.Alias9 FROM "~DBO~".AGENDACUPONES A, "~DBO~".ESPECIES E")
+    SQL.ADD(" WHERE  A.Especie = E.Codigo ") 
+    SQL.ADD("        AND   A.Especie = '"~Dialogo.Especie1~"'") 
+    SQL.ADD("        AND   A.NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' ")
+
+    Recorrer SQL
+      *--------------------------- Especie Origen ----------------------------*
+      ACT(a2, fbn['Jerarquia'])
+      ACT(b2, fbn['Especie'])
+
+      * Nr Cupon
+      ACN(c2, Dialogo.Entero1)
+      ACT(d2, fbn['Nombre'])
+
+      * VT Corte
+      ACN(e2, fbn('VTeoricoAnt'))
+
+      * Fecha de Corte
+      ****************************** JUAN COMENTA ESTO ***********************
+      *   ACD(g2, fbn('FechaCorte'))
+
+      ** Y AGREGO ESTO
+      ACD(g2, fbn('FechaCorte'))
+
+      ACT(j2, Dialogo.Vehiculo1)
+
+      * Amortizacion
+      ACN(k2, fbn('PorAmCapital'))
+
+** FJL 27/06/18 - Ingreso de TNA
+      * TNA
+      ACN(s:2, fbn('TNA'))
+      * Renta
+      ACN(l2, fbn('PorRenta'))
+
+      * Cap Int
+      ***ACN(m2, fbn('IntsCapitalizados'))
+      ACN(m2, fbn('PorAmIntCap'))
+
+      * Nr Cupon
+      ACN(n2, Dialogo.Entero1)
+
+      * Tipo de Especie
+      ACT(o2, fbn['Tipo'])
+
+      *-----------------------------Nuevo Cupon--------------------------------*
+      * Cupon Actual + 1
+      * ACN(c3, Val(c2)+1)
+      ACN(c3, Dialogo.Entero2)
+
+      * VT Actual - (%Amort /100 )
+      ACN(e3, Val(e2)-(Val(k2)/100))
+      ACN(E:99, Round(Val(e2), 7) - Round((Val(k2)/100), 7))
+      ACN(f3, Val(k2)/100)
+      IF Val(E:99) <= 0
+        ***---Ya Amortizo todo el capital, => no hay proximo cupon
+        ACN(C:3, 0)
+      ENDIF
+
+      *---------------------------- Especie Cupon -----------------------------*
+      ACT(b4, fbn('Alias9'))
+
+      * Fecha Proximo Corte
+      ACD(h4, SQL(" SELECT FechaPago FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Val(b2)~"' AND NrCupon = '"~FSTR(VAL(c2),0,0)~"' ") )
+
+      * Cupon Nuevo
+      ACN(c4, Val(c3))
+    Proximo
+
+    *- Variables para Calcular el Efectivo en el caso que genere movimientos de pago en forma automatica
+    *- aa8: Amortizacion   aa9: Renta   aa10: Ints. Cap
+
+    ACN(aa8, val(k2)/100 )
+    ACN(aa9, Val(l2)/100 )
+    ACN(aa10, Val(m2)/100 )
+
+IF NO
+*FO 20/10/2005
+    if Dialogo.Check6 = 1
+      ACN(aa31, Dialogo.Precio2 )
+      ACN(aa5, ((val(aa8)*val(aa31))+val(aa9)+val(aa10)))
+      act(aa12, Dialogo.Especie4)
+    else
+      ACN(aa31, 0)
+      ACN(aa5, ((val(aa8)+val(aa9)+val(aa10))) )
+      act(aa12, '')
+    endif
+ENDIF
+
+*FO 20/10/2005 ------------------------------------------------------------------- *
+    if Dialogo.Check6 = 1
+      ACN(aa31, Dialogo.Precio2/Dialogo.Precio3 )
+      act(aa12, Dialogo.Especie4)
+    else
+      ACN(aa31, 1)
+      act(aa12, '')
+    endif
+
+* --- FO 20/10/2005 BNP Multiplica los salodos, es lo mismo aplicar al precio del cupon que 
+* --- luego se multiplica por los saldos
+    ACN(aa5, (val(aa8)+val(aa9)+val(aa10))*Val(aa:31))
+    ACN(aa6, val(aa5)*COTIZACIONC(Dialogo.Especie2,,,,Val(h4),25,SI,VAR('MONELOCA')))
+
+*FO HASTA ACA ------------------------------------------------------------------- *
+
+    ACT(aa7, Dialogo.Especie2 )
+
+    IF Val(a:1)=1
+      Message('Corte de Saldos. ')
+      (.'CUPONSALDO'.)
+      Message('Corte de Saldos en Parking.')
+      (.'CUPONPARK'.)
+    ENDIF
+
+    IF Val(c:1)=1
+      Message('Corte de Saldos Pendientes. ')
+      * es para fallas y mov no confirmados. Los que tienen un movimineto con saldo 101
+      (.'CUPONPEND'.)
+    ENDIF
+
+    IF Dialogo.Check4 = 1
+      Message('Operaciones A-1465 ')
+      (.'CUPONA1465'.)
+    ENDIF
+
+    IF Dialogo.Check5  = 1
+      Message('Operaciones Futuras')
+      (.'CUPONPASES'.)
+    ENDIF
+
+    IF Val(b:1)=1
+      Message('Corte de Posiciones. ')
+      (.'CCUPONPOS'.)
+    ENDIF
+
+    IF Val(JO:1)=6
+      ACT(y2, Val(rx:1))
+      (.'CUSMONEDA'.)
+    Endif
+    IF Not CeldaVacia(Y:1)
+      ***---Posiciones Moneda por Corte Cupon
+      EjecutarEvento('POMOCO', NrTrans1 = Val(Y:1), Fecha1 = Dialogo.Fecha1, Fecha2 = Dialogo.Fecha2, Especie1 = Dialogo.Especie2)
+      ***---Guardo Moneda de Pago para los Revaluos
+      SQL.ADD(" Update "~DBO~".TRANSACCIONES2 ")
+      SQL.ADD(" Set Especie5 = '"~Dialogo.Especie2~"' ")
+      SQL.ADD(" Where NrTrans = '"~Val(Y:1)~"' ")
+      SQL.NEW
+      SQL.EXEC
+    ENDIF
+** AA 06/03/2018 Por error Cancela
+  Endif
+
+Endif
+

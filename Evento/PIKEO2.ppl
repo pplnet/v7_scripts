@@ -1,0 +1,111 @@
+﻿CrearDialogo
+  NrOperacion1: 'Operacion'     ;1;1;;;;Vacio(Dialogo.NrOperacion1) o [EqStr(BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion1),'MMONM') y BuscarCampo('OPERACIONES','RB7','NrOperacion',Dialogo.NrOperacion1)=1];'Operacion invalida';NO;;;;;;"TipoOp='MMONM' and RB7=1"
+  Fecha1:       'FechaVto'      ;2;1;;;;Dialogo.Fecha1<>0;'Ingrese la fecha de vencimiento';NO;FSYS;
+  Radio1:       'Automat|SI|NO' ;3;1;;NO;NO;
+FinDialogo
+
+If Not OK
+  Cancelar
+Endif
+
+***Consulta
+
+SQL.ADD("Select O.NrOperacion, O.PlazoGracia, O.RB8, C.NrCuota, C.Fecha1, C.Fecha2, C.Cantidad2, C.Precio4, C.Precio9, C.Precio10, C.Tasa3, C.Tasa5, C.Tasa7, ")
+SQL.ADD("C.Check5, C.Total9, C.Cantidad4, O.Cliente1, O.ImpGastos2, O.TotalAux1, C.Precio11, O.Cuotas1 ")
+SQL.ADD("From "~DBO~".CUOTAS C")
+SQL.ADD("Join "~DBO~".OPERACIONES O ")
+SQL.ADD("on C.NrOperacion=O.NrOperacion")
+SQL.ADD("where O.RB7=1 and C.Fecha2 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+If NoVacio(Dialogo.NrOperacion1)
+  SQL.ADD("and O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Endif
+Recorrer SQL
+  ***Segun sea manual o automatico se pikean una o varias cuotas***
+  If Dialogo.Radio1 = 1 o [Dialogo.Radio1 = 0 y fbn('Check5') = 1]
+    ***Tasa Int IVA y WH***
+    ACN(b:1,fbn('Precio9')+fbn('Precio4'))
+    ***Calcula el interes de la cuota que vence a partir de la Tasa Int con PIK***
+    ACN(a:1,IIF(fbn('NrCuota')<fbn('PlazoGracia'),0,fbn('Cantidad2')*(VAL(b:1)/100)*FactorDias(fbn('Fecha1'),fbn('Fecha2'),fbn('RB8')+1)))
+    ***Interes PIK a partir de la Tasa PIK***
+    ACN(a:2,IIF(fbn('NrCuota')<fbn('PlazoGracia'),0,fbn('Cantidad2')*(fbn('Precio10')/100)*FactorDias(fbn('Fecha1'),fbn('Fecha2'),fbn('RB8')+1)))
+    ***Importe IVA***
+    ACN(b:2, IIF(NOT EQSTR('ARG',BuscarCampo('Clientes','PaisDir','Codigo',FBN('Cliente1'))),0,((IIF(fbn('NrCuota')<fbn('PlazoGracia'),0,fbn('Cantidad2')*(Val(b:1)/100)*FactorDias(fbn('Fecha1'),fbn('Fecha2'),fbn('RB8')+1)))*fbn('ImpGastos2')/100)))
+    ***Importe WH***
+    ACN(b:3, IIF(EQSTR('ARG',BuscarCampo('Clientes','PaisDir','Codigo',FBN('Cliente1'))),0,((IIF(fbn('NrCuota')<fbn('PlazoGracia'),0,fbn('Cantidad2')*(Val(b:1)/100)*FactorDias(fbn('Fecha1'),fbn('Fecha2'),fbn('RB8')+1)))*fbn('TotalAux1')/100)))
+    ***Impuesto Intereses***
+    ACN(b:5, VAL(a:1)*(fbn('Tasa3')/100))
+    ***Interes Total***
+    ACN(b:6, Val(a:1)+Val(b:3)+Val(b:5))
+
+    ***Actualizo los valores de la cuota que vence***
+    SQL.ADD("Update "~DBO~".CUOTAS ")
+    SQL.ADD("set Cantidad3 = "~Fstr(VAL(a:1), 0, 2)~", Cantidad12 = "~FStr(VAL(a:2),0,2)~", Precio2 = "~FStr(fbn('Precio9'),0,8)~", Check7 = 1, ")
+    SQL.ADD("Tasa2 = "~FStr(Val(b:1),0,8)~", Precio1 = "~FStr(Val(b:2),0,8)~", Total6 = "~FStr(Val(b:1),0,8)~",  Precio3 = "~FStr(Val(b:3),0,8)~", ")
+    SQL.ADD("Cantidad5 = "~Val(b:6)~",Total2 = "~FStr(fbn('Cantidad4')+Val(a:1),0,2)~", Total1 = "~FStr(fbn('Cantidad4')+Val(b:6),0,2)~", ")
+    SQL.ADD("PrecioRef1 = "~FStr(VAL(b:5),0,2)~", Total9 = "~FStr(VAL(b:5),0,2)~", ")
+    SQL.ADD("Precio5 = "~FStr(Val(a:1),0,8)~", Precio6 = "~FStr(Val(b:2),0,8)~", Precio7 = "~FStr(Val(b:3),0,8)~" ")
+    SQL.ADD("where NrOperacion = '"~fbn('NrOperacion')~"' and NrCuota = "~fbn('NrCuota')~" ")
+    SQL.NEW
+    SQL.EXEC
+    ***Numero de cuota que se pikea***
+    ACN(cu:1,fbn('NrCuota'))
+    ***Se actualizan los valores correspondientes de las cuotas siguientes***
+    SQL.ADD("Select O.RB8, O.PlazoGracia, O.ImpGastos2, O.TotalAux1, O.Cliente1, C.NrCuota, C.Fecha1, C.Fecha2, C.Cantidad2, C.Cantidad4, C.Precio4, C.Precio2,  ")
+    SQL.ADD("C.Tasa2, C.Tasa3, C.Tasa5, C.Tasa7, C.NrCuota Cuota, C.Precio3, C.Total6, C.Total9, C.Precio8, C.Precio9, C.Check6 ")
+    SQL.ADD("From "~DBO~".CUOTAS C")
+    SQL.ADD("Left Join "~DBO~".OPERACIONES O ")
+    SQL.ADD("on C.NrOperacion = O.NrOperacion ")
+    SQL.ADD("where C.NrOperacion = '"~fbn('NrOperacion')~"' and C.NrCuota > "~fbn('NrCuota')~" ")
+    Recorrer SQL
+      ***En la proxima cuota***
+      If fbn('Cuota')=VAL(cu:1)+1
+        ***Se le suma el Interes Pik al valor nominal***
+        ACN(a:3,fbn('Cantidad2')+VAL(a:2))
+      ***En las cuotas siguientes el valor nominal es V.Nominal - Imp Amort de la anterior***
+      Else
+        ACN(a:3,VAL(a:7))
+      Endif
+      ***Se suma la TasaPenalty de la cuota que se pikea a la Tasa de Interes sin Pik***
+      ACN(t:1,fbn('Precio8')+fbn('Precio11',0))
+      ***Se suma la TasaPenalty de la cuota que se pikea a la Tasa de Interes con Pik***
+      ACN(t:3,fbn('Precio9')+fbn('Precio11',0))
+      ***Determino si se utiliza la Tasa Interes con Pik o sin Pik***
+      If fbn('Check6') = 1 o fbn('Cuota') = fbn('Cuotas1',0)
+        ACN(t:10,Val(t:1))
+      Else
+        ACN(t:10,Val(t:3))
+      Endif
+      ***Calculo de los nuevos intereses debido a la modificación del valor nominal***
+      ACN(a:4,IIF(fbn('NrCuota')<fbn('PlazoGracia'),0,VAL(a:3)*((fbn('Precio4')+Val(t:10))/100)*FactorDias(fbn('Fecha1'),fbn('Fecha2'),fbn('RB8')+1)))
+      ***Recalculo de la tasa de amortizacion***
+      ACN(a:5,fbn('Tasa7')/fbn('Tasa5')*100)
+      ***Calculo del nuevo importe de amortizacion segun la tasa***
+      ACN(a:6,VAL(a:3)*(VAL(a:5)/100))
+      ACN(a:7,VAL(a:3)-Val(a:6))
+      ***Si se modifica la tasa de interes calculo las nuevas tasas IVA y WH***
+      ACN(t:2,fbn('Precio4')+Val(t:10))
+      ***Imp IVA***
+      ACN(a:9,IIF(NOT EQSTR('ARG',BuscarCampo('Clientes','PaisDir','Codigo',FBN('Cliente1'))),0,((IIF(fbn('NrCuota')<fbn('PlazoGracia'),0,fbn('Cantidad2')*(Val(t:2)/100)*FactorDias(fbn('Fecha1'),fbn('Fecha2'),fbn('RB8')+1)))*fbn('ImpGastos2')/100)))
+      ***Imp WH***  
+      ACN(a:10,IIF(EQSTR('ARG',BuscarCampo('Clientes','PaisDir','Codigo',FBN('Cliente1'))),0,((IIF(fbn('NrCuota')<fbn('PlazoGracia'),0,fbn('Cantidad2')*(Val(t:2)/100)*FactorDias(fbn('Fecha1'),fbn('Fecha2'),fbn('RB8')+1)))*fbn('TotalAux1')/100)))
+      ***Impuesto Intereses     
+      ACN(a:13, VAL(a:4)*(fbn('Tasa3')/100))
+      ***Interes Total
+      ACN(a:11, Val(a:4)+Val(a:10)+Val(a:13))
+      *MessageBox('Antes de actualizar '~fbn('Cantidad12'))
+      ***Actualizo los valores de la cuotas siguientes a la que vence***
+      SQL.ADD("Update "~DBO~".CUOTAS ")
+      SQL.ADD("set Cantidad2 = "~FStr(VAL(a:3),0,2)~", Cantidad4 = "~FStr(VAL(a:6),0,2)~", Tasa1 = "~FStr(Val(a:5),0,8)~",  ")
+      SQL.ADD("Cantidad3 = "~FStr(Val(a:4),0,2)~", Cantidad5 = "~FStr(Val(a:11),0,2)~", Total2 = "~FStr(Val(a:4)+Val(a:6),0,2)~", Total1 = "~FStr(Val(a:6)+Val(a:11),0,2)~", ")
+      SQL.ADD("Precio1 = "~FStr(Val(a:9),0,8)~", Precio3 = "~FStr(Val(a:10),0,8)~", Total9 = "~FStr(Val(a:13),0,2)~", ")
+      SQL.ADD("Precio5 = "~FStr(Val(a:4),0,8)~", Precio6 = "~FStr(Val(a:9),0,8)~", Precio7 = "~FStr(Val(a:10),0,8)~", PrecioRef1 = "~FStr(Val(a:13),0,2)~" ")
+      ***Actualizo la tasa de interes, Tasa Int con Pik y sin Pik, por lo tanto, también la tasa IVA y WH***
+      SQL.ADD(", Precio8 = "~FStr(VAL(t:1),0,8)~", Precio9 = "~FStr(Val(t:3),0,8)~", ")
+      SQL.ADD("Precio2 = "~FStr(VAL(t:10),0,8)~", Total6 = "~FStr(Val(t:2),0,8)~", Tasa2 = "~FStr(Val(t:2),0,8)~" ")
+      SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' and NrCuota = "~fbn('NrCuota')~" ")
+      SQL.NEW
+      SQL.EXEC
+    Proximo
+  Endif
+Proximo
+

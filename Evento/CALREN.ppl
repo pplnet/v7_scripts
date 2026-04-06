@@ -1,0 +1,133 @@
+﻿*Modoreproceso(ConDialogo)
+*MostrarCuadroDeMensajes
+** FJL 02/07/18 - Por tasa Variable
+CrearDialogo
+   Especie1   :'Especie'        ; 1;1;;;;NoVacio(Dialogo.Especie1) y DesciendeDeEspecie(Dialogo.Especie1,'TITULO') y NOT DesciendeDeEspecie(Dialogo.Especie1,'CUPON');'Debe Ingresar una Especie Valida';NO;;;;;;"Status = 'HAB' "
+   Check1     :'Procesa'        ; 5;1;;SI;SI;;;;0;
+FinDialogo
+If Not OK
+   Cancelar
+EndIf
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+CrearFont(1, "Arial,8,")
+CrearFont(2, "Arial,8,B")
+
+ACT(x:1, Dialogo.Especie1)
+ACN(y:1, Dialogo.Check1)
+
+*Message('Calculo % Renta '~Dialogo.Especie1)
+
+ACT(a:1, 'Especie')
+ACT(a:3, 'Base')
+ACT(a:9, 'Mon.Emision')
+ACT(a:10, 'DevengaTasa')
+ACT(a:13, 'Fecha Base')
+ACT(d:1, 'Error')
+
+ACT(f:1, 'NrCupon')
+ACT(g:1, 'NrCupon')
+ACT(h:1, 'Fecha')
+ACT(i:1, 'Fecha Ant')
+ACT(j:1, 'Plazo')
+ACT(k:1, 'Base')
+ACT(l:1, 'Indice')
+ACT(m:1, 'TNA')
+ACT(n:1, '% Renta base')
+ACT(o:1, '% Renta Cal')
+
+SetFont(a:1..o:13, 2)
+
+SQL.ADD("SELECT * FROM "~DBO~".ESPECIES WHERE Codigo = '"~Dialogo.Especie1~"'")
+Recorrer SQL
+  ACT(b:1, fbn('Codigo'))  
+  ACT(b:3, fbn('DiasAnio'))  
+  #ifdef BNP 
+     ACT(b:10, 'PAO')
+  #else
+     ACT(b:9, fbn('MonedaEmision'))  
+     ACT(b:10, fbn('DevengaTasa'))
+  #endif
+proximo
+*COR-PAG-PAO
+if EqStr(Val(b:10),'COR')
+  ACT(b:13, 'F.Corte')
+else
+  if EqStr(Val(b:10),'PAG')
+    ACT(b:13, 'F.Pago')
+  else
+    * FechaPagoOriginal es el default
+    ACT(b:13, 'F.Pago Orig')
+  endif
+endif
+
+SetFilaActual(1)
+#ifdef BNP
+   SQL.ADD("SELECT * FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie1~"' order by FechaCorte")
+#else
+   SQL.ADD("SELECT * FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie1~"' order by Convert(Float,NrCupon)")
+#endif
+Recorrer SQL
+  ACT(f:FAC, fbn('NrCupon'))
+  ACN(g:FAC, Num(fbn('NrCupon')))
+
+  ** Fecha
+  if EqStr(Val(b:10),'COR')
+    ACD(h:FAC, SQL(" Select FechaCorte From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Val(g:FAC), 0, 0)~"' "))
+  else
+    if EqStr(Val(b:10),'PAG')
+      ACD(h:FAC, SQL(" Select FechaPago From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Val(g:FAC), 0, 0)~"' "))
+    else
+      ACD(h:FAC, SQL(" Select FechaPagoOriginal From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Val(g:FAC), 0, 0)~"' "))
+    endif
+  endif
+  ** Fecha Anterior
+  if Val(g:FAC)=1
+    ACD(i:FAC, Buscarcampo('ESPECIES','FEmision','Codigo',Dialogo.Especie1))
+  else
+    if EqStr(Val(b:10),'COR')
+      ACD(i:FAC, SQL(" Select FechaCorte From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Val(g:FAC)-1, 0, 0)~"' "))
+    else
+      if EqStr(Val(b:10),'PAG')
+        ACD(i:FAC, SQL(" Select FechaPago From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Val(g:FAC)-1, 0, 0)~"' "))
+      else
+        ACD(i:FAC, SQL(" Select FechaPagoOriginal From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Val(g:FAC)-1, 0, 0)~"' "))
+      endif
+    endif
+  endif
+  ** Plazo
+  ACN(j:FAC , Val(h:FAC)-Val(i:FAC))
+  ** Base
+  if EqStr(Val(b:3),'REA')
+    ACN(k:FAC , DiasA(2,Val(h:FAC)))
+  else
+    if EqStr(Val(b:3),'360')
+      ACN(k:FAC, 360)
+    else
+      ACN(k:FAC, 365)
+    endif
+  endif
+  ** Indice de conversion TNA a % Renta
+  ACN(l:FAC, Val(j:FAC)/(Val(k:FAC))) 
+  ACN(m:FAC, fbn('TNA') )
+  ACN(n:FAC, fbn('PorRenta') )
+  ACN(o:FAC, Val(m:FAC)*Val(l:FAC)) 
+
+  if Dialogo.Check1=1
+    SQL.ADD("UPDATE "~DBO~".AGENDACUPONES ")
+    SQL.ADD("   Set PorRenta = "~FSTR(Val(o:FAC),1,9)~" ")
+    SQL.ADD(" WHERE Especie = '"~Dialogo.Especie1~"' ")
+    SQL.ADD("  AND NrCupon = '"~FSTR(Val(g:FAC),1,0)~"' ")
+    SQL.NEW
+    SQL.EXEC
+  endif
+proximo
+
+if FAC>1
+  FormatoCeldas(g:2..g:FAC,Exe('F0'))
+  FormatoCeldas(j:2..j:FAC,Exe('F0'))
+  FormatoCeldas(l:2..l:FAC,Exe('F8'))
+  FormatoCeldas(n:2..o:FAC,Exe('F8'))
+endif

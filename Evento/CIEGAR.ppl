@@ -1,0 +1,269 @@
+﻿*** Solo se considera liberacion bloqueo (por no ejecucion)
+*** de ordenes para la fecha de la misma.
+
+CrearDialogo
+   Fecha1  : 'Fecha' ;;;;NO;;Dialogo.Fecha1>0;'Fecha Inválida';NO;Fsys;
+   Mercado1: 'Mercado'  ;;;;;NO;;;;;;
+   Radio1  : 'Plazo|Contado|Otros';;;;;;Dialogo.Radio1>=0;'Debe elegir una Opcion';NO;-1;
+   **Radio1  : 'Plazo|'~'Todos|'~VAR('PLAZOLIQ');;;;;;;;;0;
+FinDialogo
+
+IF Not Ok
+   Cancelar
+endif
+
+CrearFont(1,"Arial,14,B")
+CrearFont(2,"Arial,10,B")
+CrearFont(3,"Arial,8,B")
+CrearFont(4,"Arial,8,")
+AgregarBMP(c1,Exe('LOGO'),90)
+
+if SQL("Select 1 From "~DBO~".FLAGSMERCADO Where Fecha = "~IdxDate2(Dialogo.Fecha1)~" and Paso = "~FStr(Dialogo.Radio1,1,0)~" and Registro = 'CGAR' and Estado='PRO' ")=1
+    Cancelar('El cierre de la Rueda Garantizada para el Plazo '~iif(Dialogo.Radio1=0,'-Contado-','-Otros-')~' ya fue realizado. Debe ser anulado para volver a ejecutarlo')
+endif
+
+If SQL("Select top 1 1 From   "~DBO~".ORDENES O INNER JOIN "~DBO~".OPERACIONESBITS OB ON O.NrOrden = OB.NrOperacion Where OB.Valor='1' and NrBit = 33")=1
+   Cancelar('Hay Ordenes con Anulacion de Ejecuciones Pendientes - El cierre de la Rueda Garantizada no puede realizarce')
+Endif
+
+*--- Mover de Aceptada(8) a Vencida(10) ---
+SQL.ADD("SELECT ORD.NrOrden, B.NrBit  ")
+SQL.ADD("  FROM "~DBO~".ORDENES ORD INNER JOIN "~DBO~".OPERACIONESBITS B ON ORD.NrOrden=B.NrOperacion")
+SQL.ADD("   WHERE ORD.FechaOrden="~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   AND ORD.TipoOrden in('OTIC','OTIV') ")
+SQL.ADD("   AND B.NrBit in( 8 ) ")
+SQL.ADD("   AND B.Valor=1 ")
+
+IF NoVacio(Dialogo.Mercado1)
+   SQL.ADD("AND ORD.Mercado3='"~Dialogo.Mercado1~"' ")
+endif
+
+*IF Dialogo.Radio1=1
+*   SQL.ADD("AND ORD.Lotes=0 ")
+*else
+*    IF Dialogo.Radio1=2
+*    SQL.ADD("AND ORD.Lotes=24 ")
+*    else
+*       IF Dialogo.Radio1=3
+*       SQL.ADD("AND ORD.Lotes=48 ")
+*       else
+*       endif
+*    endif
+*endif
+
+IF Dialogo.Radio1=0
+   SQL.ADD("AND ORD.Lotes=0 ")
+else
+   SQL.ADD("AND ORD.Lotes<>0 ")
+endif
+
+Recorrer SQL
+   
+   ** 26-02-21 AA Se elimina update manual
+   *SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+   *SQL.ADD("   SET Valor=0 ")
+   *SQL.ADD(" WHERE NrOperacion='"~FBN['NrOrden']~"' ")
+   *SQL.ADD("   AND NrBit=8 ")
+   *SQL.New
+   *SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+   *SQL.ADD("   SET Valor=1 ")
+   *SQL.ADD(" WHERE NrOperacion='"~FBN['NrOrden']~"' ")
+   *SQL.ADD("   AND NrBit=10 ")
+   *SQL.New
+   *SQL.Exec
+   
+   EjecutarEvento('CBOINS', String1=FBN['NrOrden'], Radio1=1, Radio2=0, Entero1=8, Entero2=10)   
+   
+Proximo
+
+** AA 26-02-21
+*--- Mover Operacion a Liquidacion(10) de las ops de Ordenes de Ejecutadas(9) o Anuladas con ejecuciones(11) 
+*    y la Operacion esta en Ejecutada(13) si tiene las cuentas si no a Confirmacion (7)  ---
+SQL.ADD("SELECT ORD.NrOrden, /*B1.NrBit NrBitOrd,*/ OP.NrOperacion, B2.NrBit NrBitOp, OP.Udn2 Rueda ")
+*SQL.ADD("  FROM "~DBO~".ORDENES ORD,/* "~DBO~".OPERACIONESBITS B1,*/ "~DBO~".OPERACIONES OP, "~DBO~".OPERACIONESBITS B2 ")
+SQL.ADD("  FROM "~DBO~".ORDENES ORD INNER JOIN "~DBO~".OPERACIONES OP ON ORD.NrOrden=OP.NrOrden1 INNER JOIN "~DBO~".OPERACIONESBITS B2 ON OP.NrOperacion=B2.NrOperacion")
+SQL.ADD(" WHERE  ")
+** 21-05-2021 AA se elimina control de la orden se toman todas las operaciones relacionadas y se envian a las Instancias definidas
+*SQL.ADD(" WHERE ORD.NrOrden=B1.NrOperacion ")
+*SQL.ADD("   AND B1.NrBit in( 9, 11 ) ")
+*SQL.ADD("   AND B1.Valor=1 ")
+**SQL.ADD("   AND ORD.NrOrden=OP.NrOrden1 ")
+SQL.ADD("   ORD.TipoOrden in('OTIC','OTIV') ")
+SQL.ADD("   AND OP.TipoOp in('TIC','TIV') ")
+SQL.ADD("   AND B2.NrBit in( 13 ) ")
+SQL.ADD("   AND B2.Valor=1 ")
+SQL.ADD("   AND ORD.FechaOrden="~IdxDate2(Dialogo.Fecha1))
+
+IF NoVacio(Dialogo.Mercado1)
+   SQL.ADD("AND ORD.Mercado3='"~Dialogo.Mercado1~"' ")
+endif
+
+IF Dialogo.Radio1=0
+   SQL.ADD("AND ORD.Lotes=0 ")
+else
+   SQL.ADD("AND ORD.Lotes<>0 ")
+endif
+watch(sql.batch)
+Recorrer SQL
+   
+   ** 26-02-21 AA Se elimina update manual y se cambia Orden x Operacion
+   *SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+   *SQL.ADD("   SET Valor=0 ")
+   *SQL.ADD(" WHERE NrOperacion='"~FBN['NrOrden']~"' ")
+   *SQL.ADD("   AND NrBit=13 ")
+   *SQL.New
+   *SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+   *SQL.ADD("   SET Valor=1 ")
+   *SQL.ADD(" WHERE NrOperacion='"~FBN['NrOrden']~"' ")
+   
+   *if Vacio(SQL("SELECT 1 From "~DBO~".OPERACIONES WHERE Cuenta1 is Null or Cuenta2 is Null or Cuenta3 is Null or Cuenta4 is Null or Cuenta5 is Null  or  Cuenta6 is Null "))
+   *   SQL.ADD("   AND NrBit=7 ")
+   *else
+   *   SQL.ADD("   AND NrBit=10 ")
+   *endif   
+   *SQL.New
+   *SQL.Exec
+   
+   if Eqstr(VAR('INSTALACIO'),'MLASA') y incluido(fbn['Rueda'],Var('RUECPC1'))
+      EjecutarEvento('CBOINS', String1=FBN['NrOperacion'], Radio1=1, Radio2=0, Entero1=13, Entero2=68)
+   Else   
+      if Vacio(SQL("SELECT 1 From "~DBO~".OPERACIONES WHERE NrOperacion = '"~FBN['NrOperacion']~"' and Cuenta1 is Null or Cuenta2 is Null or Cuenta3 is Null or Cuenta4 is Null or Cuenta5 is Null  or  Cuenta6 is Null "))
+         EjecutarEvento('CBOINS', String1=FBN['NrOperacion'], Radio1=1, Radio2=0, Entero1=13, Entero2=7)
+      else
+         EjecutarEvento('CBOINS', String1=FBN['NrOperacion'], Radio1=1, Radio2=0, Entero1=13, Entero2=10)
+      endif
+   Endif
+Proximo
+if no
+** if no para verificar si actualizarmovimientos4 los reversa
+** Liberacion Limites Ordenes del dia -- Verificar si son todos los Movlimites de la Orden y si son todas las instancias
+SQL.ADD(" DELETE "~DBO~".MOVLIMITES  ")
+SQL.ADD(" Where NrOperacion in ")
+SQL.ADD(" (SELECT ORD.NrOrden FROM "~DBO~".ORDENES ORD  WHERE ORD.FechaOrden="~IdxDate2(Dialogo.Fecha1)~")")
+SQL.NEW
+SQL.EXEC
+
+endif
+**  Desbloqueo por no utilizado Especie
+SQL.ADD("SELECT ORD.NrOrden ")
+SQL.ADD("  FROM "~DBO~".ORDENES ORD ")
+SQL.ADD(" WHERE ORD.FechaOrden="~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   AND ORD.CantidadTotalOrden>Cantidad1 ")
+SQL.ADD("   AND ORD.TipoOrden in ('OTIC','OTIV') ")
+
+IF NoVacio(Dialogo.Mercado1)
+   SQL.ADD("AND ORD.Mercado3='"~Dialogo.Mercado1~"' ")
+endif
+
+IF Dialogo.Radio1=0
+   SQL.ADD("AND ORD.Lotes=0 ")
+else
+   SQL.ADD("AND ORD.Lotes<>0 ")
+endif
+
+Recorrer SQL
+   * Ajusta el Bloqueo
+   SQL.ADD("UPDATE "~DBO~".ORDENES ")
+   SQL.ADD("   SET Cantidad5=CantidadTotalOrden-Cantidad1 ")
+   SQL.ADD(" WHERE NrOrden='"~FBN['NrOrden']~"' ")
+   SQL.New
+   SQL.Exec
+   
+   * SQL.ActualizarMovimientosO4(FBN['NrOrden'],SI,SI,NO,NO,NO,NO)
+   *AA jun-2021 Recalcula campos y Movimientos instancia 0 por recalculo saldo
+   ModificarOrden(FBN['NrOrden'],0,NO,SI,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO)
+   SQL.EXEC   
+
+Proximo
+
+
+**  Desbloqueo por no utilizado Moneda, ARP De la Operacion
+#ifdef BIND
+   *SQL.ADD("SELECT ORD.TotalAux1, O.TotalNetoCli1, substring(O.Cuenta4,1,len(O.Cuenta4)-3) as Cuenta, substring(O.Cuenta4,len(O.Cuenta4)-1,2) as SubOpe, ")
+   ** AA 22-09-2021 se incorpora nuevamente OPERACIONES y Saldo Moneda Bloqueado O.TotalNetoCli1
+   SQL.ADD("SELECT ORD.Nrorden, ORD.TotalAux1, O.TotalNetoCli1, ORD.Cuenta4  as Cuenta, ORD.ContraEspecie, C.Sucursal, ORD.Leyenda3 ")
+   SQL.ADD("  FROM "~DBO~".ORDENES ORD ")
+   SQL.ADD("       Left JOIN OPERACIONES O WITH (NOLOCK) ON ORD.NrOrden=O.NrOrden1 ")
+   SQL.ADD("       Left JOIN CUENTAS C WITH (NOLOCK) ON  ORD.Cuenta4=C.Codigo ")
+   SQL.ADD("       Left JOIN OPERACIONESBITS B WITH (NOLOCK) ON  ORD.NrOrden=B.NrOperacion ")   
+   SQL.ADD(" WHERE ORD.FechaOrden="~IdxDate2(Dialogo.Fecha1))
+   SQL.ADD("   AND ORD.CantidadTotalOrden>Cantidad1 ")
+   SQL.ADD("   AND ORD.TipoOrden in ('OTIC') ")
+   SQL.ADD("   AND ORD.Mercado2='"~VAR('MERCADOBT')~"' ")
+   SQL.ADD("   AND ORD.MB2='1' ")
+   SQL.ADD("   AND ORD.AfectaLS='Saldos' ")   
+   SQL.ADD("   AND B.NrBit not in ( 30 )  and B.Valor=1 ")   
+
+   if NoVacio(Dialogo.Mercado1)
+      SQL.ADD("AND ORD.Mercado3='"~Dialogo.Mercado1~"' ")
+   endif
+
+   if Dialogo.Radio1=0
+      SQL.ADD("AND ORD.Lotes=0 ")
+   else
+      SQL.ADD("AND ORD.Lotes<>0 ")
+   endif
+   watch(sql.batch)
+   Recorrer SQL
+   
+      * Parámetros Salida
+      * RR:1  'OK/NOK’  
+      * RR:2  'Mensaje'  
+
+      * Parámetros entrada
+      * RR:10  'Cuenta'  
+      * RR:11  'Sucursal'  
+      * RR:12  'Cuenta(1a7)'    
+      * RR:13  'SubOperacion-Cuenta (9a10)'
+      * RR:14  'Moneda'
+      * RR:15  'Importe'
+      * RR:16  'Observaciones'
+ 
+      ** Desbloqueo en sistema interno 
+      BorrarCeldas(rr:1..rr:50)
+      ACT(rr:10, FBN['Leyenda3'])
+      ACT(rr:12, Copy(FBN['Cuenta'],1,7))
+      ACT(rr:13, Copy(FBN['Cuenta'],9,2))
+      * Desbloqueo de Saldo
+      ACN(rr:15,FBN['TotalAux1']-FBN['TotalNetoCli1'])
+      
+     (.'DESBSALCTA'.)
+      ACT(b:22, val(rr:1))
+      If Eqstr(Val(b:22),'NOK')
+         ACN(b:17, Query(" Select 1 From "~DBO~".EXCEPCIONES Where NrOperacion = '"~FBN['NrOrden']~"' And Tipo = 'ERRDESBLOQ' "))
+         if Val(b:17)=0
+            SQL.ADD("Insert into "~DBO~".EXCEPCIONES ( ")
+            SQL.ADD(" NrOperacion, Fecha, Tipo, Descripcion ")
+            SQL.ADD(" ) Values ( ")
+            SQL.ADD(" '"~FBN['NrOrden']~"', ")
+            SQL.ADD(" "~SQLAhora~", ")
+            SQL.ADD(" 'ERRDESBLOQ', ")
+            SQL.ADD(" '"~'Error al desbloquear cuenta '~FBN['Cuenta']~"' ")
+            SQL.ADD(" ) ")
+            SQL.NEW
+            SQL.EXEC
+         endif
+      Endif
+      
+   Proximo
+#endif   
+
+
+ACN(b:1, SQL("Select Count(*) From "~DBO~".FLAGSMERCADO Where Fecha = "~IdxDate2(Dialogo.Fecha1)~" and Paso = "~FStr(Dialogo.Radio1,1,0)~" and Registro = 'CGAR' and Estado='ANU' "))
+
+IF val(b:1)=0
+    SQL.ADD("Insert Into "~DBO~".FLAGSMERCADO ( ")
+    SQL.ADD(" Fecha, Registro, Cantidad, Estado, Paso ")
+    SQL.ADD(" ) Values ( ")
+    SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', 'CGAR', 0, 'PRO', "~FStr(Dialogo.Radio1,1,0)~" ")
+    SQL.ADD(" ) ")
+    SQL.NEW
+else
+    SQL.ADD("Update "~DBO~".FLAGSMERCADO ")
+    SQL.ADD("   Set Estado     = 'PRO' ")
+    SQL.ADD(" where Fecha      = "~IdxDate2(Dialogo.Fecha1)~" ")
+    SQL.ADD("   and Paso       = "~FStr(Dialogo.Radio1,1,0)~" ")
+    SQL.ADD("   and Registro   = 'CGAR' ")
+    SQL.NEW
+endif
+SQL.Exec

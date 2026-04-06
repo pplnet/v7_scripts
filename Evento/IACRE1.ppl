@@ -1,0 +1,86 @@
+﻿CrearDialogo
+  String1 : 'Ruta'         ;1;1;;;;;;;Var('PATHACREM')
+  String2 : 'Archivo'      ;2;1;;;;;;;Var('ACREM')
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+If EqStr(Copy(Dialogo.String1,Longitud(Dialogo.String1),1),'\')
+   ACT(x:1, Dialogo.String1~Dialogo.String2)
+Else
+   ACT(x:1, Dialogo.String1~'\'~Dialogo.String2)
+EndIf
+
+* Lineas a levantar del archivo y despues recorrer
+ImportarXLS(a:2..g:1000, aa:2..gg:1000, Val(x:1))
+
+If Not Ok
+  Cancelar('Error al cargar el archivo '~Val(x:1))
+EndIf
+
+Recorrer&i 2,1000
+  If Vacio(Val(aa:&i))
+     Break
+  EndIf
+  
+  **  Cuenta Codigo
+  ACT(CO:1,Val(aa:&i))
+  
+  ** Vehiculo
+  ACT(VH:1,BuscarCampo('CUENTAS','Cliente','Numero',Val(CO:1)))
+  
+  ** Especie
+  ACT(ES:1,BuscarCampo('CUENTAS','Especies','Numero',Val(CO:1)))
+  ACT(ES:2,Copy(val(VH:2),1,Longitud(val(ES:2))-1))
+  
+  ** Cliente
+  ACT(CL:1,BuscarCampo('CUENTAS','Comitente','Numero',Val(CO:1)))
+
+  ** Cuenta
+  ACT(CU:1,BuscarCampo('CUENTAS','Codigo','Numero',Val(CO:1)))
+  
+  ** Numerador
+  ACN(NU:1,BuscarCampo('VEHICULOS','Alias1','Codigo',Val(VH:1)))
+  
+  **NrOperacion
+  ACT(NR:1,GetNumerador(Val(NU:1)))
+  
+  **RB8  
+  ACN(RB:8,val(af:&i))
+
+  **Precio1  
+  ACN(PR:1,val(ae:&i))
+  
+  ** Plazo1
+  ACN(PL:1, Fecha(Val(ac:&i)) - Fecha(Val(ab:&i)))  
+  
+  **Perfil
+  ACT(PE:1,BuscarCampo('USUARIOS','Perfiles','Codigo',USUARIOACTIVO))
+  
+  
+  SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ( ")
+  SQL.ADD("   TipoOp,          NrOperacion,    FechaOp,         FechaOp2,      FechaVto, ")
+  SQL.ADD("   Plazo,           Vehiculo1,      Especie,         Cliente1,      Operador, ")
+  SQL.ADD("   TipoTasa,        FechaPago,      Precio1,         RB8,           TablaFeriados1, ")
+  SQL.ADD("   Cuenta1,         Book1,          Sector2,         MB3,           UsrInput, ")
+  SQL.ADD("   FechaCarga,      FechaCargaSys ")
+  SQL.ADD("   ) VALUES (")
+  SQL.ADD("   'MMRPAC'                 , '"~Val(NR:1)~"'           , '"~IdxDate(Val(ab:&i))~"' , '"~IdxDate(Val(ab:&i))~"' , '"~IdxDate(Val(ac:&i))~"', ")
+  SQL.ADD("   "~Fstr(Val(PL:1),0,0)~"  , '"~VAL(VH:1)~"'           , '"~Val(ES:2)~"'           , '"~Val(CL:1)~"'         , '"~USUARIOACTIVO~"', ")
+  SQL.ADD("   'FIJA'                   , '"~IdxDate(Val(ad:&i))~"' , "~FStr(val(PR:1),0,2)~"   , "~FStr(Val(RB:8),0,0)~" , 'ARG', ")
+  SQL.ADD("   '"~val(CU:1)~"'          , '"~Val(ag:&i)~"'          , '"~Val(PE:1)~"'           , '1'                     , '"~USUARIOACTIVO~"', ")
+  SQL.ADD("   "~SQLAhora~"             , '"~IdxDate(Fsys)~"' ")
+  SQL.ADD("   )")
+  watch(sql.batch)
+  SQL.NEW
+  SQL.EXEC
+  
+  ** Genero los bits de la operacion
+  EjecutarEvento('INSBIT', String1='OPERACIONES', Entero1=1, NrOperacion1=Val(NR:1))
+Proximo
+
+MessageBox('Evento Finalizado Correctamente.')
+
+

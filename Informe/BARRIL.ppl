@@ -1,0 +1,295 @@
+﻿* BARRIL - Barriles Cubiertos
+CrearDialogo
+  Fecha1   : 'F.Desde'     ;;;;;;Novacio(Dialogo.Fecha1);'Fecha Desde Incorrecta';NO;PriDeMes(FSys,SI)
+  Fecha2   : 'F.Hasta'     ;;;;;;;;;FinDeMes(FSys,SI)
+  Lista1   : 'Vehiculo'    ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Cliente1 : 'Cliente'     ;;;;;;;;;;;
+  Radio1   : 'Agrupa|Mensual|Anual' ;;;;;;;;;0;;
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+ACT(a1, 'Barriles Cubiertos ')
+ACT(a2, 'F.Desde : '~Dialogo.Fecha1)
+ACT(a3, 'F.Hasta : '~Dialogo.Fecha2)
+
+if NoVacio(Dialogo.Lista1)
+   ACT(a:4, 'Vehiculo : '~Dialogo.Lista1)
+else
+   ACT(a:4, 'Vehiculo : Todos')
+endif
+ 
+if NoVacio(Dialogo.Cliente1)
+   ACT(a:5, 'Cliente : '~Dialogo.Cliente1)
+else
+   ACT(a:5, 'Cliente : Todos')
+endif
+If Dialogo.Radio1=0
+   ACT(a:6, 'Informacion Mensual')
+Else
+   ACT(a:6, 'Informacion Anual')
+EndIf
+
+SetFont(a:1..a:6,2)
+
+* ab200: Ultima columna a listar ab201: Fila en la que se ubica el Titulo
+
+IF Vacio(Dialogo.Fecha2)
+   acn(ab200,50)
+Else
+   If Dialogo.Radio1=0    
+      acn(ab200,DifMeses(Dialogo.Fecha2,Dialogo.Fecha1)+1)
+   Else
+      acn(ab200,Anio(Dialogo.Fecha2)-Anio(Dialogo.Fecha1)+1)
+   EndIf
+EndIf
+
+SetFilaActual(7)
+
+act(a:fac+1,'Cliente ')
+act(b:fac+1,'Total ')
+AlinearCeldas(b:fac+1..b:fac+2,'D')
+AgregarMarco(a:fac+1..a:fac+2,2,0,Exe('COLOR'))
+
+act(b:fac+2,'Volumen ')
+act(c:fac+2,'%')
+
+aco(1,15)
+aco(2,8)
+aco(3,4)
+
+AgregarMarco(b:fac+1..c:fac+1,2,0,Exe('COLOR'))
+AgregarMarco(b:fac+2..c:fac+2,2,2,Exe('COLOR'))
+
+acn(ab200,val(ab200)*2)
+
+If Dialogo.Radio1=0 
+   *-- Listo Los Meses 
+   acn(d:fac,Anio(Dialogo.Fecha1))
+   acn(d:fac+1,Mes(Dialogo.Fecha1))
+   
+   act(d:fac+2,'Volumen ')
+   act(e:fac+2,'%')
+
+   aco(4,8)
+   aco(5,4)
+   AgregarMarco(d:fac+1..e:fac+1,2,0,Exe('COLOR'))
+   AgregarMarco(d:fac+2..e:fac+2,2,2,Exe('COLOR'))
+   
+   Recorrer&i 6,val(ab200)+3
+      acn(ac1,&i)
+      If (val(ac1) mod 2)=0
+         *- En los pares va el periodo
+         If val(&i-2:fac+1)+1>12
+            * Cambia el Año y comienza el mes
+            acn(&i:fac  ,val(&i-2:fac)+1)   
+            acn(&i:fac+1,1)  
+         Else 
+            acn(&i:fac,val(&i-2:fac))   
+            acn(&i:fac+1,val(&i-2:fac+1)+1)  
+         EndIf
+         aco(&i,8)
+         AgregarMarco(&i:fac+1..&i+1:fac+1,2,0,Exe('COLOR'))
+         act(&i:fac+2,'Volumen')
+      Else
+         act(&i:fac+2,'%')
+         aco(&i,4)
+         AgregarMarco(&i-1:fac+2..&i:fac+2,2,2,Exe('COLOR'))
+      EndIf
+   Proximo
+Else
+   *-- Listo Los Años
+   acn(d:fac+1,Anio(Dialogo.Fecha1))
+  
+   act(d:fac+2,'Volumen ')
+   act(e:fac+2,'%')
+
+   aco(4,8)
+   aco(5,4)
+   AgregarMarco(d:fac+1..e:fac+1,2,0,Exe('COLOR'))
+   AgregarMarco(d:fac+2..e:fac+2,2,2,Exe('COLOR'))
+   
+   Recorrer&i 6,val(ab200)+3
+      acn(ac1,&i)
+      If (val(ac1) mod 2)=0
+         acn(&i:fac+1,val(&i-2:fac+1)+1)  
+         aco(&i,8)
+         AgregarMarco(&i:fac+1..&i+1:fac+1,2,0,Exe('COLOR'))
+         FormatoCeldas(&i:fac+1..&i:fac+1, Exe('F0'))
+         act(&i:fac+2,'Volumen')
+      Else
+         act(&i:fac+2,'%')
+         aco(&i,4)
+         AgregarMarco(&i-1:fac+2..&i:fac+2,2,2,Exe('COLOR'))
+      EndIf
+   Proximo
+EndIf
+
+acn(ab201,fac+1)
+
+SetFilaActual(fac+3)
+
+SQL.ADD("Select Vehiculo1, Cliente1, Min(FechaOp2) Fecha1, Max(FechaEj) Fecha2  from "~DBO~".OPERACIONES ")
+SQL.ADD("Where FechaEj > '"~IdxDate(Dialogo.Fecha1)~"' ")
+If NoVacio(Dialogo.Fecha2)
+   SQL.ADD("and FechaOp2 <= '"~IdxDate(Dialogo.Fecha2)~"'")
+EndIf
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD("and Vehiculo1 in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD("and Cliente1 = '"~Dialogo.Cliente1~"' ")
+Endif
+SQL.ADD("and (TipoOp in ('DPBOD','DPDSO','DPDSS','DPS','DPOA','DPOD','DPRC','DPRS','DPRRS','DPSO','DPSS') ")
+SQL.ADD(" or (TipoOp in ('DPSN') and  (CB8='0' or CB8 IS NULL) ) )")
+SQL.ADD("group by Vehiculo1, Cliente1 ")
+SQL.ADD("order by Vehiculo1, Cliente1 ")
+
+BorrarCeldas(z1..z1)
+
+Recorrer SQL
+
+  if Not EQstr(fbn('Vehiculo1'),Val(z1))
+     * cambia empresa
+     if NoVacio(Val(z1))
+        Ifa 
+        act(a:fac,'Total Empresa '~Val(z1) )
+
+        Recorrer&i 2, val(ab200)+3
+          acn(ac1,&i)
+
+          If (val(ac1) mod 2)=0
+             acn(&i:fac,SUM(&i:val(ac2)..&i:fac))
+             FormatoCeldas(&i:fac..&i:fac, Exe('F2N'))
+          Else 
+             acn(&i:fac,100)
+
+             *- Recorro las filas calculando los % del cliente
+             Recorrer&j val(ac2)+1,fac-2
+                acn(&i:&j,(val(&i-1:&j)*100)/val(&i-1:fac))
+                FormatoCeldas(&i:&j..&i:&j, Exe('F2N'))
+                SetFont(&i:&j..&i:&j,2)
+             Proximo
+          EndIf
+        Proximo     
+
+        AgregarMarco(a:fac..val(ab200)+6:fac,1,0,RGB(192,192,192))         
+        SetFont(a:fac..val(ab200)+6:fac,1)
+        ifa
+     endif
+
+     * Asignar Empresa
+     act(z1, fbn('Vehiculo1'))
+     act(a:fac,'Empresa '~Val(z1) )
+     AgregarMarco(a:fac..val(ab200)+6:fac,1,0,RGB(192,192,192))
+     SetFont(a:fac..val(ab200)+6:fac,1)
+     *- ac2: Comienzo de corte de control
+     acn(ac2,fac)
+     ifa
+  endif
+
+  act(a:fac, fbn('Cliente1'))
+  SetFont(a:fac..a:fac,1)
+
+  Recorrer&i 4,val(ab200)+3
+
+     *- Por Cada Cliente Obtengo la Cantidad de Barriles segun el periodo del Informe
+     *- ab202: Fecha Desde  ab203: Fecha Hasta 
+     acn(ac1,&i)
+
+     If (val(ac1) mod 2)=0
+        *- En los pares va el Volumen 
+        If Dialogo.Radio1=0 
+           * Mensual
+           acd(ab202,Fecha('01/'~Fstr(val(&i:val(ab201)),0,0)~'/'~Fstr(val(&i:val(ab201)-1),4,0)) )
+           acd(ab203,FinDeMes(val(ab202),SI) )
+        Else
+           * Anio
+           If &i=4
+              *- El mes debe ser el de fecha desde
+              acd(ab202,PriDeMes(Dialogo.Fecha1,SI))
+           Else  
+              acd(ab202,Fecha('01/01/'~Fstr(val(&i:val(ab201)),4,0) ) )
+           EndIf
+           acd(ab203,FinDeMes(Fecha('01/12/'~Fstr(val(&i:val(ab201)),4,0) ),SI) )
+
+           If val(ab203)>Dialogo.Fecha2
+              *- El informe anual termina en la fecha hasta
+              acd(ab203,Dialogo.Fecha2)
+           EndIf
+
+        EndIf
+
+        Message(FBN['Vehiculo1']~' '~FBN['Cliente1']~' '~val(ab202)~' '~val(ab203))
+
+        LinkearHoja('BARRCA',1,Fecha1=val(ab202),Fecha2=val(ab203),Lista1=FBN['Vehiculo1']~'|',Cliente1=FBN['Cliente1']) 
+
+        ACN(&i:fac, LinkH(1, bv1))
+        SCN(2:fac, val(&i:fac))
+
+        SetFont(2:fac..2:fac,2)
+        SetFont(&i:fac..&i:fac,2)
+        FormatoCeldas(&i:fac..&i:fac, Exe('F2N'))
+        FormatoCeldas(2:fac..2:fac, Exe('F2N'))
+        CerrarHoja('BARRCA',1,Fecha1=val(ab202),Fecha2=val(ab203),Lista1=FBN['Vehiculo1']~'|',Cliente1=FBN['Cliente1']) 
+
+        acl(&i:fac,'BARRCA',Fecha1=val(ab202),Fecha2=val(ab203),Lista1=FBN['Vehiculo1']~'|',Cliente1=FBN['Cliente1']) 
+
+        CerrarLink(1)
+     EndIf
+  Proximo
+Proximo
+
+
+Recorrer&i 4, val(ab200)+3
+   acn(ac1,&i)
+   If (val(ac1) mod 2)=0
+      If Dialogo.Radio1=0 
+         act(&i:val(ab201),Fstr(Val(&i:val(ab201)),2,0)~'/'~Fstr(Val(&i:val(ab201)-1),4,0))
+      Else 
+         act(&i:val(ab201),Fstr(Val(&i:val(ab201)),2,0))
+      EndIf
+      AlinearCeldas(&i:val(ab201)..&i:val(ab201),'D')
+   EndIf
+Proximo
+BorrarCeldas(4:val(ab201)-1..val(ab200)+6:val(ab201)-1) 
+
+SetFont(1:val(ab201)..val(ab200)+6:val(ab201)+1,1)
+
+* cambia empresa
+if NoVacio(Val(z1))
+   Ifa 
+   Ifa 
+   act(a:fac,'Total Empresa '~Val(z1) )
+
+   Recorrer&i 2, val(ab200)+3
+      acn(ac1,&i)
+      If (val(ac1) mod 2)=0
+         acn(&i:fac,SUM(&i:val(ac2)..&i:fac))
+         FormatoCeldas(&i:fac..&i:fac, Exe('F2N'))
+      Else 
+         acn(&i:fac,100)
+         *- Recorro las filas calculando los % del cliente
+         Recorrer&j val(ac2)+1,fac-2
+            acn(&i:&j,(val(&i-1:&j)*100)/val(&i-1:fac))
+            FormatoCeldas(&i:&j..&i:&j, Exe('F2N'))
+            SetFont(&i:&j..&i:&j,2)
+         Proximo
+      EndIf
+   Proximo     
+
+   AgregarMarco(a:fac..val(ab200)+6:fac,1,0,RGB(192,192,192))         
+   SetFont(a:fac..val(ab200)+6:fac,1)
+
+   ifa
+endif
+LimitesVision(val(ab200)+3:fac+1)
+Impresion(1,2)
+
+*CrearFont(6,"Arial,6,B")
+*RangoTitulo(a:5..m:FAC, 2)

@@ -1,0 +1,187 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Lista1   : "Vehiculo" ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' ")  )
+  Fecha1   :'F.Desde'   ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys
+  Fecha2   :'F.Hasta'   ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar una Fecha';NO;FSys
+  Especie1 : "Especie"  ;;;
+  Radio6   : 'Clientes:|Todos|Vinculados|Terceros';6;1;;;;;;;0;
+  Lista3   : 'Clientes'     ;;;;Dialogo.Radio6<>0;;;;;;;IIF(Dialogo.Radio6=1,SQLSet("Select Codigo from "~DBO~".CLIENTES Where Jerarquia LIKE '"~VAR('JERVINCUL')~"%' and SUBSTRING(Jerarquia,1,6) <> '"~VAR('JERVINCUL')~"000' "),SQLSet("Select Codigo from "~DBO~".CLIENTES Where SUBSTRING(Jerarquia,1,3) <> '"~VAR('JERVINCUL')~"' "))
+  Lista2   : 'Instancias'  ;1;2;;;;;;;;;SQLSET("Select Nombre from "~DBO~".INSTANCIAS Where Tabla='TRANSACCIONES2' Order By Nombre ")
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+*-- Veo solamente los tipos seleccionados
+SetListaClaves(2)
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+   ACT(zz6,Dialogo.Lista1)
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+   EndIf
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,8,B")
+
+SetFilaActual(3)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,1)
+ACT(a:fac, 'Estado de Vouchers')
+SetFont(a:fac..a:fac,3)
+SetFilaActual(fac+2)
+ACN(w1,fac)
+
+If NoVacio(Val(zz6))
+   ACT(a:fac+1, 'Vehiculo : '~val(zz6))
+Else
+   ACT(a:fac+1, 'Vehiculo : Todos')
+EndIf
+
+ACT(a:fac+2, 'F.Desde: '~Dialogo.Fecha1)
+ACT(a:fac+3, 'F.Hasta: '~Dialogo.Fecha2)
+
+if NoVacio(Dialogo.Especie1)
+   ACT(a:fac+4, 'Especie: '~Dialogo.Especie1)
+else
+   ACT(a:fac+4, 'Especie: Todos')
+endif
+
+If Dialogo.Radio6 = 0 
+  ACT(a:fac+5,'Clientes: TODOS' )   
+Else
+  If NoVacio(Dialogo.Lista3)
+     ACT(a:fac+5,'Clientes: '~Pipe2coma(Dialogo.Lista3))   
+  Else
+     If Dialogo.Radio6 = 1
+        ACT(a:fac+5,'Clientes: VINCULADOS' )   
+     Else 
+        ACT(a:fac+5,'Clientes: TERCEROS' )   
+     Endif 
+  Endif   
+Endif
+
+If NoVacio(Dialogo.Lista2)
+   ACT(a:fac+6,'Instancias: '~Dialogo.Lista2)
+Else
+   ACT(a:fac+6,'Cualquier Instancia')
+EndIf
+
+ACT(aa1, '')
+
+SQL.ADD("Select NrInstancia from "~DBO~".INSTANCIAS Where Tabla='TRANSACCIONES2' ")
+If NoVacio(Dialogo.Lista2)
+   SQL.ADD(" and Nombre In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+EndIf
+SQL.ADD(" Order By NrInstancia ")
+
+Recorrer Sql
+   dfa
+   ACT(aa1, FBN['NrInstancia']~'|'~val(aa1))
+Proximo
+
+SetFilaActual(fac+7)
+
+ACT(a:fac, 'Instancia')
+ACT(b:fac, 'Numero')
+ACT(c:fac, 'Fecha Liq.')
+ACT(d:fac, 'Fecha Mov.')
+ACT(e:fac, 'Especie')
+ACT(f:fac, 'Tipo Tr.')
+ACT(g:fac, 'Cliente')
+ACT(h:fac, 'Cantidad')
+ACT(i:fac, 'Vehiculo')
+ACT(j:fac, 'Cuenta')
+ACT(k:fac, 'Nr.Operacion')
+ACT(l:fac, 'TipoOp')
+ACT(n:fac, 'Nr.Carta')
+
+AlinearCeldas(a:fac..g:fac,'I')
+AlinearCeldas(h:fac..h:fac,'D')
+AlinearCeldas(i:fac..n:fac,'I')
+SetFont(a:2..n:fac,2)
+AgregarMarco(a:fac..l:fac,2,0,Exe('COLOR'))
+
+if NoVacio(Dialogo.Especie1)
+  ACT(z1, "Especie= '"~Dialogo.Especie1~"' and ")
+endif
+SQL.ADD("Select T.TipoTr2, T.NrTrans, T.Fecha1, T.Fecha2, T.Especie, T.Cliente1, T.Cantidad1, T.Vehiculo1, T.Cuenta1, T.Cuenta2, T.NrOperacionRef1, T.NrOperacionRef2,I.Nombre ")
+SQL.ADD(" from "~DBO~".TRANSACCIONES2 T,"~DBO~".OPERACIONESBITS O,"~DBO~".INSTANCIAS I  ")
+If Dialogo.Radio6 > 0 
+   SQL.ADD(" ,"~DBO~".CLIENTES C")
+Endif
+SQL.ADD("where "~Val(z1) ~" ")
+SQL.ADD("T.Fecha1 Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' and T.TipoTr2 in ('DEP','RET') and ")
+SQL.ADD("O.NrOperacion=T.NrTrans and Valor='1' and NrBit In ("~Pipe2Comillas(val(aa1))~") and O.NrBit=I.NrInstancia  and Tabla='TRANSACCIONES2' ")
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and T.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+
+If Dialogo.Radio6 > 0 
+ If Dialogo.Radio6 = 1
+    SQL.ADD(" and C.Codigo = T.Cliente1 and SUBSTRING(C.Jerarquia,1,3) = '"~VAR('JERVINCUL')~"' ")
+ Else
+    SQL.ADD(" and C.Codigo = T.Cliente1 and SUBSTRING(C.Jerarquia,1,3) <> '"~VAR('JERVINCUL')~"' ")
+ Endif
+Endif
+If NoVacio(Dialogo.Lista3)
+  SQL.ADD("   and T.Cliente1 In ("~Pipe2Comillas(Dialogo.Lista3)~") ")   
+Endif
+SQL.ADD("order by T.NrTrans")
+
+recorrer SQL
+  SCN(z2,1)
+  ACT(a:fac, FBN['Nombre'])
+  ColorCeldas(a:fac,clBLUE)
+
+  Message(fbn('NrTrans'))
+
+  ACT(b:fac, fbn('NrTrans'))
+  ACT(c:fac, fbn('Fecha1'))
+  ACT(d:fac, fbn('Fecha2'))
+  ACT(e:fac, fbn('Especie'))
+  ACT(f:fac, fbn('TipoTr2'))
+  ACT(g:fac, fbn('Cliente1'))
+  ACN(h:fac, fbn('Cantidad1'))
+  ACT(i:fac, fbn('Vehiculo1'))
+  ACT(j:fac, fbn('Cuenta2'))
+  ACT(k:fac, fbn('NrOperacionRef1'))
+  ACT(l:fac, BuscarCampo('OPERACIONES','TipoOp','NrOperacion',fbn('NrOperacionRef1')) )
+  ACT(m:fac, fbn('NrOperacionRef2'))
+
+  FormatoCeldas(h:fac..h:fac,Exe('F7'))
+  * link con consulta de operaciones
+  ACLT(b:fac,Val(b:fac))
+  ACLO(k:fac,Val(k:fac))
+proximo
+
+SetFont(a:Val(w1)+8..m:fac,1)
+
+ACO(1,10)
+ACO(2,9)
+ACO(3,7)
+ACO(4,7)
+ACO(5,7)
+ACO(6,7)
+ACO(7,6)
+ACO(8,8)
+ACO(9,8)
+ACO(10,8)
+ACO(11,9)
+ACO(12,8)
+
+Impresion(1,2)
+SetFilaActual(fac+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:fac, 2)
+LimitesVision(m:fac+1)
+RangoTitulo(a:1..l:fac, Val(w1)+5)
+*AgregarBMP(a1, Exe('LOGO'), Exe('ESCALOGO'))
+ACT(a5, 'Cantidad de Vouchers: '~FStr(Val(z2), 4, 0))
+SetFont(a4..a5,2)

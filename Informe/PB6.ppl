@@ -1,0 +1,230 @@
+﻿ACT(VH:2, SQLSet(" Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+
+*CrearDialogo
+*  Fecha1:   'D.Fecha'   ;1;1;;;;;;;fsys
+*  Fecha2:   'H.Fecha'   ;1;2;;;;;;;fsys
+*  Especie1: 'Moneda'    ;2;1;;;;;;;
+*  Lista2:   'Bancos'    ;3 ;1;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CLIENTES WHERE Sector='BAN' ");
+*  Lista3:   'Proveedores';-3;2;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CNPROVEEDORES ");
+*  Lista1:   'Cuentas' ;  ;1;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS ");
+*  Radio1:   'Estado.|Asignado|Entregado|Pagado|Anulado|Todos';;;;;;;;;4
+*FinDialogo
+
+
+CrearDialogo
+  Fecha1:      'D.Fecha'     ;1;1;;;;;;;fsys
+  Fecha2:      'H.Fecha'     ;1;2;;;;;;;fsys
+  Especie1:    'Moneda'      ; 2;1;;;;Vacio(Dialogo.Especie1) o Eqstr(BuscarCampo('ESPECIES','Tipo','Codigo',Dialogo.Especie1),'MON');'Moneda Invalida';NO;'ARP';;;;;" Tipo = 'MON' "
+  Lista4:      'Vehiculos'   ; 3;1;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"), Val(VH:2))
+  ListaTabla1: 'Proveedores' ;-3;2;;;;;;;;;;;;;'Codigo'; 'Codigo;Nombre'; 'CNPROVEEDORES' 
+  Lista2:      'Bancos'      ;  ;1;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CLIENTES WHERE Sector='BAN' ");
+  Lista1:      'Cuentas'     ;-8;2;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS  WHERE Comitente IN ("~Pipe2Comillas(Dialogo.Lista2)~") "~IIF(NOVACIO(Dialogo.Lista4)," AND Cliente IN ("~Pipe2Comillas(Dialogo.Lista4)~")",iif(NoVacio(UsrVehiculos(UsuarioActivo))," AND Cliente IN ("~Pipe2Comillas(Val(VH:2))~") " ) )~"  ");
+  Radio1:      'Estado.|Asignado|Entregado|Pagado|Anulado|Todos';;1;;;;;;;4
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+*  Lista3:      'Proveedores' ;-3;2;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CNPROVEEDORES ");
+
+CrearFont(1,"Arial, 8,")
+CrearFont(2,"Arial, 8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,10,")
+CrearFont(5,"Arial, 8,BI")
+
+ACT(a:1, 'Vehiculos: '~iif(vacio(Dialogo.Lista4),'Todos',Pipe2Comillas(Dialogo.Lista4)))
+ACT(a:3, 'Proveedores: '~iif(vacio(Dialogo.ListaTabla1),'Todas',Pipe2Comillas(Dialogo.ListaTabla1)))
+ACT(a:4, 'Cuentas: '~iif(vacio(Dialogo.Lista1),'Todos',Pipe2Comillas(Dialogo.Lista1)))
+ACT(a:5, 'Bancos: '~iif(vacio(Dialogo.Lista2),'Todos',Pipe2Comillas(Dialogo.Lista2)))
+if Dialogo.Radio1 =0
+   ACT(a:2, 'Estado: Asignado')
+else
+  if Dialogo.Radio1 =1
+     ACT(a:2, 'Estado: Entregado')
+  else
+     if Dialogo.Radio1 =2
+        ACT(a:2, 'Estado: Pagado')
+     else
+        if Dialogo.Radio1 =3
+           ACT(a:2, 'Estado: Anulado')
+        else
+           ACT(a:2, 'Estado: Todos')
+        endif
+     endif
+  endif
+endif
+SetFont(a:1..a:5,2)
+
+ACT(c:6, 'Cheques emitidos por Proveedor '~Dialogo.Fecha1~' al '~Dialogo.Fecha2)
+SetFont(c:6,3)
+
+SetFilaActual(7)
+
+ACT(a:fac,   'Banco')
+ACT(b:fac,   'Cuenta')
+ACT(b:fac+1, 'Bancaria')
+ACT(c:fac,   'Cheque')
+ACT(d:fac,   'Fecha de ')
+ACT(d:fac+1, 'Emision')
+ACT(e:fac,   'Fecha de ')
+ACT(e:fac+1, 'Vencimiento')
+ACT(f:fac,   'Importe en')
+ACT(f:fac+1, 'Moneda Local')
+ACT(g:fac,   'Importe en')
+ACT(g:fac+1, 'Moneda Original')
+ACT(h:fac,   'Estado')
+
+AlinearCeldas(a:fac..z:fac+1,'C')
+SetFont(a:fac..z:fac+1,2)
+AgregarMarco(a:fac..h:fac+1,0,0,EXE('COLOR6'))
+
+
+SQL.ADD(" Select C.Chequera, C.NrCheque, C.FechaEmision, C.Monto, C.NrComprobante, C.Estado, ")
+SQL.ADD(" B.Banco, F.Cuenta2 Cuenta, F.Vehiculo1, F.Proveedor, T.Numero NroCta, E.Nombre, C.FechaPago, ")
+SQL.ADD(" F.Especie, PR.Nombre NombreP")
+SQL.ADD(" From "~DBO~".CHEQUES C, "~DBO~".CNCHEQUERASBANCO B, "~DBO~".TRANSACCIONES2 F, ")
+SQL.ADD(" "~DBO~".CUENTAS T, "~DBO~".ESPECIES E, "~DBO~".CNPROVEEDORES PR,")
+SQL.ADD(" "~DBO~".CNFORMASPAGOCOBRO FPC ")
+SQL.ADD(" Where F.Fecha2 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND   F.Fecha2 <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" AND   F.TipoTr2 ='DEVM' ")
+SQL.ADD(" AND   C.Chequera      = B.Chequera ")
+SQL.ADD(" AND   F.CNFormaPago   = FPC.Codigo ")
+SQL.ADD(" AND   'CHE'           = FPC.Tipo ")
+SQL.ADD(" AND   C.NrComprobante = F.NrTrans ")
+SQL.ADD(" AND   F.Cuenta2       = T.Codigo ")
+SQL.ADD(" AND   E.Codigo        = F.Especie ")
+SQL.ADD(" AND   F.Proveedor     = + PR.Codigo")
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD(" AND   F.Especie =  '"~Dialogo.Especie1~"' ")
+endif
+If NoVacio(Dialogo.ListaTabla1)
+  SQL.ADD(" AND   F.Proveedor IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+Endif
+If NoVacio(Dialogo.Lista1)
+  SQL.ADD(" AND   F.Cuenta2 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+If NoVacio(Dialogo.Lista2)
+  SQL.ADD(" AND   T.Comitente IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+If NoVacio(Dialogo.Lista4)
+  SQL.ADD(" AND   F.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista4)~") ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND F.Vehiculo1 IN ("~Pipe2Comillas(Val(VH:2))~") ")
+  Endif
+Endif
+if Dialogo.Radio1 =0
+   SQL.ADD(" AND   C.Estado = 'ASI' ")
+endif
+if Dialogo.Radio1 =1
+   SQL.ADD(" AND   C.Estado = 'ENT' ")
+endif
+if Dialogo.Radio1 =2
+   SQL.ADD(" AND   C.Estado = 'PAG' ")
+endif
+if Dialogo.Radio1 =3
+   SQL.ADD(" AND   C.Estado = 'ANU' ")
+endif
+
+SQL.ADD(" Order By F.Vehiculo1, F.Proveedor, F.Especie, C.FechaEmision, C.NrCheque ")
+
+ACT(vh:1,'')
+ACT(pb:1,'')
+
+dfa
+Recorrer SQL
+  act(np1,Fbn('NombreP'))
+  If Not Eqstr(fbn('Vehiculo1'),Val(vh:1)) o Not Eqstr(fbn('Proveedor'),Val(pb:1))
+     If Val(gg33) <> 0 o Val(ff33) <> 0
+*        ACT(a:fac, 'Total Proveedor:  '~fbn('NombreP'))
+        ACT(a:fac, 'Total Proveedor:  '~Val(pb:2))
+        AgregarMarco(a:fac..h:fac,0,0)
+        acn(g:fac,Val(gg33))
+        acn(f:fac,Val(ff33))
+        acn(gg33,0)
+        acn(ff33,0)
+        SetFont(a:fac..z:fac,5)
+     Endif
+     ifa
+
+     If Not Eqstr(Val(vh:1),'') 
+        If Not Eqstr(fbn('Vehiculo1'),Val(vh:1))  
+           act(a:fac,'SaltarHoja')
+           SaltarHoja
+        Endif
+     Endif
+
+     message(fbn('Vehiculo1')~' - '~fbn('Proveedor'))
+     ifa
+     ifa
+  If Not Eqstr(fbn('Vehiculo1'),Val(vh:1)) 
+     ACT(a:fac, 'Vehiculo: '~fbn('Vehiculo1'))
+     AgregarMarco(a:fac..h:fac,0,0,EXE('COLOR8'))
+     ifa
+  Endif
+     ACT(a:fac, 'Proveedor: '~fbn('Proveedor')~' '~fbn('NombreP'))
+     AsignarLink(a:fac, 'PB61',Lista2=Dialogo.Lista2, ListaTabla1=fbn('Proveedor'))
+     AgregarMarco(a:fac..h:fac,0,0)
+     SetFont(a:fac-1..z:fac,5)
+     ifa   
+ Endif
+
+ ACT(a:fac, fbn('Banco'))
+ ACT(b:fac, fbn('Cuenta')~'-'~fbn('NroCta'))
+ ACT(c:fac, fbn('NrCheque'))
+ ACD(d:fac, fbn('FechaEmision'))
+ ACD(e:fac, fbn('FechaPago'))
+ ACN(f:fac, fbn('Monto')*CotizacionC(fbn('Especie'),,,,FSYS,1,SI,'ARP'))
+ ACN(g:fac, fbn('Monto'))
+ scn(gg33, fbn('Monto'))
+ scn(ff33, fbn('Monto')*CotizacionC(fbn('Especie'),,,,FSYS,1,SI,'ARP'))
+
+ If Eqstr(fbn('Estado'), 'ASI')
+   ACT(h:fac, 'Asignado')
+ Endif
+ If Eqstr(fbn('Estado'), 'ENT')
+   ACT(h:fac, 'Entregado')
+ Endif
+ If Eqstr(fbn('Estado'), 'ANU')
+   ACT(h:fac, 'Anulado')
+ Endif
+ If Eqstr(fbn('Estado'), 'PAG')
+   ACT(h:fac, 'Pagado')
+ Endif
+
+ ACT(vh:1,fbn('Vehiculo1'))
+ ACT(pb:1,fbn('Proveedor'))
+ ACT(pb:2,fbn('NombreP'))
+
+Proximo
+If Val(gg33) <> 0 o Val(ff33) <> 0
+   ifa
+   ACT(a:fac, 'Total Proveedor:  '~val(np1))
+   AgregarMarco(a:fac..h:fac,0,0)
+   acn(g:fac,Val(gg33))
+   acn(f:fac,Val(ff33))
+   acn(gg33,0)
+   acn(ff33,0)
+   SetFont(a:fac..z:fac,5)
+Endif
+ifa
+
+ACO(1, 10)
+ACO(2, 20)
+ACO(3, 10)
+ACO(4, 10)
+ACO(5, 10)
+ACO(6, 10)
+ACO(7, 10)
+ACO(8, 10)
+
+LimitesVision(i:fac+2)
+Impresion(1,2)
+Impresion(4,1)
+*SetPrintFit(3,76)
+SetMargins(0,0,0,0)
+RangoTitulo(a1..h:fac,9)
+

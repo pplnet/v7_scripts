@@ -1,0 +1,118 @@
+﻿* DPEJOS: Ejercicio de Opciones Simples de Commodities -PC-
+CrearDialogo
+  NrOperacion1 : "Operacion"                ;1;1;;;;NoVacio(Dialogo.NrOperacion1);'Debe Ingresar una Operacion';NO;
+  Fecha1       : "F Real Ej."               ;;;;NO;;;;;Fsys
+  Precio2      : "Precio_Ref"               ;;;;;;[Dialogo.Radio2=0 y Dialogo.Precio2>=Dialogo.Precio3] o [Dialogo.Radio2=1 y Dialogo.Precio2<=Dialogo.Precio3];'Con este Precio de Referencia la Operacion no ser# Ejercida';;
+  Radio1       : "Opcion|Europea|Americana" ;;;;NO;;;;;;BuscarCampo('Operaciones','TipoOpcion','NrOperacion',Dialogo.NrOperacion1)
+  Especie1     : "Commodity"                ;1;2;;NO;;;;;;BuscarCampo('Operaciones','Especie','NrOperacion',Dialogo.NrOperacion1)
+  Fecha4       : "Fecha Ej"                 ;2;2;;NO;;;;;;BuscarCampo('Operaciones','FechaEj','NrOperacion',Dialogo.NrOperacion1)
+  Precio3      : "Precio Ej"                ;;;;NO;;;;;;BuscarCampo('Operaciones','PrecioEj','NrOperacion',Dialogo.NrOperacion1)
+  Radio2       : "Tipo|Call|Put"            ;;;;NO;;;;;;BuscarCampo('Operaciones','MB1','NrOperacion',Dialogo.NrOperacion1)
+  Radio3       : "    |Compra|Venta"        ;;;;NO;;;;;;BuscarCampo('Operaciones','MB3','NrOperacion',Dialogo.NrOperacion1)
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+If Not Incluido(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'DPOS|')
+   Cancelar('La operacion No '~Dialogo.NrOperacion1~' No es un Call o Put de Commodities')
+endif
+
+* Verifico que se encuentre en Back Office o Terminal
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+
+If VAL(X1)<>20 y VAL(X1)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+* Verifico que no se haya pasado la fecha de liquidacion
+(."DCFMODI".)
+
+If NoVacio(IdxDate(val(d1))) y Dialogo.Fecha1>VAL(D1)
+   Cancelar('La Operacion ya fue Liquidada, No se puede Modificar !!!')
+EndIf
+
+
+If Ok
+   * X1: Recupero la Operacion
+   acn(x1,0)
+
+   *- Tanto la Europea o Americana se pueden ejercer hasta el dia de la liquidacion
+   SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+   SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   SQL.ADD("and FechaEj<='"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha1)~"'>=FechaOp ")
+*    SQL.ADD("and (CB8 is Null or CB8='0') ")
+
+   Recorrer SQL
+
+     acn(x1,1)
+
+     IF [Dialogo.Radio2=0 y Dialogo.Precio2>=Dialogo.Precio3] o [Dialogo.Radio2=1 y Dialogo.Precio2<=Dialogo.Precio3]
+
+        *-- Calculo el Resultado por Unidad    
+        IF Dialogo.Radio2=0 
+           *---- Call: (Precio Referencia-PrecioEjercicio)
+           ACN(Z3,(Dialogo.Precio2-FBN['PrecioEj']))
+        ELSE 
+           *---- Put: (Precio Referencia-PrecioEjercicio)
+           ACN(Z3,(FBN['PrecioEj']-Dialogo.Precio2))
+        ENDIF
+       
+        IF Dialogo.Radio3=1
+           * Si es Venta Multiplico por -1
+           ACN(Z3,-VAL(Z3))
+        ENDIF
+
+        *** Calculo el Resultado TOTAL
+        ACN(Z2,VAL(Z3)*FBN['Cantidad'])
+    
+        Message('Actualizando la Opcion  .... ')                  
+        *** Marca la operacion como ejercida ***
+        SQL.ADD("Update "~DBO~".OPERACIONES ")
+        SQL.ADD("Set CB8 = '1', ")
+        SQL.ADD("FechaVto2 = '"~IdxDate(Dialogo.Fecha1)~"', ")
+        SQL.ADD("Precio2   = "~Fstr(Dialogo.Precio2,0,7)~", ")
+        SQL.ADD("Precio3   = "~Fstr(VAL(Z3),0,2)~", ")
+        SQL.ADD("Precio4   = "~Fstr(VAL(Z2),0,2)~"  ")
+        SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+        SQL.NEW
+        SQL.EXEC
+
+        *-- Insert de Mov.Pendientes. El Resultado invierte el signo porque se ve desde el cliente
+        * EjecutarEvento('IMOVPE',NrOperacion1=Dialogo.NrOperacion1,Fecha1=Dialogo.Fecha2,Cliente1=FBN['Cliente1'],Especie1=FBN['ContraEspecie'],Vehiculo1=FBN['Vehiculo1'],Entero1=1,Precio1=-VAL(Z2),String='Resultado Opcion',Entero2=9,Entero3=0,String1='')
+
+        *** Actualiza movimientos y limites ****
+        SQL.ActualizarMovimientos(Dialogo.NrOperacion1,SI)
+        SQL.EXEC
+
+
+     ELSE
+        *** Marca la operacion como NO ejercida ***
+        SQL.ADD("Update "~DBO~".OPERACIONES ")
+        SQL.ADD("Set CB8 = '-1', ")
+        SQL.ADD("FechaVto2 = '"~IdxDate(Dialogo.Fecha1)~"', ")
+        SQL.ADD("Precio2   = "~Fstr(Dialogo.Precio2,0,7)~" ")
+        SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+        SQL.NEW
+        SQL.EXEC
+     ENDIF
+     * Actualizo la Instancia de la Operacion a Supervision
+     (.'MODIINSTAN'.)      
+
+   proximo
+
+   If Val(x1)=0
+      Cancelar('La operacion No '~Dialogo.NrOperacion1~' No puede ser Ejercida')
+   endif
+endif
+

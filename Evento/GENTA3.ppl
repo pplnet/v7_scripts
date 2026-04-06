@@ -1,0 +1,681 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:  'Fecha'  ;1;1; ;  ;  ;;;;fsys
+  Check1:  'Procesa';1;2; ;SI;SI;;;;0;
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+ACT(v:1, 'Oper en OPROFEX')
+ACT(v:2, 'OpROFEX en USR')
+ACT(v:3, 'Operador Default')
+ACT(v:5, VAR('AGESIOP'))
+ACT(w:22, VAR('CONTROLAPM'))
+ACT(T:99,'A3')
+ACN(w:1, SQL("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'OPA3' AND COLUMN_NAME in ('RootPartyID') "))
+ACN(w:4, SQL("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'OPA3' AND COLUMN_NAME in ('RootPartyRole') "))
+ACN(w:2, SQL("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'USUARIOS' AND COLUMN_NAME in ('OpROFEX') "))
+if SQL("SELECT 1 FROM "~DBO~".VARIABLES where Codigo='OPROFEXDEF' ")=1
+  ACT(w:3, Var('OPROFEXDEF'))
+  if SQL("SELECT 1 FROM "~DBO~".USUARIOS where Codigo='"~Val(w:3)~"' ")=0
+    ACT(w:3, USUARIOACTIVO)
+  endif
+endif
+if Vacio(Val(w:3))
+  ACT(w:3, USUARIOACTIVO)
+endif
+
+
+ACT(s:1, 'Secuencia2')
+ACT(s:2, 'TipoOp')
+ACT(s:3, 'Especie')
+ACT(s:4, 'Cupon MAE')
+ACT(s:5, 'Ag.Contra')
+ACT(s:6, 'Num Ag.Contra')
+ACT(s:7, 'Clie.Tabla')
+ACT(s:8, 'Cliente')
+ACT(s:9, 'Op.Contra (A)')
+ACT(s:10, 'VTXT3 (A)')
+ACT(s:11, 'Cantidad')
+ACT(s:12, 'C.Especie')
+ACT(s:13, 'PrecioMAE')
+ACT(s:14, 'Precio3 (Clean)')
+ACT(s:15, 'Precio4 (Dirty)')
+ACT(s:16, 'Intrereses MAE')
+ACT(s:17, 'Nro.Cupon')
+ACT(s:18, 'FechaOp txt (A)')
+ACT(s:19, 'FechaOp')
+ACT(s:20, 'RB5')
+ACT(s:21, 'Plazo')
+ACT(s:22, 'Mercado')
+ACT(s:23, 'F.Liq.')
+ACT(s:24, 'Feriados')
+ACT(s:25, 'Operador')
+ACT(s:26, 'Op.SIOPEL')
+ACT(s:27, 'Cod.MAE Esp.')
+ACT(s:28, 'Cuenta1')
+ACT(s:29, 'Vechiculo1')
+ACT(s:30, 'UND1')
+ACT(s:31, 'Mercado4')
+ACT(s:32, '# Rueda')
+ACT(s:33, 'Pase')
+ACT(s:34, 'MAE1 (A)')
+ACT(s:35, '# Cta.Ord.')
+ACT(s:36, 'Referencia')
+ACT(s:37, '# Num.Ref. (A)')
+ACT(s:38, 'Cart.Propia (A)')
+ACT(s:39, '# Tipo Cli')
+ACT(s:40, 'Observ')
+ACT(s:41, 'Cant.Ops.')
+ACT(s:42, 'Duplicada')
+ACT(s:43, 'Op.Anterior')
+ACT(s:44, 'Incompleto')
+ACT(s:45, 'FechaVto')
+ACT(s:46, 'Moneda de Liquidacion')
+ACT(s:47, 'Responsable')
+ACT(s:48, 'FechaEnvioMAE(txt)')
+ACT(s:49, 'FechaEnvioMAE')
+ACT(s:50, 'NrOrden')
+ACT(s:51, 'z:1')
+ACT(s:52, 'Mercado2')
+ACT(s:53, 'Agente Contra')
+ACT(s:54, 'Corredor MAE')
+ACT(s:55, 'Corredor')
+ACT(s:56, '%Comision')
+ACT(s:57, 'Comision')
+ACT(s:58, 'ZeroCoupon')
+* FJL 15/07/19 - Por Issue 3799 - Especies Sancionadas
+ACT(s:59, 'EstadoOperativo')
+ACT(s:60, 'A Compliance SE')
+* FJL 24/11/20 - Por Comitente terceros
+ACT(s:61, 'Comitente(C/V)')
+ACT(s:62, 'Largo')
+ACT(s:63, 'Tipo')
+ACT(s:64, 'Codigo')
+ACT(s:65, 'Cliente')
+ACT(s:66, 'CatDepos')
+ACT(s:67, 'VarLiqCli')
+ACT(s:68, 'MerLiqCli')
+ACT(s:70, 'AfectaLS')
+
+
+if Dialogo.Check1=0
+  recorrer&i 1,70
+    ACT(bz:&i, Val(s:&i))
+  proximo
+endif
+
+SQL.ADD("Select * from "~DBO~".OPA3")
+SQL.ADD(" where isnull(Procesado,'0')='0' ")
+SQL.ADD("   and Convert(Date,FechaReal)="~IdxDate2(Dialogo.Fecha1) )
+SQL.ADD("   and MarketID  = 'XMAB' ")
+SQL.ADD("   and SegmentID  = 'TIVA' ")
+SQL.ADD("   and isnull(Anulada,'NO')  = 'NO' ")
+** que TrdRptStatus se toman?? 0=confirmada, 3=Cancelada, 4=Transitoria
+**SQL.ADD("   and TrdRptStatus  in ('0','3') ")
+SQL.ADD("   and TrdRptStatus  in ('4','0') ")
+SQL.ADD("   and TrdType  in ('22') ")
+** AA 20-02-2026 58 --> TRD corredor
+**SQL.ADD("   and TrdType  in ('22','58') ")
+SQL.ADD("   and isnull(ExecId,'')  <> '' ")
+**SQL.ADD("   and Boleta='31817405' ")
+**SQL.ADD("   and  Orderid='14147388' ")
+SQL.ADD(" Order by Fecha,Boleta ")  
+watch(SQL.BATCH())
+Recorrer SQL
+ 
+     ACT(WA:1,'')
+     BorrarCeldas(t:1..u:90)
+     BorrarCeldas(xy:1..xy:10)
+ 
+     ACT(t:1, fbn('Boleta'))
+     if Dialogo.Check1=1
+        Message('...'~fbn('Boleta'))
+     else
+        MessageBox('...'~fbn('Boleta'))
+     endif
+     ACT(aa:FAC, fbn('Boleta'))
+     ACT(ab:FAC, fbn('Posicion'))
+     
+     ACT(u:1,fbn('TradeNumber'))    
+     ACT(FE:1, FBN('Fecha'))
+     ACT(HO:1, FBN('Hora'))        
+     ACD(VT:1, FBN('Vto'))   
+
+     if Val(w:1)+Val(w:4)+Val(w:2)=3
+        if EqStr(fbn('RootPartyRole'),'12')
+           ACT(ae:FAC, fbn('RootPartyID'))
+        endif
+        if NoVacio(Val(ae:FAC))
+           ACT(af:fac, SQL("Select Codigo from "~DBO~".USUARIOS Where OpROFEX = '"~Val(ae:FAC)~"'"))
+           if Vacio(Val(af:fac))
+              ACT(af:fac, Val(w:3))
+           endif
+        else
+           ACT(af:fac, Val(w:3))
+        endif
+     else
+        ACT(af:fac, Val(w:3))
+     endif     
+     
+     **// Warning por default
+     ACT(WA:1, 'Falta info ')
+     
+     ** idcomitente es la relacion con CLIENTE FPA por campo NrROFEX
+   
+     **Si es un Compra o Venta
+     IF Incluido(FBN('IdCpraVta'),'1|3')
+        **Es un alta 
+        ACT(xy:3, 'OK')
+        ACN(t:44, 0)
+       
+        **Ejecucion Nueva
+        ACT(x:1, 'S')
+        ACT(xy:1,'NN')
+           
+        ACT(t:5,SQL("SELECT Codigo FROM "~DBO~".Clientes WHERE NrRofex  = '"~FBN['IdComitente']~"' "))
+
+        If vacio(val(t:5))
+           * Marca Incompleto
+           ACN(t:44, 1)
+           ACT(WA:1, val(WA:1)~' Cliente inexistente '~FBN['IdComitente'])            
+        Endif   
+
+        * Buscar Codigo FPA de especie
+        ***** Especie
+        SQL.ADD("Select * From "~DBO~".ESPECIESMERCADOS Where Mercado = '"~VAR('AMBMAE')~"' and Codigo = '"~fbn('Posicion')~"' ")
+        ACN(z10,0)
+        Recorrer Sql
+           dfa
+           ACN(z10,1)
+           ACT(t:3, FBN['Especie'])
+           ACT(z12, FBN['Moneda']) 
+           ACN(z13, FBN['UnidadPrecio'])
+           ACT(z14, FBN['MercadoE']) 
+           ACT(z15, FBN['MercadoM']) 
+        Proximo
+
+        if Vacio(Val(t:3))
+           * Marca Incompleto
+           ACN(t:44, 1)
+           ACT(WA:1, val(WA:1)~' EspecieMercado No existe'~FBN('Posicion'))            
+        else
+           ***** PrecioA3 
+           ACN(t:13, fbn('Precio')/Val(z13))
+        endif        
+ 
+        IF Val(t:44)=1
+           if Dialogo.Check1=1
+              SQL.ADD("Update "~DBO~".OPA3 ")
+              SQL.ADD("   Set Procesado   = '1',")
+              SQL.ADD("       Warning       = '"~Trim(Copy(Val(WA:1),1,255))~"', ")
+              SQL.ADD("       NrOperacion = 'Erroneo' ")
+              SQL.ADD(" where Boleta  = '"~fbn('Boleta')~"' ")
+              SQL.NEW
+              SQL.EXEC
+           endif
+        Else
+           ** TODO OK, se genera Ejecucion 
+         
+           ***** Cantidad
+           ACN(t:11, fbn('Cantidad'))
+           if Val(t:11)=0
+              SCN(z:1,1)
+              **messagebox('Cantidad')
+              ACN((26+FAC):11, 1)
+           endif
+
+           ***** Cupon MAE
+           ACT(t:4, '0')
+         
+           ***** Cliente
+           ACN(t:6, Num(Val(t:5)))
+           ACT(t:8, Val(t:5))
+           ACT(t:54,Val(t:8))
+                  
+           ** messagebox(Val(t:54)~' '~fbn('RootPartyID')~' '~Var('RUECPC1'))
+           ** 11-08-2024 BOFA verificar para cartera propia con Variable CLIEGARCP
+           #ifdef MLASA
+               if Incluido(Val(t:54),Var('CLIEGARCP')) o  Eqstr(Val(t:54),Var('VEHICULODE'))  
+                  ACN(t:55,1)
+               Else
+                  ACN(t:55,0)   
+               Endif
+           #else   
+               if Eqstr(Val(t:54),Var('VEHICULODE'))    
+                  ACN(t:55,1)
+               Else
+                  ACN(t:55,0)   
+               Endif
+           #endif
+
+           ** Cta y Ord 3ros   
+           ** 11-08-2024 BOFA verificar para cartera propia con Variable CLIEGARCP
+           #ifdef MLASA
+              if not Incluido(Val(t:54),Var('CLIEGARCP')) y  Not Eqstr(Val(t:54),Var('VEHICULODE'))  
+                 ACT(t:73,'1')
+              Else   
+                 ACT(t:73,'0')
+              Endif                  
+           #else      
+               if Not Eqstr(Val(t:54),Var('VEHICULODE'))    
+                  ACT(t:73,'1')
+               Else   
+                  ACT(t:73,'0')
+               Endif
+           #endif   
+        
+           **Mercado Especie y Mercado Contraespecie Orden 
+ 
+           ***** Mercado4
+           ACT(t:31, Var('AMBMAE'))
+           ***** Especie T:3/ Mercado T:22
+           **ACT(t:22, Var('MERLIQCPC1'))
+           ** AA 17-06-2025 mercado EspeciesMercado
+           ACT(t:22, Val(z14))
+         
+           ***** ContraEspecie T:12 / Mercado2 T:52
+           ACT(t:12, val(z12))
+         
+           **ACT(t:52, iif(Incluido(BuscarCampo('CLIENTES','CategDepositante','Codigo',Val(t:6)),'CLI'),VAR('MERCADOBT'),VAR('MERCBCRA')))
+           ** AA 17-0-2025  mercadoLiq especiesMercado
+           ACT(t:52, Val(z15))
+         
+           ** Cuentas
+           *         ACT(t:28,'')
+           *         ACT(t:80,'')
+           *         ACT(t:81,'')
+         
+
+           ***** Es ZeroCupon
+           ACT(t:58, BuscarCampo('ESPECIES','ZeroCoupon','Codigo',Val(t:3)))
+           ***** Nro Cupon
+           if EqStr(Val(t:58),'SI')    
+               ACT(t:17, Fstr(BuscarCampo('ESPECIES','Cupon','Codigo',Val(t:3)),1,0))
+           else
+               ACT(t:17, Val(t:4))
+           endif
+           ***** Fecha Op
+           ACT(t:18, fbn('Fecha'))
+           ACD(t:19, Fecha(Val(t:18)))
+    
+           ***** Mercado
+           IF Incluido(Val(T:22), VAR('MERCAVARI'))
+              ***** FormaLiquidacion1 (STD|DVP|RVP) = DVP
+              ACN(T:23, 1)
+              ***** FormaLiquidacion2 (FD&&P|DVP|FOP) = DVP
+              ACN(U:23, 1)
+           Else
+              ***** FormaLiquidacion1 (STD|DVP|RVP) = DVP
+              ACN(T:23, 1)
+              ***** FormaLiquidacion2 (FD&&P|DVP|FOP) = DVP
+              ACN(U:23, 1)         
+           ENDIF
+           ***** Operador / OperadorContra
+           * Se toma del GENRFX FJL 12/07/20 - Operador segun informacon de ROFEX
+           ACT(t:25,Val(af:fac))
+           ACT(t:26,'01')
+
+           ***** Vehiculo1
+           ACT(t:29, Var('VEHICULODE'))
+
+           *** ContraEspecie2 Moneda de Liquidacion ****
+           If Eqstr(Val(t:12),VAR('MONELOCA'))
+               ACT(T:46,Val(t:12))
+           Else
+               ACT(t:46, BuscarCampo('ESPECIES','Alias10','Codigo',val(t:12)))
+           Endif
+           if EqStr(Val(t:12),'USD')
+               if Incluido(Val(t:22),VAR('MERCAACMC'))
+                  ACT(t:46, 'USD')
+               endif
+           endif
+           ***** Tabla Feriados
+           ACT(t:24, VAR('FERIDEF'))
+
+           ***** Plazo / Lote
+           **calcular plazo
+           ACN(t:21, DifDias(FBN['Fecha'],FBN['Vto'],'ARG')*24)
+
+           ***** RB5
+           ACT(t:20, Fstr(DifDias(FBN['Fecha'],FBN['Vto'],'ARG'),1,0))
+
+           ***** FechaVto
+           ACD(t:45, fbn('vto'))
+
+           ***** UDN1
+           ACT(t:30, 'MD')
+           ***** Rueda 
+           ACT(t:32, 'TRD')
+           ***** PaseCB
+           ACT(t:33, '0')
+
+           if DesciendeDeEspecie(Val(t:3),'LETES')
+              *** cupones de Letes no se graban ( = 1 si Especie es Letes, 0 si no)
+              ACN(x:2, 1)
+           else
+              ACN(x:2, 0)
+           endif 
+
+           * Cliente definitivo a la Operacion
+           ACT(t:56, Val(t:54))
+
+           ACT(t:48, fbn('FechaReal'))
+           ACT(t:84, fbn('FechaReal'))
+           ** AA - Esta funcion no incorpora los segundos a la Hora se pasa a equipo del Core  y se cambia temporalmente por Convert(datetime,'"~Val(t:48)~"',120)
+           ACT(t:49, SQLFechaStr(Val(t:48),Exe('FORFECHOR')))
+        
+           **ACT(t:51, fbn('ExcecID'))
+           ACT(t:51, fbn('Boleta'))
+           ACT(t:70,'MERCADO')
+           ACT(t:71,BuscarCampo('CANALES','AfectaPorDefecto','Codigo',Val(t:70)))
+           ACT(t:72,copy(fbn('Hora'),1,2)~':'~copy(fbn('Hora'),3,2)~':'~copy(fbn('Hora'),5,2))
+           ACT(t:74,fbn['TradeNumber'])
+        
+        
+           ACT(t:50,fbn('OrderID'))
+           
+           ACT(t:59, BuscarCampo('ESPECIES','EstadoOperativo','Codigo',Val(t:3)))
+           if Vacio(Val(t:59))
+              ACT(t:59, 'NE')
+           endif
+           ***** A Compliance SE
+           ACT(t:60, 'NO')
+           if EqStr(Val(w:22),'SI')
+              if Incluido(Val(t:59),'SI|NE')
+                 ACT(t:60, 'SI')
+              endif
+           endif           
+           
+           If EqStr(FBN('IdCpraVta'),'1')
+              ACT(t:2,'TIV')
+           Else
+              ACT(t:2,'TIC')
+           Endif
+           If Dialogo.Check1=1
+              ACT(w6, GetNumerador(1))
+              ACT(NR:2, GetNumerador(198))
+              ACT(c:FAC, Val(w6))
+              Message('--- #Op : '~Val(w6)~' Tipo : '~Val(t:2)~' Especie : '~Val(t:3)~' Cliente : '~Val(t:56))
+              SQL.ADD("Insert into "~DBO~".OPERACIONES (")
+           
+              SQL.ADD("NrOperacion, ")
+              SQL.ADD("TipoOp, ")
+              SQL.ADD("Especie, ")
+              SQL.ADD("Cliente1, ")
+                
+              SQL.ADD("Cantidad, ")
+              SQL.ADD("ContraEspecie, ")
+              SQL.ADD("Precio1, ")
+                 
+              SQL.ADD("Cupon1,")
+              SQL.ADD("FechaOp, ")
+                
+              SQL.ADD("Plazo, ")
+              SQL.ADD("RB5, ")
+              SQL.ADD("RB6, ")
+              SQL.ADD("FechaVto, ")
+              SQL.ADD("Mercado, ")
+              SQL.ADD("Mercado2, ")
+              SQL.ADD("FormaLiquidacion1, ")
+                
+              SQL.ADD("FormaLiquidacion2, ")
+              SQL.ADD("TablaFeriados1, ")
+              SQL.ADD("Operador, ")
+              SQL.ADD("OpSIOPEL, ")
+              
+              SQL.ADD("EnteCus1, ")
+              SQL.ADD("EspecieMAE, ")
+              SQL.ADD("EnteCus2, ")
+              SQL.ADD("AgenteMAE, ")
+              SQL.ADD("Vehiculo1, ")
+              SQL.ADD("Mercado4, ")
+                 
+              SQL.ADD("CB5, ")
+              SQL.ADD("NroAltaMAE, ")
+              SQL.ADD("UDN2, ")
+              SQL.ADD("RuedaMAE, ")
+              SQL.ADD("PaseCB, ")
+                 
+              SQL.ADD("AceptaMAE, ")
+              SQL.ADD("FechaAltaMAE, ")
+              SQL.ADD("FechaEnvioMAE, ")
+              SQL.ADD("Cuenta1, ")
+                 
+              SQL.ADD("Cuenta4, ")
+              SQL.ADD("Cuenta5, ")
+              SQL.ADD("Observaciones, ")
+              SQL.ADD("Numerador, ")
+                
+              SQL.ADD("FechaCarga, ")
+              SQL.ADD("FechaCargaSys, ")
+              SQL.ADD("UsrInput, ")
+              SQL.ADD("CB4, ")
+                 
+              SQL.ADD("Direccion, ")
+              SQL.ADD("NrOrden, ")
+              SQL.ADD("Corporate, ")
+              SQL.ADD("Book1, ")
+              SQL.ADD("MB2, ")
+              SQL.ADD("NrBoleto, ")                 
+              SQL.ADD("AfectaLS,")
+              SQL.ADD("Plataforma ")              
+                 
+              SQL.ADD(") values (")
+               
+              * NrOperacion
+              SQL.ADD(" '"~Val(w6)~"', ")
+              * TipoOp
+              SQL.ADD(" '"~Val(t:2)~"', ")
+              * Especie
+              SQL.ADD(" '"~Val(t:3)~"', ")
+              * Cliente1
+              SQL.ADD(" '"~Val(t:56)~"', ")
+                                 
+              * Cantidad
+              SQL.ADD(" "~FStr(Val(t:11),0,2)~", ")
+              * ContraEspecie
+              SQL.ADD(" '"~Val(t:12)~"', ")
+              * Precio1
+              SQL.ADD(" "~FStr(Val(t:13),0,8)~", ")
+              * Cupon1
+              SQL.ADD(" '"~Val(t:17)~"', ")
+              * FechaOp
+              SQL.ADD(" '"~IdxDate(Val(t:19))~"', ")
+               
+              * Plazo (N)
+              SQL.ADD(" "~FStr(Val(t:21),0,0)~", ")
+              * RB5 (N)
+              SQL.ADD(" '"~Val(t:20)~"', ")
+              * RB6 (N) Fuente=0=Siopel
+              SQL.ADD(" '0', ")
+              * FechaVto
+              SQL.ADD(" '"~IdxDate(Val(t:45))~"', ")
+              * Mercado
+              SQL.ADD(" '"~Val(t:22)~"', ")
+              * Mercado2
+              SQL.ADD(" '"~Val(t:52)~"', ")
+              * FormaLiquidacion1
+              SQL.ADD(" '"~FStr(Val(t:23),1,0)~"', ")
+               
+              * FormaLiquidacion2
+              SQL.ADD(" '"~FStr(Val(t:23),1,0)~"', ")
+              * TablaFeriados1
+              SQL.ADD(" '"~Val(t:24)~"', ")
+              * Operador
+              SQL.ADD(" '"~Val(t:25)~"', ")
+              * OpSIOPEL
+              SQL.ADD(" '"~Val(t:26)~"', ")
+              
+              * EnteCus1 (N)
+              SQL.ADD(" '"~Val(t:27)~"', ")
+              * EspecieMAE
+              SQL.ADD(" '"~Val(t:27)~"', ")
+              * EnteCus2 (N)
+              SQL.ADD(" '"~Val(t:57)~"', ")
+              * AgenteMAE
+              SQL.ADD(" '"~Val(t:57)~"', ")
+              * Vehiculo1
+              SQL.ADD(" '"~Val(t:29)~"', ")
+              * Mercado4
+              SQL.ADD(" '"~Val(t:31)~"', ")
+                
+              * CB5 (Es de Mercado Externo )
+              SQL.ADD(" '1', ")
+              * NroAltaMAE
+              SQL.ADD(" '"~fbn('Boleta')~"', ")
+              * UDN2 (Rueda)
+              SQL.ADD(" '"~Val(t:32)~"', ")
+              * RuedaMAE
+              SQL.ADD(" '"~Val(t:32)~"', ")
+              * PaseCB
+              SQL.ADD(" '"~Val(t:33)~"', ")
+
+              * AceptaMAE
+              SQL.ADD(" 'SI', ")
+              * FechaAltaMAE
+              SQL.ADD("Convert(datetime,'"~Val(t:84)~"',103), ")
+              * FechaEnvioMAE
+              SQL.ADD(" "~Val(t:49)~", ")
+              * Cuenta1
+              SQL.ADD(" '"~Val(t:28)~"', ")
+
+              * Cuenta4
+              SQL.ADD(" '"~Val(t:80)~"', ")
+              * Cuenta5
+              SQL.ADD(" '"~Val(t:81)~"', ")
+              * Observaciones
+              SQL.ADD(" '"~Val(t:40)~"', ")
+              * Numerador
+              SQL.ADD(" 1, ")
+               
+              * FechaCarga
+              SQL.ADD(" "~SQLAhora~", ")
+              * FechaCargaSys
+              SQL.ADD(" "~IdxDate2(FSys)~", ")
+              * UsrInput
+              SQL.ADD(" '"~UsuarioActivo~"', ")
+              * Marca CPC1 x Terceros
+              SQL.ADD(" '"~Val(t:73)~"', ")
+
+              * Direccion
+              SQL.ADD(" 2, ")
+              * NrOrden
+              SQL.ADD(" '"~Val(t:50)~"', ")
+              * Corporate (Cartera Propia)
+              SQL.ADD(" '"~FStr(Val(t:55),1,0)~"', ")
+              * Book1
+              SQL.ADD(" '"~Val(t:75)~"', ")
+              * MB2 Bloqueo Moneda
+              SQL.ADD(" '"~Val(t:82)~"', ") 
+              * NrBoleto                
+              SQL.ADD(" '"~PAD0(Val(NR:2),8)~"', ")                 
+              * AfectaLS
+              SQL.ADD(" '"~Val(t:71)~"', ")
+              * Plataforma
+              SQL.ADD(" '"~VAR('PLATAA3')~"' ") 
+              
+              SQL.ADD(")")
+              SQL.NEW
+              
+              SQL.ADD("Update "~DBO~".OPA3 ")
+              SQL.ADD("   Set Procesado   = '1',")
+              SQL.ADD("       NrOperacion = '"~Val(w6)~"' ")
+              SQL.ADD(" where Boleta  = '"~fbn('Boleta')~"' ")
+              SQL.NEW
+              SQL.EXEC
+
+              Message('Modificar Operacion '~Val(w6))
+              ModificarOperacion(Val(w6),0,SI,SI,SI,NO,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO,SI,NO,SI,NO,0,NO,NO)
+                 
+              IF Ok
+                 ** Actualizo Direccion para que aparezca en verde en la instancia que corresponda **
+                 SQL.ADD("Update "~DBO~".OPERACIONES Set Direccion = 2 where NrOperacion = '"~Val(w6)~"' ")
+                 SQL.NEW
+                 SQL.EXEC                   
+              Endif
+              
+              If EqStr(Val(t:60),'SI')
+                 * Va a Compliance
+                 ACT(d:FAC, 'A inst 9')
+                 Message('Operacion '~Val(w:6)~' Ok. Pasa a Instancia 9')
+                 if Dialogo.Check1=1
+                    SQL.ADD("Update "~DBO~".OPERACIONESBITS  ")
+                    SQL.ADD("   Set Valor       = '0'  ")
+                    SQL.ADD(" where NrOperacion = '"~Val(w:6)~"' ")
+                    SQL.ADD("   and Valor       = '1' ")
+                    SQL.NEW
+                    SQL.EXEC           
+                    SQL.ADD("Update "~DBO~".OPERACIONESBITS  ")
+                    SQL.ADD("   Set Valor       = '1'  ")
+                    SQL.ADD(" where NrOperacion = '"~Val(w:6)~"' ")
+                    SQL.ADD("   and Nrbit       = 9 ")
+                    SQL.NEW
+                    SQL.EXEC           
+                 endif
+                 * Generacion de Excepciones
+                 if EqStr(Val(t:59),'NE')
+                    ACT(e:1, 'PMENOINF')
+                    ACT(f:1, 'La Especie '~Val(t:3)~' no esta informada.')
+                 endif
+                 if EqStr(Val(t:59),'SI')
+                    ACT(e:1, 'PMESANCION')
+                    if Vacio(Val(w:4))
+                       ACT(f:1, 'La Especie '~Val(b:6)~' esta sancionada.')
+                    else
+                       ACT(f:1, Val(w:4))
+                    endif
+                 endif
+                 if Dialogo.Check1=1
+                    SQL.ADD(" Insert into "~DBO~".EXCEPCIONES ( ")
+                    SQL.ADD(" NrOperacion, Tipo, Fecha, Descripcion ")
+                    SQL.ADD(" ) Values ( ")
+                    SQL.ADD(" '"~Val(w:6)~"', '"~Val(e:1)~"', '"~IdxDate(FSYS)~"' , '"~Val(f:1)~"' ")
+                    SQL.ADD(" ) ")
+                    SQL.NEW
+                    SQL.EXEC
+                 endif
+              endif
+           Endif             
+        Endif
+     Else  
+         ACT(WA:1, 'No es un movimiento de compra-venta - Trade Number '~PAD0(fbn('TradeNumber'),10))
+         
+         if Dialogo.Check1=1
+            SQL.ADD("Update "~DBO~".OPA3 ")
+            SQL.ADD("   Set Procesado   = '1',")
+            SQL.ADD("       Warning       = '"~Trim(Copy(Val(WA:1),1,255))~"', ")
+            SQL.ADD("       NrOperacion = 'Erroneo' ")
+            SQL.ADD(" where Boleta  = '"~fbn('Boleta')~"' ")
+            SQL.NEW
+            SQL.EXEC
+         endif
+     Endif
+
+Proximo 
+
+
+
+if Dialogo.Check1=0 y FAC>0
+  FormatoCeldas(t:6..t:6,Exe('F0'))
+  FormatoCeldas(t:11..t:11,Exe('F2'))
+  FormatoCeldas(t:13..t:15,Exe('F8'))
+  FormatoCeldas(t:16..t:16,Exe('F2'))
+  FormatoCeldas(t:21..t:55,Exe('F0'))
+
+  FormatoCeldas(ca:6..(78+FAC):6,Exe('F0'))
+  FormatoCeldas(ca:11..(78+FAC):11,Exe('F2'))
+  FormatoCeldas(ca:13..(78+FAC):15,Exe('F8'))
+  FormatoCeldas(ca:16..(78+FAC):16,Exe('F2'))
+  FormatoCeldas(ca:21..(78+FAC):55,Exe('F0'))
+  ACO(1, 10)
+  ACO(19,15)
+  ACO(20,12)
+  ACO(78,15)
+endif

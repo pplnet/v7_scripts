@@ -1,0 +1,225 @@
+﻿ModoReproceso(ConDialogo)
+
+CrearDialogo
+  NrTrans1  : 'NrTrans' ;;;;;;NoVacio(Dialogo.NrTrans1);'Transaccion Invalida';NO;;;;;;" TipoTr2 = 'LIQOCT' ";
+  Fecha1    : 'Fecha'   ;;;;NO;;;;NO;Fsys;BuscarCampo('TRANSACCIONES2','Fecha1','NrTrans', Dialogo.NrTrans1);
+  Vehiculo1 : 'Vehiculo';;;;NO;;;;NO;;BuscarCampo('TRANSACCIONES2','Vehiculo1','NrTrans', Dialogo.NrTrans1);
+  Cliente1  : 'Agente'  ;;;;NO;NO;
+  Especie1  : 'Especie' ;;;;NO;NO;
+  Fecha2    : 'Vto.'    ;;;;NO;NO;;;;0;
+  Radio1    : 'FPA|MAE' ;;;;NO;NO;;;;0;
+FinDialogo
+
+if not Ok 
+  Cancelar
+endif
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+CrearFont(3, 'Arial,10,B')
+
+**AgregarBMP(A:1, Exe('LOGO'), 60)
+ACT(A:2, Codigoinforme)
+SetFilaActual(4)
+IF NoVacio(Dialogo.NrTrans1) O Dialogo.Radio1 = 3
+    ACT(F:Fac, 'Detalle de Liquidacion OCT del '~Dialogo.Fecha1)
+ELSE
+    IF Dialogo.Radio1 = 0
+        ACT(F:Fac, 'Detalle MTM FPA del '~Dialogo.Fecha1)
+    ELSE
+        ACT(F:Fac, 'Detalle MTM MAE del '~Dialogo.Fecha1)
+    ENDIF
+ENDIF
+SetFont(F:fac, 3)
+SetFilaActual(fac+2)
+ACT(A:fac, 'Vehiculo: '~Dialogo.Vehiculo1)
+SetFont(A:fac, 1)
+IF NoVacio(Dialogo.Cliente1)
+    IFA
+    ACT(A:fac, 'Agente: '~Dialogo.Cliente1)
+    SetFont(A:fac, 1)
+ENDIF
+IF NoVacio(Dialogo.Especie1)
+    IFA
+    ACT(A:fac, 'Especie: '~Dialogo.Especie1)
+    SetFont(A:fac, 1)
+ENDIF
+IF Dialogo.Fecha2 <> 0
+    IFA
+    ACT(A:fac, 'FechaVto: '~Dialogo.Fecha2)
+    SetFont(A:fac, 1)
+ENDIF
+SetFilaActual(fac+2)
+IF Dialogo.Radio1 = 0 O Dialogo.Radio1 = 3
+    ACT(A:fac, 'Operacion')
+ELSE
+    ACT(A:fac, 'Nro.MAE')
+ENDIF
+ACT(B:fac, 'TipoOp')
+ACT(C:fac, 'Cliente')
+ACT(D:fac, 'FechaOp')
+ACT(E:fac, 'FechaPrecan')
+ACT(F:fac, 'FechaVto')
+ACT(G:fac, 'Moneda')
+ACT(H:fac, 'Cantidad')
+ACT(I:fac, 'Tipo Fixing')
+ACT(J:fac, 'Precio Hoy')
+ACT(K:fac, 'Precio Ayer')
+ACT(L:fac, 'MTM')
+SetFont(A:fac..M:fac, 1)
+AlinearCeldas(A:fac..M:fac, 'C')
+AgregarMarco(A:fac..M:fac, 0, 0, Exe('COLOR'))
+
+ACN(FI:1, fac+1)
+IF Dialogo.Radio1 = 0 O Dialogo.Radio1 = 3
+    ***---MTM FPA
+    SQL.ADD(" Select O.NrOperacion, O.TipoOp, O.Cliente1, O.Especie, O.Cantidad, O.PrecioEj, O.PrecioMer, O.FechaVto, ")
+    SQL.ADD(" O.FechaPrecan, O.ContraEspecie, O.MB1, O.FechaOp, O.Precio1, M.Cantidad ResMov, O.CB6, O.ObsErrorMAE, '' MetodoFix, 0 PrecioMTMH, 0 PrecioMTMA ")
+    SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M ")
+    SQL.ADD(" Where O.NrOperacion = M.NrOperacion ")
+    SQL.ADD(" AND O.TipoOp IN ('FXOCTC','FXOCTV') ")
+    IF NoVacio(Dialogo.NrTrans1)
+        SQL.ADD(" AND M.NrTrans2 = '"~Dialogo.NrTrans1~"' ")
+    ENDIF
+    IF NoVacio(Dialogo.Cliente1)
+        SQL.ADD(" AND M.Cliente = '"~Dialogo.Cliente1~"' ")
+    ENDIF
+    IF Dialogo.Fecha2 <> 0
+        SQL.ADD(" AND O.FechaVto = '"~IdxDate(Dialogo.Fecha2)~"' ")
+    ENDIF
+    IF NoVacio(Dialogo.Especie1)
+        SQL.ADD(" AND O.Especie = '"~Dialogo.Especie1~"' ")
+    ENDIF
+    SQL.ADD(" AND O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+    SQL.ADD(" AND M.NrSaldo = 100 ")
+    SQL.ADD(" AND M.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" Order By O.NrOperacion ")
+ELSE
+    ***---MTM MAE
+    SQL.ADD(" Select NroAltaMAE NrOperacion, TipoOp, Cliente Cliente1, Especie, Cantidad, 0 PrecioEj, ")
+    SQL.ADD(" 0, FechaVto, 0 FechaPrecan, '' ContraEspecie, 0 MB1, FechaOp, Precio1, ")
+    SQL.ADD(" Monto ResMov, 0 CB6, 0 ObsErrorMAE, MetodoFix, PrecioMTMH, PrecioMTMA ")
+    SQL.ADD(" From "~DBO~".MTMDETOCT ")
+    SQL.ADD(" Where TipoOp IN ('FXOCTC','FXOCTV') ")
+    IF NoVacio(Dialogo.Cliente1)
+        SQL.ADD(" AND Cliente = '"~Dialogo.Cliente1~"' ")
+    ENDIF
+    IF Dialogo.Fecha2 <> 0
+        SQL.ADD(" AND FechaVto = '"~IdxDate(Dialogo.Fecha2)~"' ")
+    ENDIF
+    IF NoVacio(Dialogo.Especie1)
+        SQL.ADD(" AND Especie = '"~Dialogo.Especie1~"' ")
+    ENDIF
+    SQL.ADD(" AND FechaProc = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" Order By NroAltaMAE ")
+ENDIF
+Recorrer SQL
+    IF Dialogo.Radio1 = 0 O Dialogo.Radio1 = 3
+        ***---TipoNegociacion
+        ACT(TN:fac, Copy(fbn('ObsErrorMAE'), 1, 1))
+        ***---EspecieOrigen
+        ACT(EO:fac, Copy(fbn('ObsErrorMAE'), 2, 5))
+        ***---Especie MTM
+        ACT(EM:fac, SQL(" Select EspecieDestino2 From "~DBO~".EQUIVALENCIA_ESPECIES Where TipoNegociacion = '"~Val(TN:fac)~"' AND EspecieOrigen = '"~Val(EO:fac)~"' AND EspecieDestino1 = '"~fbn('Especie')~"' AND TipoCotizacion = 'O' "))
+        ***---Metodo Fixing
+        IF Eqstr(fbn('Especie'), 'USD')
+            IF fbn('MB1') = 0
+                ACT(MT:fac, 'E')
+            ENDIF
+            IF fbn('MB1') = 1
+                ACT(MT:fac, 'A')
+            ENDIF
+        ENDIF
+        ***---Especie Fixing
+        ACT(EF:fac, SQL(" Select EspecieDestino2 From "~DBO~".EQUIVALENCIA_ESPECIES Where TipoCotizacion = 'F' AND TipoNegociacion = '"~Val(TN:fac)~"' AND Metodo = '"~Val(MT:fac)~"' "))
+        ACT(A:fac, fbn('NrOperacion'))
+        ACLO(A:fac, fbn('NrOperacion'))
+        IF fbn('MB1') = 0
+            ACT(I:fac, 'EMTA')
+        ENDIF
+        IF fbn('MB1') = 1
+            ACT(I:fac, 'Com A3500')
+        ENDIF
+        IF fbn('MB1') = 2
+            ACT(I:fac, 'Otro')
+        ENDIF
+        ACN(FX:fac, fbn('MB1'))
+        ***---Precio Hoy
+        IF fbn('FechaVto') = Dialogo.Fecha1 O [fbn('FechaPrecan') = Dialogo.Fecha1 Y fbn('CB6') = 1]
+            ***---Fixing o Precan
+            ACN(J:fac, CotizacionC(Val(EF:fac),,,,Dialogo.Fecha1,1,,fbn('ContraEspecie')))
+        ELSE
+            message(Val(EF:fac))
+            message(fbn('ContraEspecie'))
+            ACN(J:fac, CotizacionC(Val(EM:fac),'FUT',fbn('FechaVto'),,Dialogo.Fecha1,1,,fbn('ContraEspecie')))
+        ENDIF
+        ***---Precio Ayer
+        IF fbn('FechaOp') = Dialogo.Fecha1
+            ***---Comparo contra PrecioOp
+            ACN(K:fac, fbn('Precio1'))
+        ELSE
+            ACN(K:fac, CotizacionC(Val(EM:fac),'FUT',fbn('FechaVto'),,Dialogo.Fecha1-1,1,,fbn('ContraEspecie')))
+        ENDIF
+        IF Eqstr(fbn('TipoOp'), 'FXOCTC')
+            ACN(L:fac, fbn('Cantidad') * (Val(J:fac)-Val(K:fac)))
+        ELSE
+            ACN(L:fac, fbn('Cantidad') * (Val(K:fac)-Val(J:fac)))
+        ENDIF
+        ***---Comparo Resultado contra el MOVEJECUTADO
+        IF Round(fbn('ResMov'), 2) <> Round(Val(L:fac), 2)
+            ACT(M:fac, 'MTM <> MTM Liquidado')
+        ENDIF
+    ELSE
+        ACT(A:fac, fbn('NrOperacion'))
+        IF Eqstr(fbn('MetodoFix'), 'E')
+            ACT(I:fac, 'EMTA')
+        ENDIF
+        IF Eqstr(fbn('MetodoFix'), 'C')
+            ACT(I:fac, 'Com A3500')
+        ENDIF
+        ACN(J:fac, fbn('PrecioMTMH'))
+        ACN(K:fac, fbn('PrecioMTMA'))
+        IF Eqstr(fbn('TipoOp'), 'FXOCTC')
+            ACN(L:fac, fbn('Cantidad') * (Val(J:fac)-Val(K:fac)))
+        ELSE
+            ACN(L:fac, fbn('Cantidad') * (Val(K:fac)-Val(J:fac)))
+        ENDIF
+        ***---Comparo Resultado contra el MTM del MAE
+        IF Round(fbn('ResMov'), 2) <> Round(Val(L:fac), 2)
+            ACT(M:fac, 'MTM <> MTM MAE')
+        ENDIF
+    ENDIF
+    ACT(B:fac, fbn('TipoOp'))
+    ACT(C:fac, fbn('Cliente1'))
+    ACD(D:fac, fbn('FechaOp'))
+    IF fbn('CB6') = 1 Y fbn('FechaPrecan') <= Dialogo.Fecha1
+        ACD(E:fac, fbn('FechaPrecan'))
+    ENDIF
+    ACD(F:fac, fbn('FechaVto'))
+    ACT(G:fac, fbn('Especie'))
+    ACN(H:fac, fbn('Cantidad'))
+    SCN(TO:1, Val(L:fac))
+Proximo
+SetFont(A:Val(FI:1)..L:fac, 2)
+FormatoCeldas(H:Val(FI:1)..H:fac, Exe('F2'))
+FormatoCeldas(J:Val(FI:1)..K:fac, Exe('F9'))
+SetFilaActual(fac+2)
+ACT(K:fac, 'Total Neto')
+ACN(L:fac, Val(TO:1))
+SetFont(K:fac..L:fac, 1)
+FormatoCeldas(L:Val(FI:1)..L:fac, Exe('F2'))
+SetFilaActual(fac+2)
+ACT(A:fac, 'Fin del Informe')
+SetFont(A:fac, 1)
+ACO(2, 5)
+ACO(3, 7)
+ACO(5, 7)
+ACO(8, 10)
+ACO(10, 9)
+ACO(11, 9)
+ACO(12, 10)
+ACO(13, 14)
+SetMargins(0, 0, 0, 0)
+SetPrintFit(3, 90)
+Impresion(1, 2)
+LimitesVision(M:fac+1)

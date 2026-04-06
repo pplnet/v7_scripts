@@ -1,0 +1,115 @@
+﻿* LDESPTEMIN - Descalce de Plazos - Saldo de Terceros
+
+SQL.ADD("SELECT  P.Vehiculo,P.Cliente,P.ListaEspecies FROM  "~DBO~".IMPTERCEROS P ")
+SQL.ADD("Where Estado='HAB' and Vehiculo='"~FBN['Vehiculo1']~"' ")
+SQL.ADD("Order By P.Vehiculo,P.Cliente")
+
+Message('1 '~Fstr(val(n:fac),0,2))
+
+Recorrer SQL
+
+   DFA  
+   Message('Vinculadas No Controladas : '~FBN['Vehiculo']~'/'~FBN['Cliente']~'  ...')
+  
+   ACT(AV1,FBN['Vehiculo'])
+   ACT(AV2,FBN['Cliente'])
+
+   * Recupero las Especies contenidas en Pares de Vehiculo
+   SQL.ADD("SELECT Codigo FROM  "~DBO~".ESPECIES Where Codigo IN ("~Pipe2Comillas(FBN['ListaEspecies'])~") ") 
+
+   * Displayo una vez cada Par de Vehiculos
+   Recorrer SQL
+      DFA  
+      ACD(AH1,0)
+
+      * Verifico que tenga Minutas Diarias y no Minutas Mensuales
+      *-- Parametros de la Funcion AV1: Vehiculo1 AV2: Cliente1 AF1: Fecha AE1: Especie
+      SQL.ADD("SELECT DISTINCT O.Vehiculo1,O.Cliente1,O.Especie  ")
+      SQL.ADD("from "~DBO~".OPERACIONES O")
+      SQL.ADD("where ((O.TipoOp='TEMD' and O.FechaOp='"~IdxDate(Dialogo.Fecha1)~"') or (O.TipoOp='TEMIND' and O.FechaVto='"~IdxDate(Dialogo.Fecha1)~"' ) or (O.TipoOp='TEMINM' and O.FechaVto='"~IdxDate(Dialogo.Fecha1)~"' )) ")
+      SQL.ADD("and O.Vehiculo1='"~VAL(AV1)~"'  and O.Cliente1='"~VAL(AV2)~"' ")
+      SQL.ADD("and O.Especie='"~FBN['Codigo']~"' ")
+      SQL.ADD(" AND NOT EXISTS ")
+      SQL.ADD(" (SELECT * ")
+      SQL.ADD("from "~DBO~".OPERACIONES Op ")
+      SQL.ADD("where Op.TipoOp='TEMIND' and Op.FechaOp='"~IdxDate(Dialogo.Fecha1)~"'  ")
+      SQL.ADD("      and Op.Vehiculo1=O.Vehiculo1 and Op.Cliente1=O.Cliente1  and Op.Especie=O.Especie) ")
+      SQL.ADD("Order By O.Vehiculo1,O.Cliente1,O.Especie ")
+    
+      Recorrer SQL       
+         DFA
+         ACN(AH1,1)
+         ACT(AV1,FBN['Vehiculo1'])
+         ACT(AV2,FBN['Cliente1'])
+         Message('Saldos Vehiculo: '~FBN['Vehiculo1']~' Veh. ContraParte '~FBN['Cliente1']~' Especie:'~FBN['Especie']~' ...')
+
+         *-- Parametros de la Funcion AV1: Vehiculo1 AV2: Cliente1 AF1: Fecha AE1: Especie
+         ACT(AE1,FBN['Especie'])
+ 
+         (."SALDIATER".)
+
+         IF Round(VAL(Z1),2)<>0 
+            ACN(z3, val(z1)*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+
+            if Incluido(fbn('Especie'), 'USD|USB') 
+               ACN(y1, 1)
+            else
+               If Incluido(fbn('Especie'), 'ARP')
+                  ACN(y1, 0)
+               Else 
+                  ACN(y1, 2)
+               EndIf
+            endif           
+
+            If VAL(Z1)>0 
+               *- Tomas -> Pasivos
+               SCN(3+(3*Val(y1)):fac, Val(z3))
+               SCN(12:fac, Val(z3))
+            Else
+               SCN(2+(3*Val(y1)):fac, -Val(z3))
+               SCN(11:fac, -Val(z3))
+            EndIf
+         EndIf
+      Proximo
+
+      * No encontro el Mov. Diario => Busco el Mov. Mensual
+      IF VAL(AH1)=0
+         SQL.ADD("SELECT * ")
+         SQL.ADD("from "~DBO~".OPERACIONES ")
+         SQL.ADD("where TipoOp='TEMIND'  and Vehiculo1='"~VAL(AV1)~"'  and Cliente1='"~VAL(AV2)~"' ")
+         SQL.ADD("and Especie='"~FBN['Codigo']~"' ")
+         SQL.ADD("and FechaOp='"~IdxDate(Dialogo.Fecha1)~"' ")
+         SQL.ADD("Order By Vehiculo1,Cliente1,Especie ")
+
+         Recorrer SQL
+            DFA
+            ACN(z1, IIF(FBN['MB3']=0,-FBN['Cantidad'],FBN['Cantidad']))
+            
+            IF Round(VAL(Z1),2)<>0 
+               ACN(z3, val(z1)*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+
+               if Incluido(fbn('Especie'), 'USD|USB') 
+                  ACN(y1, 1)
+               else
+                  If Incluido(fbn('Especie'), 'ARP')
+                     ACN(y1, 0)
+                  Else 
+                     ACN(y1, 2)
+                  EndIf
+               endif           
+
+               If VAL(Z1)>0 
+                  *- Tomas -> Pasivos
+                  SCN(3+(3*Val(y1)):fac, Val(z3))
+                  SCN(12:fac, Val(z3))
+               Else
+                  SCN(2+(3*Val(y1)):fac, -Val(z3))
+                  SCN(11:fac, -Val(z3))
+               EndIf
+            EndIf
+
+            ACN(AH1,1)
+        Proximo
+      EndIf     
+   Proximo
+Proximo

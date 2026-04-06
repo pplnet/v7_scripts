@@ -1,0 +1,115 @@
+﻿MostrarCuadroDeMensajes
+*ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1     : 'Fecha'       ;;;;;;Dialogo.Fecha1>0;'Fecha Invalida';NO;fsys
+  ListaTabla1: 'Operaciones' ;;;;NO;NO;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES'
+  TipoOp1    : 'TipoOp'      ;;;;NO;NO;;
+  Lista1     : 'Vehiculos'       ;;;;SI;SI;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+  Check1     : 'Contab.Procesada';;;;NO;NO;
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+
+message('--- Asientos de Devengados Descubiertos ---')
+
+ACN(x1, SQL("Select 1 from "~DBO~".VARIABLES where Codigo = 'DIASCONT' "))
+if Val(x1)=1
+    ACN(x1, Trunc(Var('DIASCONT'),0))
+endif
+if Val(x1)<1
+    ACN(x1, 1)
+endif
+ACD(x2, Habiles(PriDeMes(Dialogo.Fecha1,SI)-1,Val(x1),'ARG'))
+
+* Fecha Proceso
+ACD(v:1, Dialogo.Fecha1)
+* Ultimo Dia Habil mes anterior
+***---ACD(v:2, Habiles(PriDeMes(Dialogo.Fecha1),-1,'ARG'))
+ACD(v:2, FinDeMes(PriDeMes(Dialogo.Fecha1, SI)-1, NO))
+* Primer Dia Mes Anterior
+ACD(v:3, PriDeMes(Val(v:2),SI))
+* Primer Dia del Mes
+ACD(v:4, PriDeMes(Val(v:1),SI))
+***---Ultimo Dia del Mes anterior
+ACD(v:5, Val(v:4)-1)
+***---Obtengo el sabado si hoy es lunes. Sino V:6 = Dialogo.Fecha1
+ACD(V:6, Habiles(Dialogo.Fecha1, -1, 'ARG') + 1)
+
+* Lista Vehiculos
+ACT(y:1, Dialogo.Lista1)
+***---Ultimo Dia mes anterior
+ACD(FE:1, PriDeMes(Dialogo.Fecha1))
+
+***---Dialogo.Fecha1 = 07/08 => V2=31/07 => V3=01/07 => V4=01/08 => V5=31/07 => FE1=01/07
+
+ACT(ME:1, Var('MONEEXTR'))
+ACT(ML:1, Var('MONELOCA'))
+ACT(MU:1, Var('MONEURU'))
+
+****************************
+*** Descubiertos Consumidos
+****************************
+
+SQL.ADD(" Select O.TipoOp, O.Vehiculo1, MD.Especie, V.Valor1, V.Valor2, M.Codigo CodAsi, Sum(MD.Monto) Devengado, ")
+SQL.ADD(" MD.Especie Moneda, C.Fecha2 FechaVto, O.NrOperacion, O.Cliente1, MD.TipoDevengado, O.Observaciones, O.Precio1, ")
+SQL.ADD(" O.Plazo, O.Cantidad, O.MB3, '' Alias8, O.CB5, V.Alias4, O.TotalNetoCli1, O.FechaVto, O.FechaVto2, O.Indice, O.FechaOp, O.RB10 ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".MOVDEVENGADOS MD, "~DBO~".VEHICULOS V, "~DBO~".MODELOSASIENTO M, ")
+SQL.ADD(" "~DBO~".CUOTAS C ")
+SQL.ADD(" Where C.Fecha2 >= '"~IdxDate(Val(V:3))~"' AND C.Fecha2 <= '"~IdxDate(Val(V:5))~"' ")
+SQL.ADD("   and O.TipoOp = 'MMDPAC' AND O.RB10=0 ")
+SQL.ADD("   and O.NrOperacion =  MD.NrOperacion ")
+SQL.ADD("   and O.NrOperacion =  C.NrOperacion ")
+SQL.ADD("   and MD.Fecha      > C.Fecha2 ")
+SQL.ADD("   and MD.Fecha      <=  C.Fecha3  ")
+SQL.ADD("   and O.Vehiculo1   IN ("~Pipe2Comillas(Var('VLIQUIDA')~Var('VLIQUIDA2'))~") ")
+SQL.ADD(" AND M.Habilitado = 'SI' ")
+If NoVAcio(Dialogo.Lista1)
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND ( ")
+   Recorrer&i 1,Elementos(Dialogo.Lista1)
+        SQL.ADD(" '|'+rtrim(M.Vehiculo)+'|' like '%|"~ItemLista(Dialogo.Lista1,&i)~"|%' ")
+        If NOT Elementos(Dialogo.Lista1)=&i
+            SQL.ADD(" OR ")
+        EndIf
+   proximo
+   SQL.ADD(") ")    
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      SQL.ADD(" AND O.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+   Endif
+Endif
+SQL.ADD("   and O.Vehiculo1   =  V.Codigo ")
+SQL.ADD("   and M.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIDEVF'))~") ")
+SQL.ADD("   and M.TipoOp      = O.TipoOp ")
+SQL.ADD(" group by O.TipoOp, O.Vehiculo1, MD.Especie, V.Valor1, V.Valor2, M.Codigo, C.Fecha2, O.NrOperacion, ")
+SQL.ADD(" O.Cliente1, MD.TipoDevengado, O.Observaciones, O.Precio1, O.Plazo, O.Cantidad, O.MB3, O.CB5, ")
+SQL.ADD(" V.Alias4, O.TotalNetoCli1, O.FechaVto, O.FechaVto2,  O.Indice, O.FechaOp, O.RB10 ")
+
+Recorrer SQL
+   ACN(CK:1, 0)
+   ACD(FV:1, Val(V:5))
+   ACT(VH:1, fbn('Vehiculo1'))
+   **//(.'FECHAVALOR'.)
+   IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+        ACN(CK:1, 1)
+        IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrOperacion = '"~fbn('NrOperacion')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado = 'E' AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+            ACN(CK:1, 0)
+        ENDIF
+   ENDIF
+   **MessageBox(Val(CK:1))
+   IF Val(CK:1) = 0
+     ACT(ba:FAC, fbn('TipoOp'))
+     ACT(bb:FAC, fbn('Vehiculo1'))
+     ACN(bc:FAC, fbn('Valor1'))
+     ACN(bd:FAC, fbn('Valor2'))
+     ACT(be:FAC, fbn('Especie'))
+     ACN(bf:FAC, fbn('Devengado'))
+     ACT(bg:FAC, fbn('CodAsi'))
+     ACN(DV:1, fbn('Devengado'))
+     message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+     SQL.GenerarAsientoOp(fbn('CodAsi'),fbn('NrOperacion'),'','',810,Val(FV:1),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+     SQL.EXEC
+   ENDIF
+Proximo

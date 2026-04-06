@@ -1,0 +1,391 @@
+﻿CrearDialogo
+  Fecha1    : 'Fecha';;;;;;;;;FSys
+  Vehiculo1 :'Vehiculo' ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+FinDialogo
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+  else
+   If [SQL("Select Count(*) from "~DBO~".VEHICULOS ") <> SQL("Select Count(*) from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"' ")] y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+endif
+
+if not Ok 
+  Cancelar
+endif
+
+ACT(a4, 'Limites de Posicion - Maturity Maxima')
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(a5, 'Vehiculo: '~Dialogo.Vehiculo1)
+  ACT(z10, Descendientes('Vehiculos', Dialogo.Vehiculo1))
+  if NoVacio(Val(z10))
+    ACT(z11, "'"~Dialogo.Vehiculo1~"',"~Pipe2Comillas(Val(z10)))
+  else
+    ACT(z11, "'"~Dialogo.Vehiculo1~"'")
+  endif
+else
+  ACT(a5, 'Vehiculo: Todos')
+endif
+ACT(a6, 'Fecha: '~Dialogo.Fecha1)
+
+ACT(a8, 'Activo')
+ACT(b8, 'Pesos')
+ACT(b9, 'Valor(000s)')
+ACT(c9, 'Maturity')
+ACT(d9, 'Mat.Maxima')
+ACT(e9, 'Estado')
+ACT(f8, 'M.Extranjera')
+ACT(f9, 'Valor(000s)')
+ACT(g9, 'Maturity')
+ACT(h9, 'Mat.Maxima')
+ACT(i9, 'Estado')
+AlinearCeldas(b9..d9, 'D')
+AlinearCeldas(f9..h9, 'D')
+
+AgregarMarco(a8..i9,1,0,Exe("COLOR"))
+AgregarMarco(b8..e8,1)
+AgregarMarco(b9..b9,1)
+AgregarMarco(c9..c9,1)
+AgregarMarco(d9..d9,1)
+AgregarMarco(e9..e9,1)
+AgregarMarco(f8..i8,1)
+AgregarMarco(f9..f9,1)
+AgregarMarco(g9..g9,1)
+AgregarMarco(h9..h9,1)
+AgregarMarco(i9..i9,1)
+
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+SetFont(a1..z9, 1)
+
+ACT(a10, 'Depositos a plazo')
+ACN(d:10, LimAsignado('VINCULADOS', 'DPMATMAXPR', 'ARP'))
+ACN(h:10, LimAsignado('VINCULADOS', 'DPMATMAXPR', 'USD'))
+AgregarMarco(a10..i10,1,0,RGB(192,192,192))
+
+SetFilaActual(10)
+
+SQL.ADD("Select Especie, Cantidad, NrOperacion, TipoOp, Cliente1, Plazo,FechaOp,FechaVto from "~DBO~".OPERACIONES where ")
+SQL.ADD(" TipoOp in ('MMCDIA','MMCDP','MMCP','MMCPM','MMD','MMDCA','MMCCR','MMO')")
+SQL.ADD("and FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' and FechaVto > '"~IdxDate(Dialogo.Fecha1)~"'")
+if NoVacio(Dialogo.Vehiculo1)
+  SQL.ADD("and Vehiculo1 in ("~Val(z11)~")")
+endif
+SQL.ADD("order by Cliente1")
+recorrer SQL
+  dfa
+  if Incluido(fbn('TipoOp'),'MMCDIA|MMCDP|MMCP|MMCPM|MMO')
+     ACN(z3, fbn('Cantidad'))
+
+     if Incluido(fbn('TipoOp'),'MMCPM')
+        ACN(z3, SQL("Select Cantidad2 from "~DBO~".CUOTAS where NrOperacion='"~fbn('NrOperacion')~"' and Fecha1<='"~IdxDate(Dialogo.Fecha1)~"' and Fecha2>'"~IdxDate(Dialogo.Fecha1)~"'"))
+     EndIf
+
+     if Incluido(fbn('Especie'), 'USD|USB') 
+        ACN(z3, val(z3)/1000)
+        ACN(y1, 1)
+     else
+        ACN(z3, val(z3)*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+        if Incluido(fbn('Especie'), 'ARP')
+           ACN(y1, 0)
+        else
+           ACN(y1, 1)
+        endif
+     endif
+  endif
+  if Incluido(fbn('TipoOp'),'MMDCA|MMCCR')
+     if Incluido(fbn('Especie'), 'USD|USB') 
+        ACN(z3, fbn('Cantidad')/1000)
+        ACN(y1, 1)
+     else
+        ACN(z3, fbn('Cantidad')*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+        if Incluido(fbn('Especie'), 'ARP')
+           ACN(y1, 0)
+        else
+           ACN(y1, 1)
+        endif
+     endif
+  endif
+
+  if Incluido(fbn('TipoOp'),'MMD')
+     if Incluido(fbn('Especie'), 'USD|USB') 
+        ACN(z3, fbn('Cantidad')/1000)
+        ACN(y1, 1)
+     else
+        ACN(z3, fbn('Cantidad')*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+        if Incluido(fbn('Especie'), 'ARP')
+           ACN(y1, 0)
+        else
+           ACN(y1, 1)
+        endif
+     endif
+  endif
+
+  acd(ad1,FBN['FechaOp'])
+  acd(ad2,FBN['FechaVto'])
+
+  *- Calculo del Plazo Remanente
+  If FBN['FechaOp']<Dialogo.Fecha1
+     acd(ad1,Dialogo.Fecha1)
+  EndIf
+
+  *- ad3: Plazo Remanente
+  acn(ad3,val(ad2)-val(ad1))     
+
+  *MessageBox('Plazo Remanente '~fbn('Cliente1')~' '~fstr(val(ad3),0,2))
+
+  if Not EqStr(fbn('Cliente1'), Val(a:fac)) y Val(z3) > 0
+     ifa
+     ACT(a:fac, fbn('Cliente1'))
+     ACN(d:fac, LimAsignado('VINCULADOS', 'DPMATMAX', 'ARP'))
+     ACN(h:fac, LimAsignado('VINCULADOS', 'DPMATMAX', 'USD'))
+     SCN(2+Val(y1)*4:fac, Val(z3))
+     SCN(3+Val(y1)*4:fac, Val(z3)*val(ad3)/365)
+     SCN(2+Val(y1)*4:10 , Val(z3))
+     SCN(3+Val(y1)*4:10 , Val(z3)*val(ad3)/365)
+  else
+     SCN(2+Val(y1)*4:fac, Val(z3))
+     SCN(3+Val(y1)*4:fac, Val(z3)*val(ad3)/365)
+     SCN(2+Val(y1)*4:10 , Val(z3))
+     SCN(3+Val(y1)*4:10 , Val(z3)*val(ad3)/365)
+  endif
+
+proximo
+
+
+
+BorrarCeldas(x1..x1)
+ifa
+ACT(a:fac, 'Trading / T.Publicos')
+ACN(d:fac, LimAsignado('VINCULADOS', 'TRMATMAXPR', 'ARP'))
+ACN(h:fac, LimAsignado('VINCULADOS', 'TRMATMAXPR', 'USD'))
+AgregarMarco(a:fac..i:fac,1,0,RGB(192,192,192))
+ACN(w1, fac)
+
+SQL.ADD("Select Codigo, Cotiza, Fecha from "~DBO~".ESPECIES where Tipo='PUB' order by Codigo")
+
+recorrer SQL
+
+  dfa
+  ACN(z1, 0)
+  ACN(z7, 0)
+  ACN(z8, 0)
+
+  *- ab1: Nro. Cartera
+  ACN(ab1,113)
+
+  (.'LPOSSMATMA'.)
+  (.'LPOSFUTURO'.)
+
+  if [Val(z1)>0 o Val(z8)>0] y Val(z1)/1000+Val(z8) > 0
+     Message(fbn('Codigo')~' '~FStr(Val(z1),1,0)~' '~FStr(Val(z8),1,0))
+     if Not EqStr(fbn('Codigo'), Val(a:fac))
+        ifa
+        ACT(a:fac, fbn('Codigo'))
+    endif
+    if EqStr(fbn('Cotiza'), 'ARP') 
+       ACN(b:fac, (Val(z8)+Val(z1))*CotizacionC(fbn('Codigo'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+       ACN(c:fac, abs(Val(b:fac))*(fbn('Fecha')-Dialogo.Fecha1)/365)
+       ACN(d:fac, LimAsignado('VINCULADOS', 'TRMATMAX', 'ARP'))
+    else
+       ACN(f:fac, (Val(z8)+Val(z1))*CotizacionC(fbn('Codigo'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+       ACN(g:fac, abs(Val(f:fac))*(fbn('Fecha')-Dialogo.Fecha1)/365)
+       ACN(h:fac, LimAsignado('VINCULADOS', 'TRMATMAX', 'USD'))
+    endif
+  endif
+
+proximo
+
+ACN(b:Val(w1), SUM(b:Val(w1)+1..b:fac))
+ACN(c:Val(w1), SUM(c:Val(w1)+1..c:fac))
+ACN(f:Val(w1), SUM(f:Val(w1)+1..f:fac))
+ACN(g:Val(w1), SUM(g:Val(w1)+1..g:fac))
+
+
+
+BorrarCeldas(x1..x1)
+ifa
+ACT(a:fac, 'Investment / T.Publicos')
+ACN(d:fac, LimAsignado('VINCULADOS', 'INMATMAXPR', 'ARP'))
+ACN(h:fac, LimAsignado('VINCULADOS', 'INMATMAXPR', 'USD'))
+AgregarMarco(a:fac..i:fac,1,0,RGB(192,192,192))
+ACN(w2, fac)
+
+SQL.ADD("Select Codigo, Cotiza, Fecha from "~DBO~".ESPECIES where Tipo='PUB' order by Codigo")
+
+recorrer SQL
+  dfa
+  ACN(z1, 0)
+  ACN(z7, 0)
+  ACN(z8, 0)
+
+  *- ab1: Nro. Cartera
+  ACN(ab1,110)
+  (.'LPOSSMATMA'.)
+
+  if Val(z1)>0
+    if Not EqStr(fbn('Codigo'), Val(a:fac))
+      ifa
+      ACT(a:fac, fbn('Codigo'))
+    endif
+    if EqStr(fbn('Cotiza'), 'ARP') 
+      ACN(b:fac, Val(z1)*CotizacionC(fbn('Codigo'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+      ACN(c:fac, Val(b:fac)*(fbn('Fecha')-Dialogo.Fecha1)/365)
+      ACN(d:fac, LimAsignado('VINCULADOS', 'INMATMAX', 'ARP'))
+    else
+      ACN(f:fac, Val(z1)*CotizacionC(fbn('Codigo'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+      ACN(g:fac, Val(f:fac)*(fbn('Fecha')-Dialogo.Fecha1)/365)
+      ACN(h:fac, LimAsignado('VINCULADOS', 'INMATMAX', 'USD'))
+    endif
+  endif
+proximo
+ACN(b:Val(w2), SUM(b:Val(w2)+1..b:fac))
+ACN(c:Val(w2), SUM(c:Val(w2)+1..c:fac))
+ACN(f:Val(w2), SUM(f:Val(w2)+1..f:fac))
+ACN(g:Val(w2), SUM(g:Val(w2)+1..g:fac))
+
+BorrarCeldas(x1..x1)
+ifa
+ACT(a:fac, 'Available for Sale / T.Publicos')
+ACN(d:fac, LimAsignado('VINCULADOS', 'HSMATMAXPR', 'ARP'))
+ACN(h:fac, LimAsignado('VINCULADOS', 'HSMATMAXPR', 'USD'))
+AgregarMarco(a:fac..i:fac,1,0,RGB(192,192,192))
+ACN(w3, fac)
+
+SQL.ADD("Select Codigo, Cotiza, Fecha from "~DBO~".ESPECIES where Tipo='PUB' order by Codigo")
+recorrer SQL
+  dfa
+  ACN(z1, 0)
+  ACN(z7, 0)
+  ACN(z8, 0)
+
+  *- ab1: Nro. Cartera
+  ACN(ab1,112)
+  (.'LPOSSMATMA'.)
+  if Val(z1)>0
+    if Not EqStr(fbn('Codigo'), Val(a:fac))
+      ifa
+      ACT(a:fac, fbn('Codigo'))
+    endif
+    if EqStr(fbn('Cotiza'), 'ARP') 
+      ACN(b:fac, Val(z1)*CotizacionC(fbn('Codigo'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+      ACN(c:fac, Val(b:fac)*(fbn('Fecha')-Dialogo.Fecha1)/365)
+      ACN(d:fac, LimAsignado('VINCULADOS', 'HSMATMAX', 'ARP'))
+    else
+      ACN(f:fac, Val(z1)*CotizacionC(fbn('Codigo'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+      ACN(g:fac, Val(f:fac)*(fbn('Fecha')-Dialogo.Fecha1)/365)
+      ACN(h:fac, LimAsignado('VINCULADOS', 'HSMATMAX', 'USD'))
+    endif
+  endif
+proximo
+ACN(b:Val(w3), SUM(b:Val(w3)+1..b:fac))
+ACN(c:Val(w3), SUM(c:Val(w3)+1..c:fac))
+ACN(f:Val(w3), SUM(f:Val(w3)+1..f:fac))
+ACN(g:Val(w3), SUM(g:Val(w3)+1..g:fac))
+
+
+BorrarCeldas(x1..x1)
+ifa
+ACT(a:fac, 'Set Aside/ T.Publicos')
+ACN(d:fac, LimAsignado('VINCULADOS', 'SAMATMAXPR', 'ARP'))
+ACN(h:fac, LimAsignado('VINCULADOS', 'SAMATMAXPR', 'USD'))
+AgregarMarco(a:fac..i:fac,1,0,RGB(192,192,192))
+ACN(w4, fac)
+
+SQL.ADD("Select Codigo, Cotiza, Fecha from "~DBO~".ESPECIES where Tipo='PUB' order by Codigo")
+
+Recorrer SQL
+  dfa
+  ACN(z1, 0)
+  ACN(z7, 0)
+  ACN(z8, 0)
+
+  *- ab1: Nro. Cartera
+  ACN(ab1,111)
+  (.'LPOSSMATMA'.)
+  if Val(z1)>0
+    if Not EqStr(fbn('Codigo'), Val(a:fac))
+      ifa
+      ACT(a:fac, fbn('Codigo'))
+    endif
+    if EqStr(fbn('Cotiza'), 'ARP') 
+      ACN(b:fac, Val(z1)*CotizacionC(fbn('Codigo'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+      ACN(c:fac, Val(b:fac)*(fbn('Fecha')-Dialogo.Fecha1)/365)
+      ACN(d:fac, LimAsignado('VINCULADOS', 'SAMATMAX', 'ARP'))
+    else
+      ACN(f:fac, Val(z1)*CotizacionC(fbn('Codigo'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+      ACN(g:fac, Val(f:fac)*(fbn('Fecha')-Dialogo.Fecha1)/365)
+      ACN(h:fac, LimAsignado('VINCULADOS', 'SAMATMAX', 'USD'))
+    endif
+  endif
+proximo
+
+ACN(b:Val(w4), SUM(b:Val(w4)+1..b:fac))
+ACN(c:Val(w4), SUM(c:Val(w4)+1..c:fac))
+ACN(f:Val(w4), SUM(f:Val(w4)+1..f:fac))
+ACN(g:Val(w4), SUM(g:Val(w4)+1..g:fac))
+
+
+ACT(a:fac+1, 'Total')
+ACN(b:fac+1, Val(b10)+Val(b:Val(w1))+Val(b:Val(w2))+Val(b:Val(w3))+Val(b:Val(w4)))
+ACN(f:fac+1, Val(f10)+Val(f:Val(w1))+Val(f:Val(w2))+Val(f:Val(w3))+Val(f:Val(w4)))
+ACN(v1, fac)
+
+ACO(1, 17)
+ACO(2, 10)
+ACO(3, 10)
+ACO(4, 10)
+ACO(5, 10)
+ACO(6, 10)
+ACO(7, 10)
+ACO(8, 10)
+ACO(9, 10)
+AgregarMarco(a9..a:fac,1)
+AgregarMarco(b9..e:fac,1)
+AgregarMarco(f9..i:fac,1)
+AgregarMarco(a:fac+1..i:fac+1,1,0,Exe('COLOR'))
+
+recorrer&i 10, fac
+  ACN(c:&i, Val(c:&i)/Val(b:&i))
+  ACN(g:&i, Val(g:&i)/Val(f:&i))
+  if Val(d:&i) >= 0
+    if Val(c:&i)>Val(d:&i)
+      ACT(e:&i, 'Excedido')
+      ColorCeldas(e:&i,clRED)
+    else
+      ACT(e:&i, 'OK')
+      ColorCeldas(e:&i,clGREEN)
+    endif
+  endif
+  if Val(h:&i) >= 0
+    if Val(g:&i)>Val(h:&i)
+      ACT(i:&i, 'Excedido')
+      ColorCeldas(i:&i,clRED)
+    else
+      ACT(i:&i, 'OK')
+      ColorCeldas(i:&i,clGREEN)
+    endif
+  endif
+proximo
+
+SetFont(a9..a:fac+1,1)
+SetFont(b10..z:fac+1,2)
+SetFilaActual(fac+2)
+SaltarHoja
+ACN(w20, fac)
+recorrer ("Select Codigo from "~DBO~".VEHICULOS")
+  dfa
+  if [DesciendeDeVehiculo(fbn('Codigo'),Dialogo.Vehiculo1) y not EqStr(fbn('Codigo'), Dialogo.Vehiculo1)] o Vacio(Dialogo.Vehiculo1)
+    ifa
+    ACT(a:fac, fbn('Codigo'))
+    AsignarLink(a:fac, 'LMATMX', Vehiculo1=Val(a:fac), Fecha1=Dialogo.Fecha1)
+  endif
+proximo
+SetFont(a:Val(w20)..z:fac,2)
+LimitesVision(j:fac+2)
+Impresion(1,2)

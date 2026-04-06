@@ -1,0 +1,129 @@
+﻿CrearDialogo
+  Fecha1:    'Fecha'     ;;;;;;
+  Vehiculo1: 'Vehiculo'  ;;;;;;
+  Cuenta1:   'Cuenta'    ;;;;;;
+  Cliente1:  'Banco'     ;;;;;;
+  Especie1:  'Moneda'    ;;;;;;
+FinDialogo
+
+If Not Ok
+  Cancelar
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+ACO(4,20)
+*******************************************************************HEADER*****************************************************
+*let &filaLogo 1
+*@LOGO
+
+ACT(D:1, 'Detalle de Saldos Cta. Comitente al '~Dialogo.Fecha1)
+SetFont(D:1..D:1,3)
+SetFilaActual(6)
+
+
+ACT(A:fac,'Fecha: '~Dialogo.Fecha1)
+ifa
+ACT(A:fac,'Cuenta: '~Dialogo.Cuenta1)
+
+
+ifa
+ifa
+ACT(a:fac, 'NrOperacion')
+ACT(b:fac, 'Fecha')
+ACT(c:fac, 'TipoOp')
+ACT(d:fac, 'Concepto')
+ACT(e:fac, 'Moneda')
+ACT(f:fac, 'Especie Op.')
+ACT(g:fac, 'Monto')
+SetFont(A:6..g:fac,2)
+AgregarMarco(A:fac..g:fac,1,0,EXE('COLOR'))
+
+*********************************************************************SQL************************************************************************
+**Fecha hasta la cual se mostrarán totalizados los saldos
+let &FechaAnt Habiles(Dialogo.Fecha1,-VAR('PLSAICTACO'),'ARG',NO)
+
+SQL.ADD("Select Fecha,Saldo ")
+SQL.ADD("from "~DBO~".SALDOSDIA S ")
+SQL.ADD("Where NrSaldo = '50'")
+SQL.ADD("And S.Cuenta = '"~Dialogo.Cuenta1~"' ")
+If NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("AND S.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+Endif
+If NoVacio(Dialogo.Cliente1)
+    SQL.ADD("AND S.Cliente = '"~Dialogo.Cliente1~"' ")
+Endif
+If NoVacio(Dialogo.Especie1)
+    SQL.ADD("AND S.Especie = '"~Dialogo.Especie1~"' ")
+Endif
+SQL.ADD("AND S.Fecha <= '"~IdxDate(&FechaAnt)~"' ")
+SQL.ADD("AND Fecha IN (Select Max(Fecha) From "~DBO~".SALDOSDIA")
+SQL.ADD("Where NrSaldo='50'")
+SQL.ADD("and Cuenta = S.Cuenta ")
+SQL.ADD("AND Fecha <= '"~IdxDate(&FechaAnt)~"' ")
+If NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("AND EnteCustodia = S.EnteCustodia ")
+Endif
+If NoVacio(Dialogo.Cliente1)
+    SQL.ADD("AND Cliente = S.Cliente ")
+Endif
+If NoVacio(Dialogo.Especie1)
+    SQL.ADD("AND Especie = S.Especie ")
+Endif
+SQL.ADD(")")
+
+Recorrer SQL
+    ACT(A:fac,'Saldos al ')
+    ACD(B:fac,&FechaAnt)
+    ACN(G:fac,FBN['Saldo'])
+    let &SumaSal &SumaSal+FBN['Saldo']
+    AgregarMarco(A:fac..G:fac,1,0,)
+    SetFont(A:fac..G:fac,2)
+Proximo
+SQL.ADD("Select M.NrOperacion,M.FechaMov,O.TipoOp,M.Leyenda as Concepto,M.Especie AS Moneda,O.Especie,M.Cantidad as Monto")
+SQL.ADD("FROM "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M")
+SQL.ADD("Where O.NrOperacion=M.NrOperacion")
+SQL.ADD("And M.NrSaldo='50'")
+SQL.ADD("And M.Cuenta='"~Dialogo.Cuenta1~"' ")
+SQL.ADD("And M.FechaMov >'"~IdxDate(&FechaAnt)~"'")
+SQL.ADD("And M.FechaMov <='"~IdxDate(Dialogo.Fecha1)~"'")
+If NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("AND M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+Endif
+If NoVacio(Dialogo.Cliente1)
+    SQL.ADD("AND M.Cliente = '"~Dialogo.Cliente1~"' ")
+Endif
+If NoVacio(Dialogo.Especie1)
+    SQL.ADD("AND M.Especie = '"~Dialogo.Especie1~"' ")
+Endif
+SQL.ADD("Order By M.FechaMov")
+
+
+let &ComienzoDatos fac
+Recorrer SQL
+    ACT(A:fac,FBN['NrOperacion'])
+    ACD(B:fac,FBN['FechaMov'])
+    ACT(C:fac,FBN['TipoOp'])
+    ACT(D:fac,FBN['Concepto'])
+    ACT(E:fac,FBN['Moneda'])
+    ACT(F:fac,FBN['Especie'])
+    ACN(G:fac,FBN['Monto'])
+    let &SumaSal &SumaSal+FBN['Monto']
+Proximo
+ifa
+ACT(A:fac,'Total ')
+ACN(G:fac,&SumaSal)
+AgregarMarco(A:fac..G:fac,1,0,EXE('COLOR6'))
+
+
+ifa
+ifa
+ACT(A:fac,'Fin del Reporte')
+SetFont(A:fac..A:fac,2)
+ifa
+LimitesVision(H:fac)
+
+
+
+

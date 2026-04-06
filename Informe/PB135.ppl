@@ -1,0 +1,295 @@
+﻿MostrarCuadroDeMensajes
+
+ACT(VH:1, SQLSet(" Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+
+CrearDialogo
+   Fecha1:  'D.Fecha'   ;1;1;;;;;;;FSYS
+   Fecha2:  'H.Fecha'   ;2;1;;;;;;;FSYS
+   Radio2:  'Tipo Cta|Cta.Cte|Interm|Recaud|C.Ahorro|Todos' ;3;1;;;;;;;4
+   Check1:  'Incluye Pagadoras';4;1;;;;;;;1
+   Lista1:  'Vehiculos' ; 5;1;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"), Val(VH:1))
+FinDialogo
+
+If NOT OK
+  Cancelar
+Endif
+
+CrearFont(1,"Arial,12,BI")
+CrearFont(2,"Arial,10,B")
+CrearFont(3,"Arial,10,BI")
+CrearFont(4,"Arial,8,BU")
+CrearFont(5,"Arial,8,BI")
+CrearFont(6,"Arial,8,B")
+CrearFont(7,"Arial,8,")
+
+ACT(a:2, 'Vehiculos: '~iif(vacio(Dialogo.Lista1),'Todos',Pipe2Comillas(Dialogo.Lista1)))
+ACT(a:3, 'Desde: '~Dialogo.Fecha1)
+ACT(a:4, 'Hasta: '~Dialogo.Fecha2)
+If Dialogo.Radio2=0
+  ACT(a:5, 'Tipo de Cta: Cuenta Corriente')
+Endif
+If Dialogo.Radio2=1
+  ACT(a:5, 'Tipo de Cta: Intermedia')
+Endif
+If Dialogo.Radio2=2
+  ACT(a:5, 'Tipo de Cta: Recaudadora')
+Endif
+If Dialogo.Radio2=3
+  ACT(a:5, 'Tipo de Cta: Caja de Ahorro')
+Endif
+If Dialogo.Radio2=4
+  ACT(a:5, 'Tipo de Cta: Todas')
+Endif
+If Dialogo.Check1=0
+  ACT(a:5, Val(a:5)~' - No incluye Cuentas Pagadoras.')
+Else
+  ACT(a:5, Val(a:5)~' - Incluye Cuentas Pagadoras.')
+Endif
+
+ACT(d:6, 'Reporte de Posiciones Proyectadas')
+SetFont(a:1..z:5,6)
+SetFont(d:6,3)
+
+SetFilaActual(7)
+
+*MOVIMIENTOS PENDIENTES DE TRANSACCIONES
+SQL.ADD(" SELECT M.Cantidad, M.Especie, M.FechaMov, M.Cliente, M.Cuenta, T.TipoTr2 Tipo, ")
+*SQL.ADD(" DECODE(M.NrComprob,NULL,0,M.NrComprob) NrComprob, T.CNFormaPago Origen, T.Fecha1 FechaOp, B.RazonSocial Banco, C.Numero, CD.Tipo CodigoDatanet, B.Codigo, 9 RB1 ")
+SQL.ADD(" CASE WHEN M.NrComprob is NULL THEN 0 ELSE M.NrComprob END NrComprob, ") 
+SQL.ADD(" T.CNFormaPago Origen, T.Fecha1 FechaOp, B.RazonSocial Banco, C.Numero, CD.Tipo CodigoDatanet, B.Codigo, 9 RB1 ")
+SQL.ADD(" FROM   "~DBO~".MOVPENDIENTES M, "~DBO~".CUENTAS C, "~DBO~".CLIENTES B, "~DBO~".TRANSACCIONES2 T, "~DBO~".ESPECIES E, "~DBO~".CODIGOSDATANET CD, "~DBO~".TIPOSCODIGODATANET TD ")
+SQL.ADD(" WHERE  M.Cuenta      = C.Codigo  ")
+SQL.ADD(" AND    C.Comitente   = B.Codigo  ")
+SQL.ADD(" AND    M.NrOperacion = T.NrTrans ")
+SQL.ADD(" AND    M.Especie     = E.Codigo  ")
+SQL.ADD(" AND    E.Tipo        = 'MON' ")
+SQL.ADD(" AND    M.NrSaldo     = 1 ")
+SQL.ADD(" AND    CD.Tipo       = TD.Codigo  ")
+SQL.ADD(" AND    T.CodigoDatanet1 = CD.Codigo  ")
+SQL.ADD(" AND    T.TipoTr2 IN ('DEVM') ")
+SQL.ADD(" AND    T.Fecha2  >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND    T.Fecha2  <= "~IdxDate2(Dialogo.Fecha2)~" ")
+SQL.ADD(" AND (M.NrComprob <> 0 AND M.NrComprob IS NOT NULL)  ")
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD') ")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT') ")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC') ")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA') ")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+If NoVAcio(Dialogo.Lista1)
+  SQL.ADD(" AND M.Cliente  IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND M.Cliente IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+SQL.ADD(" UNION ALL ")
+SQL.ADD(" SELECT M.Cantidad*(-1) Cantidad, M.Especie, M.FechaMov, M.EnteCustodia Cliente, M.Cuenta, T.TipoOp Tipo, ")
+SQL.ADD(" 0 NrComprob, ' ' Origen, T.FechaOp, B.RazonSocial Banco, C.Numero, ' ' CodigoDatanet, B.Codigo, 9 RB1  ")
+SQL.ADD(" FROM   "~DBO~".MOVEJECUTADOS M, "~DBO~".CUENTAS C, "~DBO~".CLIENTES B,  ")
+SQL.ADD(" "~DBO~".OPERACIONES T, "~DBO~".ESPECIES E, "~DBO~".TIPOSOPERACION TOPER ")
+SQL.ADD(" WHERE  M.Cuenta    = C.Codigo ")
+SQL.ADD(" AND    C.Comitente = B.Codigo ")
+SQL.ADD(" AND    M.NrOperacion = T.NrOperacion ")
+SQL.ADD(" AND    M.Especie     = E.Codigo  ")
+*SQL.ADD(" AND    M.Especie     = 'ARP'  ")
+SQL.ADD(" AND    E.Tipo        = 'MON'     ")
+SQL.ADD(" AND    T.TipoOp      = TOPER.Codigo ")
+SQL.ADD(" AND    M.NrSaldo     = 1 ")
+SQL.ADD(" AND    M.FechaMov >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND    M.FechaMov <= "~IdxDate2(Dialogo.Fecha2)~" ")
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD') ")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT') ")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC') ")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA') ")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+If NoVAcio(Dialogo.Lista1)
+  SQL.ADD(" AND M.EnteCustodia  IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND M.EnteCustodia IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+SQL.ADD(" UNION ALL ")
+SQL.ADD(" SELECT M.Cantidad*(-1) Cantidad, M.Especie, M.FechaMov, M.EnteCustodia Cliente, M.Cuenta, T.TipoOp Tipo, ")
+SQL.ADD(" 0 NrComprob, ' ' Origen, T.FechaOp, B.RazonSocial Banco, C.Numero, ' ' CodigoDatanet, B.Codigo, 9 RB1  ")
+SQL.ADD(" FROM   "~DBO~".MOVPENDIENTES M, "~DBO~".CUENTAS C, "~DBO~".CLIENTES B,  ")
+SQL.ADD(" "~DBO~".OPERACIONES T, "~DBO~".ESPECIES E, "~DBO~".TIPOSOPERACION TOPER ")
+SQL.ADD(" WHERE  M.Cuenta    = C.Codigo ")
+SQL.ADD(" AND    C.Comitente = B.Codigo ")
+SQL.ADD(" AND    M.NrOperacion = T.NrOperacion ")
+SQL.ADD(" AND    M.Especie     = E.Codigo  ")
+*SQL.ADD(" AND    M.Especie     = 'ARP'  ")
+SQL.ADD(" AND    E.Tipo        = 'MON'     ")
+SQL.ADD(" AND    T.TipoOp      = TOPER.Codigo ")
+SQL.ADD(" AND    M.NrSaldo     = 1 ")
+SQL.ADD(" AND    M.FechaMov >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND    M.FechaMov <= "~IdxDate2(Dialogo.Fecha2)~" ")
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD') ")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT') ")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC') ")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA') ")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+If NoVAcio(Dialogo.Lista1)
+  SQL.ADD(" AND M.EnteCustodia  IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND M.EnteCustodia IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+SQL.ADD(" UNION ALL ")
+SQL.ADD(" SELECT M.Cantidad1 Cantidad, M.Especie, M.Fecha2 FechaMov, M.Vehiculo1 Cliente, ")
+*SQL.ADD(" M.Cuenta2 Cuenta, M.TipoTr2 Tipo, 0 NrComprob, '  ' Origen, M.Fecha1 FechaOp, B.RazonSocial Banco, C.Numero, ' ' CodigoDatanet, B.Codigo, DECODE(M.RB1,'0  ',0,'1  ',1,'2  ',2,'3  ',3,'4  ',4,'5  ',5) RB1 ")
+SQL.ADD(" M.Cuenta2 Cuenta, M.TipoTr2 Tipo, 0 NrComprob, '  ' Origen, M.Fecha1 FechaOp, B.RazonSocial Banco, C.Numero, ' ' CodigoDatanet, B.Codigo, ")
+SQL.ADD(" CASE WHEN M.RB1='0  ' THEN 0 WHEN M.RB1 ='1  ' THEN 1 WHEN M.RB1='2  ' THEN 2 WHEN M.RB1='3  ' THEN 3 WHEN M.RB1='4  ' THEN 4 WHEN M.RB1= '5  ' THEN 5 END RB1 ")
+SQL.ADD(" FROM   "~DBO~".TRANSACCIONES2 M, "~DBO~".CUENTAS C, "~DBO~".CLIENTES B, "~DBO~".ESPECIES E ")
+SQL.ADD(" WHERE  M.Cuenta2   = C.Codigo ")
+SQL.ADD(" AND    C.Comitente = B.Codigo ")
+SQL.ADD(" AND    M.Especie   = E.Codigo ")
+*SQL.ADD(" AND    M.Especie     = 'ARP'  ")
+SQL.ADD(" AND    E.Tipo      = 'MON' ")
+SQL.ADD(" AND    M.Fecha2   >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND    M.Fecha2   <= "~IdxDate2(Dialogo.Fecha2)~" ")
+SQL.ADD(" AND    M.TipoTr2   = 'PROYEC' ")
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD') ")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT') ")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC') ")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA') ")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+If NoVAcio(Dialogo.Lista1)
+  SQL.ADD(" AND M.Vehiculo1  IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND M.Vehiculo1 IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+SQL.ADD(" ORDER BY 4,2,5 ")
+*VEHICULO, MONEDA, CUENTA
+
+ACT(va:1,'')
+ACT(mo:1,'')
+ACT(cu:1,'')
+ACT(ba:1,'')
+
+Recorrer SQL
+  If Not Eqstr(Val(va:1), fbn('Cliente'))
+    If Not Eqstr(Val(va:1), '')
+      SaltarHoja
+    Endif
+    message('Vehiculo: '~fbn('Cliente'))
+    ACT(a:fac, 'Vehiculo: '~fbn('Cliente'))
+    ACT(va:1,fbn('Cliente'))
+    SetFont(a:fac,2)
+    ifa
+    (.'PBPTITULOS'.)
+    ifa
+    ifa
+    IFA
+    ACT(mo:1,'')
+    ACT(cu:1,'')
+    ACT(ba:1,'')
+  Endif
+  If Not Eqstr(Val(mo:1), fbn('Especie'))
+    message('Moneda: '~fbn('Especie'))
+    ACT(a:fac,'Moneda: '~fbn('Especie'))
+    ACT(mo:1,fbn('Especie'))
+  Else
+    dfa
+  Endif
+
+  *Ingresos del Proyectados
+  If Incluido(fbn('Tipo'), 'ESTIMA') o [Incluido(fbn('Tipo'), 'PROYEC') y fbn('RB1')=0]
+    SCN(b:fac, fbn('Cantidad'))
+    AsignarLink(b:fac, 'PB1352',Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,Especie1=fbn('Especie'),Radio2=Dialogo.Radio2,Lista1=fbn('Cliente'))
+  Endif
+
+  *Egresos del Proyectados
+  If [Incluido(fbn('Tipo'), 'DEVM') y fbn('NrComprob')<>0]  o [Incluido(fbn('Tipo'), 'PROYEC') y fbn('RB1')=1]
+    SCN(c:fac, fbn('Cantidad')*IIF(Incluido(fbn('Tipo'), 'PROYEC'),-1,1))
+    AsignarLink(c:fac, 'PB1351',Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,Especie1=fbn('Especie'),Radio2=Dialogo.Radio2,Lista1=fbn('Cliente'))
+  Endif
+
+  *Depositos Financieros
+  If [Not Incluido(fbn('Tipo'), 'MMPCCM|MMPCCV|DEVM|CRVM|TRANSF|DISPOI|DISPOE|PROYEC|SALDO|') y fbn('Cantidad')>0] o [Incluido(fbn('Tipo'), 'PROYEC') y Eqstr(fbn('RB1'),'2')]
+    SCN(d:fac, fbn('Cantidad'))
+    AsignarLink(d:fac, 'PB1353',Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,Especie1=fbn('Especie'),Radio2=Dialogo.Radio2,Lista1=fbn('Cliente'),Check1=0,Check2=1)
+  Endif
+
+  *Egresos Financieros
+  If [Not Incluido(fbn('Tipo'), 'MMPCCM|MMPCCV|DEVM|CRVM|TRANSF|DISPOI|DISPOE|PROYEC|SALDO|') y fbn('Cantidad')<0]  o [Incluido(fbn('Tipo'), 'PROYEC') y fbn('RB1')=3]
+    SCN(e:fac, fbn('Cantidad')*IIF(Incluido(fbn('Tipo'), 'PROYEC'),-1,1))
+    AsignarLink(e:fac, 'PB1353',Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,Especie1=fbn('Especie'),Radio2=Dialogo.Radio2,Lista1=fbn('Cliente'),Check1=0,Check2=0)
+  Endif
+
+  *Prestamos Ingresos
+  If [Incluido(fbn('Tipo'), 'MMPCCM|MMPCCV') y fbn('Cantidad')>0] o [Incluido(fbn('Tipo'), 'PROYEC') y fbn('RB1')=4]
+    SCN(f:fac, fbn('Cantidad'))
+    AsignarLink(f:fac, 'PB1353',Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,Especie1=fbn('Especie'),Radio2=Dialogo.Radio2,Lista1=fbn('Cliente'),Check1=1,Check2=1)
+  Endif
+
+  *Prestamos Egresos
+  If [Incluido(fbn('Tipo'), 'MMPCCM|MMPCCV') y fbn('Cantidad')<0]  o [Incluido(fbn('Tipo'), 'PROYEC') y fbn('RB1')=5]
+    SCN(g:fac, fbn('Cantidad')*IIF(Incluido(fbn('Tipo'), 'PROYEC'),-1,1))
+    AsignarLink(g:fac, 'PB1353',Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,Especie1=fbn('Especie'),Radio2=Dialogo.Radio2,Lista1=fbn('Cliente'),Check1=1,Check2=0)
+  Endif
+
+  ACN(h:fac, SUM(b:fac..g:fac))
+
+  FormatoCeldas(b:fac..z:fac, EXE('F2'))
+  SetFont(a:fac..z:fac, 7)
+Proximo
+
+ifa
+
+ACO(1,15)
+ACO(2,12)
+ACO(3,12)
+ACO(4,12)
+ACO(5,12)
+ACO(6,12)
+ACO(7,12)
+ACO(8,12)
+
+LimitesVision(i:fac+2)
+SetPrintFit(3,95)
+Impresion(1,2)
+Impresion(4,1)

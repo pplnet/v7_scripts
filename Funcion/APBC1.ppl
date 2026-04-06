@@ -1,0 +1,314 @@
+﻿***---Fila para sumar Totales
+ACN(FT:1, 9998)
+ACN(FT:2, 9999)
+IF Val(CZ:2) > 3
+    Recorrer&k 4, Val(LM:2)
+        ACN(&k:Val(FT:1), 0)
+        ACN(&k:Val(FT:2), 0)
+    Proximo
+    ACN(TR:1, 0)
+    ACN(TP:1, 0)
+    ACN(DP:1, 0)
+ENDIF
+***---De SALDOSDATANET se obtiene el Saldo Real. El saldo real se muestra solo para la primer columna
+***---La fecha corresponde al saldo del dia anterior ya que es el saldo al inicio del dia.
+SQL.ADD(" Select FechaSaldo, NroCuenta, Sum(Saldo/1000) Saldo, Moneda, Alias1 ")
+SQL.ADD(" From "~DBO~".SALDOSDATANET ")
+***---SQL.ADD(" Where FechaSaldo = '"~IdxDate(Habiles(Dialogo.Fecha1, -1, 'ARG', SI))~"' ")
+SQL.ADD(" Where FechaSaldo = '"~IdxDate(Dialogo.Fecha1)~"' ")
+IF NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD(" AND Alias1 = '"~Dialogo.Vehiculo1~"' ")
+ENDIF
+IF Val(CZ:2) = 3
+    SQL.ADD("   and Moneda = '"~Val(ML:1)~"' ")
+ELSE
+    SQL.ADD("   and Moneda <> '"~Val(ML:1)~"' ")
+ENDIF
+IF Dialogo.Radio4 = 0
+    IF NoVacio(Dialogo.Especie1)
+        IF Eqstr(Dialogo.Especie1, Val(ML:1))
+            SQL.ADD("   and Moneda = '"~Val(ML:1)~"' ")
+        ELSE
+            SQL.ADD("   and Moneda <> '"~Val(ML:1)~"' ")
+        ENDIF
+    ENDIF
+ENDIF
+SQL.ADD(" Group By FechaSaldo, NroCuenta, Moneda, Alias1 ")
+SQL.ADD(" Order by NroCuenta, FechaSaldo ")
+Recorrer SQL
+    ACT(MF:1, BuscarCampo('ESPECIES','Alias5','Codigo', fbn('Moneda')))
+    ACN(BD:2, 0)
+    IF Val(BD:1) = 0 Y Val(CZ:2) = 3
+        ***---Primer Registro
+        (.'RCABCUADRO'.)
+        ***---Fila con Fechas del cuadro
+        ACN(FI:1, fac)
+        ifa
+    ENDIF
+    IF Val(BD:88) = 0 Y Val(CZ:2) <> 3
+        ***---Primer Registro
+        (.'RCABCUADRO'.)
+        ***---Fila con Fechas del cuadro
+        ACN(FI:1, fac)
+        ifa
+    ENDIF
+    IF Val(CZ:2) = 3
+        ***---Cotizacion Cuadro ARP
+        ACN(TC:1, 1)
+    ELSE
+        Recorrer&k 1, Elementos(Dialogo.Lista1)
+            IF Eqstr(ItemLista(Dialogo.Lista1, &k), fbn('Moneda')) Y Not Eqstr(fbn('Moneda'), Val(ME:1))
+                ACN(TC:1, Num(ItemLista(Dialogo.Lista2, &k)))
+                Break
+            ELSE
+                ***---USD
+                ACN(TC:1, 1)
+            ENDIF
+        Proximo
+    ENDIF
+    ACT(A:fac, 'Cuenta: '~fbn('NroCuenta')~' - '~BuscarCampo('CUENTAS','Nombre','Numero', fbn('NroCuenta')))
+    ***---Guardo Nro de cuenta para buscarla en el consolidado
+    ACT(Val(LM:2)+10:fac, fbn('NroCuenta'))
+    AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR6'))
+    ACT(CX:fac, fbn('NroCuenta'))
+    ***---Fila Cuenta
+    ACN(FC:1, fac)
+    IF Val(BD:1) = 0 Y Val(CZ:2) = 3
+        ***---Fila Inicial Cuadro ARP
+        ACN(PI:1, fac)
+    ENDIF
+    IF Val(BD:88) = 0 Y Val(CZ:2) <> 3
+        ***---Fila Inicial Cuadro USD
+        ACN(DI:1, fac)
+    ENDIF
+    ifa
+    ACT(A:fac, 'Saldo Real')
+    ACN(D:fac, fbn('Saldo') * Val(TC:1))
+if no
+    Recorrer&k 4, Val(LM:2)
+        ***---Saldo Real
+        ACN(&k:fac, fbn('Saldo') * Val(TC:1))
+    Proximo
+endif
+    ***---Fila Saldo Real
+    ACN(FR:1, fac)
+    ***---Total Saldo Real
+    SCN(TR:1, Val(D:fac))
+    ifa
+    ***---Fila Cheques Pendientes
+    ACN(FH:1, fac)
+    ACT(A:fac, 'Cheques Pendientes')
+    ACN(E:fac, 0)
+    ifa
+    ACT(A:fac, 'Descubierto')
+    ***---Fila Descubiertos
+    ACN(FD:1, fac)
+    ifa
+    ACT(A:fac, 'A cubrir')
+    AgregarMarco(A:fac..Val(LM:2):fac, 0, 0, Exe('COLOR6'))
+    ***---Fila a Cubrir
+    ACN(FB:1, fac)
+    ACT(CU:1, fbn('NroCuenta'))
+    Recorrer&k 4, Val(LM:2)
+        ***---Pongo en cero columnas restantes del Saldo Real
+        IF &k = 4
+            ACN(&k:Val(FH:1), 0)
+        ELSE
+            IF &k = 5
+                ACN(&k:Val(FR:1), 0)
+            ELSE
+                ACN(&k:Val(FR:1), 0)
+                ACN(&k:Val(FH:1), 0)
+            ENDIF
+        ENDIF
+    Proximo
+    ***---Obtengo Saldos Contables
+    ***---Los Saldos Contables son solo para la primer columna
+    ***---Cuenta Contable
+    ACT(CC:1, BuscarCampo('CUENTAS','CuentaContable1','Numero', fbn('NroCuenta')))
+    ***---Vehiculo
+    ACT(VH:2, fbn('Alias1'))
+    SQL.ADD(" Select Alias, Alias2, Alias3 From "~DBO~".CONTABILIDAD ")
+    SQL.ADD(" Where Codigo = '"~Val(CC:1)~"' ")
+    Recorrer SQL
+        DFA
+        ***---Sector Capsa. F=Finanzas
+        ACT(SC:1, fbn('Alias'))
+        ***---Unidad de Negocio
+        ACT(NG:1, Pad0(BuscarCampo('VEHICULOS','Valor5','Codigo', Val(VH:2)), 2)~Val(SC:1))
+        ***---Objeto
+        ACT(OB:1, fbn('Alias2'))
+        ***---SubCuenta
+        ACT(SU:1, fbn('Alias3'))
+    Proximo
+    SQL.ADD(" SELECT CDCFAMT1/100000 Saldo, CDUPMJ Fecha FROM "~DBO~".F5509996 ")
+***---    SQL.ADD(" WHERE CDBANNA = '"~FBN['NroCuenta']~"' ")
+    SQL.ADD(" Where Trim(CDMCU) = '"~Val(NG:1)~"' ")
+    SQL.ADD(" AND Trim(CDOBJ) = '"~Val(OB:1)~"' ")
+    SQL.ADD(" AND Trim(CDSUB) = '"~Val(SU:1)~"' ")
+    SQL.ADD("   and CDCRCD = '"~Val(MF:1)~"' ")
+    SQL.ADD("   and CDUPMJ = '"~IdxDate(Val(FJ:1))~"' ")
+***---    SQL.ADD("   and CDUPMJ = '"~Val(FJ:2)~"' ")
+***---    SQL.ADD("   and CDUPMJ = '"~IdxDate(Habiles(Dialogo.Fecha1, -1, 'ARG', NO))~"' ")
+    IF NoVacio(Dialogo.Vehiculo1)
+        SQL.ADD(" AND CDCO = '"~Val(VH:1)~"' ")
+    ENDIF
+    Recorrer SQL
+        ACN(E:Val(FH:1), fbn('Saldo') * Val(TC:1))
+        DFA
+    Proximo
+    ***---Cheques Pendientes = Saldos Contables dia anterior - Saldo Real dia anterior.
+    ***---Saldo Real Dia anterior - Saldos Contables dia anterior y con signo. Hablado con Leo 24-11-09
+    ***---Saldo Contable dia anterior - Saldo Real dia anterior y con signo. Hablado con Leo 29-12-09
+    ***---ACN(E:Val(FH:1), Abs(Val(E:Val(FH:1)) - Val(D:Val(FR:1))))
+    ***---ACN(E:Val(FH:1), Val(D:Val(FR:1)) - Val(E:Val(FH:1)))
+    ACN(E:Val(FH:1), Val(E:Val(FH:1)) - Val(D:Val(FR:1)))
+    SCN(TP:1, Val(E:Val(FH:1)))
+    ***---Descubiertos
+    ACN(ED:1, 0)
+    ***---Capital
+    SQL.ADD("  SELECT Sum(O.Cantidad)/1000 Descubierto, O.FechaVto Fecha ")
+    SQL.ADD("  FROM "~DBO~".OPERACIONES O, "~DBO~".CUENTAS C ")
+    SQL.ADD("  WHERE C.Codigo = O.Cuenta1 ")
+    SQL.ADD("  AND O.TipoOp = 'MMDC' ")
+    SQL.ADD("   and O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   and O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   and O.Especie = '"~FBN['Moneda']~"' ")
+    SQL.ADD("   and C.Numero = '"~FBN['NroCuenta']~"' ")
+    SQL.ADD("  Group By FechaVto ")
+
+    SQL.ADD(" UNION ")
+
+    ***---Interes
+    SQL.ADD("  SELECT Sum(O.TotalIntereses+O.TotalIVA)/1000 Descubierto, O.FechaVto2 Fecha ")
+    SQL.ADD("  FROM "~DBO~".OPERACIONES O, "~DBO~".CUENTAS C ")
+    SQL.ADD("  WHERE C.Codigo = O.Cuenta1 ")
+    SQL.ADD("  AND O.TipoOp = 'MMDC' ")
+    SQL.ADD("   and O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    ***---SQL.ADD("   and O.FechaVto2 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    ***---Mostramos el interes solo el dia del reporte
+    SQL.ADD("   and O.FechaVto2 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   and O.Especie = '"~FBN['Moneda']~"' ")
+    SQL.ADD("   and C.Numero = '"~FBN['NroCuenta']~"' ")
+    SQL.ADD("  Group By FechaVto2 ")
+    SQL.ADD("  Order by Fecha ")
+    Recorrer SQL
+        ***---Determino Fecha
+        ACD(FE:1, fbn('Fecha'))
+        IF EsHabil(Val(FE:1), 'ARG')
+            ACD(FE:2, Val(FE:1))
+        ELSE
+            ACD(FE:2, Habiles(Val(FE:1), 1, 'ARG', SI))
+        ENDIF
+        ***---Recorro Columnas Diarias
+        Recorrer&k 4, Val(LM:1)-1
+            IF Val(FE:2) = Val(&k:Val(FI:1))
+                SCN(&k:Val(FD:1), fbn('Descubierto') * Val(TC:1))
+                SCN(&k:Val(FT:1), fbn('Descubierto') * Val(TC:1))
+            ELSE
+                SCN(&k:Val(FD:1), 0)
+            ENDIF
+        Proximo
+        ***---Recorro Columnas Mensuales
+        Recorrer&k Val(LM:1), Val(LM:2)-1
+            ***---En GG tengo el ultimo dia habil de la columna
+            IF Val(FE:2) >= PriDeMes(Val(GG:&k), SI) Y Val(FE:2) <= Val(GG:&k)
+                SCN(&k:Val(FD:1), fbn('Descubierto') * Val(TC:1))
+                SCN(&k:Val(FT:1), fbn('Descubierto') * Val(TC:1))
+            ELSE
+                SCN(&k:Val(FD:1), 0)
+            ENDIF
+        Proximo
+        ***---Ultima columna
+        IF Val(FE:2) >= PriDeMes(Val(GG:Val(LM:2)), SI)
+            SCN(Val(LM:2):Val(FD:1), fbn('Descubierto'))
+            SCN(&k:Val(FT:1), fbn('Descubierto') * Val(TC:1))
+         ELSE
+            SCN(Val(LM:2):Val(FD:1), 0)
+        ENDIF
+        DFA
+        ACN(ED:1, 1)
+    Proximo
+    IF Val(ED:1) = 0
+        Recorrer&k 4, Val(LM:2)
+            ACN(&k:Val(FD:1), 0)
+        Proximo
+    ENDIF
+    ***---A Cubrir = Saldo real + descubiertos + cheques ptes - descubiertos que vencen en los dias posteriores a la fecha
+    ***---A Cubrir version2 = Saldo real + cheques ptes + descubiertos que vencen en los dias posteriores a la fecha
+    Recorrer&k 4, Val(LM:2)
+        ***---Descubiertos Posteriores
+        ACN(DP:1, Sum(&k+1:Val(FD:1)..Val(LM:2):Val(FD:1)))
+***---        SCN(&k:Val(FB:1), Val(&k:Val(FR:1)) + Val(&k:Val(FD:1)) + Val(&k:Val(FH:1)) - Val(DP:1))
+        SCN(&k:Val(FB:1), Val(&k:Val(FR:1)) + Val(&k:Val(FH:1)) + Val(DP:1))
+        SCN(&k:Val(FT:2), Val(&k:Val(FB:1)))
+    Proximo
+    IF Val(CZ:2) = 3
+       ACN(BD:1, 1)
+    ELSE
+       ACN(BD:88, 1)
+    ENDIF
+Proximo
+
+IF Val(BD:1) = 0 Y Val(CZ:2) = 3
+    ***---Primer Registro
+    (.'RCABCUADRO'.)
+    ***---Fila con Fechas del cuadro
+    ACN(FI:1, fac)
+    ifa
+    ACN(FB:1, fac)
+    ACN(PI:1, fac)
+ENDIF
+IF Val(BD:88) = 0 Y Val(CZ:2) <> 3
+    ***---Primer Registro
+    (.'RCABCUADRO'.)
+    ***---Fila con Fechas del cuadro
+    ACN(FI:1, fac)
+    ifa
+    ACN(FB:1, fac)
+    ACN(DI:1, fac)
+ENDIF
+IF Val(CZ:2) = 3
+    ***---Fila Final Cuadro ARP
+    ACN(PF:1, Val(FB:1))
+    ***---Fila Total ARP
+    ACN(FX:3, Val(FB:1)+1)
+ELSE
+    ***---Fila Final Cuadro USD
+    ACN(DF:1, Val(FB:1))
+    ***---Fila Total USD
+    ACN(FX:2, Val(FB:1)+1)
+ENDIF
+SetFilaActual(Val(FB:1) + 1)
+ACT(A:fac, 'TOTAL')
+ifa
+ACT(A:fac, 'Saldo Real')
+ifa
+ACT(A:fac, 'Cheques Pendientes')
+ACN(E:fac, Val(TP:1))
+ifa
+ACT(A:fac, 'Descubierto')
+ifa
+ACT(A:fac, 'A Cubrir')
+Recorrer&k 4, Val(LM:2)
+    IF &k = 4
+        ACN(&k:fac-3, Val(TR:1))
+        ACN(&k:fac-2, 0)
+    ELSE
+        ACN(&k:fac-3, 0)
+        IF &k = 5
+            ACN(&k:fac-2, Val(TP:1))
+        ELSE
+            ACN(&k:fac-2, 0)
+        ENDIF
+    ENDIF
+    ACN(&k:fac-1, Val(&k:Val(FT:1)))
+    ACN(&k:fac, Val(&k:Val(FT:2)))
+    IF Val(CZ:2) = 3
+        ***---A Cubrir para CashFlow
+        ACN(&k:5000, Val(&k:Val(FT:2)))
+    ELSE
+        ACN(&k:5001, Val(&k:Val(FT:2)))
+    ENDIF
+Proximo
+

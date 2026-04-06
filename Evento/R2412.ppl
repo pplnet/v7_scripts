@@ -1,0 +1,194 @@
+﻿CrearDialogo
+  NrOperacion1: 'PM/BA'    ;1;1;;;;NoVacio(Dialogo.NrOperacion1);'';NO;;;;;;" TipoOp in ('PMU','PME') and Vehiculo1='INGBA'  "
+  NrOperacion2: 'PM/CURA'  ;2;1;;;;NoVacio(Dialogo.NrOperacion2);'';NO;;BuscarCampo('OPERACIONES','NrOperacion3','NrOperacion',Dialogo.NrOperacion1);;;;" TipoOp in ('PMU','PME') and Vehiculo1 = 'INGCURA' "
+  Radio1 :'Tipo|Pone|Quita';3;1;;;;;;;;
+  Cantidad1:    '%Comision';4;1;;Dialogo.Radio1=0;Dialogo.Radio1=0;;;;;0
+  Entero1:      'DiasAnio' ;5;1;;Dialogo.Radio1=0;Dialogo.Radio1=0;;;;;0
+FinDialogo
+if Not OK
+  Cancelar
+endif
+
+if Dialogo.Radio1=0
+  SQL.ADD("Update "~DBO~".OPERACIONES ")
+  SQL.ADD("   Set NrOperacion3 = '"~Dialogo.NrOperacion1~"', ")
+  SQL.ADD("       RB1  = '1' ")
+  SQL.ADD(" Where NrOperacion  = '"~Dialogo.NrOperacion2~"' ")
+  SQL.NEW
+  SQL.EXEC
+
+  if Eqstr(BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion2),'PMU') 
+    ACT(to1,'PMU')
+  else
+    ACT(to1,'PME')
+    if SQL("Select count(*) from "~DBO~".CUOTAS where NrOperacion = '"~Dialogo.NrOperacion1~"' ") = 0
+       ACN(to2,0)
+    else
+       ACN(to2,1)
+    endif
+  endif
+
+*** Datos de la Operacion y Cliente
+  SQL.ADD("Select O.FechaOp,O.TotalAux1,O.Plazo, O.TablaFeriados1, ")
+  SQL.ADD("C.CondicionIVA, C.AgPercepcionIVA, C.ExIVA, C.PorcExIVA, C.FDesdeExIVA, C.FHastaExIVA ")
+  SQL.ADD("from "~DBO~".OPERACIONES O,"~DBO~".CLIENTES C ")
+  SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion2~"' ")
+  SQL.ADD("and   C.Codigo    = O.Cliente1 ")
+
+  Recorrer SQL
+    ACD(ff1,FBN['FechaOp'])
+    ACT(cc1,FBN['CondicionIVA'])
+    ACT(cc2,FBN['AgPercepcionIVA'])
+    ACT(cc3,FBN['ExIVA'])
+    ACN(cc4,FBN['PorcExIVA'])
+
+    ACD(cc5,FBN['FDesdeExIVA'])
+    ACD(cc6,FBN['FHastaExIVA'])
+
+    ACN(aa1,FBN['TotalAux1'])
+    ACN(aa2,FBN['Plazo'])
+    
+    ACT(zz13,FBN['TablaFeriados1'])
+  Proximo
+
+*** Prestamo PMU
+  if Eqstr(val(to1),'PMU')
+    if val(aa1)=0
+      ACN(aa3,BuscarCampo('OPERACIONES','TotalAux8','NrOperacion',Dialogo.NrOperacion1))
+    else
+      ACN(aa3,Round(val(aa1)*val(aa2)*Dialogo.Cantidad1/iif(Dialogo.Entero1=0,36000,36500),2))
+    endif
+      
+    ACN(aa4,Round(val(aa3)*MontoImpuesto('IVANORCOM',val(ff1),3,val(cc1))/100,2))
+    ACN(aa5,Round(val(aa3)*MontoImpuesto('IVAADICOM',val(ff1),3,val(cc1))/100,2))
+    ACN(aa6,0)
+
+    if Eqstr(val(cc2),'SI') y Eqstr(val(cc3),'SI')
+      if val(ff1)>=val(cc5) y val(ff1)<=val(cc6)
+         ACN(aa6,Round(val(aa3)*(MontoImpuesto('IVAPERCOM',val(ff1),3,'')*(1-val(cc4)/100))/100,2))
+      else
+         ACN(aa6,Round(val(aa3)*(MontoImpuesto('IVAPERCOM',val(ff1),3,'')/100),2))
+      endif
+      if val(aa6) <  Var('IVAPERMIN')
+         ACN(aa6,0)
+      endif
+    else 
+      ACN(aa6,0)
+    endif
+
+    SQL.ADD("Update "~DBO~".OPERACIONES set  ")
+    SQL.ADD("TotalAux1 = "~val(aa1)~", TotalAux8 = "~val(aa3)~", TotalIVA = "~val(aa4)~", ")
+    SQL.ADD("TotalIVAADI = "~val(aa5)~", TotalIVAPER = "~val(aa6)~" ")
+    if val(aa1)=0 y val(aa3)=0
+      SQL.ADD(", CB6= '1' ")
+    endif   
+    SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+    SQL.NEW
+    SQL.EXEC
+  else
+*** Prestamo PME
+    SQL.ADD("Select NrCuota,Fecha1,Fecha2,Fecha3,Fecha4,Plazo1,Plazo2,Total7,Cantidad1,Cantidad5, ")
+    SQL.ADD("Cantidad3,Cantidad12,Cantidad13,Cantidad14,Cantidad15 ")
+    SQL.ADD("from "~DBO~".CUOTAS ")
+    SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion2~"' ")
+    SQL.ADD("order by NrCuota ")
+    Recorrer SQL
+     if val(to2) > 0
+        if NoVacio(FBN['Fecha4'])
+           ACD(ff1,FBN['Fecha4'])
+        endif
+     endif
+
+     if val(to2)=0 
+       ACN(aa:fac,Round(FBN['Cantidad3']*FBN['Plazo1']*Dialogo.Cantidad1/iif(Dialogo.Entero1=0,36000,36500),2))
+     endif
+
+     if val(to2)=1 
+      if Not[Eqstr(SQL("Select Radio6 from "~DBO~".CUOTAS where NrOperacion = '"~Dialogo.NrOperacion1~"' and NrCuota ="~FBN['NrCuota']~" "),'1')]
+       if NoVacio(FBN['Fecha4']) y [FBN['Fecha1'] >= FBN['Fecha4'] y FBN['Fecha2'] >=FBN['Fecha4']]
+          ACN(aa:fac,0)
+       else
+          if NoVacio(FBN['Fecha4']) y FBN['Fecha4'] > 0 
+             if FBN['Fecha4'] < FBN['Fecha2'] 
+                ACN(pp2,FBN['Fecha4']-FBN['Fecha1'])
+                ACN(pp3,SQL("Select Cantidad3 from "~DBO~".CUOTAS where NrOperacion = '"~Dialogo.NrOperacion1~"' and NrCuota ="~FBN['NrCuota']~" "))
+                ACN(aa:fac,Round(val(pp3)*val(pp2)*Dialogo.Cantidad1/iif(Dialogo.Entero1=0,36000,36500),2))     
+             else  
+                ACN(aa:fac,Round(FBN['Cantidad3']*FBN['Plazo1']*Dialogo.Cantidad1/iif(Dialogo.Entero1=0,36000,36500),2))
+             endif
+          else
+             ACN(aa:fac,Round(FBN['Cantidad3']*FBN['Plazo1']*Dialogo.Cantidad1/iif(Dialogo.Entero1=0,36000,36500),2))         
+          endif
+       endif
+      endif
+     endif
+
+     ACN(ba:fac,MontoImpuesto('IVANORCOM',val(ff1),3,val(cc1)))
+     ACN(bb:fac,MontoImpuesto('IVAADICOM',val(ff1),3,val(cc1)))
+     ACN(bc:fac,MontoImpuesto('IVAPERCOM',val(ff1),3,''))
+ 
+     ACN(ab:fac,Round(val(aa:fac)*val(ba:fac)/100,2))
+     ACN(ac:fac,Round(val(aa:fac)*val(bb:fac)/100,2))
+
+     if Eqstr(val(cc2),'SI') y Eqstr(val(cc3),'SI')
+         if val(ff1)>=val(cc5) y val(ff1)<=val(cc6)
+           ACN(ad:fac,Round(val(aa:fac)*val(bc:fac)*(1-val(cc4)/100)/100,2))
+         else
+           ACN(ad:fac,Round(val(aa:fac)*val(bc:fac)/100,2))
+         endif
+         if val(ad:fac) <  Var('IVAPERMIN')
+           ACN(ad:fac,0)
+           ACN(bc:fac,0)
+         endif
+     else
+         ACN(ad:fac,0)
+         ACN(bc:fac,0)
+     endif
+
+     ACN(ae:fac,val(aa:fac)+val(ab:fac)+val(ac:fac)+val(ad:fac))     
+
+     if val(to2) = 0
+       SQL.ADD("Insert "~DBO~".CUOTAS  ")
+       SQL.ADD("(NrOperacion,NrCuota,Fecha1,Fecha2, ")
+       SQL.ADD(" Fecha3,Plazo1,Plazo2,Cantidad1,Cantidad5, ")
+       SQL.ADD(" Total7,Cantidad3,Cantidad4, ")
+       SQL.ADD(" Cantidad12,Cantidad13,Cantidad14,Cantidad15, ")
+       SQL.ADD(" Precio8,Precio9,Precio10) ")
+       SQL.ADD("values ")
+       SQL.ADD("('"~Dialogo.NrOperacion1~"',"~FBN['NrCuota']~",'"~Idxdate(FBN['Fecha1'])~"','"~Idxdate(FBN['Fecha2'])~"',")
+       SQL.ADD(" '"~Idxdate(FBN['Fecha3'])~"',"~FBN['Plazo1']~","~FBN['Plazo2']~","~FBN['Cantidad1']~","~FBN['Cantidad5']~",")
+       SQL.ADD(" "~val(aa:fac)~","~FBN['Cantidad3']~","~val(ae:fac)~", ")
+       SQL.ADD(" "~val(aa:fac)~","~val(ab:fac)~","~val(ac:fac)~","~val(ad:fac)~",")
+       SQL.ADD(" "~val(ba:fac)~","~val(bb:fac)~", "~val(bc:fac)~" )")
+       SQL.NEW
+       SQL.EXEC
+
+     else
+      if Not[Eqstr(SQL("Select Radio6 from "~DBO~".CUOTAS where NrOperacion = '"~Dialogo.NrOperacion1~"' and NrCuota ="~FBN['NrCuota']~" "),'1')]
+       SQL.ADD("Update "~DBO~".CUOTAS set ")
+       SQL.ADD("Cantidad3 = "~FBN['Cantidad3']~", Cantidad5 = "~FBN['Cantidad5']~", ")
+       SQL.ADD("Total7="~val(aa:fac)~",Cantidad12="~val(aa:fac)~", ")
+       SQL.ADD("Cantidad13="~val(ab:fac)~",Cantidad14="~val(ac:fac)~",Cantidad15="~val(ad:fac)~", ")
+       SQL.ADD("Precio8 = "~val(ba:fac)~", Precio9 = "~val(bb:fac)~", Precio10= "~val(bc:fac)~", ")
+       SQL.ADD("Cantidad4="~val(ae:fac)~" ")
+       SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+       SQL.ADD("and NrCuota = "~FBN['NrCuota']~" ")
+       SQL.NEW
+       SQL.EXEC
+      endif
+     endif
+       *** Devengado de Comisiones ***
+       (.'R2412DEV'.) 
+    Proximo
+  endif
+endif
+
+if Dialogo.Radio1=1
+  SQL.ADD("Update "~DBO~".OPERACIONES ")
+  SQL.ADD("   Set NrOperacion3 = NULL, ")
+  SQL.ADD("       RB1  = NULL, ")
+  SQL.ADD("       RB2  = NULL ")
+  SQL.ADD(" Where NrOperacion  in ('"~Dialogo.NrOperacion1~"','"~Dialogo.NrOperacion2~"') ")
+  SQL.NEW
+  SQL.EXEC
+endif

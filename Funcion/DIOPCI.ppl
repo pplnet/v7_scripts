@@ -1,0 +1,71 @@
+﻿*** DIOPCI
+*** Toma las Opciones y modifica el Precio  y la Cantidad
+
+Message('Procesando Opciones ...')
+
+SQL.ADD("SELECT O.* ")
+SQL.ADD("from  "~DBO~".OPERACIONES O ")
+SQL.ADD("Where O.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD("and TipoOp In ('TCC','TCP','TVC','TVP') ")
+SQL.ADD("and FechaEj >='"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD("order by O.TipoOp, O.Especie ")
+
+Recorrer SQL
+   Message('Opciones  :'~FBN['TipoOp']~' '~FBN['NrOperacion'])   
+
+   act(a:fac,fbn['Cliente1'])
+   act(b:fac,fbn['TipoOp'])
+   act(c:fac,fbn['Vehiculo1'] )   
+   act(k:fac,fbn['NrOperacion'])
+   acn(d:fac,fbn['Cantidad'] )
+   act(k:fac,fbn['NrOperacion'])   
+
+   * j:Cantidad Original
+   acn(j:fac,fbn['TotalRetenciones'] )
+  
+   IF Val(j:fac)=0
+      * Nunca Cambio
+      acn(j:fac,fbn['Cantidad'] )
+   EndIf
+
+   * e: Monto en Efectivo f: Monto en Acciones g: Precio Nuevo 
+   * g: Precio h:Notional
+   acn(e:fac,0)    
+   acn(g:fac,FBN['PrecioEj'])    
+
+   IF Dialogo.Radio1=0 
+      * Calculo el Precio del Dividendo en Efectivo 
+      acn(e:fac,FBN['Cantidad']*(Dialogo.Precio1/100))    
+      acn(g:fac,FBN['PrecioEj']-(Dialogo.Precio1/100))    
+   EndIf
+
+   acn(h:fac,FBN['Cantidad']*VAL(g:fac))    
+
+   If Dialogo.Radio1=1
+      * Calculo el Dividendo en Acciones.
+      acn(f:fac,FBN['Cantidad']*(Dialogo.Precio1/100))
+   EndIf
+
+   * Calculo el Nuevo Precio
+   acn(g:fac,VAL(h:fac)/(FBN['Cantidad']+VAL(f:fac)))       
+
+
+   Message('Actualiza Opciones ....')
+
+   SQL.ADD("Update "~DBO~".OPERACIONES ")
+   SQL.ADD("Set Cantidad      = "~Fstr(Val(d:fac)+Val(f:fac),0,2)~", ")
+   SQL.ADD("    PrecioEj      = "~Fstr(Val(g:fac),0,7)~" ")
+   SQL.ADD("where  NrOperacion = '"~Val(k:fac)~"' ")
+   SQL.NEW
+
+   * Recupero los Valores para guardar la historia     
+   ACN(ab1,BuscarCampo('OPERACIONES','Cantidad','NrOperacion',Val(k:fac) ))
+   ACN(ab2,BuscarCampo('OPERACIONES','PrecioEj','NrOperacion',Val(k:fac) ))       
+   ACN(ab4,1+SQL("SELECT Max(NrCuota) FROM "~DBO~".CUOTAS Where NrOperacion='"~Val(k:fac)~"' ") )
+
+   SQL.ADD(" INSERT "~DBO~".CUOTAS (NrOperacion,NrCuota,Fecha1,Plazo1,Cantidad1,Precio1) ")
+   SQL.ADD(" Values ")
+   SQL.ADD(" ('"~Val(k:fac)~"',"~Fstr(Val(ab4),0,0)~",'"~IdxDate(Dialogo.Fecha1)~"',0,"~Fstr(Val(ab1),0,2)~","~Fstr(Val(ab2),0,7)~") ")
+   SQL.NEW
+   SQL.EXEC
+Proximo

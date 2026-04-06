@@ -1,0 +1,261 @@
+﻿ModoReproceso(ConDialogo)
+
+
+CrearDialogo
+  Vehiculo2  : "Grupo"     ;;;;Vacio(Dialogo.Vehiculo1);;Not EsTerminal(Dialogo.Vehiculo2, Vehiculos);'Debe ingresar un Grupo';NO;;;;;;"TipoVehiculo <> 'DIV'";
+  Vehiculo1  : "Vehiculo"  ;;;;Vacio(Dialogo.Vehiculo2);;EsTerminal(Dialogo.Vehiculo1, Vehiculos) o Vacio (Dialogo.Vehiculo1);'Debe ingresar un Vehiculo';NO;;;;;;"TipoVehiculo = 'DIV'";;
+  Fecha1     : "F.Desde"      ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;FSys
+  Fecha2     : "F.Hasta"      ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar la Fecha';NO;FSys
+  Operador   : 'Operador'     ;;;;;;;;;;;
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+
+
+SetFilaActual(4)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,1)
+
+ACT(a:FAC,"Operaciones Anuladas por Operador")
+
+SetFont(a:fac..a:fac,2)
+SetFilaActual(5)
+
+ACN(w1,FAC)
+
+*if NoVacio(Dialogo.Vehiculo1)
+*  ACT(a:FAC+1, 'Vehiculo : '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+*else
+*  ACT(a:FAC+1, 'Vehiculo : Todos')
+*endif
+
+ if NoVacio (Dialogo.Vehiculo2)
+   ACT(a:FAC+1, 'Grupo : '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo2))
+ else
+   ACT(a:FAC+1, 'Grupo : Todos')
+ endIf
+
+ if NoVacio (Dialogo.Vehiculo1)
+   ACT(a:FAC+2, 'Vehiculo : '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+ else
+   ACT(a:FAC+2, 'Vehiculo : Todos')
+ endIf
+
+
+ACT(a:FAC+3, 'Fecha Desde: '~Dialogo.Fecha1)
+ACT(a:FAC+4, 'Fecha Hasta: '~Dialogo.Fecha2)
+if NoVacio(Dialogo.Operador)
+   ACT(A:FAC+5, 'Operador : '~Dialogo.Operador)
+else
+   ACT(A:FAC+5, 'Operador : Todos')
+endif
+
+*-- Veo solamente los tipos seleccionados
+SetListaClaves(1)
+
+SetFilaActual(FAC+7)
+
+*-- 1er. Nivel del Listado Cantidad de Operaciones por Operador para Fecha, Vehiculo y Tipos de Operacion
+ACT(a:FAC, 'Tipo Op.')
+ACT(b:FAC, 'Numero')
+ACT(c:FAC, 'F.Operacion')
+ACT(d:FAC, 'F.Vto.')
+ACT(e:FAC, 'Codigo')
+ACT(f:FAC, 'Cliente')
+ACT(g:FAC, 'Especie')
+ACT(h:FAC, 'Cantidad')
+ACT(i:FAC, 'ContraEspecie')
+ACT(j:FAC, 'Monto')
+ACT(k:FAC, 'Neto')
+ACT(L:FAC, 'F.Baja')
+
+AlinearCeldas(a:FAC..g:FAC,'I')
+AlinearCeldas(c:FAC..d:FAC,'D')
+AlinearCeldas(h:FAC..h:FAC,'D')
+AlinearCeldas(i:FAC..i:FAC,'I')
+AlinearCeldas(j:FAC..k:FAC,'D')
+SetFont(a:Val(w1)..N:FAC,2)
+
+AgregarMarco(a:FAC..l:FAC,2,0,Exe('COLOR6'))
+
+SQL.ADD("SELECT O.* ")
+SQL.ADD("from "~DBO~".BOPERACIONES O ")
+SQL.ADD(" WHERE FechaDel >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaDel <= '"~IdxDate(Dialogo.Fecha2+1)~"'")
+*if NoVacio(Dialogo.Vehiculo1)
+*   SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+*endif
+
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("and O.Vehiculo1='"~Dialogo.Vehiculo1~"'")
+EndIf
+
+If NoVacio(Dialogo.Vehiculo2)
+   SQL.ADD("and O.Vehiculo1 in ("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+EndIf
+
+
+if NoVacio(Dialogo.Operador)
+   SQL.ADD(" and O.Operador = '"~Dialogo.Operador~"' ")
+endif
+
+SQL.ADD(" order by O.Operador, O.Vehiculo1, O.TipoOp, O.NrOperacion ")
+
+* Z4: Total de Operaciones
+ACN(Z4,0)
+
+Recorrer SQL
+
+   IF Not EqStr(VAL(z1),FBN['Operador']) 
+      IF VAL(z2)>0 
+         ACT(a:val(z3),val(a:val(z3))~': '~Fstr(VAL(z2),0,0)~" Operaciones ")        
+         AgregarMarco(a:val(z3)..l:val(z3),2,0,0)
+         SetFont(a:val(z3)..d:val(z3),2)        
+         ifa
+      ENDIF 
+
+      ACT(z1,FBN['Operador'])
+      ACT(a:fac,'Trader'~FBN['Operador']~"- "~Copy(BuscarCampo('USUARIOS','Nombre','Codigo',FBN['Operador']),1,30))
+      AgregarMarco(a:fac..l:fac,2,0,0)
+      ACN(z2,0)
+      ACN(z3,fac)
+      SetFont(a:fac..d:fac,2)
+      ifa
+   ENDIF
+
+   ACT(a:FAC, FBN['TipoOp'])
+   ACT(b:FAC, FBN['NrOperacion'])
+   ACLBO(b:fac,FBN['NrOperacion'])
+   ACD(c:FAC, FBN['FechaOp'])
+   ACD(l:FAC, FBN['FechaDel'])
+
+   ACT(e:FAC, FBN['Cliente1'])
+   ACT(f:FAC, Copy(BuscarCampo('CLIENTES','RazonSocial','Codigo',FBN['Cliente1']),1,30))
+
+   If Vacio(FBN['FechaEj'])
+      ACT(g:FAC, FBN['Especie'])
+   else
+      ACT(g:FAC, FBN['Especie'])
+   endif
+
+   ACT(i:FAC, FBN['ContraEspecie'])
+
+   ***
+   *-- Fechas de Vencimiento
+   IF Incluido(FBN['TipoOp'],'DTKVI')
+      * Final Exchange Date
+      ACD(d:FAC, FBN['FechaEx2'])
+   ENDIF
+
+   IF EqStr(Copy(FBN['TipoOp'],1,1),'D')
+      ACD(d:FAC, FBN['FechaEj'])
+   EndIf
+
+   IF EqStr(Copy(FBN['TipoOp'],1,2),'MR')
+      ACD(d:FAC, FBN['FechaEx4'])
+   EndIf
+ 
+   IF Incluido(FBN['TipoOp'],'DTK|DTSFFM|DTSFVM|DTSVVM|DTKVI|DTOM|DTOMV|DTSFVX')
+      * Recupero la fecha de la ultima cuota
+      ACD(d:FAC, SQL("Select Fecha2 FROM "~DBO~".CUOTAS Where NrOperacion='"~FBN['NrOperacion']~"' AND NrCuota="~Fstr(FBN['Cuotas1'],0,0)~" "))
+   ENDIF
+
+   **-- Cantidad y Monto
+   ACN(h:FAC, FBN['Cantidad'])
+   ACN(j:FAC, FBN['TotalBrutoCli1'])
+
+   IF Incluido(Copy(FBN['TipoOp'],1,2),'FX|SE')   
+      ACN(k:FAC, FBN['TotalNetoCli1'])
+   ENDIF
+
+   IF Incluido(FBN['TipoOp'],'DSEO|DFXO') o EqStr(Copy(FBN['TipoOp'],1,2),'DP') o EqStr(Copy(FBN['TipoOp'],1,2),'MR') 
+      ACN(j:FAC, FBN['TotalAux1'])
+      ACN(k:FAC, 0)
+   EndIf
+
+   IF Incluido(FBN['TipoOp'],'FCS|FCR')
+      ACN(j:FAC, FBN['TotalNetoCli1'])
+      ACN(k:FAC, 0)
+   EndIf
+
+   IF Incluido(FBN['TipoOp'],'DTK|DTSFFM|DTSFVM|DTSVVM|DTKVI|DTOM|DTOMV|DTSFVX')
+      * Recupero la Cantidad de la Primer cuota
+      SQL.ADD("Select Cantidad1,Cantidad2 FROM "~DBO~".CUOTAS Where NrOperacion='"~FBN['NrOperacion']~"' AND NrCuota=1 ")
+
+      Recorrer SQL
+         DFA
+         IF FBN['Cantidad1']<>0
+            ACN(h:FAC, FBN['Cantidad1'])
+         ENDIF
+  
+         IF FBN['Cantidad2']<>0
+            ACN(j:FAC, FBN['Cantidad2'])
+         ENDIF
+      Proximo
+   ENDIF
+
+   IF Incluido(FBN['TipoOp'],'FXREPO|FXREPV')      
+      ACN(h:FAC, FBN['Cantidad'])
+      ACN(j:FAC, FBN['TotalBrutoCli1'])
+
+      * Segun La Partida Operada
+      IF FBN['RB6']=1
+         ACN(j:FAC, FBN['Cantidad'])
+         ACN(h:FAC, FBN['TotalBrutoCli1'])
+      ENDIF
+   ENDIF
+
+   SCN(z2,1)
+   SCN(z4,1)
+   SetFont(a:FAC..y:FAC,1)
+Proximo
+
+IF VAL(z2)>0 
+   ACT(a:val(z3),val(a:val(z3))~': '~Fstr(VAL(z2),0,0)~" Operaciones ")        
+   AgregarMarco(a:val(z3)..l:val(z3),2,0,0)
+   SetFont(a:val(z3)..d:val(z3),2)        
+   ifa
+ENDIF 
+
+ 
+ACO(1,5)
+ACO(2,6)
+ACO(3,7)
+ACO(4,7)
+ACO(5,6)
+ACO(6,20)
+ACO(7,10)
+ACO(8,8)
+ACO(9,10)
+ACO(10,11)
+ACO(11,8)
+ACO(12,7)
+ACO(13,7)
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+
+ACT(a:fac,'Total de Operaciones: '~Fstr(VAL(z4),0,0)~"")        
+ACT(a:FAC+1, 'FIN DE LISTADO')
+
+SetFont(a:FAC..a:fac+1, 2)
+LimitesVision(l:FAC+1)
+
+
+*
+*    Esto es lo que agrega Silvia
+*
+
+
+RangoTitulo(a:1..l:FAC+1, 12)

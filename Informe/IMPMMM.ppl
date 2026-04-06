@@ -1,0 +1,317 @@
+﻿CrearDialogo
+  NrOperacion1:'Operacion' ;;;;;;;;;;;;;;"TipoOp IN ('TICT','TICO','MMCO','MMCT')"
+  Radio2         :'|Impresora|Pantalla|PDF|Mail' ;2;1;1;;;Dialogo.Radio2>=0;;;1
+  *Check1:      'Impresora'
+FinDialogo
+if Not OK
+  Cancelar
+endif
+  
+CrearFont(4, "Arial,6,")
+CrearFont(1, "Arial,8,")
+CrearFont(2, "Arial,8,B")
+CrearFont(3, "Arial,14,B")
+CrearFont(5, "Arial,10,BU")
+CrearFont(6, "Arial,10,B")
+
+SetFilaActual(1)
+(.'LOGO2'.)
+
+
+
+
+SQL.ADD("SELECT CUIT, NrIngBrutos, RazonSocial, CodigoCNV, NrMAE, NrBYMA ")
+SQL.ADD("FROM   "~DBO~".CLIENTES ")
+SQL.ADD("WHERE  Codigo  = '"~Var('VEHICULO')~"'")
+Recorrer SQL
+ 
+   If [NoVacio(FBN('CUIT')) y Not EqStr(FBN('CUIT'), '000000000000000')]
+      If [EqStr(Copy(FBN('CUIT'), 01, 04), '0000')]
+         ACT(ZB:10, Copy(FBN('CUIT'), 05, 11))
+      Else  
+         If [[EqStr(Copy(FBN('CUIT'), 03, 01), '-')] y [EqStr(Copy(FBN('CUIT'), 12, 01), '-')]]
+            ACT(ZB:10, Copy(FBN('CUIT'), 01, 13))
+            ACT(ZB:11, Copy(FBN('CUIT'), 01, 13))
+         Else           
+            ACT(ZB:10, Copy(FBN('CUIT'), 01, 11))
+            ACT(ZB:11, Copy(FBN('CUIT'), 01, 02)~'-'~Copy(FBN('CUIT'), 03, 08)~'-'~Copy(FBN('CUIT'), 11, 01))
+         EndIf      
+      EndIf
+      ACT(vh:1,Val(ZB:10))
+   Else
+      ACT(ZB:10, '')
+      ACT(vh:1,Var('VEHICULO'))
+   EndIf
+   
+   ACT(vh:2,FBN['NrIngBrutos'])
+   ACT(vh:3,FBN['RazonSocial'])
+   ACT(vh:4,FBN['CodigoCNV'])
+   ACT(vh:5,FBN['NrMAE'])
+   ACT(vh:6,FBN['NrBYMA'])
+proximo
+
+
+
+   
+SetFilaActual(13)
+SQL.ADD("Select O.*, T.Nombre TNom, C.RazonSocial, E.Extendido")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".TIPOSOPERACION T, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E ")
+SQL.ADD(" where O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+SQL.ADD(" and   O.TipoOp   = T.Codigo ")
+SQL.ADD(" and   O.Especie  = E.Codigo ")
+SQL.ADD(" and   O.Cliente1 = C.Codigo ")
+watch(SQL.BATCH())
+Recorrer SQL
+  SQL.ADD("SELECT Contacto, Fecha, Observaciones, Usuario FROM "~DBO~".CONFIRMACIONESOP WHERE NrOperacion = '"~fbn('NrOperacion')~"' ")
+  Recorrer SQL
+    dfa
+    ACT(cf:1, fbn('Contacto'))
+    ACD(cf:2, fbn('Fecha'))
+    ACT(cf:3, fbn('Observaciones'))
+    ACT(cf:4, fbn('Usuario'))
+  Proximo
+    
+  
+
+  #ifdef BACS
+  ACT(c:fac-12,'Minuta de '~fbn['TNom']) 
+  SetFont(c:fac-12, 3)
+    
+    SetFilaActual(fac-2)
+  #else
+    ACT(c:fac-3,'Minuta de '~fbn['TNom']) 
+    SetFont(c:fac-3, 3)
+    
+    ACT(a:fac,  '     Agente de Liquidacion y Compensacion Propio registrado en CNV bajo el Nro. de matricula '~Val(vh:4)~' - ALyC y AN Propio')
+    ACT(b:fac+1, '        IVA Resp. Inscripto - Ingresos Brutos n# '~Val(vh:2))    
+  #endif
+  
+  ***********
+  * GENERALES
+  ***********
+
+  ACT(a:fac+5, 'Fecha Operacion')
+  ACD(b:fac+5, FBN['FechaOp']) 
+ 
+  ACT(a:fac+6, 'Plazo')
+  ACN(b:fac+6, FBN['FechaVto']- FBN['FechaOp'])
+  formatoCeldas(b:fac+6, exe('F0'))
+  
+  
+  ACT(a:fac+7, 'Fecha Impresion')
+  ACD(b:fac+7, FSYS)
+
+  * Por qué aparece como fecha?
+  ACT(a:fac+8, 'Hora Operacion')
+  ACT(b:fac+8, hora(fbn['FechaCarga']))
+
+  ACT(a:fac+9, 'Operador')
+  ACT(b:fac+9, BuscarCampo('USUARIOS','Nombre','Codigo',Fbn['Operador']))
+
+  *----- 
+  ACT(d:fac+5, 'Hora de Confirmacion')
+  ACT(e:fac+5, hora(Val(cf:2))) 
+ 
+  ACT(d:fac+6, 'Realizada por')
+  ACT(e:fac+6, BuscarCampo('USUARIOS','Nombre','Codigo',Val(cf:4)))
+
+  ACT(d:fac+7, 'Hora Impresion')
+  ACT(e:fac+7, hora(AHORA))
+
+  ACT(d:fac+8, 'Operador')
+  ACT(e:fac+8, BuscarCampo('USUARIOS','Nombre','Codigo', USUARIOACTIVO))
+
+*** Ojo! columna agregada
+  if Not Vacio(SQL("Select Usuario from "~DBO~".INSTANCIASOP Where NrInstancia = 3 and NrOperacion = '"~Dialogo.NrOperacion1~"' ")) 
+     ACT(d:fac+10, 'Autorizada por')
+     ACT(e:fac+10, SQL("Select Usuario from "~DBO~".INSTANCIASOP Where NrInstancia = 3 and NrOperacion = '"~Dialogo.NrOperacion1~"' "))
+  endif
+
+  *--------------------------
+
+*********
+* Datos de la operacion
+*********
+
+  ACT(a:fac+11,'Operacion Nro. :')
+  ACT(b:fac+11, Fbn['NrOperacion'])
+                            
+  ACT(a:fac+12,'Especie : ')
+  ACT(b:fac+12,FBN['Especie']~' / '~Copy(fbn['Extendido'],1,45))
+                          
+  ACT(a:fac+13,'Fecha de Liquidacion : ')
+  ACD(b:fac+13,FBN['FechaVto'])
+                              
+  ACT(a:fac+14,'Cantidad Nominal :')
+  ACN(b:fac+14, Fbn['Cantidad'])
+                         
+  ACT(a:fac+15,'TNA :')
+  ACN(b:fac+15, Fbn['Precio1'])
+                          
+  ACT(a:fac+16,'Contra Especie :')
+  ACT(b:fac+16, Fbn['ContraEspecie'])
+
+  ACT(a:fac+17,'Liquid. Contra Especie :')
+  ACD(b:fac+17, Fbn['FechaVto'])
+
+  ACT(a:fac+18,'Confirmada con :')
+  ACT(b:fac+18, Val(cf:1))
+
+  ACT(a:fac+19, 'Equivalente :')
+  ACN(b:fac+19, Fbn['Cantidad'] + Fbn['TotalIntereses'])
+
+  acn(aa20, 0)
+  if Incluido(fbn['TipoOp'], 'TICO|TICT')
+     ACT(a:fac+20, 'Cambio :')
+     ACN(b:fac+20, fbn['Precio2'])
+     ACN(aa20, 1)
+     FormatoCeldas(b:fac+20, EXE('F9'))
+  endif
+
+  * En realidad, en los fronts de los calls no se 
+  * ingresa el corredor. Ver si hace falta lo que sigue.
+  if not vacio(fbn['Corredor'])
+     ACT(a:fac+21+val(aa20),'Corredor :')
+     ACT(b:fac+21+val(aa20), Fbn['Corredor'])
+
+     ACT(a:fac+22+val(aa20),'Comision :')
+     ACN(b:fac+22+val(aa20), Fbn['Comision'])
+     * Habria que darle formato de porcentaje.
+                
+     ACT(a:fac+23+val(aa20),'Importe :')
+     ACN(b:fac+23+val(aa20), Fbn['Comision'] * Fbn['Cantidad'])
+     SCN(aa20, 4)
+  endif
+
+
+  ACT(a:fac+21+val(aa20),'Interes :')
+  ACN(b:fac+21+val(aa20), Fbn['TotalIntereses'])
+
+  ACT(a:fac+22+val(aa20),'Base de Interes :')
+  if fbn['TotalIntereses'] > 0
+     ACT(b:fac+22+val(aa20), iif(Incluido(Fbn['TipoOp'], 'MMCO|MMCT'),iif(fbn['DiasAnio']=0,'360','365'), '365'))
+  endif
+
+  ACT(AA15, SQL("Select NrBoleto from "~DBO~".OPERACIONES Where OperacionRef = '"~fbn['NrOperacion']~"'"))
+  if not Eqstr(trim(mirt(val(AA15))), '')
+       AgregarMarco(D:fac+15..E:fac+16,2,0)
+       ACT(D:fac+15, 'Boleto Asociado :')
+       ACT(E:fac+15, val(AA15))
+       ** dato redundante (operador)
+       ACT(D:fac+16, 'Fue renovada por :')
+       ACT(E:fac+16, val(b:fac+9))
+  endif
+
+  
+*********
+* Forma de liquidacion
+*********
+
+  ACT(a:fac+25+val(aa20), 'LIQUIDACION Instruccion Especie ')
+  * Para saber si es un call otorgado o tomado, me fijo en el cuarto caracter del Tipo de Operacion (O o T)
+  SQL.ADD(" Select Mercado, Nombre, Numero, Alias3 from "~DBO~".CUENTAS Where Codigo = '"~iif(eqstr(copy(fbn['TipoOp'], 4, 1), 'O'), fbn['Cuenta3'], fbn['Cuenta1'])~"'")
+  Recorrer SQL  
+     ACT(a:fac+26+val(aa20), 'Forma de liquidacion :')
+     ACT(b:fac+26+val(aa20), FBN['Mercado'])
+
+     ACT(a:fac+27+val(aa20), 'Nombre :')  
+     ACT(b:fac+27+val(aa20), Copy(FBN['Nombre'],1,20))
+
+     ACT(a:fac+28+val(aa20), 'Nro. de Cuenta :')
+     ACT(b:fac+28+val(aa20), FBN['Numero'])
+
+     ACT(a:fac+29+val(aa20), 'Cod. Swift :')
+     ACT(b:fac+29+val(aa20), FBN['Alias3'])
+  Proximo
+  dfa
+
+  ACT(d:fac+25+val(aa20), 'LIQUIDACION Instruccion ContraEspecie')
+  * 'En los calls no hay Contra Especie' (Ana dixit). Asi que uso la cuenta 3 o 1 en lugar de la 4 o 2.
+  SQL.ADD(" Select Mercado, Nombre, Numero, Alias3 from "~DBO~".CUENTAS Where Codigo = '"~iif(eqstr(copy(fbn['TipoOp'], 4, 1), 'O'), fbn['Cuenta1'], fbn['Cuenta3'])~"'")
+  Recorrer SQL  
+     ACT(d:fac+26+val(aa20), 'Forma de liquidacion :')
+     ACT(e:fac+26+val(aa20), FBN['Mercado'])
+
+     ACT(d:fac+27+val(aa20), 'Nombre :')  
+     ACT(e:fac+27+val(aa20), Copy(FBN['Nombre'],1,20))
+
+     ACT(d:fac+28+val(aa20), 'Nro. de Cuenta :')
+     ACT(e:fac+28+val(aa20), FBN['Numero'])
+
+     ACT(d:fac+29+val(aa20), 'Cod. Swift :')
+     ACT(e:fac+29+val(aa20), FBN['Alias3'])
+  Proximo
+  dfa
+
+  ACT(a:fac+32+val(aa20), 'Observ. Back Office')
+  ACT(b:fac+32+val(aa20), Val(cf:3))
+  
+  CrearFont(1, 'Arial,10,B')
+  CrearFont(2, 'Arial,10,')
+  CrearFont(3, 'Arial,14,B')
+  
+  SetFont(a:fac..a:fac+30+val(aa20),1)
+  SetFont(b:fac..b:fac+30+val(aa20),2)
+  SetFont(d:fac..d:fac+30+val(aa20),1)
+  SetFont(e:fac..e:fac+30+val(aa20),2)
+  SetFont(b:fac+4,3)
+  SetFont(a:fac..b:fac+1,1)
+
+  
+  ColorCeldas(b:fac+4,1)
+  ColorCeldas(a:fac+29+val(aa20),1)
+  ColorCeldas(a:fac+32+val(aa20),1)
+
+  FormatoCeldas(b:fac+15, EXE('F9'))
+  AgregarMarco(a:fac+5..f:fac+32+val(aa20),2,0)
+  AgregarMarco(a:fac+11..f:fac+32+val(aa20),2,0)
+  AgregarMarco(a:fac+24+val(aa20)..f:fac+32+val(aa20),2,0)
+  AlinearCeldas(a:fac+5..a:fac+32+val(aa20),'I')
+  AlinearCeldas(b:fac+5..b:fac+32+val(aa20),'I')
+  AlinearCeldas(d:fac+6..e:fac+32+val(aa20),'I')
+  AlinearCeldas(e:fac+6..f:fac+32+val(aa20),'I')
+Proximo
+
+SetFilaActual(fac+32+val(aa20))
+
+  ACO(1,16)
+  ACO(2,12)
+  ACO(3,5)
+  ACO(4,15)
+  ACO(5,8)
+  ACO(6,9)
+  
+  *La Asignacion del nombre del archivo para generar PDF debe estar previo a la definicion de LimiteVision
+  ACT(cu:1, BuscarCampo('Clientes', 'RazonSocial', 'Codigo', VAR('VEHICULODE')))
+  ACT(op:1, Dialogo.NrOperacion1)
+  ACT(ar:1,VAR('PATHCONFI')~'Boleto_Cliente_'~Val(cu:1)~'_'~Val(op:1)~'.pdf')
+  
+  *email
+  ACT(em:3, BuscarCampo('OPERACIONES', 'Cliente1','NrOperacion', Dialogo.NrOperacion1))
+  ACT(em:1, BuscarCampo('Clientes', 'DireccionEmail', 'Codigo', Val(em:3)))
+
+  *Leyendas
+  ABT(AA:10..AA:20, LeerLeyenda('','','','MBOLETOASU'), 1)
+  ABT(ZK:1..ZK:4, LeerLeyenda('','','','MBOLETODET'), 1)
+  
+  SetPrintFit(1)
+  LimitesVision(h:fac)
+  *LimitesVision(h:fac+50)
+  
+  
+if Dialogo.Radio2 = 0
+   ImprimirHoja
+else
+   If Dialogo.Radio2 = 2
+      HojaVisible(NO)
+      SetPrintFit(4)
+      ExportarPdfLite(val(ar:1))
+   Else 
+       If Dialogo.Radio2 = 3  
+         HojaVisible(NO)
+         SetPrintFit(4)
+         ExportarPdfLite(val(ar:1))
+         SendMail(Val(em:1),val(AA:10),val(ZK:1),SI,,,val(ar:1),,SI)
+       Endif 
+   endif
+endif 

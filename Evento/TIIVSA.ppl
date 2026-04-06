@@ -1,0 +1,197 @@
+﻿    *** Lee Excel verifica fecha incorporacion
+HojaVisible(SI)
+MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1  : 'Fecha'           ;;;;;;;;;FSYS
+  Entero1 : 'Filas aprox.'    ;;;;;;;;;200
+  String1 : 'Path'            ;;;;NO;;;;;Var('PATHTIIVSA')
+  String2 : 'Titofin IVSA'    ;;;;;;;;;'IVSATITOFIN.XLSX'
+  Fecha2  : ''                ;;;;NO;NO;;;;;SQL("SELECT top 1 Fecha FROM "~DBO~".DETITOFINIVSA WHERE Fecha = "~IdxDate2(Dialogo.Fecha1)~" ")
+  Label1  :                   ;;;;NO;iif(Dialogo.Fecha2=Dialogo.Fecha1,SI,NO);;;;'Existen datos con la fecha seleccionada'  
+  Label2  :                   ;;;;NO;iif(Dialogo.Fecha2=Dialogo.Fecha1,SI,NO);;;;'Si confirma.Se elimnarán previo a la carga del archivo '
+ FinDialogo
+if Not OK
+  Cancelar
+endif
+
+
+If Not ExisteDirectorio(Var('PATHTIIVSA'))
+   Cancelar('Debe Crear el Directorio '~Var('PATHTIIVSA'))
+Endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,12,B")
+CrearFont(4,"Arial,9,B")
+CrearFont(5,"Arial,11,B")
+
+
+ACN(x1,Dialogo.Entero1)
+*- Excel IVSA TITOFIN
+ImportarXLS(a:2..m:Val(x1),aa:1..am:Val(x1),Dialogo.String1~Dialogo.String2)
+
+
+If Vacio(val(aa1))
+   Cancelar('No se ha podido recuperar el archivo de IVSA')
+EndIf
+
+ACT(x3,Copy(val(aa1),7,2)~'/'~Copy(val(aa1),5,2)~'/'~Copy(val(aa1),1,4))
+ACD(x2,fecha(val(x3)))
+
+
+If Dialogo.Fecha1 <> Val(x2)
+   Cancelar('La fecha a procesar '~Dialogo.fecha1~' No coincide con la fecha de la informacion '~val(x3))
+Endif
+   
+AgregarBMP(a1,EXE('LOGO'),80)
+
+SetFilaActual(3)
+ACT(e:fac,'Interfaz IVSA TITOFIN del '~Dialogo.Fecha1)
+SetFont(e:fac, 3)
+
+ACT(j:fac,Dialogo.String1~Dialogo.String2)
+SetFont(j:fac, 2)
+
+
+*---Encabezado ---------------------------------------
+SetFilaActual(fac+2)
+
+ACT(a:fac, 'Fecha')
+ACT(b:fac, 'Especie') 
+ACT(c:fac, 'TipCupon')    
+ACT(d:fac, 'CuentaContable')  
+ACT(e:fac, 'ValorResidual')   
+ACT(f:fac, 'ValorContable')   
+ACT(g:fac, 'ValorContValuado')    
+ACT(h:fac, 'FecIncorporacion')    
+ACT(i:fac, 'TipoRegistro')
+ACT(j:fac, 'NrOperacion') 
+ACT(k:fac, 'Cotizacion')  
+ACT(l:fac, 'CuentaCustodia')
+ACT(m:fac, 'Informa F.Inc')
+ACT(n:fac, 'Observaciones')
+
+
+AlinearCeldas(a:fac..n:fac+1, 'C')
+SetFont(a:fac..n:fac, 2)
+AgregarMarco(a:fac..n:fac,1,2,EXE('COLOR6'))
+SetFilaActual(fac+1)
+
+If Dialogo.Fecha1=Val(x2)
+   SQL.ADD("Delete from "~DBO~".DETITOFINIVSA Where Fecha="~IdxDate2(Dialogo.Fecha1)~" ")
+   SQL.NEW
+   SQL.EXEC
+Endif
+
+Recorrer&i 1,Val(x1)
+
+   
+   IF Vacio(Val(aa:&i))
+      Break
+   Endif
+   
+   ifa
+   ACD(a:fac, fecha(Copy(val(aa:&i),1,4)~'/'~Copy(val(aa:&i),5,2)~'/'~Copy(val(aa:&i),7,2)))
+   ACT(b:fac, Val(ab:&i)) 
+   ACN(c:fac, Val(ac:&i))
+   ACT(d:fac, fstr(Val(ad:&i),0,0))  
+   ACN(e:fac, Val(ae:&i))   
+   ACN(f:fac, Val(af:&i))   
+   ACN(g:fac, Val(ag:&i))    
+   ACD(h:fac, fecha(Copy(val(ah:&i),1,4)~'/'~Copy(val(ah:&i),5,2)~'/'~Copy(val(ah:&i),7,2)))    
+   ACT(i:fac, '')
+   ACT(j:fac, '') 
+   ACN(k:fac, Val(ak:&i))  
+   ACT(l:fac, Val(al:&i)) 
+   ACT(m:fac, Val(am:&i)) 
+   ACN(co:1, SQL("Select 1 From "~DBO~".CONTABILIDAD Where Codigo='"~fstr(Val(ad:&i),0,0)~"' "))   
+   ACT(es:1, SQL("Select Codigo From "~DBO~".ESPECIES Where CodMAEContado='"~Val(b:fac)~"' "))
+   if Val(co:1)<>1
+      ACT(n:fac, 'No existe CuentaContable / ') 
+   endif   
+   if Vacio(Val(es:1))
+      ACT(n:fac, Val(n:fac)~'No existe Especie') 
+   endif
+   *      ACT(n:fac, Val(es:1)) 
+   *endif   
+   FormatoCeldas(c:fac..g:fac,Exe('F0'))
+   FormatoCeldas(k:fac,Exe('F8'))
+   
+  
+   ** verificar relaciones ??? especie, cuentacontable
+   if noVacio(Val(es:1)) Y Val(co:1)=1
+   SQL.ADD("Insert into "~DBO~".DETITOFINIVSA (")
+          
+   SQL.ADD("Fecha, ")
+   SQL.ADD("Especie, ")
+   SQL.ADD("TipCupon, ")
+   SQL.ADD("CuentaContable, ")
+   SQL.ADD("ValorResidual, ")
+   SQL.ADD("ValorContable, ")
+
+   SQL.ADD("ValorContValuado, ")
+   SQL.ADD("FecIncorporacion, ")
+   SQL.ADD("TipoRegistro,")
+   SQL.ADD("NrOperacion, ")
+   SQL.ADD("Cotizacion, ")
+   SQL.ADD("CuentaCustodia, ")
+   SQL.ADD("InformaFecInc ")
+
+   SQL.ADD(") values (")
+          
+   * Fecha
+   SQL.ADD(" '"~IdxDate(Val(a:fac))~"', ")
+   * Especie
+   SQL.ADD(" '"~Val(es:1)~"', ")
+   * Tipo Cupon
+   SQL.ADD(" '"~Val(c:fac)~"', ")
+   * CuentaContable
+   *SQL.ADD(" '"~Val(d:fac)~"', ")
+   SQL.ADD(" "~FStr(Val(d:fac),0,0)~", ")
+   * ValorResidual
+   SQL.ADD(" "~FStr(Val(e:fac),0,2)~", ")
+   * ValorContable
+   SQL.ADD(" "~FStr(Val(f:fac),0,2)~", ")
+   * ValorContValuado
+   SQL.ADD(" "~FStr(Val(g:fac),0,2)~", ")
+   * FecIncorporacion
+   SQL.ADD(" '"~IdxDate(Val(h:fac))~"', ")
+   * TipoRegistro
+   SQL.ADD(" '"~Val(i:fac)~"', ")
+   * NrOperacion
+   SQL.ADD(" '"~Val(j:fac)~"', ")
+   * Cotizacion
+   SQL.ADD(" "~FStr(Val(k:fac),0,8)~", ")
+   * CuentaCustodia
+   SQL.ADD(" '"~Val(l:fac)~"', ")
+   * InformaFecInc
+   SQL.ADD(" '"~Val(m:fac)~"' ")
+
+   SQL.ADD(")")
+   SQL.NEW
+   SQL.EXEC
+   endif
+   SCN(to:1,1)
+  
+proximo
+
+ACO(4,10)
+ACO(5,10)
+ACO(6,10)
+ACO(7,12)
+ACO(8,12)
+ACO(11,10)
+ACO(12,12)
+ACO(13,10)
+ACO(14,25)
+
+SetFilaActual(fac+2)
+
+ACT(c:fac, Fstr(val(to:1),1,0)~' Filas Procesadas')
+SetFont(c:fac, 2)
+
+LimitesVision(n:fac)
+
+SetPrintFit(3,80)
+Impresion(1,2)
+Impresion(4,1)

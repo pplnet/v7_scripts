@@ -1,0 +1,220 @@
+﻿ACN(RS:2, 0)
+ACN(PP:1, 0)
+ACN(PP:2, 0)
+ACN(SA:99, 0)
+SetFilaActual(fac+Val(FI:2)+1)
+ACT(A:fac, 'Actividad del Periodo')
+SetFont(A:fac..B:fac, 2)
+ifa
+ACT(A:fac, 'Fecha:')
+ACT(B:fac, 'Movimiento')
+ACT(C:fac, 'Operacion')
+ACT(D:fac, 'VN/Cuotas')
+ACT(E:fac, 'Precio')
+ACT(F:fac, 'Valor')
+ACT(G:fac, 'T.C.')
+ACT(H:fac, 'Valor ARP')
+ACT(I:fac, 'P.Costo ARP')
+ACT(J:fac, 'V.N. Acum.')
+ACT(K:fac, 'Resultado ARP')
+ACT(L:fac, 'Estado')
+ACT(M:fac, 'Saldo Operacion')
+SetFont(A:fac..M:fac, 2)
+AgregarMarco(A:fac..O:fac, 0, 0, Exe('COLOR6'))
+ifa
+ACN(FI:3, fac)
+***---En HH1 acumulo valor ARP para fila de saldo Final = Saldo de la operacion * TC * Precio
+ACN(HH:1, 0)
+IF Val(FI:2) > 0
+    Recorrer&k 1, Val(FI:2)
+        ***---Operaciones del saldo
+        ACD(A:fac+Val(FI:2)-&k, Val(AA:&k))
+        ACT(B:fac+Val(FI:2)-&k, Val(AB:&k))
+        ACT(C:fac+Val(FI:2)-&k, Val(AC:&k))
+        ACLO(C:fac+Val(FI:2)-&k, Val(AC:&k))
+        ACN(D:fac+Val(FI:2)-&k, Val(AD:&k))
+        ACN(E:fac+Val(FI:2)-&k, Val(AE:&k))
+        ACN(F:fac+Val(FI:2)-&k, Val(AF:&k))
+        ACN(G:fac+Val(FI:2)-&k, Val(AG:&k))
+        ACN(H:fac+Val(FI:2)-&k, Val(AH:&k))
+        ACT(L:fac+Val(FI:2)-&k, Val(AL:&k))
+        ACN(M:fac+Val(FI:2)-&k, Val(AD:&k))
+        SCN(HH:1, (Val(M:fac+Val(FI:2)-&k) * Val(G:fac+Val(FI:2)-&k) * Val(E:fac+Val(FI:2)-&k)))
+    Proximo
+    Recorrer&k 0, Val(FI:2)-1
+        ACN(J:fac+&k, Sum(D:fac..D:fac+&k))
+        ***---Saldo Acumulado
+        ACN(SA:99, Val(J:fac+&k))
+    Proximo
+    ***---Primer Fila PEPS
+    ACN(FI:3, fac)
+ENDIF
+SetFont(A:Val(FI:3)..M:fac+Val(FI:2), 1)
+FormatoCeldas(D:Val(FI:3)..D:fac+Val(FI:2), Exe('F2'))
+FormatoCeldas(E:Val(FI:3)..E:fac+Val(FI:2), Exe('F8'))
+FormatoCeldas(G:Val(FI:3)..G:fac+Val(FI:2), Exe('F8'))
+SetFilaActual(fac+Val(FI:2)-1)
+ACN(BD:1, 0)
+***---Operaciones del periodo
+SQL.ADD(" Select FechaOp, NrOperacion, Cantidad, Precio1, TipoOp, Especie, Cotizacion1 ")
+SQL.ADD(" From "~DBO~".OPERACIONES ")
+SQL.ADD(" where TipoOp IN ('FCS', 'FCR') ")
+SQL.ADD(" and FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" and Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" and Especie = '"~Val(ES:1)~"' ")
+SQL.ADD(" Order by FechaOp, NrOperacion ")
+Recorrer SQL
+    IF Val(FI:2) = 0 Y Val(BD:1) = 0 Y Eqstr(fbn('TipoOp'), 'FCS')
+        ***---Primer Fila PEPS
+        ACN(FI:3, fac)
+        ACN(BD:1, 1)
+    ENDIF
+    ACD(A:fac, fbn('FechaOp'))
+    ACT(C:fac, fbn('NrOperacion'))
+    ACLO(C:fac, fbn('NrOperacion'))
+    ACN(E:fac, fbn('Precio1'))
+    ACN(F:fac, fbn('Cantidad')*fbn('Precio1'))
+    ACT(CT:99, CotizaEn(fbn('Especie')))
+    IF Not Eqstr(Val(CT:99), Val(ML:1))
+        IF fbn('Cotizacion1') > 0
+            ACN(TC:1, fbn('Cotizacion1'))
+        ELSE
+            ***---ACN(TC:1, CotizacionC(Val(CT:99),,,,fbn('FechaOp'),1,SI,Val(ML:1)))
+            ***---ACN(TC:1, Cotizacion(Val(ES:1),,,,fbn('FechaOp'),1,SI) * CotizacionBNA(Val(CT:99), fbn('FechaOp'),1,NO,NO))
+            ACN(TC:1, CotizacionBNA(Val(CT:99), fbn('FechaOp')-1,1,NO,NO))
+        ENDIF
+    ELSE
+        ACN(TC:1, 1)
+    ENDIF
+    ACN(G:fac, Val(TC:1))
+    ACN(H:fac, Val(F:fac)*Val(TC:1))
+    ACT(L:fac, 'Pendiente')
+    IF Eqstr(fbn('TipoOp'), 'FCS'))
+        ACT(B:fac, 'Suscripcion')
+        ACN(D:fac, fbn('Cantidad'))
+        ACN(J:fac, Val(SA:99) + Val(D:fac))
+        ACN(SA:99, Val(J:fac))
+        ACN(M:fac, fbn('Cantidad'))
+        SCN(HH:1, Val(M:fac) * Val(G:fac) * Val(E:fac))
+        SetFont(A:fac..M:fac, 1)
+        FormatoCeldas(D:fac, Exe('F2'))
+        FormatoCeldas(E:fac, Exe('F8'))
+        FormatoCeldas(G:fac, Exe('F8'))
+    ELSE
+        ACN(VN:1, 0)
+        ACT(B:fac, 'Rescate')
+        ACN(D:fac, -fbn('Cantidad'))
+        ACN(J:fac, Val(SA:99) + Val(D:fac))
+        ACN(SA:99, Val(J:fac))
+        SetFont(A:fac..K:fac, 1)
+        FormatoCeldas(D:fac..D:fac+Val(FI:2), Exe('F2'))
+        FormatoCeldas(E:fac..E:fac+Val(FI:2), Exe('F8'))
+        FormatoCeldas(G:fac..G:fac+Val(FI:2), Exe('F8'))
+        ACT(L:fac, 'Composicion')
+        ACT(M:fac, 'Operacion')
+        ACT(N:fac, 'VN/Cuotas')
+        ACT(O:fac, 'Precio')
+        SetFont(L:fac..O:fac, 2)
+        AgregarMarco(L:fac..O:fac, 0, 0, Exe('COLOR6'))
+        ACN(RS:1, fbn('Cantidad'))
+        ACN(FI:4, fac-1)
+        ***---Precio de costo
+        ACN(PC:1, 0)
+        Recorrer&k Val(FI:3), Val(FI:4)
+            ***---Recorro Operaciones para PEPS
+            IF Val(M:&k) > 0
+                ifa
+                ***---La operacion tiene saldo
+                ACT(M:fac, Val(C:&k))
+                ACLO(M:fac, Val(C:&k))
+                IF Val(M:&k) >= Val(RS:1)
+                    ***---Saldo de la operacion >= al rescate
+                    ACN(N:fac, Val(RS:1))
+                    ***---Precio en ARP
+                    ACN(O:fac, Val(E:&k) * Val(G:&k))
+                    SCN(PC:1, Val(N:fac) * Val(O:fac))
+                    ACN(M:&k, Val(M:&k) - Val(RS:1))
+                    ***---En el valor ARP resto lo rescatado.
+                    SCN(HH:1, (Val(RS:1) * Val(G:&k) * Val(E:&k)) * (-1))
+                    IF Val(M:&k) > 0
+                        ACT(L:&k, 'Vendida Parcial')
+                    ELSE
+                        ACT(L:&k, 'Vendida')
+                    ENDIF
+                    SCN(VN:1, Val(N:fac))
+                    SetFont(L:fac..O:fac, 1)
+                    FormatoCeldas(O:fac, Exe('F8'))
+                    Break
+                ELSE
+                    ***---El saldo de la operacion no cubre el rescate
+                    ACN(N:fac, Val(M:&k))
+                    ACN(O:fac, Val(E:&k) * Val(G:&k))
+                    SCN(PC:1, Val(N:fac) * Val(O:fac))
+                    ACN(M:&k, 0)
+                    ACT(L:&k, 'Vendida')
+                    ACN(RS:1, Val(RS:1) - Val(N:fac))
+                    ***---En el valor ARP el saldo de la operacion rescatada.
+                    SCN(HH:1, (Val(N:fac) * Val(G:&k) * Val(E:&k)) * (-1))
+                    SCN(VN:1, Val(N:fac))
+                    SetFont(L:fac..O:fac, 1)
+                    FormatoCeldas(O:fac, Exe('F8'))
+                ENDIF
+            ENDIF
+        Proximo
+        ifa
+        ACT(L:fac, 'Total Comp.')
+        ACN(N:fac, Val(VN:1))
+        SetFont(L:fac..N:fac, 2)
+        AgregarMarco(L:Val(FI:4)+1..O:fac-1, 0, 0)
+        AgregarMarco(L:fac..O:fac, 0, 0, Exe('COLOR6'))
+        ACN(I:Val(FI:4)+1, Val(PC:1) / Abs(Val(D:Val(FI:4)+1)))
+        ACN(K:Val(FI:4)+1, ((Val(E:Val(FI:4)+1) * Val(G:Val(FI:4)+1)) - Val(I:Val(FI:4)+1)) * Abs(Val(D:Val(FI:4)+1)))
+        SCN(RS:2, Val(K:Val(FI:4)+1))
+        SetFont(I:Val(FI:4)+1, 1)
+        SetFont(K:Val(FI:4)+1, 1)
+        FormatoCeldas(I:Val(FI:4)+1, Exe('F8'))
+        FormatoCeldas(K:Val(FI:4)+1, Exe('F2'))
+        ifa
+    ENDIF
+Proximo
+ifa
+ACT(A:fac, 'Saldo Final Periodo')
+ACN(D:fac, Val(SA:99))
+***---Precio es el PPP de los saldos de cada compra
+Recorrer&k Val(FI:3), fac-1
+    SCN(PP:1, Val(M:&k) * Val(E:&k))
+    SCN(PP:2, Val(M:&k) * Val(G:&k))
+Proximo
+ACN(E:fac, Val(PP:1) / Val(SA:99))
+ACN(F:fac, Val(D:fac) * Val(E:fac))
+ACN(G:fac, Val(PP:2) / Val(SA:99))
+***---ACN(H:fac, Val(D:fac) * Val(G:fac))
+***---ACN(H:fac, Val(F:fac) * Val(G:fac))
+ACN(H:fac, Val(HH:1))
+***---REVISAR   ACN(I:fac, Val(G:fac))
+***---ACN(I:fac, Val(PC:1))
+ACN(J:fac, Val(D:fac))
+ACN(K:fac, Val(RS:2))
+SetFont(A:fac..M:fac, 2)
+FormatoCeldas(E:fac, Exe('F8'))
+FormatoCeldas(I:fac, Exe('F8'))
+FormatoCeldas(K:fac, Exe('F2'))
+AgregarMarco(A:fac..M:fac, 0, 0, Exe('COLOR6'))
+ifa
+ACT(F:fac, 'Valor Mercado')
+***---ACN(G:fac, CotizacionC(Val(ES:1),,,,Dialogo.Fecha2,1,SI, Val(ML:1)))
+IF Eqstr(Val(CT:99), Val(ML:1))
+    ACN(G:fac, Cotizacion(Val(ES:1),,,,Dialogo.Fecha2,1,SI))
+ELSE
+    ACN(G:fac, Cotizacion(Val(ES:1),,,,Dialogo.Fecha2,1,SI) * CotizacionBNA(Val(CT:99), Dialogo.Fecha2,1,NO,NO))
+ENDIF
+ACN(H:fac, Val(D:fac-1) * Val(G:fac))
+FormatoCeldas(G:fac-1..G:fac, Exe('F8'))
+FormatoCeldas(H:fac-1..H:fac, Exe('F2'))
+ifa
+ACT(F:fac, 'Resultado Revaluo')
+ACN(H:fac, Val(H:fac-1) - Val(H:fac-2))
+FormatoCeldas(H:fac, Exe('F2'))
+SetFont(D:fac-1..H:fac, 2)
+AgregarMarco(F:fac-1..H:fac, 0, 0, Exe('COLOR6'))

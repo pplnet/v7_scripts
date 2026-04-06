@@ -1,0 +1,217 @@
+﻿CrearDialogo
+  Fecha1    : 'Fecha'   ;;;;;;;;;;
+  Cuenta1   : 'Cuenta'  ;;;;;;;;;;;
+FinDialogo
+
+If Not OK
+  Cancelar
+EndIf
+
+ACT(us:99, UsuarioActivo)
+ACN(PL:1, Habiles(Dialogo.Fecha1, 1, 'ARG') - Dialogo.Fecha1)
+ACD(FV:1, Dialogo.Fecha1 + Val(PL:1))
+
+SQL.ADD(" Select O.FechaOp, O.Cantidad, O.Cuenta1, O.Especie, O.Vehiculo1, O.NrOperacion, O.Observac3 ")
+SQL.ADD(" from "~DBO~".OPSEVENTUALES O ")
+SQL.ADD(" where O.TipoOp = 'MMEVDE' ")
+SQL.ADD(" and O.FechaOp  = (Select Max(EV.FechaOp) From "~DBO~".OPSEVENTUALES EV ")
+SQL.ADD("                  Where EV.TipoOp = O.TipoOp ")
+SQL.ADD("                  AND EV.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("                  AND O.Cuenta1 = EV.Cuenta1 ")
+SQL.ADD("                  AND O.Especie = EV.Especie) ")
+IF NoVacio(Dialogo.Cuenta1)
+    SQL.ADD(" AND O.Cuenta1 = '"~Dialogo.Cuenta1~"' ")
+ENDIF
+**// Que no esten procesadas, si no es habil toma el ultimo saldo.
+IF EsHabil(Dialogo.Fecha1, VAR('FERIADODEF'))
+*   SQL.ADD(" and (CB5 = 0 OR CB5 is null) ")
+Endif
+SQL.ADD(" Order By 1 ")
+Recorrer SQL
+    IF fbn('Cantidad') < 0
+        **//MessageBox('Proceso Eventual '~FBN('NrOperacion'))
+        ***---Es un Descubierto
+        ***---Se toman las MMDPAC vigentes a la fecha que se procesa y no a la fecha del ultimo saldo recibido
+        ***---ACD(a:fac, fbn('FechaOp'))
+        ACD(a:fac, Dialogo.Fecha1)
+        ACD(FE:1, fbn('FechaOp'))
+        ACN(b:fac, Abs(fbn('Cantidad')))
+        ACT(c:fac, fbn('Cuenta1'))
+        ACT(d:fac, fbn('Especie'))
+        ACT(e:fac, fbn('Vehiculo1'))
+        ACT(f:fac, fbn('NrOperacion'))
+        ACT(OB:1, fbn('Observac3'))
+        acn(jj:99, 0)
+        */Cantidad
+        ACN(ca:99, Val(b:fac))
+        ACN(oo:99, 0)
+        ACT(op:99, Val(f:fac))
+        SQL.ADD(" Select FechaOp, Cantidad, Cuenta1, FechaVto, Especie, Precio1, Vehiculo1, RB8, RB10, ")
+        SQL.ADD(" Spread, NrOperacion, TipoTasa, Book1, Observac2, PrecioRef, TablaFeriados1, Cuenta4 ")
+        SQL.ADD(" from "~DBO~".OPERACIONES ")
+        SQL.ADD(" where TipoOp = 'MMDPAC' and (Cuenta1 = '"~Val(c:fac)~"' OR Cuenta4 = '"~Val(c:fac)~"') ")
+        SQL.ADD(" and Especie = '"~Val(d:fac)~"' and FechaVto > '"~IdxDate(Val(a:fac))~"' ")
+        SQL.ADD(" AND FechaOp <= '"~IdxDate(Val(a:fac))~"' ")
+        **// Primero se procesan las MMDPAC Pactadas
+        SQL.ADD(" Order by RB10 desc, FechaOp, FechaCarga")
+        watch(sql.batch)
+        Recorrer SQL
+            ACD(zz:fac, fbn('FechaOp'))
+            ACN(aa:fac, fbn('Cantidad'))
+            IF Eqstr(fbn('Cuenta1'), Dialogo.Cuenta1)
+                ACT(bb:fac, fbn('Cuenta1'))
+            ELSE
+                ACT(bb:fac, fbn('Cuenta4'))
+            ENDIF
+            ACD(cc:fac, fbn('FechaVto'))
+            ACT(dd:fac, fbn('Especie'))
+            ACN(ee:fac, fbn('Precio1'))
+            ACT(ff:fac, fbn('Vehiculo1'))
+            ACN(gg:fac, fbn('RB8'))
+            ACN(hh:fac, fbn('Spread'))
+            ACN(TT:1, val(aa:fac))
+            ACN(NU:1, BuscarCampo('VEHICULOS','Alias1','Codigo',fbn('Vehiculo1')))
+            ACT(co:99, BuscarCampo('Cuentas','Comitente','Codigo', Val(bb:fac)))
+            ***/// Si todavia no vencio la MMDPAC
+            if Val(a:fac) < Val(cc:fac)
+                acn(xy:98, Val(aa:fac) - Val(ca:99))
+                acn(xy:99, Val (xy:98))
+                if val(xy:98) < 0
+                    acn(ca:99, val (xy:98)*(-1))
+                endIf
+                **// Si es MMDPAC Consumido, genero la MMDC y calculo el interes.
+                If FBN('RB10')=0
+                   **//MessageBox('Consumo Consumido '~FBN('NrOperacion'))
+                   **// la MMDPAC cubre el saldo
+                   if val(xy:99) >= 0
+                       */CALCULO DEL INTERES
+                       if Val(gg:fac)=1
+                          ACN(rb:99, 36500)       
+                       else
+                          ACN(rb:99, 36000)
+                       endIf
+                       **//ACN(in:99, (Val (ca:99) * (Val(ee:fac) + Val(hh:fac)) * Val(PL:1))/Val(rb:99))
+                       ACN(in:99, (Val (ca:99) * (Val(ee:fac) + Val(hh:fac)) * 1)/Val(rb:99))
+                          ACT(NR:1, GetNumerador(Val(NU:1)))
+                          Message('Generando MMDC... '~Val(NR:1))
+                          SQL.ADD(" INSERT INTO "~DBO~".OPERACIONES ")
+                          SQL.ADD(" (FechaOp2, FechaCargaSys, FechaCarga, ")
+                          SQL.ADD(" FechaOp, NrOperacion, TipoOp, ")
+                          SQL.ADD(" Especie, Cantidad, Cuenta1, ")
+                          SQL.ADD(" Vehiculo1, Precio1, ")
+                          SQL.ADD(" TablaFeriados1, Numerador, Operador, ")
+                          SQL.ADD(" Cliente1, RB8, Spread, ")
+                          SQL.ADD(" Plazo, TotalIntereses, TipoTasa, ")
+                          SQL.ADD(" FechaVto, FechaVto2, Book1, ")
+                          SQL.ADD(" Observac2, PrecioRef, Observac3, ")
+                          SQL.ADD(" OperacionRef, CB5) ")
+                          SQL.ADD(" VALUES ")
+                          SQL.ADD(" ('"~IdxDate(Dialogo.Fecha1)~"','"~IdxDate(FSys)~"', "~SQLAhora~", ")
+                          SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', '"~Val(NR:1)~"','MMDC', ")
+                          SQL.ADD(" '"~val(dd:fac)~"','"~val(ca:99)~"','"~val(bb:fac)~"', ")
+                          SQL.ADD(" '"~val(ff:fac)~"', '"~Val(ee:fac)~"', ")
+                          SQL.ADD(" '"~fbn('TablaFeriados1')~"', "~Fstr(Val(NU:1), 0, 0)~", '"~UsuarioActivo~"', ")
+                          SQL.ADD(" '"~val(co:99)~"', "~Fstr(Val(gg:fac), 0, 0)~", '"~Val(hh:fac)~"', ")
+                          SQL.ADD(" 1, "~Fstr(val(in:99), 0, 2)~", '"~fbn('TipoTasa')~"', ")
+                          SQL.ADD(" '"~IdxDate(Dialogo.Fecha1+1)~"', '"~IdxDate(Dialogo.Fecha1+1)~"', '"~fbn('Book1')~"', ")
+                          SQL.ADD(" '"~fbn('Observac2')~"', '"~fbn('PrecioRef')~"', '"~Val(OB:1)~"', ")
+                          SQL.ADD(" '"~fbn('NrOperacion')~"', 0) ")
+                          SQL.NEW
+                          SQL.EXEC
+                          ACN(oo:99, 1)
+                          ***---Dejo la operacion en Terminal
+                          ACT(Z:3, Val(NR:1))
+                          (.'ALTAINSTER'.)
+                          SQL.ActualizarMovimientos3(Val(NR:1),NO,NO,NO,NO,SI)
+                          SQL.EXEC
+                       Break
+                   else
+                   **// la MMDPAC NO cubre el saldo
+                       if Val(oo:99)=0
+                          */CALCULO DEL INTERES
+                          if Val(gg:fac)=1
+                             ACN(rb:99, 36500)       
+                          else
+                             ACN(rb:99, 36000)
+                          endIf
+                          **//ACN(in:99, (Val(aa:fac) * (Val(ee:fac) + Val(hh:fac)) * Val(PL:1))/Val(rb:99))
+                          ACN(in:99, (Val(aa:fac) * (Val(ee:fac) + Val(hh:fac)) * 1)/Val(rb:99))
+                          ACN(xy:100, Val(xy:99)*(-1))
+                             ACT(NR:1, GetNumerador(Val(NU:1)))
+                             Message('Generando MMDC... '~Val(NR:1))
+                             SQL.ADD(" INSERT INTO "~DBO~".OPERACIONES ")
+                             SQL.ADD(" (FechaOp2, FechaCargaSys, FechaCarga, ")
+                             SQL.ADD(" FechaOp, NrOperacion, TipoOp, ")
+                             SQL.ADD(" Especie, Cantidad, Cuenta1, ")
+                             SQL.ADD(" Vehiculo1, Precio1, ")
+                             SQL.ADD(" TablaFeriados1, Numerador, Operador, ")
+                             SQL.ADD(" Cliente1, RB8, Spread, ")
+                             SQL.ADD(" Plazo, TotalIntereses, TipoTasa, ")
+                             SQL.ADD(" FechaVto, FechaVto2, Book1, ")
+                             SQL.ADD(" Observac2, PrecioRef, Observac3, ")
+                             SQL.ADD(" OperacionRef, CB5) ")
+                             SQL.ADD(" VALUES ")
+                             SQL.ADD(" ('"~IdxDate(Dialogo.Fecha1)~"', '"~IdxDate(FSys)~"', "~SQLAhora~", ")
+                             SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', '"~Val(NR:1)~"','MMDC', ")
+                             SQL.ADD(" '"~val(dd:fac)~"', '"~val(aa:fac)~"', '"~val(bb:fac)~"', ")
+                             SQL.ADD(" '"~val(ff:fac)~"', '"~Val(ee:fac)~"', ")
+                             SQL.ADD(" '"~fbn('TablaFeriados1')~"', "~Fstr(Val(NU:1), 0, 0)~", '"~UsuarioActivo~"', ")
+                             SQL.ADD(" '"~val(co:99)~"', "~Fstr(Val(gg:fac), 0, 0)~", '"~Val(hh:fac)~"', ")
+                             SQL.ADD(" 1, "~Fstr(val(in:99), 0, 2)~", '"~fbn('TipoTasa')~"', ")
+                             SQL.ADD(" '"~IdxDate(Dialogo.Fecha1+1)~"', '"~IdxDate(Dialogo.Fecha1+1)~"', '"~fbn('Book1')~"', ")
+                             SQL.ADD(" '"~fbn('Observac2')~"', '"~fbn('PrecioRef')~"', '"~Val(OB:1)~"', ")
+                             SQL.ADD(" '"~fbn('NrOperacion')~"', 0) ")
+                             SQL.NEW
+                             SQL.EXEC
+                             ACN(zz:99, Val(xy:99) * (-1))
+                             ***---Dejo la operacion en Terminal
+                             ACT(Z:3, Val(NR:1))
+                             (.'ALTAINSTER'.)
+                             SQL.ActualizarMovimientos3(Val(NR:1),NO,NO,NO,NO,SI)
+                             SQL.EXEC
+                       endIf
+                   endIf 
+               Else
+               **// Si es MMDPAC Pactado, no hace falta calcular interes.
+                   **//MessageBox('Consumo Pactado '~FBN('NrOperacion'))
+                   **// En CN:1 guardo el saldo que se consumio de lo pactado, para guardarlo en la MMDPAC y utilizarlo en el CONT31
+                   if val(xy:99) >= 0
+                      **// la MMDPAC cubre el saldo
+                      ACN(CN:1, Val(CA:99))
+                   Else
+                      **// la MMDPAC NO cubre el saldo
+                      ACN(CN:1, Val(AA:FAC))  
+                   Endif
+                   SQL.ADD(" Update "~DBO~".OPERACIONES ")
+                   SQL.ADD(" Set TotalAux1 = "~Fstr(Val(CN:1),0,2)~" ")
+                   SQL.ADD(" Where NrOperacion = '"~FBN('NrOperacion')~"' ")
+                   SQL.NEW
+                   SQL.EXEC
+                   if val(xy:99) >= 0
+                      **// la MMDPAC cubre el saldo, entonces salgo.
+                      Break
+                   Endif
+               Endif
+            endIf
+        Proximo
+    ELSE
+        ***---Si es positivo, marco las MMDC del mes, anteriores, para en el evento CONT31 poder
+        ***---determinar si el mes termino con saldo positivo o negativo. Si termino con saldo
+        ***---positivo, no se genera la contabilidad de reclasificacion de deuda.
+        SQL.ADD(" Update "~DBO~".OPERACIONES ")
+        SQL.ADD(" Set CB5 = 1 ")
+        SQL.ADD(" Where TipoOp = 'MMDC' ")
+        SQL.ADD(" AND FechaOp < '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD(" AND FechaOp >= '"~IdxDate(PriDeMes(Dialogo.Fecha1))~"' ")
+        SQL.ADD(" AND FechaCargaSys = '"~IdxDate(Fsys)~"' ")
+        SQL.ADD(" AND Cuenta1 = '"~fbn('Cuenta1')~"' ")
+        SQL.ADD(" AND Especie = '"~fbn('Especie')~"' ")
+        SQL.NEW
+        SQL.EXEC
+    ENDIF
+    SQL.ADD(" Update "~DBO~".OPSEVENTUALES ")
+    SQL.ADD(" Set CB5 = 1 ")
+    SQL.ADD(" Where NrOperacion = '"~FBN('NrOperacion')~"' ")
+    SQL.NEW
+    SQL.EXEC
+Proximo

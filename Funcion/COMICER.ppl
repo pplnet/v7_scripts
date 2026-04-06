@@ -1,0 +1,102 @@
+﻿*--> (cp:3) = Capital ajustado (Cantidad) <--*
+*--> (cp:5) = Capital amort. ajustado <--*
+
+*--> (vv:3) = TotalComisiones-- <--*
+*--> (vc:1) = Importe1--------- <--*
+*--> (vc:2) = Cantidad1-------- <--*
+*--> (vc:3) = Importe2--------- <--*
+*--> (vc:4) = Importe3--------- <--*
+*--> (vc:5) = Importe4--------- <--*
+*--> (vc:6) = Precio2---------- <--*
+
+If (Val(um:1) +1) = 1
+   *--> Operaciones U.V. <--*  
+   Sql.Add(" Select C.NrOperacion NrOp, C.NrComision NrComi, C.Tipo Tipo, C.Tasa1 Ta1, C.NrCuota Cuota, C.Importe1 Imp1, C.Especie1 Esp, C.Fecha1 Fe1, C.Cliente1 Cl1, C.RB1 RB1, C.Tasa2 Ta2, C.Importe2 Imp2, ")
+   Sql.Add(" C.Tasa3 Ta3, C.Importe3 Imp3, C.RB2 RB2, C.Precio1 Pr1, C.Precio2 Pr2, C.Importe4 Imp4, C.Cantidad1 Ca1, C.Cotizacion1 Co1, C.Cotizacion2 Co2, C.Importe5 Imp5, ")
+   Sql.Add(" O.Plazo Pl, O.OperacionRef OpRef, 0 Cant,  O.TipoOp TipoOp, ")
+   Sql.Add(" 0 CTCa2, 1 Uni_Mul ")
+   Sql.Add(" From "~DBO~".COMISIONES2 C, "~DBO~".OPERACIONES O ")
+   Sql.Add(" Where C.NrOperacion = '"~FBN['NrOp']~"' ")
+
+   *--> Tratando de solucionar que la comision no este liquidada <--*
+   Sql.Add("   and C.Fecha1 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+   Sql.Add("   and C.NrOperacion = O.NrOperacion ")
+Else
+   *--> Operaciones M.V. <--*
+   *--> Se definio que se ingresara el numero de cuota en las comisiones. (Mail de Leonardo 08/05)
+
+   Sql.Add(" Select C.NrOperacion NrOp, C.NrComision NrComi, C.Tipo Tipo, C.Tasa1 Ta1, C.NrCuota Cuota, C.Importe1 Imp1, C.Especie1 Esp, C.Fecha1 Fe1, C.Cliente1 Cl1, C.RB1 RB1, C.Tasa2 Ta2, C.Importe2 Imp2, ")
+   Sql.Add(" C.Tasa3 Ta3, C.Importe3 Imp3, C.RB2 RB2, C.Precio1 Pr1, C.Precio2 Pr2, C.Importe4 Imp4, C.Cantidad1 Ca1, C.Cotizacion1 Co1, C.Cotizacion2 Co2, C.Importe5 Imp5, ")
+   Sql.Add(" CT.Plazo1 Pl, O.OperacionRef OpRef, O.Cantidad Cant, O.TipoOp TipoOp,")
+   Sql.Add(" CT.Cantidad2 CTCa2, 2 Uni_Mul ")
+   Sql.Add(" From "~DBO~".COMISIONES2 C, "~DBO~".CUOTAS CT, "~DBO~".OPERACIONES O ")
+   Sql.Add(" Where O.NrOperacion = '"~FBN['NrOp']~"' ")
+   Sql.Add("   and O.NrOperacion = CT.NrOperacion ")
+   Sql.Add("   and CT.NrOperacion = C.NrOperacion ")
+   Sql.Add("   and C.NrCuota = '"~FBN['Cuota']~"' ")
+   Sql.Add("   and C.NrCuota = CT.NrCuota ")
+   Sql.Add("   and C.Fecha1 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+EndIf
+
+Sql.Add(" Order by Fe1, Tipo, Cuota ")
+
+RECORRER SQL
+
+   If FBN['Uni_Mul'] = 1
+      ACN(vv:3, Val(vu:3))
+   Else
+      ACN(vv:3, Val(vm:3))
+   EndIf
+
+   If Incluido(FBN['TipoOp'], 'MMPI|MMPE')
+      ACN(vc:1, IIF(FBN['Tipo'] <= 5, IIF(FBN['Tipo'] <= 2 O FBN['Tipo'] = 5, (Val(cp:3) + IIF(FBN['Tipo'] <= 2, Val(vv:3), 0)) * FBN['Ta1'] / 100, IIF(FBN['Tipo'] = 3, ((Val(cp:3)+Val(vv:3)) * FBN['Ta1'] * FBN['Pl'] / IIF(FBN['RB2']=0, 36000, 36500)), FBN['Imp1'])), 0) )
+      ACN(vc:3, IIF(VACIO(FBN['OpRef']), (Val(vc:1) * FBN['Ta2'] / 100)) )
+      ACN(vc:4, IIF(VACIO(FBN['OpeRef']), IIF(FBN['RB1']=1, (Val(vc:1) * FBN['Ta3'] / 100), 0)) )
+      ACN(vc:6, IIF(VACIO(FBN['OpeRef']), IIF(FBN['RB1']<>1, (Val(vc:1) * FBN['Pr1'] / 100), 0)) )
+      ACN(vc:5, Val(vc:1) + Val(vc:4) + Val(vc:6) )
+   EndIf
+
+   If EqStr(FBN['TipoOp'], 'MMSIMV')
+   ***---ACN(vc:1, IIF(FBN['Tipo']<=5, IIF(FBN['Tipo']<=2 O FBN['Tipo']=5, (Val(cp:3)+IIF(FBN['Tipo']<=2, Val(vv:3), 0)) * FBN['Ta1']/100, IIF(FBN['Tipo']=3, ((Val(cp:3)+Val(vv:3)) * FBN['Ta1']*FBN['Pl']/IIF( FBN['RB2']=0, 36000, 36500)), FBN['Imp1']))), 0) )
+   ACN(vc:1, IIF(FBN['Tipo']<=5, IIF(FBN['Tipo']<=2 O FBN['Tipo']=5, (Val(cp:3)+IIF(FBN['Tipo']<=2, Val(vv:3), 0)) * FBN['Ta1']/100, IIF(FBN['Tipo']=3, (Val(cp:3)+Val(vv:3)) * FBN['Ta1']*FBN['Pl']/IIF( FBN['RB2']=0, 36000, 36500), FBN['Imp1'])), 0) )
+      ACN(vc:3, IIF(VACIO(FBN['OpRef']), (Val(vc:1)*FBN['Ta2']/100)) )
+      ACN(vc:4, IIF(FBN['RB1']=1, Val(vc:1)*FBN['Ta3']/100, 0) )
+      ACN(vc:6, IIF(VACIO(FBN['OpeRef']), IIF(FBN['RB1']<>1, (Val(vc:1) * FBN['Pr1'] / 100), 0)) )
+      ACN(vc:5, Val(vc:1) + Val(vc:4) + Val(vc:6) )
+   EndIf
+
+   If Not Incluido(FBN['TipoOp'], 'MMPI|MMPE|MMSIMV')
+      ***COMIOP***
+      ACN(vc:1, IIF(FBN['Tipo'] <= 5, IIF(FBN['Tipo'] <= 2 O FBN['Tipo'] = 5, (Val(cp:3) + IIF(FBN['Tipo'] <= 2, Val(vv:3), 0)) * FBN['Ta1'] / 100, IIF(FBN['Tipo'] = 3, (Val(cp:3) * FBN['Ta1'] * FBN['Pl'] / IIF(FBN['RB2'] = 0, 36000, 36500)), FBN['Imp1'])), 0))
+      ACN(vc:2, IIF(FBN['Tipo'] <= 5, IIF(FBN['Tipo'] <= 2 O FBN['Tipo'] = 5, (Val(cp:3) + IIF(FBN['Tipo'] <= 2, Val(vv:3), 0)), IIF(FBN['Tipo'] = 3, Val(cp:3), FBN['Imp1'])), 0) )
+      ACN(vc:3, IIF(VACIO(FBN['OpRef']),(Val(vc:1) * FBN['Ta2'] / 100)) )
+      ACN(vc:4, IIF(FBN['RB1'] = 1, Val(vc:1) * FBN['Ta3'] / 100, 0 ) )
+      ACN(vc:5, Val(vc:1) + Val(vc:4) )
+      ACN(vc:6, IIF(VACIO(FBN['OpRef']), ((Val(vc:1) * FBN['Pr1'])/100 ), 0) )
+   EndIf
+
+   Sql.Add(" Update "~DBO~".COMISIONES2 Set ")
+   Sql.Add(" Importe1 = "~FStr(Val(vc:1),0,2)~" ,")
+   
+   If Not Incluido(FBN['TipoOp'], 'MMPI|MMPE|MMSIMV')
+      Sql.Add(" Cantidad1 = "~FStr(Val(vc:2),0,2)~" ,")
+   EndIf
+
+   Sql.Add(" Importe2 = "~FStr(Val(vc:3),0,2)~" ,")
+   Sql.Add(" Importe3 = "~FStr(Val(vc:4),0,2)~" ,")
+   Sql.Add(" Importe4 = "~FStr(Val(vc:5),0,2)~" ,")
+   Sql.Add(" Precio2 = "~FStr(Val(vc:6),0,2)~" ")
+   Sql.Add(" Where NrOperacion = '"~FBN['NrOp']~"' ")
+
+   If FBN['Uni_Mul'] = 2
+      Sql.Add("   and NrCuota = '"~FStr(FBN['Cuota'],0,0)~"' ")   
+   EndIf
+
+   Sql.Add("   and NrComision = '"~FStr(FBN['NrComi'],0,0)~"' ")
+   Sql.Add("   and Fecha1 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+
+   Sql.New
+   Sql.Exec
+
+PROXIMO
+

@@ -1,0 +1,166 @@
+﻿*ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1     : "Reset Desde"         ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha Desde';NO;FSys
+  Fecha2     : "Reset Hasta"         ;;;;;;Dialogo.Fecha2>=Dialogo.Fecha1;'Debe Ingresar una Fecha Hasta';NO;FSys
+  Lista1     : "Vehiculo"            ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Radio1     : 'Tasas|Todas|Sin Ingresar'   ;;;;;;;;;1;
+  Radio2     : 'Op|Todas|DT|MM'      ;;;;;;;;;0;;;      
+*  Lista2     : "Tipo Op."            ;;;;Dialogo.Radio2>0;Dialogo.Radio2>0;;;;;;IIf(Dialogo.Radio2=2,SQLSET("Select Codigo from "~DBO~".TIPOSOPERACION Where Codigo In ('MMCDIA','MMCDP','MMCP','MMDC','MMDCA','MMCCR','MMFRN','MMFRNP','MMO','MMPCCV','MMPCL','MMPCOS','MMPE','MMPI','MMPSC','MMPSI','MMCPM','MMFCMV','MMFIMV','MMONM','MMPCCM','MMPCLM','MMPEM','MMPIM','MMSCMV','MMSIMV') "),SQLSET("Select Codigo from "~DBO~".TIPOSOPERACION Where Codigo In ('DTSFV','DTSVV','DTK','DTKVI','DTOM','DTSFVM','DTSVVM') "))
+  Lista2     : "Tipo Op."            ;;;;Dialogo.Radio2>0;Dialogo.Radio2>0;;;;;;IIf(Dialogo.Radio2=2,SQLSET("Select Codigo from "~DBO~".TIPOSOPERACION Where Codigo Like 'MM%' "), SQLSET("Select Codigo from "~DBO~".TIPOSOPERACION Where Codigo Like 'DT%' "))
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+   ACT(LS:1,Dialogo.Lista1)
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(LS:1,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+   ELSE
+      ACT(LS:1, SQLSet(" Select Codigo From "~DBO~".VEHICULOS "))
+   EndIf
+EndIf
+
+IF NoVacio(Dialogo.Lista2)
+    ACT(LS:2, Dialogo.Lista2)
+ELSE
+    IF Dialogo.Radio2 = 0
+        ACT(LS:2, SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo Like 'MM%' OR Codigo Like 'DT%' "))
+    ENDIF
+    IF Dialogo.Radio2 = 1
+        ACT(LS:2, SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo Like 'DT%' "))
+    ENDIF
+    IF Dialogo.Radio2 = 2
+        ACT(LS:2, SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo Like 'MM%' "))
+    ENDIF
+ENDIF
+
+CrearFont(2,"Arial,8,")
+CrearFont(1,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(4)
+
+ACT(a:2, "Vencimientos con Tasas Flotantes ")
+ACT(K:2,'Fecha : '~Var('FECHASYS'))
+SetFont(a:2, 3)
+SetFont(K:2, 1)
+
+ACT(a:fac+1, 'Fecha Desde: '~Dialogo.Fecha1)
+ACT(a:fac+2, 'Fecha Hasta: '~Dialogo.Fecha2)
+
+If NoVacio(Val(LS:1))
+   ACT(d:fac+1, 'Vehiculo : '~val(LS:1))
+Else
+   ACT(d:fac+1, 'Vehiculo : Todos')
+EndIf
+If NoVacio(Dialogo.Lista2)
+   ACT(d:fac+2, 'Tipos de Operacion  : '~Pipe2Comillas(Dialogo.Lista2))
+Else
+   If Dialogo.Radio2=0
+      ACT(d:fac+2, 'Tipos de Operacion : Todas')
+   EndIf
+   If Dialogo.Radio2=1
+      ACT(d:fac+2, 'Tipos de Operacion : Derivados de Tasas ')
+   EndIf
+   If Dialogo.Radio2=2
+      ACT(d:fac+2, 'Tipos de Operacion : Money Market ')
+   EndIf
+EndIf
+SetFont(a:fac..d:fac+2, 1)
+SetFilaActual(fac+3)
+IF Dialogo.Radio1 = 0
+    ACT(A:fac, 'Tasas: Todas')
+ELSE
+    ACT(A:fac, 'Tasas: Sin Ingresar')
+ENDIF
+SetFont(A:fac, 1)
+ifa
+
+ACT(A:fac, 'TipoOp')
+ACT(B:fac, 'Operacion')
+ACT(C:fac, 'Moneda')
+ACT(D:fac, 'Entidad')
+ACT(E:fac, 'Fecha Reset')
+ACT(F:fac, 'Fecha Inicio')
+ACT(F:fac+1, 'Periodo')
+ACT(G:fac, 'Fecha Vto')
+ACT(G:fac+1, 'Periodo')
+ACT(H:fac, 'Plazo')
+ACT(I:fac, 'Tipo de')
+ACT(I:fac+1, 'Tasa')
+ACT(J:fac, 'Tasa')
+ACT(K:fac, 'Spread')
+ACT(L:fac, 'NrCuota')
+ACT(M:fac, 'Interes')
+
+AlinearCeldas(A:fac..M:fac+1, 'C')
+SetFont(A:fac..M:fac+1, 1)
+AgregarMarco(A:fac..M:fac+1, 0, 0, Exe('COLOR'))
+ifa
+
+***---Query Intereses
+(.'TASFLOT1'.)
+SQL.ADD(" UNION ")
+***---Query Swaps Intereses
+(.'TASFLOT2'.)
+SQL.ADD(" UNION ")
+***---Query Caps/Floor Intereses
+(.'TASFLOT3'.)
+SQL.ADD(" Order by 1, 10, 6 ")
+
+BorrarCeldas(VH:1..VH:1)
+Recorrer SQL
+    IF Not Eqstr(fbn('Vehiculo1'), Val(VH:1)) Y Not CeldaVacia(VH:1)
+        ***---Cambio de vehiculo
+        AgregarMarco(A:Val(FI:1)..M:fac-1, 0, 0)
+        FormatoCeldas(H:Val(FI:1)..H:fac-1, Exe('F0'))
+        FormatoCeldas(J:Val(FI:1)..K:fac-1, Exe('F8'))
+        FormatoCeldas(L:Val(FI:1)..L:fac-1, Exe('F0'))
+        SetFont(A:Val(FI:1)..M:fac-1, 2)
+        ACT(A:fac, fbn('Vehiculo1'))
+        SetFont(A:fac, 1)
+        ifa
+        ACN(FI:1, fac)
+    ENDIF
+    IF CeldaVacia(VH:1)
+        ACT(A:fac, fbn('Vehiculo1'))
+        SetFont(A:fac, 1)
+        ifa
+        ACN(FI:1, fac)
+    ENDIF
+    ACT(VH:1, fbn('Vehiculo1'))
+    ACT(A:fac, fbn('TipoOp'))
+    ACT(B:fac, fbn('NrOperacion'))
+    ACLO(B:fac, fbn('NrOperacion'))
+    ACT(C:fac, fbn('Especie'))
+    ACT(D:fac, fbn('Cliente1'))
+    ACD(E:fac, fbn('Reset'))
+    ACD(F:fac, fbn('Inicio'))
+    ACD(G:fac, fbn('Fin'))
+    ACN(H:fac, fbn('Plazo'))
+    ACT(I:fac, fbn('TipoTasa'))
+    ACN(J:fac, fbn('Tasa'))
+    ACN(K:fac, fbn('Spread'))
+    ACN(L:fac, fbn('NrCuota'))
+    ACN(M:fac, fbn('Importe'))
+Proximo
+FormatoCeldas(H:Val(FI:1)..H:fac, Exe('F0'))
+FormatoCeldas(J:Val(FI:1)..K:fac, Exe('F8'))
+FormatoCeldas(L:Val(FI:1)..L:fac, Exe('F0'))
+AgregarMarco(A:Val(FI:1)..M:fac, 0, 0)
+SetFont(A:Val(FI:1)..M:fac, 2)
+SetFilaActual(fac+2)
+ACT(A:fac, 'Fin del Informe')
+SetFont(A:fac, 1)
+LimitesVision(N:fac+1)
+SetPrintFit(3, 90)
+ACO(1, 6)
+ACO(2, 6)
+ACO(3, 5)
+ACO(5, 7)
+ACO(8, 5)
+ACO(12, 5)
+ACO(13, 9)

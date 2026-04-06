@@ -1,0 +1,94 @@
+﻿CrearDialogo
+  Fecha1:       'F.Pago'  ;;;;;;;;;Fsys
+  Check1:     'Impresora' ;
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+if no
+SQL.ADD(" Select M.*,T.NrTrans,T.Fecha2,T.Cliente1,T.TipoTr2,T.Especie,T.Especie1,T.Cantidad1,T.Cantidad2, T.Cuenta5, ")
+SQL.ADD("        T.CB8, T.CB7 ,T.CB6 ,T.Mercado1 ,T.CB1, E.Tipo, T.CB5                                              ")
+SQL.ADD("   from "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS O, "~DBO~".ESPECIES E,"~DBO~".MOVEJECUTADOS M    ")
+SQL.ADD("                                                                                    ")
+SQL.ADD(" where  T.NrTrans = O.NrOperacion                                                                          ")
+SQL.ADD(" and    M.NrOperacion = T.NrTrans                                                                          ")
+SQL.ADD(" and    M.Especie = E.Codigo                                                                               ")
+SQL.ADD(" and    E.Tipo = 'MON'                                                                                     ")
+SQL.ADD(" and    O.NrBit In (3,4,6,70) and O.Valor ='1'                                                               ")
+SQL.ADD(" and    T.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"'                                                           ")
+SQL.ADD(" and    T.TipoTr2 In ('LCUPON')                                                                            ")
+SQL.ADD(" and    M.NrSaldo = 1                                                                                      ")
+endif
+SQL.ADD(" Select T.NrTrans,T.Fecha1,M.Cliente,T.TipoTr2,T.Especie,T.Especie1,M.Cantidad,T.Cantidad2, T.Cuenta5,     ")
+SQL.ADD("        T.CB8, T.CB7 ,T.CB6 ,T.Mercado1 ,T.CB1, T.CB5, M.Book                                              ")
+SQL.ADD("   from "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS O,"~DBO~".MOVEJECUTADOS M                        ")
+SQL.ADD(" where  T.NrTrans = O.NrOperacion                                                                          ")
+SQL.ADD(" and    M.NrOperacion = T.NrTrans                                                                          ")
+SQL.ADD(" and    M.Especie = T.Especie                                                                              ")
+SQL.ADD(" and    O.NrBit In (3,4,6,70) and O.Valor ='1'                                                             ")
+SQL.ADD(" and    T.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"'                                                           ")
+SQL.ADD(" and    T.TipoTr2 In ('LCUPON')                                                                            ")
+
+SQL.ADD(" order by T.NrTrans ")
+
+watch(sql.batch)
+acn(z1,0)
+Recorrer SQL
+    SCN(z1,1)
+    ACT(a:Val(z1), fbn['NrTrans'])
+    ACT(b:Val(z1), fbn['Fecha1'])
+    ACT(c:Val(z1), fbn['Cliente'])
+    ACT(d:Val(z1), fbn['TipoTr2'])
+    ACT(e:Val(z1), fbn['Especie'])
+    ACN(f:Val(z1), ABS(fbn['Cantidad']))
+    ACT(h:Val(z1), ' '~fbn['Mercado1'])
+    ACT(aa:Val(z1), fbn['Mercado1'])
+    ACT(ab:Val(z1), fbn['CB1'])
+    ACT(ad:Val(z1), fbn['CB5'])
+    ACT(ac:Val(z1), fbn['Book'])
+proximo
+
+if Val(z1)=0
+  Cancelar('No existen Vouchers para imprimir')
+else
+  ACO(1,9)
+  ACO(2,11)
+  ACO(3,11)
+  ACO(4,7)
+  ACO(5,8)
+  ACO(6,9)
+  FormatoCeldas(f1..f:Val(z1),Exe('F2'))
+  FormatoCeldas(g1..g:Val(z1),Exe('F2'))
+        
+*  ListBox(a:1..h:Val(z1),'Voucher  Fecha      Cliente    Tipo   Especie           Cantidad       Moneda')
+  ListBox(a:1..h:Val(z1),'Voucher     Fecha         Cliente      Tipo      Especie         Cantidad')
+        
+  if Ok
+    recorrerSel
+    *      If [Not EqStr(Val(ab:FilaCiclo),'1') y Not EqStr(Val(aa:FilaCiclo),'AC')] o [Not EqStr(Val(ad:FilaCiclo),'1') y EqStr(Val(aa:FilaCiclo),'AC')]
+       
+
+          If EqStr(Val(ab:FilaCiclo),'') o EqStr(Val(ab:FilaCiclo),'0')
+             LinkearHoja('EVOUCU',1,NrTrans1=Val(a:FilaCiclo),Cliente1=Val(c:FilaCiclo),Cuenta1=Val(ac:FilaCiclo),Check1=0,Check3=Dialogo.Check1)
+          else
+             LinkearHoja('EVOUCU',1,NrTrans1=Val(a:FilaCiclo),Cliente1=Val(c:FilaCiclo),Cuenta1=Val(ac:FilaCiclo),Check1=1,Check3=Dialogo.Check1)
+          endif
+        
+        * Marca de ya impreso  
+        If [EqStr(Val(ab:FilaCiclo),'') o EqStr(Val(ab:FilaCiclo),'0') Y not Incluido(Val(aa:FilaCiclo),'AC')] o [EqStr(Val(ad:FilaCiclo),'') o EqStr(Val(ad:FilaCiclo),'0') Y Incluido(Val(aa:FilaCiclo),'AC')]
+           SQL.ADD("Update "~DBO~".TRANSACCIONES2 ")
+           If not Incluido(Val(aa:FilaCiclo),'AC')
+              SQL.ADD("Set    CB1 = '1' ") 
+           Else
+              SQL.ADD("Set    CB5 = '1' ") 
+           Endif
+           SQL.ADD("where  NrTrans = '"~Val(a:FilaCiclo)~"' ") 
+           SQL.NEW
+           SQL.EXEC 
+      Endif 
+*      Endif 
+    proximo
+  endif
+endif  

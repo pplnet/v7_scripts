@@ -1,0 +1,368 @@
+﻿CrearDialogo
+  Fecha1   : 'Fecha'    ;;;;;;Dialogo.Fecha1<>0;'Fecha Invalida';NO;FSys;
+  Vehiculo1: 'Vehiculo' ;;;;;;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+  Radio1   : 'Especies|Acciones|Bonos' ;;;;;;;;;0;
+  Especie1 : 'Especie'  ;;;;;;Vacio(Dialogo.Especie1) O [Eqstr(BuscarCampo('ESPECIES','Tipo','Codigo', Dialogo.Especie1), 'PRI') Y Dialogo.Radio1=0] O [Eqstr(BuscarCampo('ESPECIES','Tipo','Codigo', Dialogo.Especie1), 'PUB') Y Dialogo.Radio1=1];'Especie Invalida';NO;;;;;;IIF(Dialogo.Radio1=0," Tipo = 'PRI' ", " Tipo = 'PUB' ");
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(2)
+ACT(C:fac, BuscarCampo('CLIENTES','RazonSocial','Codigo', Dialogo.Vehiculo1))
+ifa
+ACT(A:fac, 'Listado de Cartera Propia Comparativo Nominales - '~IIF(Dialogo.Radio1=0, 'Acciones', 'Bonos')~' - '~Dialogo.Fecha1)
+SetFont(A:fac-1..D:fac, 3)
+SetFilaActual(fac+2)
+ACT(A:fac, 'Especie')
+ACT(B:fac, 'Sub-Grupo')
+ACT(C:fac, 'Anterior')
+ACT(D:fac, 'Entrada')
+ACT(E:fac, 'Salida')
+ACT(F:fac, Dialogo.Fecha1)
+SetFont(A:fac..F:fac, 2)
+AlinearCeldas(A:fac..F:fac, 'C')
+AgregarMarco(A:fac..F:fac, 1, 1, Exe('COLOR6'))
+
+ACN(FI:1, fac+1)
+ACN(BD:1, 0)
+ACT(CT:1, '11-Cartera')
+
+***---Bloque Cartera Propia
+*****************************************************************************************
+***---Saldo Inicial
+SQL.ADD(" Select S.Especie, E.Nombre, Sum(S.Saldo) Saldo, E.CodMAEContado, 0 BD1 ")
+SQL.ADD(" From "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E, "~DBO~".ESTADOSCUSTODIA EC ")
+SQL.ADD(" Where S.Cliente = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND E.Codigo = S.Especie ")
+SQL.ADD("  AND S.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  AND ((S.NrSaldo-100 = EC.NrSaldo AND S.NrSaldo > 201) OR (S.NrSaldo = EC.NrSaldo AND S.NrSaldo=101)) ")
+SQL.ADD("  AND (S.NrSaldo > 201 OR S.NrSaldo = 101) ")
+SQL.ADD("  AND S.Saldo <> 0 ")
+SQL.ADD("  AND S.Especie Not IN ("~Pipe2Comillas(Var('ESPNOCP1'))~") ")
+SQL.ADD("  AND S.Especie Not IN ("~Pipe2Comillas(Var('ESPNOCP2'))~") ")
+IF Dialogo.Radio1 = 0
+    SQL.ADD(" AND E.Tipo = 'PRI' ")
+ENDIF
+IF Dialogo.Radio1 = 1
+    SQL.ADD(" AND E.Tipo = 'PUB' ")
+ENDIF
+IF NoVacio(Dialogo.Especie1)
+    SQL.ADD(" AND E.Codigo = '"~Dialogo.Especie1~"' ")
+ENDIF
+SQL.ADD("  AND S.Fecha = (Select Max(S1.Fecha) ")
+SQL.ADD("                 From "~DBO~".SALDOSDIA S1 ")
+SQL.ADD("                 Where S1.Cliente = S.Cliente ")
+SQL.ADD("                 AND S1.Especie = S.Especie ")
+SQL.ADD("                 AND S1.EnteCustodia = S.EnteCustodia ")
+SQL.ADD("                 AND S1.Mercado = S.Mercado ")
+SQL.ADD("                 AND S1.NrSaldo = S.NrSaldo ")
+SQL.ADD("                 AND S1.Cupon = S.Cupon ")
+SQL.ADD("                 AND S1.Cuenta = S.Cuenta ")
+SQL.ADD("                 AND S1.Fecha <= '"~IdxDate(Dialogo.Fecha1-1)~"' ) ")
+SQL.ADD(" Group By S.Especie, E.Nombre, E.CodMAEContado ")
+
+SQL.ADD(" UNION ")
+
+***---Entradas y Salidas
+SQL.ADD(" Select M.Especie, E.Nombre, M.Cantidad Saldo, E.CodMAEContado, 1 BD1 ")
+*SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".ESPECIES E, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD(" From "~DBO~".ESPECIES E, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD(" Where E.Codigo = M.Especie ")
+*SQL.ADD(" AND M.NrOperacion = T.NrTrans ")
+SQL.ADD(" AND M.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND M.Cliente = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+*SQL.ADD(" AND T.TipoTr2 IN ('DTP','RTP','CUPON','CCUPON','PCUPON','PDIVID') ")
+SQL.ADD(" AND (M.NrSaldo = 101 OR M.NrSaldo > 201) ")
+IF Dialogo.Radio1 = 0
+    SQL.ADD(" AND E.Tipo = 'PRI' ")
+ENDIF
+IF Dialogo.Radio1 = 1
+    SQL.ADD(" AND E.Tipo = 'PUB' ")
+ENDIF
+IF NoVacio(Dialogo.Especie1)
+    SQL.ADD(" AND E.Codigo = '"~Dialogo.Especie1~"' ")
+ENDIF
+SQL.ADD(" Order By 1 ")
+Recorrer SQL
+    IF Eqstr(fbn('Especie'), Val(ES:1))
+        SetFilaActual(fac-2)
+    ELSE
+        ACT(ES:1, fbn('Especie'))
+        ACT(A:fac, fbn('Especie')~' - '~fbn('Nombre'))
+        ACT(B:fac, Val(CT:1))
+        SCN(BD:1, 1)
+    ENDIF
+    IF fbn('BD1') = 0
+        ***---Saldo Inicial
+        SCN(C:fac, fbn('Saldo'))
+    ELSE
+        IF fbn('Saldo') > 0
+            ***---Entradas
+            SCN(D:fac, fbn('Saldo'))
+        ELSE
+            ***---Salidas
+            SCN(E:fac, fbn('Saldo'))
+        ENDIF
+    ENDIF
+    ACN(F:fac, Sum(C:fac..E:fac))
+    ifa
+    ACT(A:fac, 'Cod MAE: '~fbn('CodMAEContado'))
+Proximo
+FormatoCeldas(C:Val(FI:1)..F:fac, Exe('F2'))
+SetFont(A:Val(FI:1)..F:fac, 1)
+*****************************************************************************************
+***---Bloque Movimientos Directores
+ACT(aa:1,'')
+ACN(aa:2,0)
+ACN(aa:3,0)
+ACN(aa:4,0)
+ACN(BD:2, 0)
+**-- Toma los incrementos y disminucion de cartera propia --**
+ACT(aa:7, SQL(" SELECT SUBSTRING(Jerarquia,1,5) FROM "~DBO~".CLIENTES WHERE Codigo='"~VAR('NOMJERDIR')~"' ") )
+SQL.ADD(" select O.Cliente1, O.TipoOp, O.Especie, O.ContraEspecie, O.Cantidad, O.Precio1, ")
+SQL.ADD(" O.TotalNetoCli1, O.FechaOp, O.FechaVto, C.RazonSocial, E.CodMAEContado, E.Nombre ")
+SQL.ADD(" from  "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E, "~DBO~".CLIENTES C ")
+SQL.ADD(" where O.Especie = E.Codigo ")
+SQL.ADD("  and  O.Cliente1 = C.Codigo ")
+SQL.ADD("  and  O.TipoOp IN ('TIC','TIV','TIFC','TIFV','IPO') ")
+SQL.ADD("  and  O.FechaOp = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND C.Jerarquia LIKE '"~Val(aa:7)~"%' ")
+SQL.ADD(" AND O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+IF Dialogo.Radio1 = 0
+    SQL.ADD(" AND E.Tipo = 'PRI' ")
+ENDIF
+IF Dialogo.Radio1 = 1
+    SQL.ADD(" AND E.Tipo = 'PUB' ")
+ENDIF
+IF NoVacio(Dialogo.Especie1)
+    SQL.ADD(" AND E.Codigo = '"~Dialogo.Especie1~"' ")
+ENDIF
+SQL.ADD("ORDER BY Cliente1, Especie, TipoOp ")
+watch(SQL.BAtch())
+recorrer SQL
+ SCN(BD:1, 1)
+ SCN(BD:2, 1)
+ IF Val(BD:2) = 1
+     ifa
+     Message('Movimientos de Directores')
+     ACT(a:fac  , 'Posicion Directores, Administradores, Sindicos o Miembros')
+     ACT(a:fac+1, 'del Consejo de Vigilancia, Gerentes y Apoderados.-')
+     SetFont(a:fac..a:fac+1, 2)
+
+     SetFilaActual(fac+3)
+     ACT(a:fac, 'Movimientos')
+     SetFont(a:fac, 2)
+
+     SetFilaActual(fac+2)
+     ACT(a:fac, 'Concepto')
+     ACT(b:fac, 'Especie')
+     ACT(c:fac, 'Cantidad')
+     ACT(d:fac, 'Precio ')
+     ACT(e:fac, 'Moneda')
+     ACT(f:fac, 'Importe')
+     ACT(g:fac, 'F. Concert.')
+     ACT(h:fac, 'F. Liquid.')
+     SetFont(a:fac..h:fac,2)
+     AlinearCeldas(a:fac..h:fac,'C')
+     AgregarMarco(a:fac..h:fac, 1, 1, Exe('COLOR6'))
+     ifa
+     ACN(FI:1, fac)
+ ENDIF
+ if Not EqStr(Val(aa:1),fbn('Cliente1'))
+  ACT(aa:1,fbn('Cliente1'))
+  ACT(a:fac,fbn('Cliente1')~' '~COPY(fbn('RazonSocial'),1,25))
+  SetFont(a:fac,2)
+  AgregarMarco(a:fac..h:fac,0,0)
+  FormatoCeldas(C:Val(FI:1)..F:fac-1, Exe('F2'))
+  SetFont(A:Val(FI:1)..F:fac-1, 1)
+  ifa
+  ACN(FI:1, fac)
+ endif    
+
+ ACT(a:fac, iif(Incluido(fbn('TipoOp'),'TIC|TIFC'),'Incremento','Disminucion'))
+
+ ACT(i:fac, fbn('CodMAEContado'))
+ if Vacio(Val(i:fac)) o EqStr(Val(i:fac),'0')
+  ACT(b:fac, fbn('Especie')~' - '~fbn('Nombre'))
+ else
+  ACT(b:fac, Val(i:fac)~' - '~fbn('Nombre'))
+ endif
+
+ ACN(c:fac, iif(Incluido(fbn('TipoOp'),'TIC|TIFC'),fbn('Cantidad'),-fbn('Cantidad')))
+ ACN(d:fac, fbn('Precio1'))
+ FormatoCeldas(c:fac..d:fac,Exe('F2'))
+ ACT(e:fac, fbn('ContraEspecie'))
+ AlinearCeldas(e:fac,'C')
+ ACN(f:fac, iif(Incluido(fbn('TipoOp'),'TIC|TIFC'),-fbn('TotalNetoCli1'),fbn('TotalNetoCli1')))
+ FormatoCeldas(f:fac,Exe('F2'))
+ ACT(g:fac, fbn('FechaOp'))
+ ACT(h:fac, fbn('FechaVto'))
+ AlinearCeldas(g:fac..h:fac,'C')
+
+ SetFont(a:fac..h:fac,1)
+ AgregarMarco(a:fac..h:fac,0,2)
+proximo
+FormatoCeldas(C:Val(FI:1)..F:fac, Exe('F2'))
+SetFont(A:Val(FI:1)..F:fac, 1)
+*****************************************************************************************
+***---Bloque Saldos Directores
+Message('')
+
+* Saldos de Directores ------------------------------------------------------------------------------------------------- *
+Message('Saldos de Directores')
+
+ACN(BD:3, 0)
+
+***---Saldo Inicial
+SQL.ADD(" Select S.Especie, E.Nombre, Sum(S.Saldo) Saldo, E.CodMAEContado, 0 BD1 ")
+SQL.ADD(" From "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E, "~DBO~".ESTADOSCUSTODIA EC, ")
+SQL.ADD(" "~DBO~".CLIENTES C ")
+SQL.ADD(" Where C.Codigo = S.Cliente ")
+SQL.ADD(" AND E.Codigo = S.Especie ")
+SQL.ADD(" AND S.Cliente <> '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND S.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND C.Jerarquia LIKE '"~Val(aa:7)~"%' ")
+SQL.ADD(" AND ((S.NrSaldo-100 = EC.NrSaldo AND S.NrSaldo > 201) OR (S.NrSaldo = EC.NrSaldo AND S.NrSaldo=101)) ")
+SQL.ADD(" AND (S.NrSaldo > 201 OR S.NrSaldo = 101) ")
+SQL.ADD(" AND S.Saldo <> 0 ")
+SQL.ADD(" AND S.Especie Not IN ("~Pipe2Comillas(Var('ESPNOCP1'))~") ")
+SQL.ADD(" AND S.Especie Not IN ("~Pipe2Comillas(Var('ESPNOCP2'))~") ")
+IF Dialogo.Radio1 = 0
+    SQL.ADD(" AND E.Tipo = 'PRI' ")
+ENDIF
+IF Dialogo.Radio1 = 1
+    SQL.ADD(" AND E.Tipo = 'PUB' ")
+ENDIF
+IF NoVacio(Dialogo.Especie1)
+    SQL.ADD(" AND E.Codigo = '"~Dialogo.Especie1~"' ")
+ENDIF
+SQL.ADD(" AND S.Fecha = (Select Max(S1.Fecha) ")
+SQL.ADD("                 From "~DBO~".SALDOSDIA S1 ")
+SQL.ADD("                 Where S1.Cliente = S.Cliente ")
+SQL.ADD("                 AND S1.Especie = S.Especie ")
+SQL.ADD("                 AND S1.EnteCustodia = S.EnteCustodia ")
+SQL.ADD("                 AND S1.Mercado = S.Mercado ")
+SQL.ADD("                 AND S1.NrSaldo = S.NrSaldo ")
+SQL.ADD("                 AND S1.Cupon = S.Cupon ")
+SQL.ADD("                 AND S1.Cuenta = S.Cuenta ")
+SQL.ADD("                 AND S1.Fecha <= '"~IdxDate(Dialogo.Fecha1-1)~"' ) ")
+SQL.ADD(" Group By S.Especie, E.Nombre, E.CodMAEContado ")
+
+SQL.ADD(" UNION ")
+
+***---Entradas y Salidas
+SQL.ADD(" Select M.Especie, E.Nombre, M.Cantidad Saldo, E.CodMAEContado, 1 BD1 ")
+*SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".ESPECIES E, "~DBO~".MOVEJECUTADOS M, ")
+SQL.ADD(" From "~DBO~".ESPECIES E, "~DBO~".MOVEJECUTADOS M, ")
+SQL.ADD(" "~DBO~".CLIENTES C ")
+SQL.ADD(" Where E.Codigo = M.Especie ")
+SQL.ADD(" AND C.Codigo = M.Cliente ")
+*SQL.ADD(" AND M.NrOperacion = T.NrTrans ")
+SQL.ADD(" AND M.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND C.Jerarquia LIKE '"~Val(aa:7)~"%' ")
+SQL.ADD(" AND M.Cliente <> '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+*SQL.ADD(" AND T.TipoTr2 IN ('DTP','RTP','CUPON','CCUPON','PCUPON','PDIVID') ")
+SQL.ADD(" AND (M.NrSaldo = 101 OR M.NrSaldo > 201) ")
+IF Dialogo.Radio1 = 0
+    SQL.ADD(" AND E.Tipo = 'PRI' ")
+ENDIF
+IF Dialogo.Radio1 = 1
+    SQL.ADD(" AND E.Tipo = 'PUB' ")
+ENDIF
+IF NoVacio(Dialogo.Especie1)
+    SQL.ADD(" AND E.Codigo = '"~Dialogo.Especie1~"' ")
+ENDIF
+SQL.ADD(" Order By 1 ")
+Recorrer SQL
+    SCN(BD:3, 1)
+    IF Val(BD:3) = 1
+        IF Val(BD:2) = 0
+            ifa
+            ACT(a:fac  , 'Posicion Directores, Administradores, Sindicos o Miembros')
+            ACT(a:fac+1, 'del Consejo de Vigilancia, Gerentes y Apoderados.-')
+            SetFont(a:fac..a:fac+1, 2)
+            SetFilaActual(fac+3)
+        ELSE
+            ifa
+        ENDIF
+        ACT(a:fac,'Tenencia Actual')
+        SetFont(a:fac,2)
+        SetFilaActual(fac+2)
+        ACT(A:fac, 'Especie')
+        ACT(B:fac, 'Sub-Grupo')
+        ACT(C:fac, 'Anterior')
+        ACT(D:fac, 'Entrada')
+        ACT(E:fac, 'Salida')
+        ACT(F:fac, Dialogo.Fecha1)
+        SetFont(A:fac..F:fac, 2)
+        AlinearCeldas(A:fac..F:fac, 'C')
+        AgregarMarco(A:fac..F:fac, 1, 1, Exe('COLOR6'))
+        ifa
+        ACN(FI:1, fac)
+    ENDIF
+    IF Eqstr(fbn('Especie'), Val(ES:1))
+        SetFilaActual(fac-2)
+    ELSE
+        ACT(ES:1, fbn('Especie'))
+        ACT(A:fac, fbn('Especie')~' - '~fbn('Nombre'))
+        ACT(B:fac, Val(CT:1))
+        SCN(BD:1, 1)
+    ENDIF
+    IF fbn('BD1') = 0
+        ***---Saldo Inicial
+        SCN(C:fac, fbn('Saldo'))
+    ELSE
+        IF fbn('Saldo') > 0
+            ***---Entradas
+            SCN(D:fac, fbn('Saldo'))
+        ELSE
+            ***---Salidas
+            SCN(E:fac, fbn('Saldo'))
+        ENDIF
+    ENDIF
+    ACN(F:fac, Sum(C:fac..E:fac))
+    ifa
+    ACT(A:fac, 'Cod MAE: '~fbn('CodMAEContado'))
+Proximo
+FormatoCeldas(C:Val(FI:1)..F:fac, Exe('F2'))
+SetFont(A:Val(FI:1)..F:fac, 1)
+IF Val(BD:2) = 0 Y Val(BD:3) = 0
+    SetFilaActual(fac+2)
+    ACT(A:fac, 'LOS GERENTES GENERALES Y APODERADOS NO REGISTRAN SALDOS NI OPERACIONES')
+    SetFont(A:fac, 2)
+ELSE
+    IF Val(BD:2) = 0
+        SetFilaActual(fac+2)
+        ACT(A:fac, 'LOS GERENTES GENERALES Y APODERADOS NO REGISTRAN SALDOS')
+        SetFont(A:fac, 2)
+    ENDIF
+    IF Val(BD:3) = 0
+        SetFilaActual(fac+2)
+        ACT(A:fac, 'LOS GERENTES GENERALES Y APODERADOS NO REGISTRAN OPERACIONES')
+        SetFont(A:fac, 2)
+    ENDIF
+ENDIF
+SetFilaActual(fac+2)
+****************************************************************************************
+
+ACT(A:fac, Fstr(Val(BD:1), 0, 0)~' Registros Listados')
+ifa
+ACT(A:fac, 'Fin del Informe')
+SetFont(A:fac-1..A:fac, 2)
+ACO(1, 15)
+ACO(2, 10)
+ACO(3, 10)
+ACO(4, 10)
+ACO(5, 10)
+ACO(6, 10)
+
+SetPrintFit(3, 90)
+LimitesVision(I:fac+1)

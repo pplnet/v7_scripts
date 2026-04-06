@@ -1,0 +1,631 @@
+﻿**SOSLAV -- LAVSOS anterior
+*ModoReproceso(SinDialogo)
+HojaVisible(SI)
+CrearDialogo
+   Fecha1   : 'Fecha'                    ;;;;;;;;;FSys
+   Fecha2   : 'FechaHta'                 ;;;;;;;;;Dialogo.Fecha1;Dialogo.Fecha1
+   Cliente1 : 'Cliente'                  ;3;1;;SI;SI
+   Cantidad1: 'Monto Minimo'             ;;;;;NO;;;;
+   Radio2   : "Salida|Informe|Inf+TXT"   ;4;;;;;;;;1
+   String1  : 'Path'                     ;;;;NO;Dialogo.Radio2=1;;;;VAR('PATHBCRA');
+   String2  : 'Operaciones SOS'          ;;;;NO;Dialogo.Radio2=1;;;;'LAVOPER_'~Fecha(Dialogo.Fecha1,'YYYYMMDD')~'.TXT';'LAVOPER_'~Fecha(Dialogo.Fecha1,'YYYYMMDD')~'.TXT';;;'!!!!!!!!!!!!!!!!!!!!'
+   String3  : 'Clientes SOS'             ;;;;NO;Dialogo.Radio2=1;;;;'LAVCTAS_'~Fecha(Dialogo.Fecha1,'YYYYMMDD')~'.TXT';'LAVCTAS_'~Fecha(Dialogo.Fecha1,'YYYYMMDD')~'.TXT';;;'!!!!!!!!!!!!!!!!!!!!'
+   Check1   : 'Saldo 81|SI|NO'           ;;;;NO;NO;;;;1;
+FinDialogo
+**VAR('MONTOBCRA')
+If Not OK
+   Cancelar
+Endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+
+If Dialogo.Radio2=1 y Not ExisteDirectorio(Dialogo.String1)
+   Messagebox('No existe el path '~Dialogo.String1~'. Debera crearlo.')
+   Cancelar
+Endif
+
+Message(' - Borrando Archivos SOS')
+
+* Borro Archivos Anteriores
+IF Dialogo.Radio2=1 y ExisteArchivo(Dialogo.String1~Dialogo.String2) 
+   WinExec('CMD.EXE /C DEL '~Dialogo.String1~Dialogo.String2, 0)
+   Esperar(5)
+EndIf
+
+IF Dialogo.Radio2=1 y ExisteArchivo(Dialogo.String1~Dialogo.String3) 
+   WinExec('CMD.EXE /C DEL '~Dialogo.String1~Dialogo.String3, 0)
+   Esperar(5)
+EndIf
+
+* Creo el archivo 
+IF Dialogo.Radio2=1 
+   ACT(aa1, Dialogo.String1~Dialogo.String2)
+   Message('Creando Archivo '~Dialogo.String2)
+   AbrirASCII(val(aa1),0)
+EndIf
+
+ACT(yy:4,'Interfase Lavado de Dinero SOS')
+ACT(yy:5,'LAVDIN')
+** Incluir control en Mov Monedas que la cuenta sea con Comitente=Vehiculo
+**  Depositos Plazo Fijo
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPDEPTIT')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.Cantidad Cantidad, O.Cuenta1, O.Cliente1, C.AliasBT,  ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.Especie, E.Cotiza, O.Cantidad*Precio3 Monto, C.Sucursal, O.FechaOP FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E.CodNumCajaValores,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, 'AR' PaisSwift, E1.CodBCRA ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on O.Cuenta1=CU.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp in ('TIDE') ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI'  ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and (O.FechaOP >= "~IdxDate2(Dialogo.Fecha1)~" and O.FechaOP<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("UNION")
+** Pases Pasivos Titulos (Moneda)
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPPPASTI')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.Cantidad, O.Cuenta1, O.Cliente1, C.AliasBT,  ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.Especie, E.Cotiza, O.TotalNetoCli1 Monto, C.Sucursal, MO.FechaEje FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E.CodNumCajaValores,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, 'AR' PaisSwift, E1.CodBCRA  ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on O.Cuenta1=CU.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion ")
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp in ('TIC','TIFV')  and PaseCB=1 ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI'  ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and  (MO.FechaEje >= "~IdxDate2(Dialogo.Fecha1)~" and MO.FechaEje<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("       and O.ContraEspecie  =MO.Especie ")
+SQL.ADD("UNION")
+** Pases Activos Titulos (Moneda)
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPPACTTI')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.Cantidad, O.Cuenta1, O.Cliente1, C.AliasBT, ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.Especie, E.Cotiza, O.TotalNetoCli1 Monto, C.Sucursal, MO.FechaEje FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E.CodNumCajaValores,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, 'AR' PaisSwift, E1.CodBCRA  ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on O.Cuenta1=CU.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion ")
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp in ('TIV','TIFC')  and PaseCB=1 ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI'  ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and  (MO.FechaEje >= "~IdxDate2(Dialogo.Fecha1)~" and MO.FechaEje<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("       and O.ContraEspecie  =MO.Especie ")
+SQL.ADD("UNION")
+** Compra Titulos Privados (Moneda)
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPCPRAPRI')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.Cantidad, O.Cuenta1, O.Cliente1, C.AliasBT, ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.Especie, E.Cotiza, O.TotalBrutoCli1 Monto, C.Sucursal, MO.FechaEje FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal,  ")
+SQL.ADD(" E.CodNumCajaValores,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, 'AR' PaisSwift, E1.CodBCRA  ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on Cuenta1=CU.Codigo ")
+IF Dialogo.Check1=1
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion and Nrsaldo=81 ")
+Else
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion ")
+Endif
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp in ('TIV','TCOPRI','TIFV') and PaseCB<>1 ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+SQL.ADD("       and E.Tipo in (select Codigo from "~DBO~".TIPOESPECIE where Clasificacion ='PRI')  ")
+SQL.ADD("       and O.Mercado not in  ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI' ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and  (MO.FechaEje >= "~IdxDate2(Dialogo.Fecha1)~" and MO.FechaEje<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("       and O.ContraEspecie  =MO.Especie ")
+SQL.ADD("UNION")
+** Compra Titulos Publicos (Moneda)
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPCPRAPUB')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.Cantidad, O.Cuenta1, O.Cliente1, C.AliasBT,  ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.Especie, E.Cotiza, O.TotalBrutoCli1 Monto, C.Sucursal, MO.FechaEje FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E.CodNumCajaValores ,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, 'AR' PaisSwift, E1.CodBCRA ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on Cuenta1=CU.Codigo ")
+IF Dialogo.Check1=1
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion and Nrsaldo=81 ")
+Else
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion ")
+Endif
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp  in ('TIV','TCOPRI','TIFV') and PaseCB<>1 ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+SQL.ADD("       and E.Tipo in (select Codigo from "~DBO~".TIPOESPECIE where Clasificacion ='PUB')  ")
+SQL.ADD("       and O.Mercado not in  ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI'  ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and  (MO.FechaEje >= "~IdxDate2(Dialogo.Fecha1)~" and MO.FechaEje<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("       and O.ContraEspecie  =MO.Especie ")
+SQL.ADD("UNION")
+** Venta Titulos Privados (Moneda)
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPVTAPRI')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.Cantidad, O.Cuenta1, O.Cliente1, C.AliasBT,  ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.Especie, E.Cotiza, O.TotalBrutoCli1 Monto, C.Sucursal, MO.FechaEje FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E.CodNumCajaValores,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, 'AR' PaisSwift, E1.CodBCRA  ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on Cuenta1=CU.Codigo ")
+IF Dialogo.Check1=1
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion and Nrsaldo=81 ")
+Else
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion ")
+Endif
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp  in ('TIC','TIFC') and PaseCB<>1 ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+SQL.ADD("       and E.Tipo in (select Codigo from "~DBO~".TIPOESPECIE where Clasificacion ='PRI')  ")
+SQL.ADD("       and O.Mercado not in  ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI'  ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and  (MO.FechaEje >= "~IdxDate2(Dialogo.Fecha1)~" and MO.FechaEje<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("       and O.ContraEspecie  =MO.Especie ")
+SQL.ADD("UNION")
+** Venta Titulos Publicos (Moneda)
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPVTAPUB')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.Cantidad, O.Cuenta1, O.Cliente1,  C.AliasBT, ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.Especie, E.Cotiza, O.TotalBrutoCli1 Monto, C.Sucursal, MO.FechaMov FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E.CodNumCajaValores,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, 'AR' PaisSwift, E1.CodBCRA  ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on Cuenta1=CU.Codigo ")
+IF Dialogo.Check1=1
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion and Nrsaldo=81 ")
+Else
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion ")
+Endif
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp  in ('TIC','TIFC') and PaseCB<>1 ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+SQL.ADD("       and E.Tipo in (select Codigo from "~DBO~".TIPOESPECIE where Clasificacion ='PUB')  ")
+SQL.ADD("       and O.Mercado not in  ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI'  ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and  (MO.FechaMov >= "~IdxDate2(Dialogo.Fecha1)~" and MO.FechaMov<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("       and O.ContraEspecie  =MO.Especie ")
+SQL.ADD("UNION")
+**  Giros y Transferencias en el Pais para TIC/TIV/TIFC/TIFV
+**  Emitidos
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPTRSEARG')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.TotalBrutoCli1 Cantidad, O.Cuenta4 Cuenta1, O.Cliente1, C.AliasBT,  ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.ContraEspecie Especie, E.Cotiza, O.TotalBrutoCli1 Monto, C.Sucursal, MO.FechaEje FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E.CodNumCajaValores,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, 'AR' PaisSwift, E1.CodBCRA  ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on Cuenta1=CU.Codigo ")
+IF Dialogo.Check1=1
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion and Nrsaldo=81 ")
+Else
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion ")
+Endif
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp  in ('TIV','TCOPRI','TIFV') and PaseCB<>1 ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+**SQL.ADD("       and E.Tipo in (select Codigo from "~DBO~".TIPOESPECIE where Clasificacion ='PRI')  ")
+SQL.ADD("       and O.Mercado not in  ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI'  ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and  (MO.FechaEje >= "~IdxDate2(Dialogo.Fecha1)~" and MO.FechaEje<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("       and O.ContraEspecie  =MO.Especie ")
+SQL.ADD("UNION")
+**  Recibidos
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPTRSRARG')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.TotalBrutoCli1 Cantidad, O.Cuenta4 Cuenta1, O.Cliente1, C.AliasBT,  ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.ContraEspecie Especie, E.Cotiza, O.TotalBrutoCli1 Monto, C.Sucursal, MO.FechaEje FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E.CodNumCajaValores,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, 'AR' PaisSwift, E1.CodBCRA  ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on Cuenta1=CU.Codigo ")
+IF Dialogo.Check1=1
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion and Nrsaldo=81 ")
+Else
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion ")
+Endif
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp  in ('TIC','TIFC') and PaseCB<>1 ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+**SQL.ADD("       and E.Tipo in (select Codigo from "~DBO~".TIPOESPECIE where Clasificacion ='PRI')  ")
+SQL.ADD("       and O.Mercado not in  ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI'  ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and  (MO.FechaEje >= "~IdxDate2(Dialogo.Fecha1)~" and MO.FechaEje<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("       and O.ContraEspecie  =MO.Especie ")
+SQL.ADD("UNION")
+**  Giros y Transferencias en el Exterior para TIC/TIV
+**  Emitidos
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPTRSEEXT')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.TotalBrutoCli1 Cantidad, O.Cuenta4 Cuenta1, O.Cliente1, C.AliasBT,  ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.ContraEspecie Especie, E.Cotiza, O.TotalBrutoCli1 Monto, C.Sucursal, MO.FechaMov FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E1.CodNumCajaValores,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, CO.Pais PaisSwift, E1.CodBCRA  ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on Cuenta1=CU.Codigo ")
+IF Dialogo.Check1=1
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion and Nrsaldo=81 ")
+Else
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion ")
+Endif
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp  in ('TIV','TCOPRI','TIFV') and PaseCB<>1 ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+SQL.ADD("       and E.Tipo in (select Codigo from "~DBO~".TIPOESPECIE where Clasificacion ='PUB')  ")
+SQL.ADD("       and O.Mercado in  ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI'  ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and  (MO.FechaMov >= "~IdxDate2(Dialogo.Fecha1)~" and MO.FechaMov<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("       and O.ContraEspecie  =MO.Especie ")
+SQL.ADD("UNION")
+**  Recibidos
+SQL.ADD("SELECT 1 as TP, '"~VAR('OPTRSREXT')~"' as Operacion, O.TipoOP, O.NrOperacion, O.FechaOp, O.TotalBrutoCli1 Cantidad, O.Cuenta4 Cuenta1, O.Cliente1, C.AliasBT,  ")
+SQL.ADD(" O.ContraEspecie ContraEsp, O.ContraEspecie Especie, E.Cotiza, O.TotalBrutoCli1 Monto, C.Sucursal, MO.FechaMov FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E1.CodNumCajaValores,C.RazonSocial,O.FechaVto,O.Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, E1.ISO CodEspecie, CO.Pais PaisSwift, E1.CodBCRA  ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O ")
+SQL.ADD("     LEFT JOIN dbo.CLIENTES C on O.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN dbo.CUENTAS CU on Cuenta1=CU.Codigo ")
+IF Dialogo.Check1=1
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion and Nrsaldo=81 ")
+Else
+   SQL.ADD("     LEFT JOIN "~DBO~".MOVEJECUTADOS MO WITH (NOLOCK) ON O.NrOperacion=MO.NrOperacion ")
+Endif
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON O.ContraEspecie=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+SQL.ADD("WHERE  O.TipoOp  in ('TIC','TIFC') and PaseCB<>1 ")
+SQL.ADD("       and B.Valor='1' and B.NrBit not in (30) ")
+SQL.ADD("       and E.Tipo in (select Codigo from "~DBO~".TIPOESPECIE where Clasificacion ='PUB')  ")
+SQL.ADD("       and O.Mercado in  ("~Pipe2Comillas(VAR('UIFRTIMERC'))~") ")
+**SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ') and C.CategDepositante='CLI'  ")
+SQL.ADD("       and (C.Alias1 <> 'CP' or C.Alias1 is Null or C.Alias1='' or C.Alias1=' ')   ")
+SQL.ADD("       and  (MO.FechaMov >= "~IdxDate2(Dialogo.Fecha1)~" and MO.FechaMov<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("       and O.ContraEspecie  =MO.Especie ")
+SQL.ADD("UNION")
+**  Giros y Transferencias en el Exterior para TRNOP/DRT
+** Enviadas al Exterior
+SQL.ADD("SELECT 2 as TP, '"~VAR('OPTRSEEXT')~"' as Operacion, TipoTr2 TipoOP, NrTrans Nroperacion, T.Fecha1 FechaOp, T.Cantidad1 Monto, T.Cuenta1, T.Cliente1,  C.AliasBT, ")
+SQL.ADD(" '"~VAR('MONELOCA')~"' ContraEsp, T.Especie, E.Cotiza, T.Cantidad1 Monto, C.Sucursal, T.Fecha1 FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E.CodNumCajaValores,C.RazonSocial,T.Fecha1 FechaVto,0 Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta, ")
+SQL.ADD(" (select E1.ISO from "~DBO~".ESPECIES E1 where E1.Codigo = '"~VAR('MONELOCA')~"') CodEspecie, CO.Pais PaisSwift, E1.CodBCRA ")
+SQL.ADD("FROM   "~DBO~".TRANSACCIONES2 T  ")
+SQL.ADD("     LEFT JOIN "~DBO~".CLIENTES C on T.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".CUENTAS CU on Cuenta1=CU.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON '"~VAR('MONELOCA')~"'=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON T.Mercado1=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  NrTrans=B.NrOperacion ")
+SQL.ADD("WHERE  B.Valor='1' and B.NrBit not in (30)  and TipoTr2 in ('TRNOP','DRT') ")
+SQL.ADD("       and T.Mercado1 in ("~Pipe2Comillas(VAR('UIFRTIMERC'))~")   ")
+SQL.ADD("       and  (T.Fecha1 >= "~IdxDate2(Dialogo.Fecha1)~" and T.Fecha1<="~IdxDate2(Dialogo.Fecha2)~" )")
+SQL.ADD("UNION")
+**  Recibidas del Exterior
+SQL.ADD("SELECT 2 as TP, '"~VAR('OPTRSREXT')~"' as Operacion, TipoTr2 TipoOP, NrTrans Nroperacion, T.Fecha1 FechaOp, T.Cantidad1 Monto, T.Cuenta1, T.Cliente1, C.AliasBT,  ")
+SQL.ADD(" '"~VAR('MONELOCA')~"' ContraEsp, T.Especie, E.Cotiza, T.Cantidad1 Monto, C.Sucursal, T.Fecha1 FechaLiq, C.NrCuenta, SWIFTAddress, CO.Nombre Corresponsal, ")
+SQL.ADD(" E.CodNumCajaValores,C.RazonSocial,T.Fecha1 FechaVto,0 Plazo, C.Persona, C.CUIT, C.FechaApertura, C.ActividadBCRA, C.Pais, C.OficialCuenta,  ")
+SQL.ADD(" (select E1.ISO from "~DBO~".ESPECIES E1 where E1.Codigo = '"~VAR('MONELOCA')~"') CodEspecie, CO.Pais PaisSwift, E1.CodBCRA ")
+SQL.ADD("FROM   "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD("     LEFT JOIN "~DBO~".CLIENTES C on T.Cliente1=C.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".CUENTAS CU on Cuenta1=CU.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON Especie=E.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".MERCADOS M WITH (NOLOCK) ON T.Mercado1=M.Codigo ") 
+SQL.ADD("     LEFT JOIN "~DBO~".ESPECIES E1 WITH (NOLOCK) ON '"~VAR('MONELOCA')~"'=E1.Codigo ")
+SQL.ADD("     LEFT JOIN "~DBO~".OPERACIONESBITS B WITH (NOLOCK) ON  NrTrans=B.NrOperacion ")
+SQL.ADD("WHERE  B.Valor='1' and B.NrBit not in (30)  and TipoTr2 in ('TRNOP','DRT') ")
+SQL.ADD("       and T.Mercado2 in ("~Pipe2Comillas(VAR('UIFRTIMERC'))~")   ")
+SQL.ADD("       and  (T.Fecha1 >= "~IdxDate2(Dialogo.Fecha1)~" and T.Fecha1<="~IdxDate2(Dialogo.Fecha2)~" )")
+**SQL.ADD("UNION")
+**  Giros y Transferencias por transacciones de Titulos TIC/TIV
+SQL.ADD("  ORDER BY Cliente1, Operacion, ContraEspecie, FechaOp")
+
+watch(sql.batch)
+ACN(z1,7)
+
+Recorrer SQL
+   DFA
+   SCN(z1,1)
+   
+   If Val(z1)=8
+      ACT(a1, 'Detalle Interfase SOS')
+      ACT(a:3, 'Fecha Desde: '~Dialogo.Fecha1)
+      ACT(d:3, 'Fecha Hasta: '~Dialogo.Fecha2)
+      *      ACT(a:4, 'Monto Min.: '~Dialogo.Cantidad1)
+      #ifdef BIND
+         ACT(a:5, 'Todos los movimientos: '~IIF(EqStr(Var('LAVSOS'),'SI'),'SI','Solo cuentas en el Banco'))
+      #endif
+
+      ACT(a:7, 'Sucursal')
+      ACT(b:7, 'FechaOp')
+      ACT(c:7, 'TipoOp')
+      ACT(d:7, 'Cliente')
+      ACT(e:7, 'FechaLiq')
+      ACT(f:7, 'Monto')
+      ACT(g:7, 'Cantidad')
+      ACT(h:7, 'Especie')
+      ACT(i:7, 'ContraEspecie')      
+      ACT(j:7, 'Nombre/Razon Social')
+      ACT(k:7, 'NrOperacion')
+      ACT(l:7, 'NrCuenta')
+      ACT(m:7, 'CUIT')
+      ACT(n:7, 'FechaApertura')
+      SetFont(a:1..w:1,3)
+      SetFont(a:3..w:7,2)
+      AgregarMarco(a:7..n:7,2,0,Exe('COLOR6'))
+   Endif
+
+   #ifdef BIND
+       ACT(a:Val(z:1), '001')
+   #else
+       ACT(a:Val(z:1), FBN['Sucursal'])
+   #endif   
+   
+   ACD(b:Val(z:1), FBN['FechaOp'])
+   ACT(c:Val(z:1), FBN['Operacion'])
+   ACT(d:Val(z:1), FBN['Cliente1'])
+   ACD(e:Val(z:1), FBN['FechaLiq'])
+   ACN(f:Val(z:1), FBN['Monto'])
+   ACN(g:Val(z:1), FBN['Cantidad'])
+   IF EqStr(FBN['Especie'],FBN['ContraEsp'])
+      ACT(h:Val(z:1), FBN['Especie'])
+   Else
+      ACT(h:Val(z:1), FBN['Especie']~'-'~FBN['CodNumCajaValores'])
+   Endif
+   ACT(i:Val(z:1), FBN['ContraEsp'])
+   ACT(j:Val(z:1), FBN['RazonSocial'])
+   ACT(k:Val(z:1), FBN['NrOperacion'])
+   If FBN['TP']=1
+      ACLO(k:Val(z:1), FBN['NrOperacion'])
+   Else
+      ACLT(k:Val(z:1), FBN['NrOperacion'])
+   End
+   ** Verificar que cuenta informar del Cliente o de la Operacion
+   #ifdef BIND
+      ** Verificar si Cuenta1 es una cuenta en BIND cuando es de Moneda
+       IF EqStr(FBN['Especie'],FBN['ContraEsp'])
+          **ACT(cu:Val(z:1),IIF(EqStr(BuscarCampo('CUENTAS','NrDepositante','Codigo',FBN['Cuenta1']),VAR('VEHICULODE')),'SI','NO') )
+          ** Solo se informan las cuentas que son MERINT del Cliente
+          ACT(cu:Val(z:1),IIF(EqStr(BuscarCampo('CUENTAS','Mercado','Codigo',FBN['Cuenta1']),'MERINT'),'SI','NO') )
+          if EqStr(Val(cu:Val(z:1)),'SI')
+             ACT(l:Val(z:1), FBN['AliasBT'])
+          else
+             ACT(l:Val(z:1), 'No BIND')
+          endif
+       ELSE
+          ACT(cu:Val(z:1),'SI')
+          ACT(l:Val(z:1), FBN['AliasBT'])
+       ENDIF
+   #else
+       ACT(cu:Val(z:1),'SI')
+       ACT(l:Val(z:1), FBN['NrCuenta'])
+   #endif
+   **ACT(l:Val(z:1), FBN['Cuenta1'])
+   ACT(m:Val(z:1), fbn('CUIT'))
+   ACD(n:Val(z:1), fbn('FechaApertura'))
+
+   IF EqStr(Val(cu:Val(z:1)),'SI')
+
+   ** Genera registro en LAVOPER
+   *- Empresa (verificar donde se puede codificar Bind=0050
+   ACT(aa:fac, '0050')
+   *- Fecha de la Informacion
+   ACT(aa:fac, Val(aa:fac)~Fecha(FBN['FechaLiq'],'YYYYMMDD'))
+   *- Numero de Cuenta
+   ACT(aa:fac, Val(aa:fac)~Pad0(Val(l:Val(z:1)),22))
+   **ACT(aa:fac, Val(aa:fac)~Pad0(FBN['Cuenta1'],22))
+   *- Numero de Operacion
+   ACT(aa:fac, Val(aa:fac)~Pad0(Copy(FBN['NrOperacion'],2,7),22))
+   *- Tipo de Cuenta
+   ACT(aa:fac, Val(aa:fac)~'TIT')
+   *- Tipo de Operacion
+   ACT(aa:fac, Val(aa:fac)~Pad(FBN['Operacion'],3))
+   *- Codigo sucursal SISCEN
+   ACT(aa:fac, Val(aa:fac)~'00001')
+   *ACT(aa:fac, Val(aa:fac)~Pad0(FStr(FBN['Sucursal'],1,0),5))
+   *- Codigo sucursal Cliente
+   *ACT(aa:fac, Val(aa:fac)~Pad(FBN['Sucursal'],3))   
+   ACT(aa:fac, Val(aa:fac)~Pad(Val(a:Val(z:1)),3))
+   *- Fecha de Liquidacion
+   ACT(aa:fac, Val(aa:fac)~Fecha(FBN['FechaLiq'],'YYYYMMDD'))
+   *- Monto Operacion en Pesos
+   ACT(aa:fac, Val(aa:fac)~Pad0(FStr(FBN['Monto']*100,1,0),15))
+   *- Cantidad de Especie Transada
+   ** Si es titulos para Bind, es cantidad *100
+   #ifdef BIND
+       IF EqStr(FBN['Especie'],FBN['ContraEsp'])
+          ACT(aa:fac, Val(aa:fac)~Pad0(FStr(FBN['Cantidad'],1,0),15))
+       ELSE
+          ACT(aa:fac, Val(aa:fac)~Pad0(FStr(FBN['Cantidad']*100,1,0),15))
+       ENDIF
+   #else
+       ACT(aa:fac, Val(aa:fac)~Pad0(FStr(FBN['Cantidad'],1,0),15))
+   #endif   
+   *- Tipo Especie Transada
+   ACT(aa:fac, Val(aa:fac)~iif(Incluido(FBN['TipoOp'],'TRNOP|DRT'),Pad(FBN['CodEspecie'],5),iif(EqStr(FBN['Especie'],FBN['ContraEsp']),Pad(FBN['CodBCRA'],5),Pad0(FBN['CodNumCajaValores'],5))))
+   *- Banco Corresponsal (Codigo SWIFT)
+   ACT(aa:fac, Val(aa:fac)~Pad(FBN['SWIFTAddress'],12))
+   *- Beneficiario/Ordenante del Exterior
+   ACT(aa:fac, Val(aa:fac)~Pad(FBN['Corresponsal'],50))
+   *- Cod Pais (SWIFT) Beneficiario/Ordenante del Exterior
+   ACT(aa:fac, Val(aa:fac)~Pad(FBN['PaisSwift'],2))
+   *- Datos Adicionales (en Blanco)
+   ACT(aa:fac, Val(aa:fac)~Pad('',80))
+   *- Oficial de Cuenta
+   ACT(aa:fac, Val(aa:fac)~Pad0(FStr(FBN['OficialCuenta'],1,0),10))
+   *- Nro del Cheque (en Blanco)
+   ACT(aa:fac, Val(aa:fac)~Pad('',8))
+   *- Fecha Operacion (idem Fecha de Liquidacion)
+   ACT(aa:fac, Val(aa:fac)~Fecha(FBN['FechaLiq'],'YYYYMMDD'))
+   
+   EscribirASCII(Val(aa:fac))
+   ELSE
+      if Not EqStr(VAR('LAVSOS'),'SI')
+         BorrarCeldas(a:Val(z:1)..n:Val(z:1))
+         SCN(z1,-1)
+      Endif   
+   ENDIF
+
+Proximo
+ 
+CerrarASCII
+
+
+* Creo el archivo 
+IF Dialogo.Radio2=1 
+   ACT(aa1, Dialogo.String1~Dialogo.String3)
+   Message('Creando Archivo '~Dialogo.String3)
+   AbrirASCII(val(aa1),0)
+EndIf
+
+** recorrer desde 8 hasta Val(z:1) y generar registro en LAVCTAS por corte de control  columna d:
+   ACT(xy:1, 'PRIMERO')
+   ACN(xy:2, 8)
+   *messagebox(val(xy:1)~' '~val(xy:2)~' '~val(z:1))
+   Recorrer&i 8,Val(z:1)
+      *messagebox(Val(d:&i)~' '~val(xy:1)~' '~val(xy:2))
+    IF EqStr(Val(cu:&i),'SI')
+      if   Eqstr(Val(xy:1),'PRIMERO')
+         ** Genera registro LAVCTAS
+         *- Empresa 
+         ACT(aa1, Pad(VAR('CODEMPSOS'),4))
+         *- Fecha de la Informacion
+         ACT(aa1, Val(aa1)~Fecha(Val(e:Val(xy:2)),'YYYYMMDD'))
+         *- Tipo de Cuenta
+         ACT(aa1, Val(aa1)~'TIT')
+         *- Numero de Cuenta
+         ACT(aa1, Val(aa1)~Pad0(Val(l:Val(xy:2)),22))
+         *- sin Uso
+         ACT(aa1, Val(aa1)~Pad('',3))     
+         *- Codigo sucursal SISCEN
+         ACT(aa1, Val(aa1)~'00001')
+         *- Fecha de Apertura cuenta
+         ACT(aa1, Val(aa1)~Fecha(Val(n:Val(xy:2)),'YYYYMMDD'))
+         *- Limite de Descubierto
+         ACT(aa1, Val(aa1)~Pad0(FStr(0,1,0),15))
+         *- Fecha de Baja
+         ACT(aa1, Val(aa1)~Pad('',8))
+         *- Monto Presunto
+         ACT(aa1, Val(aa1)~Pad0(FStr(0,1,0),15))     
+         ACT(xy:1, Val(d:&i))
+       
+         EscribirASCII(Val(aa1))   
+      Else
+          ACN(xy:2,&i)
+          if not Eqstr(Val(d:&i),Val(xy:1))
+                   ** Genera registro LAVCTAS
+         *- Empresa 
+         ACT(aa1, Pad(VAR('CODEMPSOS'),4))
+         *- Fecha de la Informacion
+         ACT(aa1, Val(aa1)~Fecha(Val(e:Val(xy:2)),'YYYYMMDD'))
+         *- Tipo de Cuenta
+         ACT(aa1, Val(aa1)~'TIT')
+         *- Numero de Cuenta
+         ACT(aa1, Val(aa1)~Pad0(Val(l:Val(xy:2)),22))
+         *- sin Uso
+         ACT(aa1, Val(aa1)~Pad('',3))     
+         *- Codigo sucursal SISCEN
+         ACT(aa1, Val(aa1)~'00001')
+         *- Fecha de Apertura cuenta
+         ACT(aa1, Val(aa1)~Fecha(Val(n:Val(xy:2)),'YYYYMMDD'))
+         *- Limite de Descubierto
+         ACT(aa1, Val(aa1)~Pad0(FStr(0,1,0),15))
+         *- Fecha de Baja
+         ACT(aa1, Val(aa1)~Pad('',8))
+         *- Monto Presunto
+         ACT(aa1, Val(aa1)~Pad0(FStr(0,1,0),15))     
+         ACT(xy:1, Val(d:&i))
+         
+         EscribirASCII(Val(aa1))
+          Endif
+      Endif
+      
+      ACT(xy:3,Val(d:&i))
+    Endif     
+   Proximo
+
+   IF not Eqstr(Val(xy:3),Val(xy:1)) y Val(xy:2)>8
+   ** Genera registro LAVCTAS
+   *- Empresa 
+   ACT(aa1, Pad(VAR('CODEMPSOS'),4))
+   *- Fecha de la Informacion
+   ACT(aa1, Val(aa1)~Fecha(Val(e:Val(xy:2)),'YYYYMMDD'))
+   *- Tipo de Cuenta
+   ACT(aa1, Val(aa1)~'TIT')
+   *- Numero de Cuenta
+   messagebox(Val(l:Val(xy:2)))
+   ACT(aa1, Val(aa1)~Pad0(Val(l:Val(xy:2)),22))
+   *- sin Uso
+   ACT(aa1, Val(aa1)~Pad('',3))     
+   *- Codigo sucursal SISCEN
+   ACT(aa1, Val(aa1)~'00001')
+   *- Fecha de Apertura cuenta
+   ACT(aa1, Val(aa1)~Fecha(Val(n:Val(xy:2)),'YYYYMMDD'))
+   *- Limite de Descubierto
+   ACT(aa1, Val(aa1)~Pad0(FStr(0,1,0),15))
+   *- Fecha de Baja
+   ACT(aa1, Val(aa1)~Pad('',8))
+   *- Monto Presunto
+   ACT(aa1, Val(aa1)~Pad0(FStr(0,1,0),15))     
+
+   EscribirASCII(Val(aa1))   
+Endif
+
+CerrarASCII
+
+LimitesVision(w:Val(z1))
+
+
+ACO(1,5)
+ACO(2,8)
+ACO(3,5)
+ACO(4,5)
+ACO(5,8)
+ACO(6,12)
+ACO(7,12)
+ACO(8,10)
+ACO(9,10)
+ACO(10,30)
+ACO(11,8)
+ACO(12,8)
+ACO(13,8)
+ACO(14,10)
+
+iMPRESION(1,2)
+iMPRESION(4,1)

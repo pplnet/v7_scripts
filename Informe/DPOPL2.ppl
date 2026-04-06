@@ -1,0 +1,240 @@
+﻿IF Vacio(UsrVehiculos(UsuarioActivo))
+    ACT(LS:1, SQLSet(" Select Codigo from "~DBO~".VEHICULOS where Status = 'HAB' "))
+ELSE
+    ACT(LS:1, UsrVehiculos(UsuarioActivo))
+ENDIF
+
+CrearDialogo
+    Fecha1:       'Fecha'                                 ;;;;;;;;;
+    Vehiculo1:    'Vehiculo'                              ;;;;;;;;;
+    Book1:        'Book'                                  ;;;;;;;;;
+    Radio1:       'Expresado en|ARP|USD'                  ;;;;;;;;;
+    Radio2:       'Expresado en|Millones|ImporteOri'      ;;;;;;;;;
+    Precio1:      'CotDolDivisa'                          ;;;;;;;;;
+    Precio2:      'CotDolBillete'                         ;;;;;;;;;
+    String1:      'Moneda'                                ;;;;;;;;;
+    Lista1:       'Vehiculo'                              ;;;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), Val(LS:1), SQLSet(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where V.Codigo = U.Vehiculo AND U.Codigo = '"~UsuarioActivo~"' AND V.Status = 'HAB' "));;
+FinDialogo
+
+IF Not OK
+  Cancelar
+ENDIF
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+*****************************************************************VAR MONEDAS****************************************************
+let &monedaLocal Var('MONELOCA')
+let &monedaExtr Var('MONEEXTR')
+let &dolBillete Var('DOLBILLETE')
+let &vehiculosDolBillete Var('VEHDOLBI')
+let &cotDolDivisa Dialogo.Precio1
+let &cotDolBillete Dialogo.Precio2
+IF Dialogo.Radio1 = 0
+    let &monedaInforme &monedaLocal
+ELSE
+    let &monedaInforme &monedaExtr
+ENDIF
+
+*****************************************************************ENCABEZADO***************************************************
+SetFilaActual(1)
+ACT(A:fac,'Operaciones pendientes de liquidar')
+ifa
+ACT(E:fac,'Apertura por vehiculo y books')
+SetFont(A:fac-2..F:fac, 3)
+ifa
+ifa
+
+let &ComienzoTitulos fac
+
+ACT(A:fac,'Fecha: '  ~Dialogo.Fecha1)
+ifa
+
+ESPECIE
+ACT(A:fac,'Especies: ')
+let &filaEspecie fac
+ifa
+IF Vacio(Dialogo.Vehiculo1)
+    let &Vehiculos 'Todos'
+ELSE
+    let &Vehiculos Dialogo.Vehiculo1
+ENDIF
+ACT(A:fac,'Vehiculo: '~ &Vehiculos)
+ifa
+
+IF Vacio(Dialogo.Book1)
+    let &Books 'Todos'
+ELSE
+    let &Books Dialogo.Book1
+ENDIF
+ACT(A:fac,'Books: '~ &Books)
+ifa
+ACT(A:fac,'Moneda: '~Dialogo.String1)
+ifa
+IF Dialogo.Radio1 = 0
+    let &expresion 'ARP'
+ELSE
+    let &expresion 'USD'
+ENDIF
+
+ACT(A:fac,'Expresado en : '~ &expresion)
+ifa
+ACT(A:fac, 'TC Divisa: '~Fstr(&cotDolDivisa,0,2))x
+ifa
+ACT(A:fac, 'TC Billete: '~Fstr(&cotDolBillete,0,2))
+ifa
+
+IF Dialogo.Radio2 = 0
+    ACT(A:fac, 'Expresado en: Millones')
+    let &unidad 1000000
+ELSE
+    ACT(A:fac, 'Expresado en: Importe Original')
+    let &unidad 1
+ENDIF
+ifa
+ifa
+ACT(A:fac,'NrOperacion')
+ACT(B:fac,'TipoOp')
+ACT(C:fac,'FechaOp')
+ACT(D:fac,'Plazo')
+ACT(E:fac,'FechaVto')
+ACT(F:fac,'Especie')
+ACT(G:fac,'ValorNominal')
+ACT(H:fac,'Precio')
+ACT(I:fac,'Total Mon Pago')
+ACT(J:fac,'Total Mon Expresion')
+
+AgregarMarco(A:fac..J:fac, 0, 3, Exe('COLOR'))
+AlinearCeldas(A:fac-1..J:fac,'C')
+
+
+******************************************************************SQL**************************************************************************
+SQL.ADD(" Select O.TotalNetoCli1/"~Fstr(&unidad, 0, 0)~" Total, O.ContraEspecie Moneda, O.Book1 Book, O.Vehiculo1 Vehiculo, O.TipoOp,O.Plazo, ")
+SQL.ADD("O.NrOperacion,O.FechaOp,O.FechaVto,O.Precio1,O.Cantidad,O.Especie")
+SQL.ADD(" From "~DBO~".OPERACIONES O ")
+SQL.ADD(" Where O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.TipoOp IN ('FCS','FCR','SECS','SEVS') ")
+SQL.ADD("AND O.ContraEspecie = '"~Dialogo.String1~"'")
+
+If NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("AND O.Vehiculo1= '"~Dialogo.Vehiculo1~"' ")
+Else
+    IF NoVacio(Dialogo.Lista1)
+        SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    ELSE
+        SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1))~") ")
+    ENDIF
+Endif
+If NoVacio(Dialogo.Book1)
+    SQL.ADD("AND O.Book1= '"~Dialogo.Book1~"' ")
+Endif   
+SQL.ADD("Order By O.Vehiculo1,O.Book1")
+
+
+Recorrer SQL
+        IF Not Eqstr(fbn('Book'), Val(BO:1)) y NoVacio(Val(BO:1)) o [Not Eqstr(fbn('Vehiculo'), Val(VH:1)) y NoVacio(Val(VH:1))]
+        ACT(A:fac,'Total Cartera: '~ Val(BO:1))
+        ACN(I:fac,Val(TB:1))
+        ACN(J:fac,Val(TB:2))
+        SetFont(A:fac..J:fac,2)
+        AgregarMarco(A:fac..J:fac,1,0,EXE('COLOR8'))
+        ACN(TB:1,0)
+        ACN(TB:2,0)
+        ifa
+        ifa
+    Endif
+    IF Not Eqstr(fbn('Vehiculo'), Val(VH:1)) y NoVacio(Val(VH:1))
+    ACT(A:fac,'Total Vehiculo: '~ Val(VH:1))
+        ACN(I:fac,Val(TV:1))
+        ACN(J:fac,Val(TV:2))
+        SetFont(A:fac..J:fac,2)
+        AgregarMarco(A:fac..J:fac,1,0,EXE('COLOR8'))
+        ACN(TV:1,0)
+        ACN(TV:2,0)
+        ifa
+        ifa
+    Endif
+    If  Not Eqstr(fbn('Vehiculo'), Val(VH:1))
+        ACT(A:fac,'VEHICULO: '~FBN['Vehiculo'])
+        SetFont(A:fac..A:fac,2)
+        ifa
+    Endif
+    If  Not Eqstr(fbn('Book'), Val(BO:1)) o Not Eqstr(fbn('Vehiculo'), Val(VH:1))
+        ACT(A:fac,'CARTERA: '~FBN['Book'])
+        SetFont(A:fac..A:fac,2)
+        ACT(BO:1,FBN['Book'])
+        ifa
+    ENDIF
+    ACT(VH:1,FBN['Vehiculo'])
+    IF Incluido(fbn('Vehiculo'), &vehiculosDolBillete)
+        let &cotVehiculo &cotDolBillete
+    ELSE
+        let &cotVehiculo &cotDolDivisa
+    ENDIF
+    IF Eqstr(&expresion, fbn('Moneda'))
+        let &tc 1
+    ELSE
+        IF Eqstr(&monedaInforme, &monedaLocal)
+            let &tc &cotVehiculo
+        ELSE
+            let &tc 1/&cotVehiculo
+        ENDIF
+    ENDIF
+*    IF Not Eqstr(fbn('Especie'), &especieAnt)
+*        let &cotEspecie COTIZACION(fbn('Especie'),,,,Dialogo.Fecha1,1,SI)
+*    ENDIF
+    ACT(A:fac,FBN['NrOperacion'])
+    ACT(B:fac,FBN['TipoOp'])
+    ACD(C:fac,FBN['FechaOp'])
+    ACT(D:fac,FBN['Plazo'])
+    ACD(E:fac,FBN['FechaVto'])
+    ACT(F:fac,FBN['Especie'])
+    ACN(G:fac,FBN['Cantidad'])
+    ACN(H:fac,FBN['Precio1'])
+    ACN(I:fac,FBN['Total'])
+    ACN(J:fac,FBN['Total'] * &tc)
+  
+    
+    ACN(TV:1,Val(TV:1)+Val(I:fac))
+    ACN(TB:1,Val(TB:1)+Val(I:fac))
+    ACN(TV:2,Val(TV:2)+Val(J:fac))
+    ACN(TB:2,Val(TB:2)+Val(J:fac))
+    If Not Incluido(FBN['Especie'],Val(A:&filaEspecie))
+        ACT(A:&filaEspecie,Val(A:&filaEspecie)~FBN['Especie']~'|') 
+    Endif
+Proximo
+
+ifa
+If NoVacio(Val(A:&comienzoDatos+1))
+    ACT(A:fac,'Total '~ Val(BO:1))
+    ACN(I:fac,Val(TB:1))
+    ACN(J:fac,Val(TB:2))
+    SetFont(A:fac..J:fac,2)
+    AgregarMarco(A:fac..J:fac,1,0,EXE('COLOR8'))
+    ifa
+    ifa
+    ACT(A:fac,'Total '~ Val(VH:1))
+    ACN(I:fac,Val(TV:1))
+    ACN(J:fac,Val(TV:2))
+    SetFont(A:fac..J:fac,2)
+    AgregarMarco(A:fac..J:fac,1,0,EXE('COLOR8'))
+    ifa
+Else
+    Cancelar('No se encontraron posiciones para los datos seleccionados')
+Endif
+
+let &ultimoRegistro fac
+SetFilaActual(&ultimoRegistro)
+ifa
+ifa
+ACT(A:fac,'Fin del Reporte')
+SetFont(A:fac..A:fac,2)
+ifa
+LimitesVision(K:fac)
+
+ACO(1,15)
+ACO(9,10)
+ACO(10,11)
+ 

@@ -1,0 +1,218 @@
+﻿CrearDialogo
+  Especie1: 'Especie'
+  Fecha1: 'Fecha';;;;;;;;;HABILES(FSYS,3,'ARG',SI)
+  Precio1: 'Precio Clean';
+  Radio1: 'Esquema|Sin PIKs|Con PIKs|';;;;BUSCARCAMPO('ESPECIES','Valor9','Codigo',Dialogo.Especie1)=2;;;;;BUSCARCAMPO('ESPECIES','Valor9','Codigo',Dialogo.Especie1);BUSCARCAMPO('ESPECIES','Valor9','Codigo',Dialogo.Especie1)
+FinDialogo
+
+if not OK 
+  Cancelar
+endif
+
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(1)
+ACT(a:fac,'Informe Prueba PIKs - Prueba de concepto')
+SetFont(a:fac,2)
+ACT(h:fac,'Fecha : '~Var('FECHASYS')~'    Hora: '~HORA(AHORA))
+SetFont(h:fac..h:fac,1)
+SetFilaActual(3)
+ACN(w1,fac)
+
+ACT(a:fac, 'Especie : ')
+ACT(b:fac, Dialogo.Especie1)
+ACT(a:fac+1, 'Fecha : ')
+ACT(b:fac+1, Dialogo.Fecha1)
+ACT(e:fac, 'Precio CC: ')
+ACT(e:fac+1, 'Cupon: ')
+ACT(e:fac+2, 'Precio Clean: ')
+ACT(e:fac+3, 'TIR: ')
+ACN(f:fac+2, Dialogo.Precio1)
+*ACF(f:fac+3, Fecha(Val(z4)))
+ACT(i:fac, 'Dias Mes: ')
+ACT(i:fac+1, 'Dias Año: ')
+ACT(i:fac+2, 'F.Ult.Cupon: ')
+ACT(I:fac+3, 'Duration')
+
+if Dialogo.Radio1 = 0
+  ACT(a:fac+2, 'Sin PIKs')
+else
+  ACT(a:fac+2, 'Con PIKs')
+endif
+
+SetFont(a:fac..L:fac+2,2)
+SetFont(a:fac+2..a:fac+2,3)
+
+
+SetFilaActual(fac+5)
+ACN(w2, fac)
+ACT(a:fac,'Fecha')
+ACT(b:fac,'Tasa Renta')
+ACT(c:fac,'Tasa PIK')
+ACT(d:fac,'V.Residual')
+ACT(e:fac,'% Amort.')
+ACT(f:fac,'Valor Par')
+ACT(g:fac,'Pago Ppal.')
+ACT(h:fac,'Pago Ints.')
+ACT(i:fac,'PIKs Ints.')
+ACT(j:fac,'Cashflow')
+ACT(K:fac, 'Valor Presente')
+
+AlinearCeldas(a:fac..a:fac,'I')
+AlinearCeldas(b:fac..K:fac,'D')
+SetFont(a:fac..K:fac,2)
+AgregarMarco(a:FAC..K:fac,2,0,Exe('COLOR'))
+
+SetFilaActual(fac+1)
+ACD(a:fac, Dialogo.Fecha1)
+ACN(d:fac, 100)
+ACN(f:fac, 100)
+ACN(j:fac, -Dialogo.Precio1)
+ACN(l:fac, Val(a:fac)-Dialogo.Fecha1)
+SetFont(a:FAC..N:fac,1)
+
+SQL.ADD("SELECT * from "~DBO~".AGENDACUPONES where Especie='"~Dialogo.Especie1~"' and FechaCorte >= '"~IdxDate(Dialogo.Fecha1)~"' and")
+IF Dialogo.Radio1 = 0
+  SQL.ADD("Esquema not in ('2','DOS','PK')")
+  ACD(z4, SQL("Select Max(FechaCorte) from "~DBO~".AGENDACUPONES where Especie='"~Dialogo.Especie1~"' and FechaCorte <'"~IdxDate(Dialogo.Fecha1)~"' and Esquema not in ('2','DOS','PK')"))
+ELSE
+  SQL.ADD("Esquema in ('2','DOS','PK')")
+  ACD(z4, SQL("Select Max(FechaCorte) from "~DBO~".AGENDACUPONES where Especie='"~Dialogo.Especie1~"' and FechaCorte <'"~IdxDate(Dialogo.Fecha1)~"' and Esquema in ('2','DOS','PK')"))
+ENDIF
+SQL.ADD("order by FechaCorte")
+
+ACT(z2, BuscarCampo('ESPECIES','DiasMes','Codigo',Dialogo.Especie1))
+if Incluido(Val(z2), 'REA')
+  ACT(j3, 'Real')
+else
+  ACT(j3, '30')
+endif
+ACT(z3, BuscarCampo('ESPECIES','DiasAnio','Codigo',Dialogo.Especie1))
+if Incluido(Val(z3), 'REA|365')
+  ACT(j4, '365')
+else
+  ACT(j4, '360')
+endif
+ACT(j5, Val(z4))
+ACD(z5, Val(z4))
+ACD(FE:1, Dialogo.Fecha1)
+ACN(FI:1, fac+1)
+Recorrer SQL   
+  acd(a:fac, fbn('FechaCorte'))
+  acn(b:fac, fbn('PorRenta'))
+  acn(c:fac, fbn('PorPIK'))
+  acn(e:fac, fbn('PorAmCapital'))
+  if Val(e:fac)>0 y Val(z1)=0
+    ACN(z1, Val(f:fac-1))
+  endif
+  acn(d:fac, Val(d:fac-1)-Val(e:fac))
+*  acn(f:fac, Val(d:fac)+fbn('PIKsAcumulados'))
+  acn(f:fac, Val(f:fac-1)+Val(i:fac-1)-Val(g:fac-1))
+  acn(g:fac, Val(e:fac)/100*Val(z1))
+  if Val(d:fac)=0
+    acn(g:fac, Val(f:fac))
+  endif
+  if EqStr(Val(z2), 'REA')
+    if Incluido(Val(z3), '365|REA')
+      ACN(h:fac, (Val(a:fac)-Val(z5))/365*Val(b:fac)*Val(f:fac)/100)
+      ACN(i:fac, (Val(a:fac)-Val(z5))/365*Val(c:fac)*Val(f:fac)/100)
+      ACN(PL:fac, (Val(a:fac)-Val(FE:1))/365)
+      ACN(DA:1, 365)
+    else
+      ACN(h:fac, (Val(a:fac)-Val(z5))/360*Val(b:fac)*Val(f:fac)/100)
+      ACN(i:fac, (Val(a:fac)-Val(z5))/360*Val(c:fac)*Val(f:fac)/100)
+      ACN(PL:fac, (Val(a:fac)-Val(FE:1))/360)
+      ACN(DA:1, 360)
+    endif
+  else
+    if Incluido(Val(z3), '365|REA')
+      ACN(h:fac, Dif360(Val(a:fac),Val(z5),2)/365*Val(b:fac)*Val(f:fac)/100)
+      ACN(i:fac, Dif360(Val(a:fac),Val(z5),2)/365*Val(c:fac)*Val(f:fac)/100)
+      ACN(PL:fac, Dif360(Val(a:fac),Val(FE:1),2)/365)
+      ACN(DA:1, 365)
+    else
+      ACN(h:fac, Dif360(Val(a:fac),Val(z5),2)/360*Val(b:fac)*Val(f:fac)/100)
+      ACN(i:fac, Dif360(Val(a:fac),Val(z5),2)/360*Val(c:fac)*Val(f:fac)/100)
+      ACN(PL:fac, Dif360(Val(a:fac),Val(FE:1),2)/360)
+      ACN(DA:1, 360)
+    endif
+  endif
+  acn(z5, Val(a:fac))
+  acn(j:fac, Val(g:fac)+Val(h:fac))
+  acn(l:fac, Val(a:fac)-Dialogo.Fecha1)
+  ***---Calculo Duration
+  *ACN(K:fac, (Val(D:fac-1) * 5 / 100 * Val(PL:1)))
+  
+
+  SetFont(a:FAC..N:fac,1)
+proximo
+ACN(FI:2, fac)
+
+
+if EqStr(Val(z2), 'REA')
+  if Incluido(Val(z3), '365|REA')
+    ACN(f:4, (Val(a:9)-Val(z4))/365*Val(f:10)*(Val(b:10)+(Val(c:10)*Dialogo.Precio1/100))/100)
+  else
+    ACN(f:4, (Val(a:9)-Val(z4))/360*Val(f:10)*(Val(b:10)+(Val(c:10)*Dialogo.Precio1/100))/100)
+  endif
+else
+  if Incluido(Val(z3), '365|REA')
+    ACN(f:4, Dif360(Val(a:9),Val(z4),2)/365*Val(f:10)*(Val(b:10)+(Val(c:10)*Dialogo.Precio1/100))/100)
+  else
+    ACN(f:4, Dif360(Val(a:9),Val(z4),2)/360*Val(f:10)*(Val(b:10)+(Val(c:10)*Dialogo.Precio1/100))/100)
+  endif
+endif
+ACN(f3, Val(f5)+Val(f4))
+ACN(j:9, -Val(f:3))
+ACN(f6, Tir2(l:9..l:fac,j:9..j:fac)*100)
+
+***---Calculo Duration
+Recorrer&k Val(FI:1), Val(FI:2)
+    ***---Valor a Hoy
+  ACN(K:&k, Val(J:&k) - (Val(J:&k) * Val(F:6) / 100 * Val(PL:&k)))
+  ***---Precio del bono a hoy
+  SCN(PR:1, Val(K:&k))
+Proximo
+***---Recorro de nuevo para saber el % de cada cupon sobre el Precio del bono a hoy
+Recorrer&k Val(FI:1), Val(FI:2)
+  ACN(M:&k, Val(K:&k) / Val(PR:1) * 100)
+  ***---Duration
+  SCN(DR:1, (Val(M:&k) * Val(PL:&k)))
+Proximo
+ACN(J:6, Val(DR:1) / 100)
+SetFont(K:Val(FI:1)..K:fac, 1)
+
+SetFont(j:9..j:9,1)
+SetFont(a1..z6,2)
+
+FormatoCeldas(b:Val(w1)..K:fac,Exe('F5'))
+*FormatoCeldas(i:Val(aw:1)..i:fac,Exe('F0'))
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Fin del Listado')
+SetFont(a:FAC,2)
+
+ACO(1,12)
+ACO(2, 10)
+ACO(3, 10)
+ACO(4, 10)
+ACO(5, 10)
+ACO(6, 10)
+ACO(7, 10)
+ACO(8, 10)
+ACO(9, 10)
+ACO(10, 10)
+ACO(11, 12)
+
+
+LimitesVision(k:fac)
+SetPrintFit(3,90)
+Impresion(1,2)
+*Impresion(2,1)
+*Impresion(4,1)
+SetMargins(0,0,0,2)
+
+*DAYS360(A22,A13)/360*(C22)*G22+DAYS360(A22,A13)/360*(D22)*G22*B8/100

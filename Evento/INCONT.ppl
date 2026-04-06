@@ -1,0 +1,656 @@
+﻿*- 14.11.05 Se incluye codigo de cuenta donde se debitan los fondos = CUENTA ORIGEN => Cuenta2 de la transaccion RET
+*-          Se incluye codigo de cuenta donde se acreditan los fondos = CUENTA DESTINO => Cuenta2 de la transaccion DEP
+CrearDialogo
+  Fecha1       : 'Fecha'       ;;;;;;NoVacio(Dialogo.Fecha1);'Debe Ingresar una Fecha';NO;FSys
+  Check1       : 'Reprocesar'  ;1;2;;;;;;;0;
+  Entero1      : 'Nr. Envio'   ;2;2;;Dialogo.Check1 = 1;Dialogo.Check1 = 1;Dialogo.Entero1 > 0 O Dialogo.Check1 = 0;'Nr. de Envio Invalido';NO;;;;;'###';
+  Radio1       : 'Sist.Oper.|W98|NT'     ;3;2;;;;;;;0;
+  Especie1     : 'Especie'     ;2;1;;Dialogo.Check1 = 0;
+  Vehiculo1    : 'Vehiculo'    ;;;;;;[Vacio(Dialogo.Vehiculo1) Y Dialogo.Check1 = 0] O [NoVacio(Dialogo.Vehiculo1) Y Incluido(Dialogo.Vehiculo1, IIF(NoVacio(UsrVehiculos(UsuarioActivo)), UsrVehiculos(UsuarioActivo), SQLSet(" Select Codigo From "~DBO~".VEHICULOS ")))];'Vehiculo Invalido';NO;;;;;;IIF(NoVacio(UsrVehiculos(UsuarioActivo)), " Codigo IN ("~Pipe2Comillas(UsrVehiculos(UsuarioActivo))~") ");
+  Lista2       : 'TipoOp'      ;;;;Dialogo.Check1 = 0;;;;;;;SQLSet("Select Codigo from "~DBO~".TIPOSOPERACION") 
+  NrOperacion1 : 'NrOperacion' ;;;;Dialogo.Check1 = 0;
+  String1      : 'Path Txt'    ;;;;NO;;;;;Var('PATHINTCON');;;;;;;;;;;;;;;;;  
+FinDialogo
+
+
+If Not Ok
+   Cancelar
+Endif
+MostrarCuadroDeMensajes
+
+***---BD1 = 0 Operaciones nuevas
+***---BD1 = 1 Operaciones borradas contabilizadas => ContraAsientos
+***---BD1 = 2 Operaciones anuladas contabilizadas => ContraAsientos
+***---Los asientos se graban con Estado = Pendiente. Si se anula el voucher, se marca con Anulado
+***---Cuando se genera el contraasiento, se marca el campo como Procesado.
+
+IF Not ExisteDirectorio(Var('PATHINTCON'))
+    Cancelar('Debe crear el directorio '~Var('PATHINTCON'))
+ENDIF
+
+IF NoVacio(Dialogo.Vehiculo1)
+    ACT(VH:10, Dialogo.Vehiculo1)
+ELSE
+    IF NoVacio(UsrVehiculos(UsuarioActivo))
+        ACT(VH:10, UsrVehiculos(UsuarioActivo))
+    ELSE
+        ACT(VH:10, SQLSet(" Select Codigo From "~DBO~".VEHICULOS "))
+    ENDIF
+ENDIF
+
+***---Lista con Letras de Envio
+ACT(LS:4, 'A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z')
+
+***---Lista de operaciones para comisiones
+ACT(OC:1, SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo Like 'MM%' "))
+
+ACN(UI:1, SQL(" Select UID From "~DBO~".USUARIOS Where Codigo = '"~UsuarioActivo~"' "))
+
+ACT(AH:1, SQLAhora)
+
+ACT(BL:1, Descendientes('CLIENTES', 'BLOCAL'))
+ACT(BE:1, Descendientes('CLIENTES', 'BEXTER'))
+
+ACN(FW:1, 0)
+ACN(CR:1, 0)
+ACN(CW:1, 0)
+ACN(XV:1, 0)
+BorrarCeldas(LA:1..LA:2)
+
+IF Dialogo.Check1 = 0
+    *--- Se toman todas las transacciones de fecha1 y los fondos del dia habil anterior
+    SQL.ADD(" Select T.NrTrans, T.TipoTr2, T.NrOperacionRef1, T.Vehiculo1, T.Cliente1, ")
+    SQL.ADD(" CASE M.Concepto WHEN 'COMISI' THEN M.Especie ELSE  T.Especie END Especie, T.Fecha1, M.Cantidad Cantidad1, ")
+    SQL.ADD(" O.Precio1, CASE O.TipoOp WHEN  'MMON  ' THEN O.Observac3 WHEN  'MMONM ' THEN O.Observac3 ELSE O.Especie END EspOp, ")
+    SQL.ADD(" O.ContraEspecie, O.TipoOp, O.Spread, O.TotalIntereses, ")
+    SQL.ADD(" M.NrMov, M.Leyenda, M.Especie EspecieMov, M.NrOperacion OpeMov, 0 as BD1, ")
+    SQL.ADD(" 1 as BD3, O.FechaCargaSys FechaContable, M.FechaMov FechaValor, '' Origen, ")
+    SQL.ADD(" '' Instante, '' SubInstante, CASE M.Concepto WHEN 'COMISI' THEN 'COMISI' ELSE '' END Concepto, ")
+    SQL.ADD(" '' Concepto1, O.TCComCor1 CambioComis, 0 Tipo_De_Cambio,")
+    SQL.ADD(" CASE Trim(T.TipoTr2) WHEN 'RET' THEN T.Cuenta2 ELSE '' END CuentaOrigen, CASE Trim(T.TipoTr2) WHEN 'DEP' THEN T.Cuenta2 ELSE '' END CuentaDestino  ")
+    SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M ")
+    ***---En las operaciones que son de partidas, el voucher tiene el NrOperacion de la partida
+    SQL.ADD(" Where (T.NrOperacionRef1 = O.NrOperacion OR T.NrOperacionRef1 = O.OperacionRef) ")
+    SQL.ADD(" and T.TipoTr2 in ('DEP','RET') ")
+    SQL.ADD(" AND M.NrOperacion = O.NrOperacion ")
+    SQL.ADD(" AND M.NrTrans2 = T.NrTrans ")
+    SQL.ADD(" AND M.NrSaldo = 1 ")
+    SQL.ADD(" AND T.Cantidad1 > 0 ")
+    SQL.ADD(" AND T.NrOperacionRef1 Not IN (Select S.NrOperacion From "~DBO~".MOVIMIENTOS S ")
+    SQL.ADD("                              Where S.NrOperacion = T.NrOperacionRef1 ")
+    SQL.ADD("                              AND S.Movimiento_Numero = M.NrMov ")
+    SQL.ADD("                              AND S.Estado = 'Pendiente') ")
+    ***---En las operaciones que son de partidas, el voucher tiene el NrOperacion de la partida
+    SQL.ADD(" AND O.NrOperacion Not IN (Select S.NrOperacion From "~DBO~".MOVIMIENTOS S ")
+    SQL.ADD("                              Where S.NrOperacion = O.NrOperacion ")
+    SQL.ADD("                              AND S.Movimiento_Numero = M.NrMov ")
+    SQL.ADD("                              AND S.Estado = 'Pendiente') ")
+    ***---Las comisiones se tratan todas juntas en la funcion
+    SQL.ADD(" AND ((((M.Concepto <> 'COMISI' AND M.Concepto <> 'CUPON') OR M.Concepto Is Null)) ")
+    SQL.ADD("        OR (M.Concepto = 'COMISI' AND (Leyenda Like '%IVA%' OR Leyenda Like '%WH%' OR Leyenda Like '%Impto.Int%') )) ")
+    SQL.ADD(" AND M.Leyenda Not like '%CEC%' ")
+    SQL.ADD(" AND (M.Leyenda Not like '%CEN%' OR M.Leyenda = 'IVA Comision CEN') ")
+
+    If Vacio(Dialogo.NrOperacion1)
+*       SQL.ADD("  and ((T.Fecha1='"~IdxDate(Dialogo.Fecha1)~"' and O.TipoOp Not Like 'FC%') ")
+*       SQL.ADD("  or (O.FechaCargaSys='"~IdxDate(Habiles(Dialogo.Fecha1,-1,'ARG',SI))~"' and O.TipoOp Like 'FC%')) ")
+       SQL.ADD("  and T.Fecha1='"~IdxDate(Dialogo.Fecha1)~"' ")
+       If NoVacio(Dialogo.Lista2)
+          SQL.ADD("       and O.TipoOp In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+       Endif
+    Else
+       SQL.ADD("       and T.NrOperacionRef1='"~Dialogo.NrOperacion1~"' ")
+    EndIf
+    If NoVacio(Dialogo.Especie1)
+       SQL.ADD("       and T.Especie='"~Dialogo.Especie1~"' ")
+    Endif
+    SQL.ADD(" AND T.Vehiculo1 IN ("~Pipe2Comillas(Val(VH:10))~") ")
+
+    SQL.ADD(" UNION ")
+
+    ***---Operaciones Borradas
+    SQL.ADD(" Select '' NrTrans, M.Tipo_Movimiento_Codigo TipoTr2, M.NrOperacion NrOperacionRef1, ")
+    SQL.ADD(" M.Compania_Codigo_PC3 Vehiculo1, M.Entidad_Codigo Cliente1, M.Moneda_Codigo Especie, ")
+    SQL.ADD(" M.Movimiento_Fecha Fecha1, M.Movimiento_Monto Cantidad1, O.Precio1, ")
+    SQL.ADD(" CASE O.TipoOp WHEN 'MMON  ' THEN O.Observac3 WHEN 'MMONM ' THEN O.Observac3 ELSE O.Especie END EspOp, ")
+    SQL.ADD(" O.ContraEspecie, O.TipoOp, O.Spread, O.TotalIntereses, M.Movimiento_Numero NrMov, ")
+    SQL.ADD(" M.Concepto Leyenda, M.Moneda_Codigo EspecieMov, M.NrOperacion OpeMov, 1 as BD1, ")
+    SQL.ADD(" 1 as BD3, O.FechaCarga FechaContable, M.Movimiento_Fecha FechaValor, M.Origen, ")
+    SQL.ADD(" M.Instante, M.SubInstante, M.Estado1 Concepto, M.Concepto1, O.TCComCor1 CambioComis, ")
+    SQL.ADD(" 0 Tipo_De_Cambio,'' as CuentaOrigen, '' as CuentaDestino  ")
+    SQL.ADD(" From "~DBO~".MOVIMIENTOS M, "~DBO~".BOPERACIONES O ")
+    SQL.ADD(" Where M.Tipo_Movimiento_Codigo IN ('DEP   ','RET   ') ")
+    SQL.ADD(" AND M.NrOperacion = O.NrOperacion ")
+    ***---Marco con 'Procesado' las operaciones anuladas que ya fueron enviadas
+    SQL.ADD(" AND (M.Estado <> 'Procesado' AND M.Estado <> 'ContraAsiento') ")
+    If Vacio(Dialogo.NrOperacion1)
+       SQL.ADD("  and ((O.FechaCarga='"~IdxDate(Dialogo.Fecha1)~"' and O.TipoOp Not Like 'FC%') ")
+       SQL.ADD("  or (O.FechaCarga='"~IdxDate(Habiles(Dialogo.Fecha1,-1,'ARG',SI))~"' and O.TipoOp Like 'FC%')) ")
+       If NoVacio(Dialogo.Lista2)
+          SQL.ADD("       and O.TipoOp In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+       Endif
+    Else
+       SQL.ADD("       and M.NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    EndIf
+    If NoVacio(Dialogo.Especie1)
+       SQL.ADD("       and M.Moneda_Codigo='"~Dialogo.Especie1~"' ")
+    Endif
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(VH:10))~") ")
+
+    SQL.ADD(" UNION ")
+    ***---Operaciones Anuladas
+    SQL.ADD(" Select '' NrTrans, M.Tipo_Movimiento_Codigo TipoTr2, M.NrOperacion NrOperacionRef1, ")
+    SQL.ADD(" M.Compania_Codigo_PC3 Vehiculo1, M.Entidad_Codigo Cliente1, M.Moneda_Codigo Especie, ")
+    SQL.ADD(" M.Movimiento_Fecha Fecha1, M.Movimiento_Monto Cantidad1, 0 Precio1, M.Estado2 EspOp, ")
+    SQL.ADD(" M.Moneda_Codigo ContraEspecie, M.Tipo_Operacion_Codigo TipoOp, 0 Spread, ")
+    SQL.ADD(" 0 TotalIntereses, M.Movimiento_Numero NrMov, M.Concepto Leyenda, ")
+    SQL.ADD(" M.Moneda_Codigo EspecieMov, M.NrOperacion OpeMov, 2 as BD1, ")
+    SQL.ADD(" 1 as BD3, M.FechaAnulada FechaContable, M.Movimiento_Fecha FechaValor, M.Origen, ")
+    SQL.ADD(" M.Instante, M.SubInstante, M.Estado1 Concepto, M.Concepto1, 0 CambioComis, ")
+    SQL.ADD(" M.Tipo_De_Cambio, M.CuentaOrigen, M.CuentaDestino ")
+    SQL.ADD(" From "~DBO~".MOVIMIENTOS M ")
+    SQL.ADD(" Where M.Tipo_Movimiento_Codigo IN ('DEP   ','RET   ') ")
+    ***---Marco con 'Procesado' las operaciones anuladas que ya fueron enviadas
+    SQL.ADD(" AND M.Estado = 'Anulado' ")
+    If Vacio(Dialogo.NrOperacion1)
+       SQL.ADD("  and M.FechaAnulada = '"~IdxDate(Dialogo.Fecha1)~"' ")
+       If NoVacio(Dialogo.Lista2)
+          SQL.ADD("       and M.Tipo_Operacion_Codigo In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+       Endif
+    Else
+       SQL.ADD("       and M.NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    EndIf
+    If NoVacio(Dialogo.Especie1)
+       SQL.ADD("       and M.Moneda_Codigo='"~Dialogo.Especie1~"' ")
+    Endif
+    SQL.ADD(" AND M.Compania_Codigo_PC3 IN ("~Pipe2Comillas(Val(VH:10))~") ")
+
+    SQL.ADD(" UNION ")
+    ***---Comisiones
+    (.'INTCONTAB1'.)
+
+    SQL.ADD(" UNION ")
+    ***---Corte de Cupon
+    (.'INTCONTAB2'.)
+ELSE
+    ***---Reproceso
+    SQL.ADD(" Select * ")
+    SQL.ADD(" From "~DBO~".MOVIMIENTOS ")
+    SQL.ADD(" Where FechaProceso = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND NrEnvio = '"~LPad(Fstr(Dialogo.Entero1, 0, 0), 3)~"' ")
+    SQL.ADD(" AND Compania_Codigo_PC3 = '"~Dialogo.Vehiculo1~"' ")
+ENDIF
+SQL.ADD(" Order By 4, 1 ")
+
+ACN(z1,0)
+Recorrer SQL
+  
+  IF Dialogo.Check1 = 1
+     ACT(tx1,FBN['NrOperacion'])
+  Else
+     ACT(tx1,FBN['OpeMov']~' '~FBN['Leyenda'])   
+  EndIf
+
+  Message('Procesando '~val(tx1))
+
+  SCN(CW:1, 1)
+  IF Dialogo.Check1 = 0
+*      IF Eqstr(fbn('TipoOp'), 'CUPON')
+          ***---Tomo FechaMov del corte
+*          ACD(MF:1, BuscarCampo('MOVEJECUTADOS','FechaMov','NrOperacion', fbn('NrOperacionRef1')))
+*      ELSE
+          ACD(MF:1, fbn('Fecha1'))
+*      ENDIF
+      IF Incluido(fbn('TipoOp'), 'SECS|SECT') Y fbn('BD1') <> 2 Y Buscar('Titulo', fbn('Leyenda')) Y fbn('TotalIntereses') <> 0
+          ***---Cuando es Capital, agrego un registro para los intereses
+          ACN(EL:9, 2)
+      ELSE
+          ACN(EL:9, 1)
+      ENDIF
+      ACT(TR:2, fbn('TipoTr2'))
+      IF Not Eqstr(fbn('Vehiculo1'), Val(VH:1))
+          ACN(XT:1, 0)
+          IF Val(CW:1) > 1
+              ***---No es primer vehiculo
+              IF Not ExisteArchivo(Var('PATHINTCON')~Val(NA:1))
+                  ***---No grabo el archivo, => decremento NrEnvio
+              ELSE
+                  ***---Guardo NrEnvio de Vehiculo
+                  SCN(XV:1, 1)
+                  ACT(VX:Val(XV:1), Val(VH:1))
+                  ACN(VY:Val(XV:1), Val(EV:1))
+              ENDIF
+          ENDIF
+
+          *- Recupero el ultimo nro. de envio de la tabla de movimientos
+          *- Si no existen registros en movimientos es el envio nro. 1 
+          *- VH:3 Vehiculo EV1: Nro. de Envio Actual
+          ACT(VH:3,FBN['Vehiculo1'])
+
+          (.'INTCONTAB0'.)
+      ENDIF
+      Recorrer&j 1, Val(EL:9)
+          IF Val(XT:1) = 1 Y &j > 1
+              ***---Si es primer registro y agrego registro de intereses, no pregunto si existe
+              ***---archivo
+              SCN(XT:1, 1)
+          ENDIF
+          ACT(ST:1, '')
+          ACT(ST:1, 'SIA')
+          ***---Id Envio
+          ACT(ST:1, Val(ST:1)~Pad(Copy(fbn('Vehiculo1'), 1, 7), 7))
+          ACT(ST:1, Val(ST:1)~LPad(Fstr(Val(EV:1), 0, 0), 3))
+          ***---Fecha Proceso en Juliano
+          ACD(FE:1, Fsys)
+          (.'FECHAJULIA'.)
+          ACT(FP:1, Val(FE:2))
+          ACT(ST:1, Val(ST:1)~Val(FP:1))
+          ACT(NP:1, fbn('OpeMov'))
+          If Vacio(val(np1))
+             ACT(NP:1, fbn('NrOperacionRef1'))
+          EndIf
+
+
+          ACT(EO:1, Copy(fbn('EspOp'), 1, 28))
+          ACT(SR:1, Copy(fbn('EspOp'), 1, 28))
+          ACN(BD:1, fbn('BD1'))
+          ACN(BD:3, fbn('BD3'))
+          IF &j > 1
+              ACT(LY:1, Var('INTINTTITU'))
+          ELSE
+              ACT(LY:1, fbn('Leyenda'))
+          ENDIF
+          ACT(TO:3, fbn('Origen'))
+          ACT(TO:1, fbn('TipoOp'))
+          IF fbn('BD1') = 0
+              ACT(CQ:1, fbn('Concepto'))
+          ELSE
+              ACT(CQ:1, fbn('Concepto1'))
+          ENDIF
+          IF Val(BD:1) = 0
+              ***---Operacion
+              ***---Busco la relacion
+              (.'INTCONTAB8'.)
+          ELSE
+              ***---Operacion Anulada
+              ACT(OG:1, Lpad(fbn('Origen'), 3))
+              ACT(IT:1, Lpad(fbn('Instante'), 2))
+              ACT(SS:1, Lpad(fbn('SubInstante'), 2))
+              ACT(CP:1, Pad(fbn('Concepto'), 25))
+          ENDIF
+          ACT(TO:1, Pad(fbn('TipoOp'), 6))
+          ACN(ZZ:1, 0)
+          IF CeldaVacia(OG:1) O Eqstr(Val(OG:1), '   ')
+              Message('***---No se informa')
+              ACN(ZZ:1, 2)
+          ENDIF
+          IF Eqstr(Val(OG:1), '999')
+              ***---Movimiento sin relacion
+              ACN(ZZ:1, 1)
+              ACT(OG:1, Pad('', 3))
+              ACT(IT:1, Pad('', 2))
+              ACT(SS:1, Pad('', 2))
+          ENDIF
+          ***---Tipo de Asiento, Origen, Instante, SubInstante
+          ACT(ST:1, Val(ST:1)~Val(OG:1)~Val(IT:1)~Val(OG:1)~Val(IT:1)~Val(SS:1))
+          ***---Tipo de Operacion, Concepto
+          ACT(ST:1, Val(ST:1)~Val(TO:1)~Val(CP:1))
+          ACT(ET:1, Pad(fbn('Cliente1'), 10))
+
+          ACT(NP:1, Copy(fbn('OpeMov'), 1, 8))
+
+          If Vacio(val(np1))
+             ACT(NP:1, Copy(fbn('NrOperacionRef1'), 1, 8))
+          EndIf
+
+          ACT(VH:1, Pad(Copy(fbn('Vehiculo1'), 1, 10), 10))
+          ***---Entidad, NrOperacion, Vehiculo
+          ACT(ST:1, Val(ST:1)~Val(ET:1)~Val(NP:1)~Val(VH:1))
+          ***---Valor1
+          ACT(VL:1, Pad0(Fstr(BuscarCampo('VEHICULOS','Valor1','Codigo', fbn('Vehiculo1')), 0, 0), 5))
+          ACT(ST:1, Val(ST:1)~Val(VL:1))
+          ***---Descripcion de linea (Remark)
+          ACT(DL:1, Pad('SIAF '~Val(OG:1)~' '~Val(IT:1), 30))
+          ***---Descripcion (Exa)
+          ACT(DS:1, Val(CP:1))
+          ***---Tipo de Documento
+          ACT(TD:1, Var('INTTIPODOC'))
+          ***---Descripcion de linea (Remark), Descripcion (Exa), Tipo de Documento
+          ACT(ST:1, Val(ST:1)~Val(DL:1)~Val(DS:1)~Val(TD:1))
+          ***---Fecha Contable
+          ACD(FE:1, fbn('FechaContable'))
+          (.'FECHAJULIA'.)
+          ACT(FC:1, Val(FE:2))
+          ***---Fecha Valor
+          IF Eqstr(fbn('TipoOp'), 'CUPON')
+              ACD(FE:1, Val(MF:1))
+          ELSE
+              ACD(FE:1, fbn('FechaValor'))
+          ENDIF
+          (.'FECHAJULIA'.)
+          ACT(FV:1, Val(FE:2))
+          ACT(ST:1, Val(ST:1)~Val(FC:1)~Val(FV:1))
+          ***---Signo
+          IF Eqstr(Copy(Val(TR:2), 1, 3), 'DEP')
+              ACN(SG:1, -1)
+          ELSE
+              ACN(SG:1, 1)
+              IF fbn('BD1') = 2
+                  ***---Operacion Borrada, para RET invierto signo
+                  ACN(SG:1, -1)
+              ENDIF
+          ENDIF
+          IF fbn('BD1') = 1
+              ***---Operacion Anulada => Invierto el signo
+              ACN(SG:1, Val(SG:1) * (-1))
+          ENDIF
+          IF &j > 1
+              ACN(CN:1, fbn('TotalIntereses'))
+              ACT(ES:1, fbn('ContraEspecie'))
+              ***---Los int. de compra/vta de titulos tienen signo contrario al capital
+              ACN(SG:1, Val(SG:1) * (-1))
+          ELSE
+              ACN(CN:1, fbn('Cantidad1'))
+              ACT(ES:1, Trim(fbn('Especie')))
+          ENDIF
+          ***---Importe
+          ACT(IM:1, LPad(Fstr(Round(Val(CN:1)*Val(SG:1), 2), 0, 2), 15))
+          ACT(IM:2, '')
+          Recorrer&k 1, 15
+              IF Not Eqstr(Copy(Val(IM:1), &k, 1), '.')
+                  ACT(IM:2, Val(IM:2)~Copy(Val(IM:1), &k, 1))
+              ENDIF
+          Proximo
+          ACT(IM:2, Lpad(Val(IM:2), 15))
+          ***---Cotizacion
+          IF Not Eqstr(Val(ES:1), Var('MONELOCA'))
+              IF Incluido(fbn('TipoOp'), 'FXCS|FXVS|FXCT|FCVT|FXAS|FXAT')
+                  ***---Para FXs se toma tipo de cambio de la operacion
+                  IF fbn('NrMov') = 4
+                      ***---Comision Corredor
+                      ACN(CT:1, fbn('CambioComis'))
+                  ELSE
+                      IF Incluido(fbn('TipoOp'), 'FXAS|FXAT')
+                          ***---Para Arbitrajes se calculan las cotizaciones en $.
+                          IF Eqstr(Val(ES:1), Trim(fbn('ContraEspecie')))
+                              ***---Tomo la cotizacion de la operacion (para ContraEspecie)
+                              ***---contra la cotiz. de especie en $.
+                              IF Eqstr(Modo(fbn('ContraEspecie'), fbn('EspOp')), 'INV')
+                                  ACN(CT:1, CotizacionC(Trim(fbn('EspOp')),,,,Dialogo.Fecha1, 1, SI, Var('MONELOCA')) / fbn('Precio1'))
+                              ELSE
+                                  ACN(CT:1, CotizacionC(Trim(fbn('EspOp')),,,,Dialogo.Fecha1, 1, SI, Var('MONELOCA')) * fbn('Precio1'))
+                              ENDIF
+                          ELSE
+                              ***---Cotizacion de la Especie en $
+                              ACN(CT:1, CotizacionC(Val(ES:1),,,,Dialogo.Fecha1, 1, SI, Var('MONELOCA')))
+                          ENDIF
+                      ELSE
+                          ACN(CT:1, fbn('Precio1'))
+                      ENDIF
+                  ENDIF
+              ELSE
+                  ACN(CT:1, CotizacionC(Val(ES:1),,,,Dialogo.Fecha1, 1, SI, Var('MONELOCA')))
+              ENDIF
+              ACN(CT:3, Val(CT:1))
+              ACT(CT:1, Lpad(Fstr(Round(Val(CT:1), 7), 0, 7), 15))
+              ACT(CT:2, '')
+              Recorrer&k 1, 15
+                  IF Not Eqstr(Copy(Val(CT:1), &k, 1), '.')
+                      ACT(CT:2, Val(CT:2)~Copy(Val(CT:1), &k, 1))
+                  ENDIF
+              Proximo
+              ACT(CT:2, Lpad(Val(CT:2), 15))
+          ELSE
+              ACN(CT:3, 0)
+              ACT(CT:2, Lpad('', 15))
+          ENDIF
+          IF fbn('BD1') = 2
+              ***---Los ContraAsientos de las anuladas llevan el tipo de cambio del asiento
+              ACN(CT:1, fbn('Tipo_De_Cambio'))
+              ACN(CT:3, fbn('Tipo_De_Cambio'))
+              ACT(CT:1, Lpad(Fstr(Round(Val(CT:1), 7), 0, 7), 15))
+              ACT(CT:2, '')
+              Recorrer&k 1, 15
+                  IF Not Eqstr(Copy(Val(CT:1), &k, 1), '.')
+                      ACT(CT:2, Val(CT:2)~Copy(Val(CT:1), &k, 1))
+                  ENDIF
+              Proximo
+              ACT(CT:2, Lpad(Val(CT:2), 15))
+          ENDIF
+          ***---Moneda
+          IF &j > 1
+              ACT(MO:1, Pad(fbn('ContraEspecie'), 6))
+          ELSE
+              IF DesciendeDeEspecie(fbn('EspecieMov'), 'MONEDA')
+                  ACT(MO:1, Pad(fbn('EspecieMov'), 6))
+              ELSE
+                  ACT(MO:1, Pad(fbn('ContraEspecie'), 6))
+              ENDIF
+          ENDIF
+          ***---Unidades
+          ACT(UN:1, Pad0('', 15))
+          ***---Unidad de Medida
+          ACT(UM:1, Lpad('', 10))
+          ***---Importe, Cotizacion, Moneda, Unidades, Unidad de Medida
+          ACT(ST:1, Val(ST:1)~Val(IM:2)~Val(CT:2)~Val(MO:1)~Val(UN:1)~Val(UM:1))
+          ***---Concepto FPA
+          ACT(CF:1, Pad(Copy(Val(LY:1), 1, 40), 40))
+          ACT(ST:1, Val(ST:1)~Val(CF:1))
+          ***---Especie Titulo
+          IF Incluido(fbn('TipoOp'), 'SECS|SEVS|SECT|SEVT|CUPON|MMON|MMONM')
+              ACT(ST:1, Val(ST:1)~Pad(Val(EO:1), 28))
+          ELSE
+              ACT(ST:1, Val(ST:1)~Pad('', 28))
+          ENDIF
+
+          *--------------
+          *- Incorporo las cuentas origen y destino
+          *- cu1: Cuenta Origen cu2: Cta. Destino
+          ACT(cu:1, FBN['CuentaOrigen'])
+          ACT(cu:2, FBN['CuentaDestino'])
+
+          ACT(ST:1, Val(ST:1)~Pad(Val(cu:1), 10)~Pad(Val(cu:2), 10))
+          *--------------
+
+          ACT(VH:1, fbn('Vehiculo1'))
+          ACN(NM:1, fbn('NrMov'))
+          ACD(FT:1, fbn('FechaContable'))
+
+*          I3F Val(BD:1) = 0 Y [Val(ZZ:1) = 0 O Val(ZZ:1) = 1]
+          IF [Val(ZZ:1) = 0 O Val(ZZ:1) = 1]
+              IF fbn('BD1') = 0
+                  ACT(ED:1, 'Pendiente')
+                  ACD(FA:1, 0)
+              ELSE
+                  ACT(ED:1, 'ContraAsiento')
+                  ACD(FA:1, Fsys)
+                  SQL.ADD(" Update "~DBO~".MOVIMIENTOS ")
+                  SQL.ADD(" Set Estado = 'Procesado' ")
+                  SQL.ADD(" Where NrOperacion = '"~Val(NP:1)~"' ")
+                  SQL.ADD(" AND Movimiento_Numero = '"~Fstr(Val(NM:1), 1, 0)~"' ")
+                  SQL.ADD(" AND Estado = 'Anulado' ")
+                  SQL.NEW
+                  SQL.EXEC
+              ENDIF
+              ***---Inserto los movimientos
+              (.'INTCONTAB3'.)
+          ENDIF
+          SQL.EXEC
+          ACT(VH:2, Pad(Copy(fbn('Vehiculo1'), BuscarCampo('VEHICULOS','Valor3','Codigo', fbn('Vehiculo1')), 1), 1))
+          IF Val(EL:9) > 1 Y &j = 1
+              ***---Genero Archivo
+              (.'INTCONTAB4'.)
+          ENDIF
+      Proximo
+  ELSE
+      ***---Reproceso
+      ***---Id Envio
+      ACT(ST:1, '')
+      ACT(ST:1, 'SIA')
+      ACN(EV:1, Dialogo.Entero1)
+      ACT(ST:1, Val(ST:1)~Pad(Copy(fbn('Compania_Codigo_PC3'), 1, 7), 7))
+      ACT(ST:1, Val(ST:1)~LPad(Fstr(Val(EV:1), 0, 0), 3))
+      ***---Fecha Proceso en Juliano
+      ACD(FE:1, fbn('FechaProceso'))
+      (.'FECHAJULIA'.)
+      ACT(FP:1, Val(FE:2))
+      ACT(ST:1, Val(ST:1)~Val(FP:1))
+      ACT(LY:1, fbn('Concepto'))
+      ACT(TO:3, fbn('Origen'))
+      ACT(CQ:1, fbn('Concepto1'))
+      ACT(TO:1, fbn('Tipo_Operacion_Codigo'))
+      ACN(BD:3, fbn('RB1'))
+      ACT(NP:1, fbn('NrOperacion'))
+      ACN(GG:1, 0)
+      IF Vacio(fbn('Origen'))
+          ***---Busco si ahora encuentra relacion
+          (.'INTCONTAB8'.)
+          ACN(GG:1, 1)
+      ELSE
+          ACT(OG:1, Lpad(fbn('Origen'), 3))
+          ACT(IT:1, Lpad(fbn('Instante'), 2))
+          ACT(SS:1, Lpad(fbn('SubInstante'), 2))
+          ACT(CP:1, Pad(fbn('Estado1'), 25))
+      ENDIF
+      ACN(ZZ:1, 0)
+      IF CeldaVacia(OG:1) O Eqstr(Val(OG:1), '   ')
+          ***---No se informa
+          ACN(ZZ:1, 2)
+      ENDIF
+      IF Eqstr(Val(OG:1), '999')
+          ***---Movimiento sin relacion
+          ACN(ZZ:1, 1)
+          ACT(OG:1, Pad('', 3))
+          ACT(IT:1, Pad('', 2))
+          ACT(SS:1, Pad('', 2))
+      ENDIF
+      IF Val(GG:1) = 1 Y Val(ZZ:1) = 0
+          ***---Encontro relacion que no tenia, => actualizo MOVIMIENTOS
+          SQL.ADD(" Update "~DBO~".MOVIMIENTOS ")
+          SQL.ADD(" Set Origen = '"~Val(OG:1)~"', ")
+          SQL.ADD(" Instante = '"~Val(IT:1)~"', ")
+          SQL.ADD(" SubInstante = '"~Val(SS:1)~"', ")
+          SQL.ADD(" Estado1 = '"~Val(CP:1)~"' ")
+          SQL.ADD(" Where NrOperacion = '"~Val(NP:1)~"' ")
+          SQL.ADD(" AND Movimiento_Numero = "~fbn('Movimiento_Numero')~" ")
+          SQL.ADD(" AND NrEnvio = '"~fbn('NrEnvio')~"' ")
+          SQL.NEW
+          SQL.EXEC
+      ENDIF
+      ***---Tipo de Asiento, Origen, Instante, SubInstante, Operacion, Concepto, Entidad, Operacion, Vehiculo
+      ACT(ST:1, Val(ST:1)~Val(OG:1)~Val(IT:1)~Val(OG:1)~Val(IT:1)~Val(SS:1)~Pad(fbn('Tipo_Operacion_Codigo'), 6)~Val(CP:1)~Pad(fbn('Entidad_Codigo'), 10)~fbn('NrOperacion')~Pad(fbn('Compania_Codigo_PC3'), 10))
+      ***---Valor1
+      ACT(VL:1, Pad0(Fstr(BuscarCampo('VEHICULOS','Valor1','Codigo', fbn('Compania_Codigo_PC3')), 0, 0), 5))
+      ACT(ST:1, Val(ST:1)~Val(VL:1))
+      ***---Descripcion de linea (Remark)
+      ACT(DL:1, Pad('SIAF '~fbn('Origen')~' '~fbn('Instante'), 30))
+      ***---Descripcion (Exa)
+      ACT(DS:1, Pad(fbn('Estado1'), 25))
+      ***---Tipo de Documento
+      ACT(TD:1, Var('INTTIPODOC'))
+      ***---Descripcion de linea (Remark), Descripcion (Exa), Tipo de Documento
+      ACT(ST:1, Val(ST:1)~Val(DL:1)~Val(DS:1)~Val(TD:1))
+      ***---Fecha Contable
+      ACD(FE:1, fbn('FechaContable'))
+      (.'FECHAJULIA'.)
+      ACT(FC:1, Val(FE:2))
+      ***---Fecha Valor
+      ACD(FE:1, fbn('Movimiento_Fecha'))
+      (.'FECHAJULIA'.)
+      ACT(FV:1, Val(FE:2))
+      ***---Importe
+      ACT(IM:1, LPad(Fstr(Round(fbn('Movimiento_Monto'), 2), 0, 2), 15))
+      ACT(IM:2, '')
+      Recorrer&k 1, 15
+          IF Not Eqstr(Copy(Val(IM:1), &k, 1), '.')
+              ACT(IM:2, Val(IM:2)~Copy(Val(IM:1), &k, 1))
+          ENDIF
+      Proximo
+      ACT(IM:2, Lpad(Val(IM:2), 15))
+      ACT(ST:1, Val(ST:1)~Val(FC:1)~Val(FV:1)~Val(IM:2))
+      ***---Tipo de Cambio
+      IF fbn('Tipo_De_Cambio') <> 0
+          ACT(CT:1, Lpad(Fstr(Round(fbn('Tipo_De_Cambio'), 7), 0, 7), 15))
+          ACT(CT:2, '')
+          Recorrer&k 1, 15
+              IF Not Eqstr(Copy(Val(CT:1), &k, 1), '.')
+                  ACT(CT:2, Val(CT:2)~Copy(Val(CT:1), &k, 1))
+              ENDIF
+          Proximo
+          ACT(CT:2, Lpad(Val(CT:2), 15))
+      ELSE
+          ACT(CT:2, Lpad('', 15))
+      ENDIF
+      ACT(ST:1, Val(ST:1)~Val(CT:2))
+      ***---Moneda
+      ACT(MO:1, Pad(fbn('Moneda_Codigo'), 6))
+      ***---Unidades
+      ACT(UN:1, Pad0('', 15))
+      ***---Unidad de Medida
+      ACT(UM:1, Lpad('', 10))
+      ACT(ST:1, Val(ST:1)~Val(MO:1)~Val(UN:1)~Val(UM:1))
+      ***---Concepto FPA
+      ACT(CF:1, Pad(Copy(fbn('Concepto'), 1, 40), 40))
+      ACT(ST:1, Val(ST:1)~Val(CF:1))
+      ***---Especie Titulo
+      ACT(ST:1, Val(ST:1)~Pad(fbn('Estado2'), 28))
+      ACT(VH:2, Pad(Copy(fbn('Compania_Codigo_PC3'), BuscarCampo('VEHICULOS','Valor3','Codigo', fbn('Compania_Codigo_PC3')), 1), 1))
+
+      *--------------
+      *- Incorporo las cuentas origen y destino
+      *- cu1: Cuenta Origen cu2: Cta. Destino
+      ACT(cu:1, FBN['CuentaOrigen'])
+      ACT(cu:2, FBN['CuentaDestino'])
+
+      ACT(ST:1, Val(ST:1)~Pad(Val(cu:1), 10)~Pad(Val(cu:2), 10))
+      *--------------
+  ENDIF
+  ***---Genero Archivo
+  (.'INTCONTAB4'.)
+  ACN(z1,1)
+Proximo
+
+IF Not ExisteArchivo(Var('PATHINTCON')~Val(NA:1))
+ELSE
+    ***---Guardo NrEnvio de Vehiculo
+    SCN(XV:1, 1)
+    ACT(VX:Val(XV:1), Val(VH:1))
+    ACN(VY:Val(XV:1), Val(EV:1))
+ENDIF
+
+IF FinDeMes(Dialogo.Fecha1, NO, 'ARG') = Dialogo.Fecha1 Y Dialogo.Check1 = 0
+    ***---Obtengo los datos devengados mensuales de la operacion.
+    ACT(LS:2, SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo In ('MMFIMV','MMPCLM','MMPEM','MMPIM','MMPOSM','MMFRNP','MMPCL','MMPE','MMPI','MMPCOS','MMPLME','DTSFF','DTSFV','DTSVV','DTSFFM','DTSFVM','DTSVVM','MMPCCM','MMPCCV','MMCP','MMDCA','MMO','MMD','MMCCR','MMON','MMONM','MMPSI','MMPSC','MMSIMV','MMSCMV') "))
+    (.'INTCONTAB9'.)
+    (.'INTCONTAB5'.)
+ENDIF
+
+IF Val(FW:1) > 0
+    ***---Hay registros con fallas
+    (.'INTCONTAB6'.)
+    Recorrer&k 1, 100
+        ***---Busco que no exista archivo de corridas anteriores
+        IF Not ExisteArchivo(Var('PATHINTCON')~'EX'~Copy(Val(NA:1), 3, 5)~Pad0(Fstr(&k, 1, 0), 4)~'.XLS')
+            ExportarXLS(A:1..H:Val(FI:1), A:1..H:Val(FI:1), Var('PATHINTCON')~'EX'~Copy(Val(NA:1), 3, 5)~Pad0(Fstr(&k, 1, 0), 4)~'.XLS')
+            Break
+        ENDIF
+    Proximo
+
+ENDIF
+
+If Val(CR:1) = 0
+  MessageBox('No se encontraron Registros')
+ELSE
+    ***---Armo lista de archivos grabados
+    Recorrer&k 1, Elementos(Val(LA:1))
+        IF Not Incluido(ItemLista(Val(LA:1), &k), Val(LA:2))
+            ACT(LA:2, Val(LA:2)~ItemLista(Val(LA:1), &k)~'|')
+        ENDIF
+    Proximo
+    ACN(EE:1, Longitud(Val(LA:2)))
+    ACT(LA:3, Copy(Val(LA:2), 1, Val(EE:1)-1))
+    ACT(LA:3, Reemplazar(Val(LA:3), '|', '_'))
+    MessageBox('Archivos Generados: '~Val(LA:3))
+Endif
+
+LimitesVision(H:fac+1)

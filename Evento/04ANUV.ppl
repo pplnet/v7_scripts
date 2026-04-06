@@ -1,0 +1,276 @@
+﻿CrearDialogo
+  NrTrans1 : 'Nro.Voucher' ;;;;;;Incluido(BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Dialogo.NrTrans1),'DEP|RET|COMP|MATCH');'Tipo de Comprobante incorrecto';NO;;;;;;" TipoTr2 IN ('DEP','RET','COMP','MATCH') ";
+  Check3   : 'Llamado'     ;;;;NO;NO;;;;0;
+  Check2   : 'Interfase'   ;;;;NO;NO;;;;1;
+  Fecha1   : 'Fecha'       ;;;;NO;NO;;;;FSys;
+FinDialogo
+
+if Dialogo.Check3=0
+   #ifdef BIND
+      Cancelar('Debe correr el evento de anulacion por Fecha')
+   #endif
+endif
+
+if Not OK
+  Cancelar
+endif
+
+if BuscarCampo('TRANSACCIONES2','CB9','NrTrans',Dialogo.NrTrans1)=1
+  Cancelar('El Voucher '~Dialogo.NrTrans1~' esta confirmado')
+endif
+
+if Incluido(BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Dialogo.NrTrans1),'DEP|RET|MATCH')
+  ACT(x1, SQL("Select Valor from "~DBO~".OPERACIONESBITS where NrOperacion = '"~Dialogo.NrTrans1~"' and NrBit = 4 "))
+  if EqStr(Val(x1),'1')
+    Cancelar('El Voucher '~Dialogo.NrTrans1~' esta fallado')
+  endif
+endif
+
+if Incluido(BuscarCampo('TRANSACCIONES2','TipoTr2','NrOperacionRef1',Dialogo.NrTrans1),'DTP|RTP')
+   ACT(x5,BuscarCampo('TRANSACCIONES2','NrTrans','NrOperacionRef1',Dialogo.NrTrans1) )
+
+   SQL.ADD("DELETE from "~DBO~".MOVEJECUTADOS ")
+   SQL.ADD("where NrOperacion = '"~Val(x5)~"'")
+   SQL.NEW
+
+   SQL.ADD("DELETE from "~DBO~".MOVPENDIENTES ")
+   SQL.ADD("where NrOperacion =  '"~Val(x5)~"' ")
+   SQL.NEW
+
+   SQL.ADD("DELETE from "~DBO~".TRANSACCIONES2 ")
+   SQL.ADD("where NrTrans =  '"~Val(x5)~"'   ")
+   SQL.NEW
+
+   SQL.EXEC
+Endif
+
+*FO27/10/2005 - Restablece los limites de las operaciones
+
+if Incluido(BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Dialogo.NrTrans1),'COMP')
+   SQL.ADD(" select NrOperacion from "~DBO~".MOVEJECUTADOS ")
+   SQL.ADD(" where NrTrans2   = '"~Dialogo.NrTrans1~"'     ")
+   SQL.ADD(" and NrOperacion <> '"~Dialogo.NrTrans1~"'     ")
+   Recorrer SQL
+      SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+      SQL.ADD("  SET RB10        = '0',  ")
+      SQL.ADD("      FechaPrecan = Null ")  
+      SQL.ADD("Where NrOperacion = '"~fbn['NrOperacion']~"' ")
+      SQL.ADD("  and TipoOp     In ('TIC','TIV','TIFC','TIFV','TICO','TIPO','TCOPRI') ")
+      SQL.NEW
+      SQL.EXEC
+      *** Actualiza movimientos y limites ****
+      SQL.ActualizarMovimientos2(fbn['NrOperacion'],NO,SI,NO,NO)
+      SQL.EXEC
+   Proximo
+Endif
+
+
+*VP generacion 2016 - Restablece los  bits de las operaciones
+
+
+   SQL.ADD(" select NrOperacion from "~DBO~".MOVEJECUTADOS ")
+   SQL.ADD(" where NrTrans2   = '"~Dialogo.NrTrans1~"'     ")
+   SQL.ADD(" and NrOperacion <> '"~Dialogo.NrTrans1~"'     ")
+   Recorrer SQL
+   
+     SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+      SQL.ADD("  SET valor        = 0 ")
+      SQL.ADD("Where NrOperacion = '"~fbn['NrOperacion']~"' ")
+      SQL.NEW
+
+      SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+      SQL.ADD("  SET valor        = 1  ")
+      SQL.ADD("Where NrOperacion = '"~fbn['NrOperacion']~"' and NrBit = '10' ")
+      SQL.NEW
+ 
+ 
+     SQL.EXEC
+   Proximo
+   
+   
+SQL.ADD("SELECT * ")
+SQL.ADD("  FROM "~DBO~".TRANSACCIONES2 ")
+SQL.ADD(" WHERE NrTrans='"~Dialogo.NrTrans1~"'")
+
+Recorrer SQL
+
+      ACT(ba:1, FBN['Mercado1'])
+      ACT(bb:1, FBN['Especie'])
+      ACT(bi:1, FBN['TipoTr2'])
+      if Eqstr(Val(bi:1),'RET')
+         SCN(bf:1, -FBN['Cantidad1'])
+      else
+         SCN(bf:1, FBN['Cantidad1'])
+      endif   
+      *      ACT(ba:1, FBN['Cuenta1'])
+      ACT(bh:1, FBN['Cuenta1'])
+      ACT(bq:1, FBN['NrTrans']~'|')
+      *      ACT(aj:fac, FBN['Vehiculo1'])
+      *      ACT(al:fac, FBN['Cuenta2'])
+      *      ACT(ax:fac, FBN['Ley4'])
+      ACT(by:1, FBN['Cliente1'])
+      ACN(bw:1, FBN['Cantidad11'])
+      *      ACT(bk:fac, FBN['Book1'])
+      *      ACT(am:fac, FBN['ContraEspecie'])
+      *      ACT(an:fac, FBN['Cantidad12'])
+      *      ACT(as:fac, FBN['Cantidad25'])
+
+Proximo
+
+SQL.ADD("INSERT INTO "~DBO~".MOVPENDIENTES ")
+SQL.ADD("(NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+SQL.ADD("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+SQL.ADD("Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+SQL.ADD("NrMov, NrLiq, Status, NrInstan, Cupon, ")
+SQL.ADD("Cuenta, Transaccion, Cantidad, Book) ")
+
+SQL.ADD("Select ")
+SQL.ADD("NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+SQL.ADD("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+SQL.ADD("Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+SQL.ADD("NrMov, NrLiq, Status, NrInstan, Cupon, ")
+SQL.ADD("Cuenta, Transaccion, Cantidad, Book ")
+SQL.ADD("from "~DBO~".MOVEJECUTADOS ")
+SQL.ADD("where NrTrans2 = '"~Dialogo.NrTrans1~"'")
+SQL.ADD("and NrOperacion <> '"~Dialogo.NrTrans1~"'")
+
+SQL.ADD("Union ")
+
+SQL.ADD("Select ")
+SQL.ADD("NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+SQL.ADD("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+SQL.ADD("Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+SQL.ADD("NrMov, NrLiq, Status, NrInstan, Cupon, ")
+SQL.ADD("Cuenta, Transaccion, Cantidad , Book")
+
+SQL.ADD("from "~DBO~".MOVPENDIENTES ")
+SQL.ADD("where NrTrans2 = '"~Dialogo.NrTrans1~"'")
+SQL.ADD("and NrOperacion <> '"~Dialogo.NrTrans1~"'")
+SQL.NEW
+
+SQL.ADD("DELETE from "~DBO~".MOVEJECUTADOS ")
+SQL.ADD("where NrTrans2 = '"~Dialogo.NrTrans1~"' ")
+SQL.NEW
+
+SQL.ADD("DELETE from "~DBO~".MOVPENDIENTES ")
+SQL.ADD("where NrTrans2 = '"~Dialogo.NrTrans1~"' ")
+SQL.NEW
+
+SQL.ADD("DELETE from "~DBO~".OPERACIONESBITS ")
+SQL.ADD("where NrOperacion = '"~Dialogo.NrTrans1~"' ")
+SQL.NEW
+
+SQL.ADD("DELETE from "~DBO~".INSTANCIASOP ")
+SQL.ADD("where NrOperacion = '"~Dialogo.NrTrans1~"' ")
+SQL.NEW
+
+SQL.ADD("DELETE from "~DBO~".LIQUIDACIONESVT ")
+SQL.ADD("where NrTrans = '"~Dialogo.NrTrans1~"' ")
+SQL.NEW
+
+
+SQL.ADD("DELETE from "~DBO~".TRANSACCIONES2 ")
+SQL.ADD("where NrTrans = '"~Dialogo.NrTrans1~"' ")
+SQL.NEW
+
+SQL.EXEC
+
+*
+*SQL.ADD("EXEC "~DBO~".sgaHandleDelTransaccion ")
+*SQL.ADD(" '"~IdxDate(Fsys)~"'")
+*SQL.ADD(",'"~Dialogo.NrTrans1~"'")
+*SQL.NEW
+*
+SQL.EXEC
+
+* Solo si se corre solo y no es llamado por otro
+If Dialogo.Check3=0
+   If DesciendeDeEspecie(Val(bb:1),'MONEDA') y Eqstr(Val(ba:1),VAR('MERCADOBT'))
+     * Fila consolidacion trnsferencia
+     acn(bz:2,1)
+     #ifdef BIND
+        * Parámetros Salida
+        * RR:1  'OK/NOK  
+        * RR:2  'Mensaje'  
+
+        * Parámetros entrada
+        * RR:10  'Referencia'  
+        * RR:11  'Sucursal'  
+        * RR:12  'Cuenta(1a7)'    
+        * RR:13  'SubOperacion-Cuenta (9a10)'
+        * RR:14  'Moneda'
+        * RR:15  'Importe'
+        * RR:16  'Observaciones'
+        * RR:17  'Importe a Bloquear'
+        * RR:18  'Importe a Debitar / Acreditar'
+        * RR:19  'Cliente'
+        * RR:20  'Cuenta'
+        * RR:21  'Especie'
+        * RR:22  'Importe Bloqueado'
+        * RR:23  'Importe Debitado / Acreditado'
+        * RR:24  'Tipo operacion'
+        * RR:25  'Mercado'
+        * RR:26  'Tipo Transferencia'
+        * RR:27  'Capital'
+        * RR:28  'Comisiones'
+        * RR:29  'Derechos'
+        * RR:30  'Iva'
+        * RR:31  'Intereses'
+        * RR:32  'Cod Evento (producto)'
+        * RR:33  'Fecha Valor'
+      
+        * Cliente / Especie / Cuenta / 
+           *  Interfase Bantotal
+           BorrarCeldas(rr:1..rr:50)
+           ACT(rr:10, Val(bq:val(bz:2)))
+           ACT(rr:12, Copy(Val(bh:val(bz:2)),1,7))
+           ACT(rr:13, Copy(Val(bh:val(bz:2)),9,2))
+           ACN(rr:17, Val(bw:val(bz:2)))
+           ACN(rr:18, Val(bf:val(bz:2)))
+           ACT(rr:19, Val(by:val(bz:2)))
+           ACT(rr:20, Val(bh:val(bz:2)))
+           ACT(rr:21, Val(bb:val(bz:2)))
+           ACT(rr:25, Val(ba:1))
+           ACT(rr:26, 'ANUEP2')
+           ACT(rr:27, '0')
+           ACT(rr:28, '0')
+           ACT(rr:29, '0')
+           ACT(rr:30, '0')
+           ACT(rr:31, '0')
+           ACT(rr:32, '0')
+           ACT(rr:32, '2')
+           ACT(rr:33, Dialogo.Fecha1)
+           * Faltaria obtener el Id del vouconsolidados
+           SQL.ADD("SELECT * FROM "~DBO~".VOUCONSOLIDADOS WHERE Id="~FSTR(val(bs:val(bz:2))))
+           Recorrer SQL
+              dfa
+              act(rr:36, FBN['Transaccion'])
+              act(rr:37, FBN['FechaCont'])
+              act(rr:38, FBN['Modulo'])
+              act(rr:39, FBN['Relacion'])
+              act(rr:9, FBN['Id'])
+           Proximo
+           
+           if Val(bw:val(bz:2))<>0
+              * Desbloqueo de Saldo
+              ACN(rr:15, ABS(Val(bw:val(bz:2))))
+              ACT(rr:27, val(rr:15))
+              if Dialogo.Check2=1
+                 (.'BLOQSALCTA'.)
+                 if Eqstr(Val(rr:1),'OK')
+                    acn(rr:22, val(rr:17))
+                 endif
+              else
+                 act(rr:1,'OK')
+                 acn(rr:22, val(rr:17))
+                 Messagebox('Desbloqueo '~val(rr:10)~' '~val(rr:12)~' '~val(rr:13)~' '~val(rr:15))
+              endif   
+           else
+              act(rr:1,'OK')
+           endif   
+           (.'ANULMOVCON'.)    
+           SCN(bz:2,1)   
+           ACN(bz:3,1)   
+     #endif
+   Endif          
+Endif

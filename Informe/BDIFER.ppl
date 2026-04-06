@@ -1,0 +1,480 @@
+﻿ModoReproceso(SinDialogo)
+GrillaVisible(SI)
+
+CrearDialogo
+  Vehiculo1  : 'Vehiculo'         ;  ;;;NO;;;;;VAR('VEHICULODE')
+  Mercado1   : 'Ubicacion'        ;  ;;;NO;;;;;VAR('CLHODEFA')
+  Fecha1     : 'Fecha'            ;  ;;;;;Dialogo.Fecha1<>0;'Fecha No Valida';NO;Fsys
+  Fecha2     : 'Fecha Pend'       ; 3;2;;;;Dialogo.Fecha2<>0;'Fecha No Valida';NO;Fsys-1
+  Lista1     : 'Especies'         ; 4;1;;;;;;;;;SQLSet("SELECT Codigo FROM "~DBO~".ESPECIES WHERE Status='HAB' ORDER BY Codigo ");SI
+  Lista2     : 'Excluye Especies' ;-2;2;;;;;;;VAR('EXCCONCIL');;SQLSet("SELECT Codigo FROM "~DBO~".ESPECIES WHERE Status='HAB' AND Codigo NOT IN ("~Pipe2Comillas(VAR('EXCCONCIL'))~") ORDER BY Codigo ");SI
+  ListaTabla1: 'Clientes'         ;-1;1;;;;;;;;;;;;;'Codigo' ; 'Codigo;RazonSocial' ; 'vCLIENTES01'
+  Check1     : 'Sin saldos'       ; 5;1;;  ;;;;;1 ;;;
+FinDialogo
+
+if Not Ok
+   Cancelar
+endif
+
+if Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+   Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+endif
+
+ACN(SL:1, BuscarCampo('EstadosCustodia','NrSaldo','Codigo', VAR('SALLIBRECU')))
+* Saldos Libre
+ACT(sl:2, VAR('LIBREDISP'))
+* Saldos Bloquedos
+ACT(sl:3, VAR('BLOQUEOS'))
+* Saldos Parking
+ACT(sl:4, VAR('SALPARK'))
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(4)
+ACT(a:fac, "Listado de Movimientos Diarios de Titulos (DIFER) ")
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(5)
+ACT(a:fac+1, 'Vehiculo : '~Dialogo.Vehiculo1)
+ACT(a:fac+2, 'Fecha : '~Dialogo.Fecha1)
+ACT(c:fac+2, 'Fecha pend : '~Dialogo.Fecha2)
+ACT(a:fac+3, 'Especies : '~IIF(NoVacio(Dialogo.Lista1), Dialogo.Lista1, 'Todas'))
+ACT(a:fac+4, 'Excluye Especies : '~IIF(NoVacio(Dialogo.Lista2), Dialogo.Lista2, 'Todas'))
+ACT(a:fac+5, 'Clientes : '~IIF(NoVacio(Dialogo.ListaTabla1), Dialogo.ListaTabla1, 'Todos'))
+SetFont(a:fac+1..g:fac+5,2)
+SetFilaActual(fac+7)
+
+ACT(a:fac, "Especie")
+ACT(b:fac, "Cliente")
+ACT(c:fac, "Movimiento")
+ACT(d:fac, "Detalle")
+ACT(f:fac, "Estado")
+ACT(g:fac, "Saldos")
+
+ACT(h:fac, "Depositante")
+ACT(i:fac, "Comitente")
+
+ACN(ac1, fac)
+
+AlinearCeldas(a:fac..i:fac,'C')
+SetFont(a:fac..i:fac,2)
+AgregarMarco(a:fac..i:fac,2,0,Exe('COLOR'))
+
+SetFilaActual(fac)
+ACN(aa1,fac)
+ACN(aa2,0)
+
+ACN(pr1,0)
+ACT(es1,' ')
+ACT(cu1,' ')
+ACN(li1,0)
+
+*- tc1: saldo pend del cliente
+ACN(tc1,0 )
+*- tc2: saldo ejec del cliente
+ACN(tc2,0 )
+** FJL 22/02/24 - Para ir calculando el saldo
+*- te1: saldo teorico de la especie
+ACN(tc1, 0)
+
+ACN(sa1,Num(BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALLIBRECU'))))
+ACN(sa2,Num(BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('BLOQVTAS'))))
+
+(.'SELECDIFER'.)
+
+watch(SQL.Batch)
+
+recorrer SQL
+   * Total para un Comitente *
+   if [Not Eqstr(Val(cu1),fbn('Comitente')) o Not Eqstr(Val(es1),fbn('Especie'))] y Val(aa2) = 1
+      ACT(b:fac,'Total Cliente '~val(cu1) )
+      *- Saldo real del cliente
+      ACT(d:fac,'Saldo Real ' )
+      AlinearCeldas(d:fac, 'D')
+      ACT(cl91, Val(cl1))
+      ACT(ct91, Val(ct1))
+      ACD(fe91, Dialogo.Fecha1)
+      (.'SALDOSTOT2'.)
+      ACN(e:fac, Val(zw1))
+      
+      if Incluido(Val(es1),'ARP|USD')
+        * Buscao saldos Cuanta vista del cliente
+        ACT(t:FAC, 'Vista Fin')
+        (.'SALDOSTOT3'.)
+        SCN(e:fac, Val(zw2))
+      endif      
+      ACN(e:fac,Round(Val(e:fac)*val(vr1),val(vr2)))
+
+      *- Saldo teorico del cliente
+      ACT(f:fac,'Saldo Teorico ' )
+      AlinearCeldas(f:fac, 'D')
+      ACN(g:fac, Val(tc1))
+** FJL 22/02/24 - Para ir calculando el saldo
+      SCN(te:1, Val(g:fac))
+      SetFont(a:fac..g:fac,2)
+      IFA
+   endif  
+
+   * Total para una Especie *
+   if [Not Eqstr(Val(es1),fbn('Especie'))] y Val(aa2) = 1
+      ifa
+      ACT(a:fac,'TOTAL ESPECIE '~val(es1) )
+
+** FJL 22/02/24 - Para ir calculando el saldo
+      ACT(cl91, '')
+      ACT(ct91, '')
+      ACD(fe91, Dialogo.Fecha1)
+      (.'SALDOSTOT2'.)
+      ACN(g:fac, Val(zw1))
+      ACN(u:fac, Val(te:1))
+      ACN(te:1, 0)
+      ACN(g:fac,Round(Val(g:fac)*val(vr1),val(vr2)))
+      SetFont(a:fac..g:fac,2)
+      AgregarMarco(a:fac..i:fac,2,0,Exe('COLOR6'))
+      ifa
+   endif  
+
+   * Cambio de Especie *
+   if Not Eqstr(Val(es1),fbn('Especie'))
+      if Val(aa2) = 1
+         ifa
+      else
+         ACN(aa2,1)
+      endif
+      ACN(me1,0)
+      ACT(es1,fbn('Especie'))
+      ACT(es2,fbn('Cupon'))
+      ACT(a:fac,fbn('CodNumCajaValores')~' - '~fbn('Nombre'))
+      SetFont(a:fac..i:fac,2)
+      AgregarMarco(a:fac..i:fac,2,0)
+      *MAC 08-08-223 Le saco el valor residual
+      *ACN(vr1,ValorTeorico2(val(es1),Dialogo.Fecha1))
+      ACN(vr1,1)
+      * En este modelo no se usa Alias5 para decimales
+      *      ACN(vr2,fbn('Alias5'))
+      ACN(vr2,2)
+      ACT(cu1,' ')
+      ACN(k:fac, Val(vr1))
+      ACN(l:fac, Val(vr2))
+      ACT(m:fac, fbn('Alias5'))
+   endif
+
+   * Cambio de Comitente *
+   if Not Eqstr(Val(cu1),fbn('Comitente')) o Not Eqstr(Val(es1),fbn('Especie'))
+      ifa
+      ACT(b:fac,fbn('Comitente')~' - '~Copy(BuscarCampo('CLIENTES','RazonSocial','Codigo',fbn('Cliente')),1,20))   
+
+      ACT(cl1,fbn('Cliente'))  
+      ACT(cu1,fbn('Comitente'))
+      ACT(ct1,fbn('Cuenta'))
+         
+      *- Saldo inicial del cliente
+      ACT(cl91, Val(cl1))
+      ACT(ct91, Val(ct1))
+      *MAC cambio fecha de desde por fecha hasta
+      *ACD(fe91, Dialogo.Fecha2)
+      ACD(fe91, Dialogo.Fecha1-1)
+      (.'SALDOSTOT2'.)
+      ACN(g:fac, Val(zw1))
+
+      if Incluido(Val(es1),'ARP|USD')
+        * Buscao saldos Cuanta vista del cliente
+        ACT(t:FAC, 'Vista Ini')
+        (.'SALDOSTOT3'.)
+        SCN(g:fac, Val(zw2))
+      endif      
+
+      *- Busco Valor Teorico con Fecha2
+      *MAC 08-08-223 Le saco el valor residual
+      *ACN(vr3,ValorTeorico2(val(es1),Dialogo.Fecha2))
+      ACN(vr3,1)
+*messagebox(Val(es:1)~val(vr3))   
+      *- Calculo el Residual
+      ACN(g:fac,Round(Val(g:fac)*val(vr3),val(vr2)))
+      SetFont(a:fac..g:fac,2)
+      ACN(fc1,fac)
+      ifa
+      ACN(tc1,val(g:fac-1) )
+      ACN(tc2,val(g:fac-1) )
+      ACN(mc1,0)
+   endif  
+
+   ACT(k:fac, fbn('NrSel'))
+   ACT(l:fac, fbn('NrTrans'))
+   ACT(m:fac, fbn('TipoTr2'))
+   * Renglon de listado *
+   if Incluido(fbn('TipoTr2'), 'DTP|RTP|DRT|')
+      *** TRANSFERENCIAS INTERNAS ***
+
+      * Formateo la Leyenda *
+      if EqStr(fbn('Tipo'),'DIR')
+         if Incluido(fbn('TipoTr2'),'DTP|DRT|')
+            ACT(d:fac,' RECEPTORA ')
+         else
+            ACT(d:fac,' EMISORA ')
+         endif
+      else
+         if EqStr(fbn('TipoTr2'),'DTP|DRT|')
+            ACT(d:fac,' EMISORA ')
+         else
+            ACT(d:fac,' RECEPTORA ')
+        endif
+      endif
+      if fbn('CB2') = 1
+         ACT(d:fac,' INTERNA ')
+      endif
+      if fbn('RB1')=0
+         ACT(d:fac,val(d:fac)~' Conformada ')
+      endif
+      if fbn('RB1')=1
+         ACT(d:fac,val(d:fac)~' Diferida ')
+      endif
+      if fbn('RB1')=2 
+         ACT(d:fac,val(d:fac)~' Inmediata ')
+      endif
+      ACT(d:fac,val(d:fac)~' '~fbn('NrTrans'))
+      if NoVacio(fbn('Fecha2'))
+         ACT(d:fac,val(d:fac)~' Ejecucion '~IdxDate(fbn('Fecha2')))
+      endif
+      if NoVacio(fbn('Fecha3'))
+         ACT(d:fac,val(d:fac)~' Matching '~IdxDate(fbn('Fecha3')))
+      endif
+
+      * Cantidad *
+      ACN(n:fac, fbn('Cantidad'))
+      ACN(c:fac, Round(val(n:fac)*val(vr1),val(vr2)))
+
+      ACN(p:fac, fbn('CB1'))
+      If fbn('CB1') = 1
+        *-Transferancia
+        if incluido(fbn('TipoTr2'),'DRT')
+          ACT(r:fac, FBN['Cuenta2'])
+          ACT(s:fac, BuscarCampo('CUENTAS','Comitente','Codigo',FBN['Cuenta2']))
+          ACT(t:fac, BuscarCampo('CLIENTES','CodDepCajaValores','Codigo',Val(s:fac)))
+          ACT(h:fac, Val(t:fac))
+        else
+          ACT(h:fac, FBN['Cliente4'])
+        endif
+        ACN(q:fac, fbn('CB2'))
+        If fbn('CB2') = 1
+          *- Interna
+          ACT(i:fac, BuscarCampo('CUENTAS','NrDepositante','Codigo',FBN['Cuenta2']))
+        Else
+          *- Externa
+          ACT(i:fac, FBN['ComitenteExt'])
+        Endif
+      Endif
+   else
+      if EqStr(fbn('TipoTr2'), 'LCUPON')
+        *** CUPONES - AMORTIZACION DE TITULOS PUBLICOS ***
+        ACN(c:fac, fbn('Cantidad'))
+        ACT(n:fac, BuscarCampo('TRANSACCIONES2','Especie','NrTrans',fbn('NrTrans')))
+        ACN(o:fac, BuscarCampo('TRANSACCIONES2','Cupon1','NrTrans',fbn('NrTrans')))
+        ACT(p:fac, BuscarCampo('TRANSACCIONES2','Especie1','NrTrans',fbn('NrTrans')))
+        ACT(q:fac, fbn('Especie'))
+        if Not EqStr(fbn('Especie'),Val(p:fac))
+          ACT(d:fac, 'Amortizacion de Titulos Publicos ('~fbn('Especie')~' Cupon '~FStr(fbn('Cupon'),1,0)~')')
+        else
+          * El movimiento es en Moneda
+          ACT(d:fac, 'Pago Amortizacion de Titulos Publicos ('~Val(n:fac)~' Cupon '~FStr(Val(o:fac),1,0)~')')
+          ACT(f:fac, FBN['Estado'])
+          If Not EqStr(FBN['Estado'],'EJEC') o fbn('FechaMov')=fbn('FechaEje')
+            SCN(tc1,Val(c:fac))
+          Endif
+          *- dependiendo del estado sumo los pendientes o ejecutados para armar el saldo
+          If EqStr(FBN['Estado'],'PEND')
+            ColorCeldas(a:FAC..z:FAC,clBLUE)
+          Else
+            SCN(tc2,Val(c:fac))
+          EndIf
+          ACN(g:fac, Val(tc1))
+
+          ACLT(d:fac, fbn('NrTrans'))
+          SetFont(a:fac..g:fac,1)
+
+          IFA
+          ACN(c:fac, -fbn('Cantidad'))
+          ACT(d:fac, 'Deb.Aut.Acred.Efvo')
+        endif
+      endif
+      if EqStr(fbn('TipoTr2'), 'CUPON')
+        *** CUPONES DE TITULOS PUBLICOS ***
+        ACN(c:fac, Round(fbn('Cantidad')*val(vr1),val(vr2)))
+        ACT(n:fac, BuscarCampo('TRANSACCIONES2','Especie','NrTrans',fbn('NrTrans')))
+        ACN(o:fac, BuscarCampo('TRANSACCIONES2','Cupon1','NrTrans',fbn('NrTrans')))
+        ACT(p:fac, BuscarCampo('TRANSACCIONES2','Especie2','NrTrans',fbn('NrTrans')))
+        ACT(q:fac, fbn('Especie'))
+        if EqStr(fbn('Especie'),Val(n:fac))
+          * El movimiento es de la especie (bono)
+          ACT(d:fac, 'Amortizacion de Titulos Publicos ('~fbn('Especie')~' Cupon '~FStr(fbn('Cupon'),1,0)~')')
+        else
+          * El movimiento es del cupon
+          ACT(d:fac, 'Cupones de Titulos Publicos ('~fbn('Especie')~' Cupon '~FStr(fbn('Cupon'),1,0)~')')
+        endif
+      endif
+      if Incluido(fbn('TipoTr2'), 'PDIVID|CANJE|STOCK')
+         *** Acciones
+         ACN(c:fac, fbn('Cantidad'))
+         ACT(n:fac, BuscarCampo('TRANSACCIONES2','Especie','NrTrans',fbn('NrTrans')))
+         ACT(o:fac, BuscarCampo('TRANSACCIONES2','Especie2','NrTrans',fbn('NrTrans')))
+         ACN(p:fac, BuscarCampo('TRANSACCIONES2','CB3','NrTrans',fbn('NrTrans')))
+         if Incluido(fbn('TipoTr2'), 'PDIVID')
+           ACN(q:fac, BuscarCampo('TRANSACCIONES2','RB10','NrTrans',fbn('NrTrans')))
+           if Val(q:fac)=0
+             ACT(d:fac, 'Pago Dividendos en Efvo ('~Val(n:fac)~')')
+           else
+             ACT(d:fac, 'Pago Dividendos en Acciones ('~Val(n:fac)~')')
+           endif
+         endif
+         if Incluido(fbn('TipoTr2'), 'CANJE')
+           ACT(d:fac, 'CANJE Acciones ('~Val(n:fac)~')')
+         endif
+         if Incluido(fbn('TipoTr2'), 'STOCK')
+           ACT(d:fac, 'Split Acciones ('~Val(n:fac)~')')
+         endif
+
+         if EqStr(fbn('Especie'),Val(o:fac))
+           * El movimiento es de la Moneda
+           if Val(p:FAC)=0
+             * No es saldo Bloqueado
+             ACT(f:fac, FBN['Estado'])
+             If Not EqStr(FBN['Estado'],'EJEC') o fbn('FechaMov')=fbn('FechaEje')
+               SCN(tc1,Val(c:fac))
+             Endif
+             *- dependiendo del estado sumo los pendientes o ejecutados para armar el saldo
+             If EqStr(FBN['Estado'],'PEND')
+               ColorCeldas(a:FAC..z:FAC,clBLUE)
+             Else
+               SCN(tc2,Val(c:fac))
+             EndIf
+             ACN(g:fac, Val(tc1))
+
+             ACLT(d:fac, fbn('NrTrans'))
+             SetFont(a:fac..g:fac,1)
+
+             IFA
+             ACN(c:fac, -fbn('Cantidad'))
+             ACT(d:fac, 'Deb.Aut.Acred.Efvo')
+           endif
+         endif
+      endif
+      * FJL 22/12/22 
+      if Incluido(fbn('TipoTr2'), 'DENOP|RENOP|TRNOP')
+        *** Movs. No Operativos Cuenta Vista ***
+        ACN(c:fac, fbn('Cantidad'))
+        ACT(n:fac, BuscarCampo('TRANSACCIONES2','Especie','NrTrans',fbn('NrTrans')))
+        ACT(q:fac, fbn('Especie'))
+
+        ACT(d:fac, 'Mov. No Operativo Cta Vista')
+        ACT(f:fac, FBN['Estado'])
+        If Not EqStr(FBN['Estado'],'EJEC') o fbn('FechaMov')=fbn('FechaEje')
+*          SCN(tc1,Val(c:fac))
+        Endif
+        *- dependiendo del estado sumo los pendientes o ejecutados para armar el saldo
+        If EqStr(FBN['Estado'],'PEND')
+          ColorCeldas(a:FAC..z:FAC,clBLUE)
+        Else
+*          SCN(tc2,Val(c:fac))
+        EndIf
+        ACN(g:fac, Val(tc1))
+
+        ACLT(d:fac, fbn('NrTrans'))
+        SetFont(a:fac..g:fac,1)
+      endif
+      
+      If fbn('CB1') = 1
+        *-Transferancia
+        ACT(h:fac, FBN['Cliente4'])
+        If fbn('CB2') = 1
+          *- Interna
+          ACT(i:fac, BuscarCampo('CUENTAS','NrDepositante','Codigo',FBN['Cuenta2']))
+        Else
+          *- Externa
+          ACT(i:fac, FBN['ComitenteExt'])
+        Endif
+      Endif
+   endif
+
+   ACT(f:fac, FBN['Estado'])
+ *04/10/04
+* FJL 22/03/24 - Por Issue EXTBIND-5957 - Al mostar movimientos por FechaMov no sumava los Ejecutados
+*   If Not EqStr(FBN['Estado'],'EJEC') o fbn('FechaMov')=fbn('FechaEje')
+      SCN(tc1,Val(c:fac))
+*   Endif
+   *- dependiendo del estado sumo los pendientes o ejecutados para armar el saldo
+   If EqStr(FBN['Estado'],'PEND')
+      ColorCeldas(a:FAC..z:FAC,clBLUE)
+      * SCN(tc1,Val(c:fac))
+   Else
+      SCN(tc2,Val(c:fac))
+   EndIf
+   ACN(g:fac, Val(tc1))
+
+   ACLT(d:fac, fbn('NrTrans'))
+   SetFont(a:fac..g:fac,1)
+    
+
+Proximo
+
+if Val(aa2) = 1
+   ifa
+   ACT(b:fac,'Total Cliente '~val(cu1) )
+   ACT(d:fac,'Saldo Real ' )
+   AlinearCeldas(d:fac, 'D')
+
+   *- Saldo real del cliente
+   ACT(cl91, Val(cl1))
+   ACT(ct91, Val(ct1))
+   ACD(fe91, Dialogo.Fecha1)
+   (.'SALDOSTOT2'.)
+   ACN(e:fac, Val(zw1))
+   if Incluido(Val(es1),'ARP|USD')
+     * Busco saldos Cuanta vista del cliente
+     ACT(t:FAC, 'Vista Fin')
+     (.'SALDOSTOT3'.)
+     SCN(e:fac, Val(zw2))
+   endif      
+
+   ACN(e:fac,Round(Val(e:fac)*val(vr1),val(vr2)))
+   ACT(f:fac,'Saldo Teorico ' )
+   AlinearCeldas(f:fac, 'D')
+   ACN(g:fac, Val(tc1))
+** FJL 22/02/24 - Para ir calculando el saldo
+   SCN(te:1, Val(g:fac))
+   SetFont(a:fac..g:fac,2)
+   ifa
+
+   ifa
+   ACT(a:fac,'TOTAL ESPECIE '~val(es1) )
+   *- obtengo en zw1 el saldo de la especie a Dialogo.Fecha-1
+* FJL 22/02/24 - Para ir calculando el saldo
+   ACT(cl91, '')
+   ACT(ct91, '')
+   ACD(fe91, Dialogo.Fecha1)
+   (.'SALDOSTOT2'.)
+   ACN(g:fac, Val(zw1))
+   ACN(u:fac, Val(te:1))
+   ACN(g:fac, Round(Val(g:fac)*val(vr1),val(vr2)))
+   AgregarMarco(a:fac..i:fac,2,0,Exe('COLOR6'))
+   SetFont(a:fac..i:fac,2)
+endif
+
+FormatoCeldas(c:val(aa1)..c:fac,Exe('F7'))
+FormatoCeldas(e:val(aa1)..e:fac,Exe('F2'))
+FormatoCeldas(g:val(aa1)..g:fac,Exe('F7'))
+
+ACO(1, 8)
+ACO(2, 8)
+ACO(3,12)
+ACO(4,30)
+ACO(5,10)
+ACO(6,15)
+
+SetFilaActual(fac+2)
+ACT(a:fac, 'FIN DEL INFORME')
+SetFont(a:fac,2)
+LimitesVision(i:fac)
+SetPrintFit(3,78)
+RangoTitulo(a:1..i:fac, Val(ac1))

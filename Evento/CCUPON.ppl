@@ -1,0 +1,484 @@
+﻿* Las Operaciones deben estar en BackOffice o Terminal (Inst. 20 o 50)
+* Modifica la Tabla de Especies. o 
+* Modifica el Nro. de Cupon de las Operaciones Futuros y los Repo
+* Las Operaciones Contado no las toca
+* HojaVisible(SI)
+CrearDialogo
+  Especie1   :'Especie'    ;;;;;;NoVacio(Dialogo.Especie1) y DesciendeDeEspecie(Dialogo.Especie1,'TITULO') ;'Debe Ingresar una Especie';NO;
+  Fecha1     :'F.Posicion' ;;;;;;Dialogo.Fecha1<>0 y Dialogo.Fecha1 <= Fsys;'Debe Ingresar una Fecha';NO;;BuscarCampo('Especies','FechaProximoCorte','Codigo',Dialogo.Especie1)
+  Entero1    :'Nr.Cupon'   ;;;;;;Dialogo.Entero1>=0;'Debe Ingresar el Numero de Cupon';NO;;BuscarCampo('Especies','Cupon','Codigo',Dialogo.Especie1)
+  Precio1    :'% Amort.'   ;;;;;;Dialogo.Precio1>=0;'El Porcentaje de Amortizacion debe ser Positivo';NO;
+  Precio2    :'%_Prox.'    ;;;;Eqstr(BuscarCampo('ESPECIES','InteresesC','Codigo',Dialogo.Especie1),'CLE');Eqstr(BuscarCampo('ESPECIES','InteresesC','Codigo',Dialogo.Especie1),'CLE');Dialogo.Precio1>=0;'El Porcentaje de Tasa Cupon Prox. Periodo es incorrecto';NO;;BuscarCampo('Especies','TasaIntVigente','Codigo',Dialogo.Especie1)*100
+  Fecha3     :'Fecha Pago' ;;;;;;;;;;ProxCupon(Dialogo.Especie1,Dialogo.Fecha1)
+  Fecha2     :'Prox.Corte' ;;;;;;Dialogo.Fecha2>Dialogo.Fecha1;'Debe Ingresar la Fecha de Proximo Corte de Cupon';NO;;
+  Check2     :'Alquileres' ;6;1;;NO;NO;;;;0
+  Check3     :'Op.Liquidar';6;1;;NO;NO;;;;0
+  Check4     :'Pendientes ';6;1;;NO;NO;;;;0
+  Vehiculo1  :'Vehiculo'   ;6;1;;NO;NO;;;;
+  Check1     :'Saldos'     ;6;1;;NO;NO;;;;0
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+If Eqstr(BuscarCampo('Especies','EsCupon','Codigo',Dialogo.Especie1),'SI')
+   Cancelar('La Especie '~Dialogo.Especie1~' Es un Cupon')
+endif
+
+*If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+*   Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+*endif
+
+If Dialogo.Precio1 = 0 y Dialogo.Precio2 = 0
+   Cancelar('La Renta o la Amortizacion deben ser Distintos de Cero')
+endif
+
+**-- Valida que no haya transacciones por confirmar ***
+**-- Bit7=1 Pendientes de Confirmacion * SQL.ADD("and T.Vehiculo1= '"~Dialogo.Vehiculo1~"' ")
+
+SQL.ADD("Select * FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS B ")
+SQL.ADD("where T.Especie= '"~Dialogo.Especie1~"' ")
+SQL.ADD("and T.NrTrans  = B.NrOperacion ")
+SQL.ADD("and B.NrBit=7 and B.Valor='0'  ") 
+
+acn(z1,0)
+
+Recorrer SQL
+   acn(z1,1)
+Proximo
+
+if Val(z1)>0
+  Cancelar('La Especie '~Dialogo.Especie1~' tiene Vouchers Pendientes de Confirmacion')
+endif
+
+ACT(a:1, 'Jerarquia')
+ACT(b:1, 'Codigo')
+ACT(c:1, 'Cupon')
+ACT(d:1, 'Nombre')
+ACT(e:1, 'Valor Teorico')
+ACT(f:1, 'Padre')
+ACT(g:1, 'Observ')
+ACT(h:1, 'F.Pago')
+
+ACO(1,15)
+ACO(2,15)
+ACO(3,15)
+ACO(4,15)
+ACO(5,15)
+ACO(6,15)
+ACO(7,15)
+ACO(8,15)
+ACO(24,20)
+
+*** Fila 2 especie origen, fila 3 especie nueva, fila 4 cupon ***
+SQL.ADD("Select * FROM "~DBO~".ESPECIES ")
+SQL.ADD("where  Codigo = '"~Dialogo.Especie1~"' ")
+
+acn(z1,0)
+
+Recorrer SQL
+
+   If Vacio(fbn['Cupon']) o fbn['Cupon'] = 0
+      acn(z1,2)
+      Break   
+   endif
+
+   If [Dialogo.Entero1 <> fbn['Cupon']] y [Dialogo.Entero1 <> (fbn['Cupon'] - 1)]
+      acn(z1,4)
+      Break   
+   endif
+
+*   ACT(j2, Dialogo.Vehiculo1)
+   ACT(a2, fbn['Jerarquia'])
+   ACT(b2, fbn['Codigo'])
+   ACN(c2, fbn['Cupon'])
+   ACT(d2, fbn['Nombre'])
+   ACN(e2, fbn['VTeorico'])
+   ACD(g2, Dialogo.Fecha1)
+   ACN(k2, Dialogo.Precio1)
+   ACN(l2, Dialogo.Precio2)
+   ACN(m2, Dialogo.Entero1)
+   ACT(n2, fbn['Tipo'])
+   ACD(o2, Dialogo.Fecha2)
+
+   acn(c3, Val(c2)+1)
+   ACN(e3, Val(e2)-(Dialogo.Precio1/100))
+
+   If Longitud(Val(b2)) >= 6
+      ACT(b4, 'C'~Copy(Val(b2),1,1)~Copy(Val(b2),3,4))
+   else
+      ACT(b4, 'C'~Val(b2))
+   endif
+
+   ACD(h4, Dialogo.Fecha3)
+   ACN(c4, Val(c3))
+
+   *-- Confirma le generacion de las nuevas especies ***
+   acn(u1,Dialogo.Check1)
+   acn(u2,Dialogo.Check2)
+   acn(u3,Dialogo.Check3)
+   acn(u4,Dialogo.Check4)
+
+   CrearDialogo
+      Fecha1         :'F.Posicion'  ;1;2;;NO;;;;;VAL(g2)
+      Especie1       :'E. Origen'   ;1;1;;NO;;;;;Val(b2)
+      Entero1        :'Nr.Cupon'    ; ; ;;NO;;;;;Val(m2)
+      ContraEspecie2 :'Cupon'       ;3;1;;NO;;;;;Val(b4)
+   FinDialogo
+
+   if Not Ok
+      acn(z1,3)
+      Break
+   endif
+
+   *** Si el cupon no existe lo crea ****
+   SQL.ADD("Select * FROM "~DBO~".ESPECIES ")
+   SQL.ADD("where  Codigo = '"~Val(b4)~"' ")
+
+   acn(z1,0)
+   Recorrer SQL
+      acn(z1,1)
+   Proximo
+
+   If Val(z1) =  0
+
+      Message('Generando Especie Cupon '~VAL(b2)~' ... ')
+
+      if Longitud(BuscarCampo('Especies','Nombre','Codigo',Val(b2)))<9
+         ACT(d4, 'Cup.'~' '~BuscarCampo('Especies','Nombre','Codigo',Val(b2)))
+      else
+         ACT(d4, 'Cup.'~' '~Val(b2))
+      endif
+
+      ACT(i4, 'Cup.'~' '~BuscarCampo('Especies','Extendido','Codigo',Val(b2)))
+      ACT(a4, GenerarJerarquia('Especies',Val(a2),SI))
+
+      SQL.ADD("INSERT INTO "~DBO~".ESPECIES ")
+      SQL.ADD("( Jerarquia, Codigo, Cupon, Nombre, Extendido, Cotiza, VTeorico, ")
+      SQL.ADD("  FEmision, Fecha, VNominal, DiasMes, DiasAnio, ")
+      SQL.ADD("  MercadoDef, Observaciones, LaminaMinima, Status, ")
+      SQL.ADD("  FechaCorteCupon, FechaPagoCupon, FechaCambioTasa, ")
+      SQL.ADD("  TasaIntVigente, TasaIntAnterior, EsCupon, Valor10, Tipo ) ")
+      SQL.ADD(" Values ")
+      SQL.ADD("( '"~Val(a4)~"', '"~Val(b4)~"', "~Fstr(Val(c2),0,0)~", ")
+      SQL.ADD("  '"~Val(d4)~"', '"~Val(i4)~"', '"~fbn['Cotiza']~"', "~Fstr(val(e2),0,7)~", ")
+      SQL.ADD("  '"~IdxDate(fbn['Femision'])~"', '"~IdxDate(Val(h4))~"', ")
+      SQL.ADD("  "~Fstr(fbn['VNominal'],0,7)~", '"~fbn['DiasMes']~"', '"~fbn['DiasAnio']~"', ")
+      SQL.ADD("  '"~fbn['MercadoDef']~"', '"~fbn['Observaciones']~"', ")
+      SQL.ADD("  "~Fstr(fbn['LaminaMinima'],0,7)~", 'HAB', ")
+      SQL.ADD("  '"~IdxDate(Val(g2))~"', '"~IdxDate(Val(h4))~"', ")
+      SQL.ADD("  '"~IdxDate(FBN['FechaCambioTasa'])~"', ")
+      SQL.ADD("  "~Fstr(fbn['TasaIntVigente'],0,7)~", "~Fstr(fbn['TasaIntAnterior'],0,7)~", ")
+      SQL.ADD("  'SI', "~Fstr(fbn['Valor10'],0,0)~", '"~Val(n2)~"' ) ")
+      SQL.NEW
+      SQL.EXEC
+   endif
+
+   if val(c3) <> 0
+      Message(' Modificando la Especie ...')
+      SQL.ADD("Update "~DBO~".ESPECIES ")
+      SQL.ADD("Set ")
+      SQL.ADD("  Status ='HAB', ")
+      SQL.ADD("  FechaPagoCupon ='"~IdxDate(Val(h4))~"' ")
+      SQL.ADD("where  Codigo = '"~Dialogo.Especie1~"' ")
+      SQL.NEW      
+      SQL.EXEC
+   endif
+
+   *** Actualizo si No se corto antes el cupon ****
+   If Val(c2) = Val(m2)
+
+      if val(c3) <> 0
+         Message(' Modificando la Especie ...')
+         SQL.ADD("Update "~DBO~".ESPECIES ")
+         SQL.ADD("Set Cupon = "~Fstr(Val(c3),0,0)~", VTeorico = "~Fstr(Val(e3),0,7)~", ")
+         SQL.ADD("  TasaIntVigente ="~Fstr(val(l2)/100,0,7)~", ") 
+         SQL.ADD("  TasaIntAnterior="~Fstr(Fbn['TasaIntVigente'],0,7)~", ")
+         SQL.ADD("  FechaCorteCupon='"~IdxDate(Val(g2))~"', ")
+         SQL.ADD("  FechaPagoCupon ='"~IdxDate(Val(h4))~"', ")
+         SQL.ADD("  FechaProximoCorte='"~IdxDate(Val(o2))~"', ")
+         SQL.ADD("  Valor4 = "~Fstr(Val(k2),0,7)~", Valor5 = "~Fstr(Val(l2),0,7)~" ")
+         SQL.ADD("where  Codigo = '"~Dialogo.Especie1~"' ")
+         SQL.NEW      
+         SQL.EXEC
+      endif
+
+      Message(' Modificando el Cupon ...')
+      SQL.ADD("Update "~DBO~".ESPECIES ")
+      SQL.ADD("Set Cupon = "~Fstr(Val(c2),0,0)~", ")
+      SQL.ADD("    Fecha = '"~IdxDate(Val(h4))~"', ")
+      SQL.ADD("    FechaCorteCupon = '"~IdxDate(Val(g2))~"', ")
+      SQL.ADD("    FechaPagoCupon = '"~IdxDate(Val(h4))~"', ")
+      SQL.ADD("    Valor1 = 0, Valor2 = 0, Valor3 = 0, ")
+      SQL.ADD("    Valor4 = "~Fstr(Val(k2),0,7)~", Valor5 = "~Fstr(Val(l2),0,7)~", ")
+      SQL.ADD("    VTeorico = "~Fstr(Val(e2),0,7)~" ")
+      SQL.ADD("where  Codigo = '"~Val(b4)~"' ")
+      SQL.NEW
+      SQL.EXEC
+   endif
+Proximo
+
+if Val(z1) = 2
+  Cancelar('En la Especie '~Dialogo.Especie1~' No esta indicado el Cupon')
+endif
+
+if Val(z1) = 4
+  Cancelar('El Numero de Cupon '~Dialogo.Entero1~' es Incorrecto')
+endif
+
+if Val(z1) = 3
+  Cancelar('El Corte de Cupon ha sido Cancelado')
+endif
+
+acn(z1,0)
+
+Message('**-- Verificando la Instancia de las Operaciones ...')
+SQL.ADD("SELECT NrBit,O.NrOperacion FROM "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B")
+SQL.ADD("where O.Especie='"~Dialogo.Especie1~"' ")
+SQL.ADD("and O.Cupon1  ='"~FStr(Dialogo.Entero1,0,0)~"' ")
+SQL.ADD("and O.FechaOp <='"~IdxDate(Val(g2))~"' ")
+SQL.ADD("and O.FechaVto> '"~IdxDate(Val(g2))~"' ")
+SQL.ADD("and ((O.TipoOp In ('SEABD','SEABP') ")
+SQL.ADD("and O.RB9='1') ")
+SQL.ADD("or  ")
+SQL.ADD("O.TipoOp In ('SECT','SECTV','SEVT','SEVTV')) ")
+SQL.ADD("and O.NrOperacion=B.NrOperacion ")
+SQL.ADD("and (B.NrBit<>20 and B.NrBit<>50) ")
+SQL.ADD("and B.Valor='1' ")
+
+Recorrer SQL
+   acn(z1,FBN['NrBit'])
+   MessageBox('La Operacion '~FBN['NrOperacion']~' Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(Z1),0,0)~" AND Tabla='OPERACIONES'") )
+   Break
+Proximo
+
+If val(z1)=0
+   SQL.ADD("SELECT NrBit,O.NrOperacion FROM "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B")
+   SQL.ADD("Where O.Cupon1='"~Fstr(Dialogo.Entero1,0,0)~"' ")
+   SQL.ADD("and O.Especie = '"~Dialogo.Especie1~"' ")
+   SQL.ADD("and O.FechaOp <= '"~IdxDate(Val(g2))~"' ")
+   SQL.ADD("and O.FechaVto2 > '"~IdxDate(Val(g2))~"' ")
+   SQL.ADD("and O.TipoOp In ('SERA','SERP','SERAV','SERPV') ")
+   SQL.ADD("and O.NrOperacion=B.NrOperacion ")
+   SQL.ADD("and (B.NrBit<>20 and B.NrBit<>50) ")
+   SQL.ADD("and B.Valor='1' ")
+	
+   Recorrer SQL
+      acn(z1,FBN['NrBit'])
+      MessageBox('La Operacion '~FBN['NrOperacion']~' Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(Z1),0,0)~" AND Tabla='OPERACIONES'") )
+      Break
+   Proximo
+EndIf
+
+If val(z1)=0
+   SQL.ADD("SELECT NrBit,O.NrOperacion FROM "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B")
+   SQL.ADD("where O.Especie = '"~Dialogo.Especie1~"' ")
+   SQL.ADD("and O.Cupon1  = '"~FStr(Dialogo.Entero1,0,0)~"' ")
+   SQL.ADD("and O.FechaOp <= '"~IdxDate(Val(g2))~"' ")
+   SQL.ADD("and O.FechaEj > '"~IdxDate(Val(g2))~"' ")
+   SQL.ADD("and (O.CB8 is Null or O.CB8 = '0' ) ")
+   SQL.ADD("and (O.RB4 is Null or O.RB4 = '0' ) ")
+   SQL.ADD("and O.TipoOp='DSEO' ")
+   SQL.ADD("and O.NrOperacion=B.NrOperacion ")
+   SQL.ADD("and (B.NrBit<>20 and B.NrBit<>50) ")
+   SQL.ADD("and B.Valor='1' ")
+	
+   Recorrer SQL
+      acn(z1,FBN['NrBit'])
+      MessageBox('La Operacion '~FBN['NrOperacion']~' Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(Z1),0,0)~" AND Tabla='OPERACIONES'") )
+      Break
+   Proximo
+EndIf
+
+if Val(z1)=1
+  Cancelar('Proceso Cancelado. Existen Operaciones En instancias Distintas a Back Office o Terminal')
+endif
+
+SetFilaActual(9)
+
+Message('Verificando Saldos  ... ')
+(."CCSALD".)
+
+* Recupero Carteras para Saldo <>10
+* x3: Cartera x4: Saldo
+ACT(x3,"('0')")
+ACN(x4,3)
+(."CCSPOT".)
+
+* Recupero Carteras para Saldo 10
+ACT(x3,"('1','2','3')")
+ACN(x4,10)
+(."CCSPOT".)
+
+Message('Verificando Repo a Liquidar  ... ')
+(."CCREPO".)
+
+Message('Verificando las Opciones a Liquidar  ... ')
+(."CCOPCI".)
+
+*-- x3: Nro. de Saldo
+ACN(x3,101)
+
+
+Recorrer&j 0,1
+
+   (."CCPOSIC".)
+
+   * 110 o 210
+   ACN(x3,VAL(X3)+9)
+
+   Recorrer&i 0,3
+
+     ACN(w1,FAC) 
+
+     Message("Procesando Posiciones por Cartera Nro. "~Fstr(val(x3),0,0) )
+
+     (."CCPOSIC".)
+     SCN(x3,1)
+   Proximo
+
+   ACN(x3,201)
+Proximo    
+
+* n2: Cantidad de Filas Generadas
+ACN(x2,fac)
+
+*-- Hay datos para mostrar
+CrearDialogo
+  Fecha1         :'F.Posicion'  ;1;2;;NO;;;;;VAL(g2)
+  Fecha2         :'Fecha Pago'  ;2;2;;NO;;;;;Val(h4)
+  Especie1       :'E. Origen'   ;1;1;;NO;;;;;Val(b2)
+  Entero1        :'Nr.Cupon'    ;2;1;;NO;;;;;Val(m2)
+  ContraEspecie2 :'Cupon'       ;3;1;;NO;;;;;Val(b4)
+  ListBox; 'Arial,8,N'; 460; 300
+     'Cliente'       ;a10..a:FAC;NO;;;;60;STRING
+     'Concepto'      ;b10..b:FAC;NO;;;;60;STRING
+     'Vehiculo'      ;c10..c:FAC;NO;;;;60;STRING
+     'Cantidad'      ;d10..d:FAC;NO;;;;80;NUMERO;'###,###,###.##'
+     'TipoOp'        ;e10..e:FAC;NO;;;;60;STRING
+     'Nro.Op.'       ;f10..f:FAC;NO;;;;60;STRING
+     'N.A.Dseo'      ;g10..g:FAC;NO;;;;80;NUMERO;'###,###,###.##'
+     'PP Posic'      ;h10..h:FAC;NO;;;;80;NUMERO;'###,###,###.##'   
+  FinListBox  
+FinDialogo
+
+IF Not OK
+   Cancelar
+EndIf
+
+IF VAL(x2)>=10 
+
+   *-- El primer renglon es de totales
+   Recorrer&i 10,FAC
+      ACN(w1,&i)
+      IF Incluido(Copy(Val(b:Val(w1)),1,4),'POSI')
+         *** Genera Operacion
+         (."CCGENEOP".)
+      EndIf
+
+      IF Incluido(Copy(Val(b:Val(w1)),1,4),'SPOT')
+         *** Genera Operacion       
+         (."CCGENEOP".)
+      EndIf
+
+      IF Incluido(Copy(Val(b:Val(w1)),1,3),'SAL')
+         *** Genera Operacion
+         (."CCGENEOP".)
+      EndIf
+
+      IF Incluido(Val(e:Val(w1)),'DSEO')
+         Message('Actualiza Opciones ....')
+
+         * Recupero los Valores para guardar la historia     
+         ACD(ab1,BuscarCampo('OPERACIONES','FechaUltCupon','NrOperacion',Val(f:Val(w1)) ))
+         ACN(ab2,BuscarCampo('OPERACIONES','TasaInteresesCupon','NrOperacion',Val(f:Val(w1)) ))
+         ACN(ab3,BuscarCampo('OPERACIONES','TotalAux1','NrOperacion',Val(f:Val(w1)) ))
+         ACN(ab5,BuscarCampo('OPERACIONES','TotalBrutoCli1','NrOperacion',Val(f:Val(w1)) ))
+         ACN(ab4,SQL("SELECT Max(NrCuota) FROM "~DBO~".CUOTAS Where NrOperacion='"~Val(f:Val(w1))~"' ")+1 )
+
+         SQL.ADD(" INSERT "~DBO~".CUOTAS ")
+         SQL.ADD(" (NrOperacion,NrCuota,")
+         SQL.ADD(" Fecha1,Radio1,")
+         SQL.ADD(" Fecha2,Precio2,Cantidad2,Precio3) ")
+         SQL.ADD(" Values ")
+         SQL.ADD(" ('"~Val(f:Val(w1))~"',"~Fstr(Val(ab4),0,0)~",")
+         SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"','1',")
+         SQL.ADD(" '"~IdxDate(Val(ab1))~"',"~Fstr(Val(ab2),0,7)~","~Fstr(Val(ab3),0,2)~","~Fstr(Val(ab5),0,2)~") ")
+         SQL.NEW
+
+         SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+         SQL.ADD(" Set ")
+         SQL.ADD(" FechaUltCupon='"~IdxDate(Val(g2))~"', ")
+         SQL.ADD(" TasaInteresesCupon="~Fstr(val(l2),0,7)~",  ")      
+         IF Val(e:Val(w1))<>0 
+            Message('**-- Modificando las Operaciones Futuras con Especies Clean...')
+            SQL.ADD("    Mercado3 = '"~Dialogo.ContraEspecie2~"', ")
+            SQL.ADD("    TotalBrutoCli1 = "~Fstr(Val(e3),0,7)~",  ")
+            SQL.ADD("    TotalAux1 = "~Fstr(Val(e:fac),0,5)~", ")
+         EndIf
+         SQL.ADD(" Cupon1='"~Fstr(Dialogo.Entero1+1,0,0)~"' ")
+         SQL.ADD("where  NrOperacion = '"~Val(f:Val(w1))~"' ")
+         SQL.NEW
+         SQL.EXEC
+
+         ACT(i3,Val(f:Val(w1)))
+ 
+         * Actualizo la Instancia de la Operacion a Supervision
+         (.'MODIINSTAN'.)    
+      ENDIF
+
+      IF Incluido(Val(b:Val(w1)),'SERA|SERP|SERAV|SERPV')
+         Message('Actualiza Repos ....')
+         SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+         SQL.ADD(" Set ")
+         SQL.ADD(" FechaUltCupon='"~IdxDate(Val(g2))~"', ")
+         SQL.ADD(" TasaInteresesCupon="~Fstr(val(l2),0,7)~",  ")
+         SQL.ADD(" Cupon1='"~Fstr(Dialogo.Entero1+1,0,0)~"' ")
+         SQL.ADD("where  NrOperacion = '"~Val(f:Val(w1))~"' ")
+         SQL.NEW
+         SQL.EXEC
+
+         IF EqStr(VAL(x:Val(w1)),'0')
+            *** genera transaccion de dividendo
+            (."CCGENEOP".)
+         ENDIF
+
+         ACT(i3,Val(f:Val(w1)))
+  
+         * Actualizo la Instancia de la Operacion a Supervision
+         (.'MODIINSTAN'.)    
+      EndIf
+
+      IF Incluido(Val(b:Val(w1)),'SECT|SECTV|SEVT|SEVTV')
+         Message('Actualiza Operaciones a Termino')
+         SQL.ADD("Update "~DBO~".OPERACIONES Set ")
+         SQL.ADD("   FechaUltCupon='"~IdxDate(Val(g2))~"', ")
+         SQL.ADD("   FechaEx1='"~IdxDate(Val(o2))~"', ")
+         SQL.ADD("   TasaInteresesCupon="~Fstr(val(l2),0,7)~", ")
+         SQL.ADD("   Cupon1='"~Fstr(Dialogo.Entero1+1,0,0)~"' ")
+         SQL.ADD("where  NrOperacion = '"~Val(f:Val(w1))~"' ")
+         SQL.NEW
+         SQL.EXEC  
+
+         ACT(i3,Val(f:Val(w1)))
+   
+         * Actualizo la Instancia de la Operacion a Supervision
+         (.'MODIINSTAN'.)    
+
+         *** NO GENERA TRANSACCION DE DIVIDENDOS por los TERMINOS
+      ENDIF
+
+   Proximo
+ELSE
+
+   Message(' Deshabilitando la Especie Cupon ...')
+   SQL.ADD("Update "~DBO~".ESPECIES ")
+   SQL.ADD("Set ")
+   SQL.ADD("  Status ='DES' ")
+   SQL.ADD("where  Codigo = '"~VAL(b4)~"' ")
+   SQL.NEW      
+   SQL.EXEC
+
+   Message('No existen Movimientos para esta Especie ...')
+ENDIF

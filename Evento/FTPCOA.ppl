@@ -1,0 +1,189 @@
+﻿
+*- Recupero las Variables de Equipo, Usuario,  Pasword y Directorio de TELECOM y PERSONAL
+*- Telecom, Paginas, Internet, Soluciones y Microsistemas => Van al equipo de TELECOM
+*- Personal => va al Equipo de Personal
+CrearDialogo
+  Radio1       : 'Sist.Oper.|W98|NT'     ;1;1;;;;;;;1;
+FinDialogo
+
+If Not Ok
+   Cancelar
+EndIf
+
+If Dialogo.Radio1=0
+   ACT(so1,"COMMAND.COM /C ")
+Else
+   ACT(so1,"CMD.EXE /C ")
+EndIf
+
+Message('Eliminando archivos Texto')
+
+*------ TELECOM
+WinExec(val(so1)~" del "~VAR('PATHINTCON')~'SIAGGL.TXT',0)
+Esperar(5)
+
+Message('Borro siaggl.txt')
+WinExec(val(so1)~" del "~VAR('PATHINTCON')~'MVINCONT.bat',0)
+Esperar(5)
+
+Message('Borro mvincont.txt')
+Message('Construyendo linea FTP ')
+AbrirASCII(VAR('PATHINTCON')~'SIAGGL.TXT',0)
+
+ACT(t1," "~VAR('TECOUSR')~" ")
+EscribirASCII(VAL(t1))
+
+ACT(t1," "~VAR('TECOPASW')~" ")
+EscribirASCII(VAL(t1))
+
+ACT(t1,"lcd "~Var('PATHINTCON')~" ")
+EscribirASCII(VAL(t1))
+
+ACT(t1,"cd "~VAR('GLDESTI')~" ")
+EscribirASCII(VAL(t1))
+
+*- Recupero la fecha juliana para sacar el nombre del archivo
+ACD(fe:1, FSYS )
+(.'FECHAJULIA'.)
+
+SQL.ADD("Select Codigo,Valor3 from "~DBO~".VEHICULOS Where ")
+SQL.ADD("Codigo Not In ('"~VAR('VEHIADISC')~"')")
+If NoVacio(UsrVehiculos(UsuarioActivo))
+   SQL.ADD("and Codigo IN (SELECT Vehiculo from "~DBO~".USRVEHICULO WHERE Codigo='"~UsuarioActivo~"') ")
+Endif
+
+*- Control de archivos
+ACN(ct1,0)
+
+Recorrer SQL
+   dfa
+   *-- Letra de cada archivo por vehiculo
+   ACT(VH:2, Pad(Copy(fbn('Codigo'), FBN['Valor3'], 1),1) )
+
+   ACT(V2, VAR('PATHINTCON')~"S"~VAL(VH:2)~Copy(VAL(fe:2),2, 5)~'*')
+   ACT(V3, PrimerArchivo(Val(V2)))
+
+   *- Texto para mover los archivos
+   AbrirASCII(VAR('PATHINTCON')~'MVINCONT.bat',0)
+   EscribirASCII('Move '~VAL(v2)~' '~VAR('PATHCONTRA'))
+   CerrarASCII
+
+   AbrirASCII(VAR('PATHINTCON')~'SIAGGL.TXT',0)
+   If Ok     
+      ACT(t1,"put "~val(v3)~" ")
+      EscribirASCII(VAL(t1))
+
+      ACN(ct1,1)
+
+      Recorrer&j 1,100
+         ACT(V3, ProximoArchivo)
+
+         If Not Ok
+            Break
+         Else
+            ACT(t1,"put "~val(v3)~" ")
+            EscribirASCII(VAL(t1))
+         EndIf
+      Proximo
+   EndIf
+Proximo
+
+ACT(t1,"close ")
+EscribirASCII(VAL(t1))
+
+ACT(t1,"quit ")
+EscribirASCII(VAL(t1))
+CerrarASCII
+
+If val(ct1)=1
+   WinExec("ftp -v -i -s:"~VAR('PATHINTCON')~"SIAGGL.TXT "~VAR('TECOAS400'))
+EndIf
+
+*------ PERSONAL
+Message('Eliminando Archivos Texto ')
+WinExec(val(so1)~" del "~VAR('PATHINTCON')~'HGIAGL.TXT',0)
+Esperar(5)
+
+Message('Construyendo linea FTP ')
+AbrirASCII(VAR('PATHINTCON')~'HGIAGL.TXT',0)
+
+ACT(t1," "~VAR('PERSUSR')~" ")
+EscribirASCII(VAL(t1))
+
+ACT(t1," "~VAR('PERSPASW')~" ")
+EscribirASCII(VAL(t1))
+
+ACT(t1,"lcd "~VAR('PATHINTCON')~" ")
+EscribirASCII(VAL(t1))
+
+ACT(t1,"cd "~VAR('GLDESTI')~" ")
+EscribirASCII(VAL(t1))
+
+*- Recupero la fecha juliana para sacar el nombre del archivo
+ACD(fe:1, FSYS )
+(.'FECHAJULIA'.)
+
+ACN(ct2,0)
+
+SQL.ADD("Select Codigo,Valor3 from "~DBO~".VEHICULOS Where ")
+SQL.ADD(" Codigo In ('"~VAR('VEHIADISC')~"')")
+If NoVacio(UsrVehiculos(UsuarioActivo))
+   SQL.ADD(" and Codigo IN (SELECT Vehiculo from "~DBO~".USRVEHICULO WHERE Codigo='"~UsuarioActivo~"') ")
+Endif
+
+Recorrer SQL
+   dfa
+
+   ACT(VH:2, Pad(Copy(fbn('Codigo'), FBN['Valor3'], 1),1) )
+   ACT(V2, VAR('PATHINTCON')~"S"~VAL(VH:2)~Copy(VAL(fe:2),2, 5)~'*')
+   ACT(V3, PrimerArchivo(Val(V2)))
+
+   If Not Ok
+      Break
+   Else
+      *- Texto para mover los archivos
+      AbrirASCII(VAR('PATHINTCON')~'MVINCONT.bat',0)
+      EscribirASCII('Move '~VAL(v2)~' '~VAR('PATHCONTRA'))
+      CerrarASCII
+
+      AbrirASCII(VAR('PATHINTCON')~'HGIAGL.TXT',0)
+    
+      If Not Ok
+         ACN(ct1,1)
+      Else 
+         ACN(ct2,1)
+
+         ACT(t1,"put "~val(v3)~" ")
+         EscribirASCII(VAL(t1))
+  
+         Recorrer&j 1,100
+            ACT(V3, ProximoArchivo)
+
+            If Not Ok
+               Break
+            Else
+               ACT(t1,"put "~val(v3)~" ")
+               EscribirASCII(VAL(t1))
+            EndIf
+        Proximo
+     EndIf
+  EndIf
+Proximo
+
+ACT(t1,"close ")
+EscribirASCII(VAL(t1))
+
+ACT(t1,"quit ")
+EscribirASCII(VAL(t1))
+CerrarASCII
+
+If val(ct2)=1
+   WinExec("ftp -v -i -s:"~VAR('PATHINTCON')~"HGIAGL.TXT "~VAR('PERSAS400'))
+EndIf
+
+Esperar(5)
+
+If val(ct1)=1 o val(ct2)=1
+   WinExec(VAR('PATHINTCON')~'MVINCONT.bat')
+EndIf
+

@@ -1,0 +1,64 @@
+﻿HojaVisible(NO)
+CrearDialogo
+  CentrosCosto1    : "Division 1"     ;;;;;;;;;;;
+  CentrosCosto2    : "Division 2"     ;;;;;;;;;;;
+  Especie1   : "Especie"      ;;;;;;;;;;;
+  Fecha1     :'F.Desde'       ;;;;;;NoVacio(Dialogo.Fecha1);'Debe Ingresar Fecha Desde';NO;FSys-Dia(FSys)+1
+  Fecha2     :'F.Hasta'       ;;;;;;NoVacio(Dialogo.Fecha2);'Debe Ingresar Fecha Hasta';NO;FinDeMes(FSys,SI,'ARG')
+  Radio1     :'Tipo|Todos|Colocacion|Toma' ;;;;;;;;;0
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+
+acd(zz7,HABILES(Dialogo.Fecha1,-1, VAR('FERIADODEF')))
+
+* Vehiculos permitidos por el usuario
+
+ACT(zz6,SQLSET("Select Codigo from "~DBO~".CENTROSCOSTO"))
+
+
+* Recupero las VIMIND que no son FechasValor
+SQL.ADD("Select Distinct  O.Centro1,O.Centro2,O.Especie,O.MB3 from "~DBO~".OPERACIONES  O ")
+SQL.ADD("where O.TipoOp = 'APORTE' ")
+
+
+If NoVacio(Dialogo.CentrosCosto1)
+   SQL.ADD(" and O.Centro1='"~Dialogo.CentrosCosto1~"' ")
+Else
+      SQL.ADD(" and O.Centro1 IN ("~Pipe2Comillas(val(zz6))~") ")
+EndIf
+
+If NoVacio(Dialogo.CentrosCosto2)
+   SQL.ADD(" and O.Centro2='"~Dialogo.CentrosCosto2~"' ")
+EndIf
+
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+
+SQL.ADD(" and  ( ")
+SQL.ADD(" (O.FechaOp  >= '"~IdxDate(val(zz7))~"' and O.FechaOp<='"~IdxDate(Dialogo.Fecha2)~"' ) ")
+SQL.ADD(" or ")
+SQL.ADD(" (TipoOp='APORTE' and DateDiff(day,FechaOp,FechaCarga)>0 and FechaVto>='"~IdxDate(val(zz7))~"'  ")
+SQL.ADD(" and FechaVto<='"~IdxDate(Dialogo.Fecha2)~"') ")
+
+SQL.ADD(" ) ")
+
+If Dialogo.Radio1=1
+   * Coloca
+   SQL.ADD(" and MB3 ='0' ")
+EndIf
+If Dialogo.Radio1=2
+   * Toma
+   SQL.ADD(" and MB3 ='1' ")
+EndIf
+SQL.ADD("order by O.Centro1,O.Centro2, O.Especie, O.MB3")
+
+
+Recorrer SQL
+   ACN(ba1,1)
+   LinkearHoja('APO2',val(ba1),CentrosCosto1=fbn['Centro1'],CentrosCosto2=fbn['Centro2'],Especie1=fbn['Especie'],Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,Radio1=IIF(EqStr(fbn['MB3'],'0'),1,2))
+proximo

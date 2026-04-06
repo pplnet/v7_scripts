@@ -1,0 +1,152 @@
+﻿HojaVisible(SI)
+MostrarCuadroDeMensajes
+
+CrearDialogo
+    Directorio1:    'Path '        ;;;;SI;SI;;;;
+    String1:        'Archivo '     ;;;;SI;SI;;;;    
+FinDialogo
+
+*Reviso si existe el directorio y si el archivo existe en el mismo.
+If ExisteDirectorio(Dialogo.Directorio1)
+    If EqStr(Copy(Dialogo.Directorio1,Longitud(Dialogo.Directorio1),1),'\')
+        If Not ExisteArchivo(Dialogo.Directorio1~Dialogo.String1)
+            Cancelar('1.El Archivo '~Dialogo.String1~' no existe en el directorio: '~Dialogo.Directorio1)
+        EndIf
+    Else
+        If Not ExisteArchivo(Dialogo.Directorio1~'\'~Dialogo.String1)
+            Cancelar('2.El Archivo '~Dialogo.String1~' no existe en el directorio: '~Dialogo.Directorio1)
+        EndIf
+    Endif
+Else
+    Cancelar('El directorio '~Dialogo.Directorio1~' no existe')
+EndIf
+
+*Agrego \ al final si el directorio no lo tiene
+let &pf ''
+If EqStr(Copy(Dialogo.Directorio1,Longitud(Dialogo.Directorio1),1),'\')
+    let &pf Dialogo.Directorio1~Dialogo.String1
+Else
+    let &pf Dialogo.Directorio1~'\'~Dialogo.String1
+Endif
+
+ImportarXLS(A2..E1000,AA2..AE1000,&pf)
+
+CrearFont(1, 'Arial,12,B')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,8,')
+
+ACT(C:1,'Errores Importacion Saldos Ctas Comitentes')
+SetFont(C:1,1)
+
+*ACT(F:1,'No se importaron')
+*SetFont(F:1,2)
+
+SetFilaActual(2)
+
+Recorrer&i 2,1000000
+    IF NoVacio(Val(AA:&i))
+        *Me guardo los datos en variables
+        let &vehiculo Val(AA:&i)
+        let &entidad Val(AB:&i)
+        ACT(CU:&i, Val(AC:&i))
+        let &cuenta Val(CU:&i)
+        let &moneda Val(AD:&i)
+        ACN(SA:&i, Val(AE:&i))
+        let &saldo VAL(SA:&i)
+        
+        *VERIFICACIÓN DE DATOS - Vehículo
+        IF SQL(" SELECT 1 FROM "~DBO~".VEHICULOS WHERE Codigo = '"~&vehiculo~"' AND Status ='HAB' ") = 1
+            IF Vacio(UsrVehiculos(UsuarioActivo)) o Incluido(&vehiculo,SqlSet("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"'"))
+            *VERIFICACIÓN DE DATOS - Entidad
+                IF SQL(" SELECT 1 FROM "~DBO~".CLIENTES WHERE Codigo = '"~&entidad~"' AND Status ='HAB' ") = 1
+                *VERIFICACIÓN DE DATOS - Cuenta
+                IF (SQL(" SELECT 1 FROM "~DBO~".CUENTAS WHERE Codigo = '"~&cuenta~"'") = 1) y EqSTr(BuscarCampo('CUENTAS','Estado','Codigo',&cuenta),'HAB')
+                    IF ClienteCuenta(&vehiculo,&cuenta) y EspecieCuenta(&moneda,&cuenta)
+                        *VERIFICACIÓN DE DATOS - Moneda
+                        IF DesciendeDeEspecie(&moneda,'MONEDA')
+                            *VERIFICACIÓN DE DATOS - Saldo
+                            IF &saldo <> 0
+                                *Si pasa todas las verificaciones, Cargo la Transacción
+                                *Busco el book usando la cuenta
+                                let &book BuscarCampo('CUENTAS','Alias1','Codigo', &cuenta)
+                                *Busco el nr de Transacción
+                                let &nrTrans GetNumerador(BuscarCampo('VEHICULOS','Alias3','Codigo',&vehiculo))
+                                *Realizo el insert  
+                                Message('Insertando '~&NrTrans)
+                                SQL.ADD(" INSERT INTO "~DBO~".TRANSACCIONES2")
+                                SQL.ADD("(NrTrans, TipoTr2, Fecha1,Vehiculo1,Cliente1,Cuenta1,")
+                                SQL.ADD("Especie,Cantidad1,Book1,Ley1,FechaCargaSys,FechaCarga)")
+                                SQL.ADD("VALUES")
+                                SQL.ADD("( '"~&nrTrans~"','SALCOM','"~IdxDate(Fecha(Var('FECHAMIGRA')))~"', '"~&vehiculo~"', '"~&entidad~"',")
+                                SQL.ADD("'"~&cuenta~"', '"~&moneda~"', '"~&saldo~"', '"~&book~"','SALDO INICIAL',")
+                                SQL.ADD("'"~IdxDate(Fsys)~"',"~SQLAhora~")")
+                                SQL.NEW
+                                SQL.EXEC
+                                
+                                SQL.ADD(" INSERT INTO "~DBO~".OPERACIONESBITS ")
+                                SQL.ADD(" (NrOperacion,NrBit,Valor) ")
+                                SQL.ADD(" VALUES ")
+                                SQL.ADD(" ('"~&nrTrans~"',1,'1'), ")
+                                SQL.ADD(" ('"~&nrTrans~"',20,'0') ")
+                                SQL.NEW
+                                SQL.EXEC
+                                
+                                *Actualizo los movimientos
+                                SQL.ActualizarMovimientosT2(&nrTrans,SI,NO,NO,NO)
+                                SQL.EXEC
+                            ELSE
+                                ACT(A:FAC,'El saldo '~&saldo~' es inválido')
+                                SetFont(A:FAC,3)
+                                IFA
+                                *Saldo
+                            EndIf
+                        ELSE
+                            ACT(A:FAC,'La moneda '~&moneda~' no existe')
+                            SetFont(A:FAC,3)
+                            IFA
+                            *Moneda
+                        EndIf
+                    ELSE
+                        ACT(A:FAC,'La cuenta '~&cuenta~' El vehículo y cuenta o la moneda y la cuenta no son compatibles')
+                        SetFont(A:FAC,3)
+                        IFA
+                    *Cuenta
+                    EndIf
+                    ELSE
+                    ACT(A:FAC,'La cuenta '~&cuenta~' la cuenta no existe o no está habilitada')
+                        SetFont(A:FAC,3)
+                        IFA
+                    *Cuenta
+                    EndIf
+                ELSE
+                    ACT(A:FAC,'La Entidad '~&entidad~' no existe o no está habilitada')
+                    SetFont(A:FAC,3)
+                    IFA
+                *Entidad
+                EndIf
+            ELSE
+                ACT(A:FAC,'El Usuario '~USUARIOACTIVO~' no puede usar el vehiculo '~&vehiculo)
+                SetFont(A:FAC,3)
+                IFA                  
+            EndIf
+        ELSE
+            ACT(A:FAC,'El Vehiculo '~&vehiculo~' no existe o no está habilitado')
+            SetFont(A:FAC,3)
+            IFA
+        *Vehículo    
+        EndIf
+    ELSE
+        break
+    *datos    
+    ENDIF
+Proximo
+ 
+ACT(A:FAC+2,'Fin del informe')
+SetFont(A:FAC+2,2)
+LimitesVision(H:FAC)
+ACO(1,25)
+ACO(2,16)
+ACO(3,16)
+ACO(4,16)
+ACO(5,16)
+ACO(6,25)

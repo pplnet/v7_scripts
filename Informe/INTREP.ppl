@@ -1,0 +1,169 @@
+﻿CrearDialogo
+  Fecha1   : 'F.Desde';;;;;;Dialogo.Fecha1=PriDeMes(Dialogo.Fecha1,SI);'Debe ser principio de mes';NO;PriDeMes(FSys,SI)
+  Fecha2   : 'F.Hasta';;;;;;Dialogo.Fecha2=FinDeMes(Dialogo.Fecha2,SI);'Debe ser fin de mes';NO;FinDeMes(FSys,SI)
+  Vehiculo1: 'Vehiculo' ;;;;;;;;NO;VAR('VEHICULODE')
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+
+ACT(a1, 'Resumen de Intereses Devengados - Pases')
+ACT(a2, 'F.Desde : '~Dialogo.Fecha1)
+ACT(a3, 'F.Hasta : '~Dialogo.Fecha2)
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(a4, 'Vehiculo : '~Dialogo.Vehiculo1)
+else
+  ACT(a4, 'Vehiculo : Todos')
+endif
+
+
+ACT(a6, 'Mes')
+ACT(b6, 'Pases Activos')
+ACT(d6, 'Pases Pasivos')
+ACT(b:7, 'Pesos')
+ACT(c:7, 'Dolares')
+ACT(d:7, 'Pesos')
+ACT(e:7, 'Dolares')
+AgregarMarco(a6..e7, 1,0,Exe('COLOR6'))
+
+AlinearCeldas(b7..e7, 'D')
+
+ACT(ag1, 'Enero')
+ACT(ag2, 'Febrero')
+ACT(ag3, 'Marzo')
+ACT(ag4, 'Abril')
+ACT(ag5, 'Mayo')
+ACT(ag6, 'Junio')
+ACT(ag7, 'Julio')
+ACT(ag8, 'Agosto')
+ACT(ag9, 'Septiembre')
+ACT(ag10, 'Octubre')
+ACT(ag11, 'Noviembre')
+ACT(ag12, 'Diciembre')
+
+ACN(z1, Dialogo.Fecha1)
+ACN(z2, FinDeMes(Dialogo.Fecha1,SI))
+
+recorrer&i 1, 100
+
+  if Val(z1)>=Dialogo.Fecha2
+    break
+  endif
+
+  ACN(aa:&i+7, Val(z1))
+  ACN(ab:&i+7, Val(z2))
+  ACT(a:&i+7, Val(ag:Num(Copy(Fecha(Val(z1)),4,2)))~' '~Copy(Fecha(Val(z1)),7,4))
+  ACL(a:&i+7, 'INTDEP', Fecha1=Val(aa:&i+7), Fecha2=Val(ab:&i+7), Vehiculo1=Dialogo.Vehiculo1, Radio1=3)
+  ACN(z1, Val(z2)+1)
+  ACN(z2, FinDeMes(Val(z1),SI))
+  ACN(z3, &i)
+
+proximo
+
+SetFilaActual(7)
+SQL.ADD("Select NrOperacion, TipoOp, Especie, ContraEspecie, FechaOp, FechaVto, Cliente1, Cantidad, TotalBrutoCli1, ")
+SQL.ADD("TotalDerechos, TotalBrutoCli2, TotalAux1, Plazo, EsAforado, TotalCaucion, TotalGastos from "~DBO~".OPERACIONES ")
+SQL.ADD("where FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"'")
+SQL.ADD("and FechaVto > '"~IdxDate(Dialogo.Fecha1)~"'")
+SQL.ADD("and TipoOp in ('TIPA','TIPP')")
+if NoVacio(Dialogo.Vehiculo1)
+  SQL.ADD(" and Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+endif
+SQL.ADD("order by TipoOp, NrOperacion")
+
+recorrer SQL
+
+  if Not EqStr(Val(y1), fbn('TipoOp'))
+
+    ACT(y1, fbn('TipoOp'))
+
+    if EqStr(fbn('TipoOp'), 'TIPA')
+      ACN(z5, 1)
+      ACN(y2, 2)
+    endif
+
+    if EqStr(fbn('TipoOp'), 'TIPP')
+      ACN(z5, -1)
+      ACN(y2, 4)
+    endif
+
+  endif
+
+  if EqStr(fbn('ContraEspecie'), 'USD')
+    ACN(y4, 1)
+  else
+    ACN(y4, 0)
+  endif
+
+
+  recorrer&i 8, 8+Val(z3)
+    if fbn('FechaOp') <= Val(ab:&i) y fbn('FechaVto') > Val(aa:&i)
+
+      if fbn('FechaOp') > Val(aa:&i)
+        ACN(x2, fbn('FechaOp'))
+      else
+        ACN(x2, Val(aa:&i))
+      endif
+
+      if fbn('FechaVto') <= Val(ab:&i)
+        ACN(x3, fbn('FechaVto'))
+      else
+        ACN(x3, Val(ab:&i)+1)
+      endif
+      ACN(x4, Val(x3)-Val(x2))
+
+      * intereses
+      if EqStr(fbn('EsAforado'),'1')
+        ACN(o1,fbn('TotalCaucion'))
+        ACN(o2,fbn('TotalGastos'))
+      else
+        ACN(o1,fbn('TotalBrutoCli1')+fbn('TotalDerechos'))
+        ACN(o2,fbn('TotalBrutoCli2')+fbn('TotalAux1'))
+      endif
+
+      ACN(o3, Val(o2)-Val(o1))
+      SCN(Val(y2)+Val(y4):&i, Val(o3)*Val(z5)/fbn('Plazo')*Val(x4))
+    endif
+
+
+  proximo
+
+proximo
+
+if NoVacio(Val(z1)) y no
+  ifa
+  ACT(a:fac, 'Total')
+  ACN(i:fac, Sum(i:Val(z4)..i:fac-1))
+  ACN(k:fac, Sum(k:Val(z4)..k:fac-1))
+  AgregarMarco(a:fac..l:fac,1)
+  ifa
+  ACT(a:fac, 'Total General')
+  ACN(i:fac, Sum(i8..i:fac-1)/2)
+  ACN(k:fac, Sum(k8..k:fac-1)/2)
+  AgregarMarco(a:fac..l:fac,1,0,Exe('COLOR6'))
+  AgregarMarco(i7..i:fac,1)
+  AgregarMarco(k7..k:fac,1)
+endif
+ifa
+ifa
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+SetFont(a1..az7, 1)
+SetFont(a8..az:Val(z3)+8, 2)
+FormatoCeldas(b7..e:Val(z3)+8, Exe('F2'))
+AgregarMarco(a6..a:Val(z3)+7,1)
+AgregarMarco(b6..c:Val(z3)+7,1)
+AgregarMarco(d6..e:Val(z3)+7,1)
+LimitesVision(g:Val(z3)+8)
+ACT(a:fac, 'Fin del Informe.')
+SetFont(a:fac..a:fac, 1)
+ACO(1,9)
+ACO(2,8)
+ACO(3,8)
+ACO(4,8)
+ACO(5,8)
+Impresion(1,2)
+SetPrintFit(3, 75)
+CrearFont(6,"Arial,6,B")
+RangoTitulo(a:+6..g:Val(z3)+8, 2)

@@ -1,0 +1,157 @@
+﻿CrearDialogo
+  Especie1 : 'Especie'  ;1;1;1;  ;  ;NoVacio(Dialogo.Especie1);'Debe ingresar una especie';NO
+  Fecha1   : 'Fecha'    ;2;1;1;  ;  ;Dialogo.Fecha1>0 y Dialogo.Fecha1<=FSys;;;FSys
+  Radio1   : 'Moneda|ARP|USD'        ;3;1;1;  ;  ;;;;0
+  Radio2   : 'Tipo Dol|MEP|Cable'    ;3;2;1;Dialogo.Radio1=1;Dialogo.Radio1=1;;;;0
+  Radio3   : 'Mercado|Local|Exterior';4;1;1;Dialogo.Radio1=1 y Dialogo.Radio2=1;  ;;;;0;if(Dialogo.Radio1=0 o (Dialogo.Radio1=1 y Dialogo.Radio2=0),0,Dialogo.Radio3)
+  Cantidad1: 'Cantidad' ;5;1;1;  ;  ;Dialogo.Cantidad1>0;'La cantidad debe ser positiva';NO
+  Cliente1 : 'Cliente'  ;6;1;1;NO;  ;;;;VAR('VEHICULODE')
+  Check1   : 'Procesa'  ;7;1;1;NO;NO;;;;1
+FinDialogo
+if not OK
+  Cancelar
+endif   
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+
+IF Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+ACT(a:1, 'Especie')
+ACT(a:2, 'Fecha')
+ACT(a:3, 'Radio1 (Moneda)')
+ACT(a:4, 'Radio2 (TipoDol)')
+ACT(a:5, 'Radio3 (Mercado)')
+ACT(a:6, 'Cantidad')
+ACT(a:7, 'Cliente')
+ACT(a:9, 'NrSaldo')
+ACT(a:10, 'TipoDol')
+ACT(a:11, 'Mercado')
+ACT(a:12, '# Movs')
+ACT(a:13, 'Sum Cantidad')
+
+
+ACT(a:14, 'Procesa')
+ACT(a:15, 'Error')
+ACT(a:16, 'Accion')
+
+ACT(b:1, Dialogo.Especie1)
+ACD(b:2, Dialogo.Fecha1)
+ACN(b:3, Dialogo.Radio1)
+ACN(b:4, Dialogo.Radio2)
+ACN(b:5, Dialogo.Radio3)
+ACN(b:6, Dialogo.Cantidad1)
+ACT(b:7, Dialogo.Cliente1)
+if Dialogo.Radio1=0
+  * ARP
+  ACN(b:9, 131)
+endif
+if Dialogo.Radio1=1
+  * USD
+  if Dialogo.Radio2=0
+    * MEP
+    ACN(b:9, 132)
+    ACT(b:10, 'MEP')
+  else
+    * Cable
+    ACN(b:9, 133)
+    ACT(b:10, 'Cable')
+  endif
+endif
+if Dialogo.Radio3=0
+  * Local
+  ACT(b:11, 'ARG')
+else
+  * Exterior
+  ACT(b:11, 'EXT')
+endif
+
+SQL.ADD("Select Cantidad ") 
+SQL.ADD("from "~DBO~".MOVEJECUTADOS ")
+SQL.ADD("where NrOperacion = 'INICIALP' ")
+SQL.ADD("  and Especie     = '"~Val(b:1)~"' ")
+SQL.ADD("  and Cliente     = '"~Val(b:7)~"' ")
+SQL.ADD("  and NrSaldo     = "~FStr(Val(b:9),1,0)~" ")
+SQL.ADD("  and Mercado     = '"~Val(b:11)~"' ")
+SQL.ADD("  and FechaMov    = '"~IdxDate(Val(b:2))~"' ")
+recorrer SQL
+  DFA
+  SCN(b:12, 1)
+  SCN(b:13, fbn('Cantidad'))
+proximo
+ACN(b:14, Dialogo.Check1)
+
+if Val(b:12)>0
+  MessageBox('Ya existe saldo inicial para los parametros ingresados')
+  ACN(b:15, 1)
+endif
+
+if Val(b:15)=0
+  if Dialogo.Check1=1
+    SQL.ADD("INSERT INTO "~DBO~".MOVEJECUTADOS ( ")
+    SQL.ADD(" NrOperacion, ")
+    SQL.ADD(" FechaMov, ")
+    SQL.ADD(" Cliente, ")
+    SQL.ADD(" Especie, ")
+    SQL.ADD(" Mercado, ")
+    SQL.ADD(" Cantidad, ")
+    SQL.ADD(" Leyenda, ")
+    SQL.ADD(" Bits, ")
+    SQL.ADD(" NrSaldo, ")
+    SQL.ADD(" NrGrupo, ")
+    SQL.ADD(" FechaEje, ")
+    SQL.ADD(" UsuarioEje, ")
+    SQL.ADD(" NrGrupo2, ")
+    SQL.ADD(" NrMov, ")
+    SQL.ADD(" NrInstan, ")
+    SQL.ADD(" Vehiculo ")
+    SQL.ADD(" ) Values ( ")
+    * NrOperacion
+    SQL.ADD(" 'INICIALP', ")
+    * FechaMov
+    SQL.ADD(" '"~IdxDate(Val(b:2))~"', ")
+    * Cliente
+    SQL.ADD(" '"~Val(b:7)~"', ")
+    * Especie
+    SQL.ADD(" '"~Val(b:1)~"', ")
+    * Mercado
+    SQL.ADD(" '"~Val(b:11)~"', ")
+    * Cantidad
+    SQL.ADD(" "~Fstr(Val(b:6),0,2)~", ")
+    * Leyenda
+    SQL.ADD(" 'Saldo Incial Parking', ")
+    * Bits
+    SQL.ADD(" 'AV', ")
+    * NrSaldo
+    SQL.ADD(" "~Fstr(Val(b:9),0,0)~", ")
+    * NrGrupo
+    SQL.ADD(" 1, ")
+    * FechaEj
+    SQL.ADD(" '"~IdxDate(FSYS)~"',")
+    * UsuarioEje
+    SQL.ADD(" '"~UsuarioActivo~"', ")
+    * NrGrupo2
+    SQL.ADD(" 0, ")
+    * NrMov
+    SQL.ADD(" 1, ")
+    * NrInstan
+    SQL.ADD(" 0, ")
+    * Vehiculo
+    SQL.ADD(" '"~Val(b:7)~"' ")
+    SQL.ADD(" ) ")
+    SQL.NEW
+    ACT(b:16, 'Insertado')
+    MessageBox('Saldo inicial ingresado')
+  else
+    ACT(b:16, 'Sin Procesar')
+  endif
+  if Dialogo.Check1=1
+    SQL.EXEC
+  endif
+else
+  MessageBox('Evento Cancelado')
+endif
+
+ACO(1, 15)

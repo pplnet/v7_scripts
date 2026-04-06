@@ -1,0 +1,810 @@
+﻿IF Vacio(UsrVehiculos(UsuarioActivo))
+    ACT(LS:1, SQLSet(" Select Codigo from "~DBO~".VEHICULOS where Status = 'HAB' "))
+ELSE
+    ACT(LS:1, UsrVehiculos(UsuarioActivo))
+ENDIF
+
+CrearDialogo
+  Fecha1: 'Fecha'                ;;;;;;;;;FSys
+  Vehiculo1: 'Vehiculo'          ;;;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), Val(LS:1), SQLSet(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where V.Codigo = U.Vehiculo AND U.Codigo = '"~UsuarioActivo~"' AND V.Status = 'HAB' "));;
+  Lista1: 'Books'                ;;;;;;;;;;;;;;;;
+  Radio2: 'Expresado en|ARP|USD' ;;;;;;;;;0
+  Radio3: 'Expresado en|Millones|ImporteOri';;;;SI;SI;;;;0;;;;;
+FinDialogo
+
+IF Not OK
+  Cancelar
+ENDIF
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+let &monedaLocal Var('MONELOCA')
+let &monedaExtr Var('MONEEXTR')
+let &dolBillete Var('DOLBILLETE')
+let &vehiculosDolBillete Var('VEHDOLBI')
+let &cotDolDivisa CotizacionBNA(&monedaExtr,Dialogo.Fecha1-1,1,NO,NO)
+let &cotDolBillete CotizacionBNA(&dolBillete,Dialogo.Fecha1-1,1,NO,NO)
+IF Dialogo.Radio2 = 0
+    let &monedaInforme &monedaLocal
+ELSE
+    let &monedaInforme &monedaExtr
+ENDIF
+SetFilaActual(1)
+ACT(D:fac, 'Detalle de INVERSIONES')
+SetFont(D:fac, 3)
+SetFilaActual(fac+2)
+Let &fi1 fac
+ACT(A:fac, 'Fecha: '~Dialogo.Fecha1)
+ifa
+ACT(A:fac, 'Vehiculo: '~Dialogo.Vehiculo1)
+ifa
+IF NoVacio(Dialogo.Lista1)
+    ACT(A:fac, 'Book: '~Dialogo.Lista1)
+ELSE
+    ACT(A:fac, 'Book: Todos')
+ENDIF
+ifa
+IF Dialogo.Radio2 = 0
+    ACT(A:fac, 'Expresado en: ARP')
+    let &monedaExpr '$'
+ELSE
+    ACT(A:fac, 'Expresado en: USD')
+    let &monedaExpr 'U$S'
+ENDIF
+ifa
+ACT(A:fac, 'TC Divisa:')
+ACN(B:fac, &cotDolDivisa)
+ifa
+ACT(A:fac, 'TC Billete:')
+ACN(B:fac, &cotDolBillete)
+FormatoCeldas(B:fac-1..B:fac, Exe('F8'))
+ifa
+IF Dialogo.Radio3 = 0
+    ACT(A:fac, 'Expresado en: Millones')
+    let &unidad 1000000
+ELSE
+    ACT(A:fac, 'Expresado en: Importe Original')
+    let &unidad 1
+ENDIF
+SetFont(A:&fi1..B:fac, 2)
+ifa
+let &filaTotalCtasVista fac
+ifa
+
+**********************************************************************
+***---Cuadro Cuentas a la vista
+**********************************************************************
+ACT(A:fac, 'Vehiculo')
+ACT(B:fac, 'Instrumento')
+ACT(C:fac, 'Entidad')
+ACT(D:fac, 'Moneda')
+*ACT(E:fac, 'Nro. Cuenta')
+ACT(E:fac, 'Remunera')
+*ACT(G:fac, 'Monto Moneda Original')
+ACT(F:fac, 'Monto a la Fecha')
+ACT(G:fac, '% Sobre Total Invertido')
+SetFont(A:fac..G:fac, 2)
+AgregarMarco(A:fac..H:fac, 0, 0, Exe('COLOR'))
+let &filaIniCtasVista fac+1
+SQL.ADD(" Select S.SaldoContable/"~Fstr(&unidad, 0, 0)~" SaldoContable, C.Cliente Vehiculo, C.Alias1 BookCta, V.Alias5 BookDafult, C.Especies, S.NrCuenta, ")
+SQL.ADD(" C.Codigo Cuenta, 'Cta Cte' Instrumento, C.Comitente Entidad, C.Especies Moneda, 1 NrSaldo ")
+SQL.ADD(" From "~DBO~".SALDOSBANCARIOS S, "~DBO~".CUENTAS C, "~DBO~".VEHICULOS V ")
+SQL.ADD(" Where S.NrCuenta = C.Numero ")
+SQL.ADD(" AND V.Codigo = C.Cliente ")
+SQL.ADD(" AND S.FechaSaldo = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND C.Cliente = '"~Dialogo.Vehiculo1~"' ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND (C.Alias1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") OR V.Alias5 IN ("~Pipe2Comillas(Dialogo.Lista1)~")) ")
+ENDIF
+SQL.ADD(" UNION ")
+SQL.ADD(" Select S.Saldo/"~Fstr(&unidad, 0, 0)~" SaldoContable, C.Cliente Vehiculo, C.Alias1 BookCta, V.Alias5 BookDafult, C.Especies, C.Numero NrCuenta, ")
+SQL.ADD(" S.Cuenta, 'Cta Comitente' Instrumento, C.Comitente Entidad, S.Especie Moneda, S.NrSaldo ")
+SQL.ADD(" From "~DBO~".SALDOSDIA S, "~DBO~".CUENTAS C, "~DBO~".VEHICULOS V ")
+SQL.ADD(" Where S.Cuenta = C.Codigo ")
+SQL.ADD(" AND V.Codigo = C.Cliente ")
+SQL.ADD(" AND C.Cliente = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND S.NrSaldo = 50 ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND C.Alias1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ENDIF
+SQL.ADD(" AND S.Fecha = (Select Max(Fecha) From "~DBO~".SALDOSDIA S1 ")
+SQL.ADD("                Where S.Cuenta = S1.Cuenta ")
+SQL.ADD("                AND S.NrSaldo = S1.NrSaldo ")
+SQL.ADD("                AND S1.Especie = S1.Especie ")
+SQL.ADD("                AND S1.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD(" Order By 3, 8 ")
+Watch(sql.Batch)
+Recorrer SQL
+    IF Incluido(fbn('Vehiculo'), &vehiculosDolBillete)
+        let &cotVehiculo &cotDolBillete
+    ELSE
+        let &cotVehiculo &cotDolDivisa
+    ENDIF
+    IF Incluido(&monedaInforme, fbn('Especies')) o Eqstr(&monedaInforme, fbn('Moneda'))
+        let &tc 1
+    ELSE
+        IF Eqstr(&monedaInforme, &monedaLocal)
+            let &tc &cotVehiculo
+        ELSE
+            let &tc 1/&cotVehiculo
+        ENDIF
+    ENDIF
+    ACT(A:fac, fbn('Vehiculo'))
+    IF NoVacio(fbn('BookCta'))
+        ***---Si la cuenta tiene definido el book, tomamos ese, sino el book default del vehículo, que no se muestra
+        ACT(A:fac, Val(A:fac)~' '~fbn('BookCta'))
+    ENDIF
+    ACT(B:fac, fbn('Instrumento'))
+    ACT(C:fac, fbn('Entidad'))
+    IF fbn('NrSaldo') = 50
+        ACT(D:fac, fbn('Moneda'))
+    ELSE
+        ACT(D:fac, ItemLista(fbn('Moneda'), 1))
+    ENDIF
+    let &remunera 0
+    SQL.ADD(" Select 1 From "~DBO~".OPERACIONES O, "~DBO~".CUENTAS C ")
+    SQL.ADD(" Where C.Codigo = O.Cuenta1 ")
+    SQL.ADD(" AND O.TipoOp = 'MMRPAC' ")
+    SQL.ADD(" AND C.Numero = '"~fbn('NrCuenta')~"' ")
+    SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("  ")
+    Recorrer SQL
+        DFA
+        let &remunera 1
+    Proximo
+    IF &remunera = 0
+        ACT(E:fac, 'NO')
+    ELSE
+        ACT(E:fac, 'SI')
+    ENDIF
+    *ACT(E:fac, fbn('NrCuenta'))
+    *ACN(G:fac, fbn('SaldoContable'))
+    ACN(F:fac, fbn('SaldoContable') * &tc)
+    let &totalCtasVista &totalCtasVista + Val(F:fac)
+Proximo
+AgregarMarco(A:&filaIniCtasVista..H:fac, 0, 0)
+FormatoCeldas(F:&filaIniCtasVista..F:fac, Exe('F2'))
+ACN(F:&filaTotalCtasVista, &totalCtasVista)
+SetFont(F:&filaTotalCtasVista, 2)
+FormatoCeldas(F:&filaTotalCtasVista, Exe('F2'))
+AgregarMarco(F:&filaTotalCtasVista, 0, 0)
+let &filaFinCtasVista fac
+
+SetFilaActual(fac+3)
+
+**********************************************************************
+***---Cuadro FCI
+**********************************************************************
+let &filaTotalFCI fac-1
+let &filaIniFCI fac+1
+let &filaIniInversiones fac+1
+ACT(A:fac, 'Vehiculo')
+ACT(B:fac, 'Instrumento')
+ACT(C:fac, 'Nombre Extendido de la Especie')
+ACT(D:fac, 'Moneda')
+ACT(E:fac, 'Vencimiento')
+ACT(F:fac, 'Valor Cuotaparte')
+ACT(G:fac, 'CuotasPartes')                             
+ACT(H:fac, 'Monto a la Fecha')
+ACT(I:fac, '% Sobre Total Invertido')
+SetFont(A:fac..I:fac, 2)
+AgregarMarco(A:fac..J:fac, 0, 0, Exe('COLOR'))
+
+***---SQL Bloque FCI
+SQL.ADD(" Select P.Especie, P.CantidadFin/"~Fstr(&unidad, 0, 0)~" CantidadFin, P.Vehiculo, P.Book, E.Cotiza Moneda, 'FCI' Instrumento,")
+SQL.ADD("E.Issuer Entidad, E.Extendido, E.PlazoLiq ")
+SQL.ADD(" From "~DBO~".POSICIONES2 P, "~DBO~".ESPECIES E ")
+SQL.ADD(" Where E.Codigo = P.Especie ")
+SQL.ADD(" AND dbo.DESCIENDEDEESPECIE(P.Especie,'FONDOS') = 1 ")
+SQL.ADD(" AND P.NrSaldo = 1 ")
+SQL.ADD(" AND P.Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND P.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND P.Book IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ENDIF
+SQL.ADD(" Order By 3, 4, 1 ")
+Watch(sql.Batch)
+Recorrer SQL
+    IF Incluido(fbn('Vehiculo'), &vehiculosDolBillete)
+        let &cotVehiculo &cotDolBillete
+    ELSE
+        let &cotVehiculo &cotDolDivisa
+    ENDIF
+    IF Incluido(&monedaInforme, fbn('Moneda'))
+        let &tc 1
+    ELSE
+        IF Eqstr(&monedaInforme, &monedaLocal)
+            let &tc &cotVehiculo
+        ELSE
+            let &tc 1/&cotVehiculo
+        ENDIF
+    ENDIF
+    ACT(A:fac, fbn('Vehiculo')~' '~fbn('Book'))
+    ACT(B:fac, fbn('Instrumento'))
+    ACT(C:fac, fbn('Extendido'))
+    ACT(D:fac, fbn('Moneda'))
+    ACT(E:fac, Dialogo.Fecha1 + (fbn('PlazoLiq') / 24)) 
+    ACN(F:fac, Cotizacion(fbn('Especie'),,,,Dialogo.Fecha1,1,SI))                             
+    ACN(G:fac, fbn('CantidadFin'))                                                                                          
+    ACN(H:fac, Val(G:fac)* Val(F:fac) * &tc)
+    let &totalFCI &totalFCI + Val(H:fac)
+Proximo
+
+***FORMATO DE CELDAS BLOQUE FCI
+let &filaFinFCI fac
+AgregarMarco(A:&filaIniFCI..J:&filaFinFCI, 0, 0)
+FormatoCeldas(F:&filaIniFCI..F:&filaFinFCI, Exe('F8'))
+FormatoCeldas(G:&filaIniFCI..G:&filaFinFCI, Exe('F2'))
+FormatoCeldas(H:&filaIniFCI..H:&filaFinFCI, Exe('F2'))
+
+***TOTAL MONTO A LA FECHA FCI
+ACN(H:&filaTotalFCI, &totalFCI)
+SetFont(H:&filaTotalFCI, 2)
+FormatoCeldas(H:&filaTotalFCI, Exe('F2'))
+AgregarMarco(H:&filaTotalFCI, 0, 0)
+SetFilaActual(fac+3)
+
+**********************************************************************
+***---BLOQUE PF
+**********************************************************************
+let &filaTotalPF fac-1
+let &filaIniPlazoFijo fac+1
+ACT(A:fac, 'Vehiculo')
+ACT(B:fac, 'Instrumento')
+ACT(C:fac, 'Entidad')
+ACT(D:fac, 'Moneda')
+ACT(E:fac, 'Vencimiento')
+ACT(F:fac, 'Tasa')
+ACT(G:fac, 'Capital Inicial')
+ACT(H:fac, 'Monto a la Fecha')
+ACT(I:fac, '% Sobre Total Invertido')
+SetFont(A:fac..J:fac, 2)
+AgregarMarco(A:fac..J:fac, 0, 0, Exe('COLOR'))
+
+****SQL Bloque PF***
+SQL.ADD("SELECT O.NrOperacion,SUM(M.Monto)/"~Fstr(&unidad, 0, 0)~" AS Monto, M.Especie, M.TipoDevengado, M.Cliente, O.Vehiculo1 as 'Vehiculo',")
+SQL.ADD("O.Cliente1,O.FechaOp,O.FechaVto,O.CantidadOri/"~Fstr(&unidad, 0, 0)~" AS CantidadOri,O.Book1, O.Precio1")
+SQL.ADD("FROM MOVDEVENGADOS M,OPERACIONES O")
+SQL.ADD("WHERE M.NrOperacion = O.NrOperacion")
+SQL.ADD("AND M.Vehiculo='"~Dialogo.Vehiculo1~"'")
+SQL.ADD("AND O.TipoOp = 'MMCPM'")
+SQL.ADD("AND M.TipoDevengado = 'INTLEN'")
+SQL.ADD("AND O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("AND M.Fecha   <= '"~IdxDate(Dialogo.Fecha1)~"'")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND O.Book1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ENDIF  
+SQL.ADD("GROUP By O.NrOperacion,M.Especie, M.TipoDevengado, M.Cliente, O.Vehiculo1,O.Cliente1,O.FechaOp,O.FechaVto,O.CantidadOri,O.Book1, O.Precio1")
+
+SQL.ADD(" UNION ")
+
+SQL.ADD("SELECT O.NrOperacion,0 AS Monto, O.Especie, '' as TipoDevengado, O.Vehiculo1 as 'Cliente', O.Vehiculo1 as 'Vehiculo',")
+SQL.ADD("O.Cliente1,O.FechaOp,O.FechaVto,O.CantidadOri/"~Fstr(&unidad, 0, 0)~" AS CantidadOri,O.Book1, O.Precio1")
+SQL.ADD("FROM OPERACIONES O")
+SQL.ADD("WHERE O.Vehiculo1='"~Dialogo.Vehiculo1~"'")
+SQL.ADD("AND O.TipoOp = 'MMCPM'")
+SQL.ADD("AND O.FechaOp= '"~IdxDate(Dialogo.Fecha1)~"'")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND O.Book1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ENDIF  
+SQL.ADD("GROUP By O.NrOperacion,O.Especie, O.Vehiculo1,O.Cliente1,O.FechaOp,O.FechaVto,O.CantidadOri,O.Book1, O.Precio1")
+
+SQL.ADD(" ORDER BY O.Vehiculo1,O.Book1, O.NrOperacion ")
+    
+    
+Watch(sql.Batch)
+Recorrer SQL
+    IF Incluido(fbn('Vehiculo'), &vehiculosDolBillete)
+        let &cotVehiculo &cotDolBillete
+    ELSE
+        let &cotVehiculo &cotDolDivisa
+    ENDIF
+    IF Incluido(&monedaInforme, fbn('Especie'))
+        let &tc 1
+    ELSE
+        IF Eqstr(&monedaInforme, &monedaLocal)
+            let &tc &cotVehiculo
+        ELSE
+            let &tc 1/&cotVehiculo
+        ENDIF
+    ENDIF
+    ACT(A:fac, fbn('Vehiculo')~' '~fbn('Book1'))
+    ACT(B:fac, 'PF')
+    ACT(C:fac, fbn('Cliente1'))
+    ACT(D:fac, fbn('Especie'))
+    ACT(E:fac, fbn('FechaVto'))
+    ACN(F:fac, fbn('Precio1'))
+    ACN(G:fac, fbn('CantidadOri'))
+    
+    If EqStr(&MonedaInforme, fbn('Especie'))
+        ACN(H:fac, fbn('CantidadOri')+fbn('Monto') )
+    ELSE
+        ACN(H:fac, ((fbn('CantidadOri')+fbn('Monto'))*&tc) )
+    ENDIF
+    let &totalPF &totalPF + Val(H:fac)
+    ACT(K:FAC, FBN['NrOperacion'])
+    ACLO(K:FAC, FBN['NrOperacion'])
+Proximo
+***FORMATO DE CELDAS BLOQUE PF****
+let &filaFinPlazoFijo fac
+AgregarMarco(A:&filaIniPlazoFijo..J:&filaFinPlazoFijo, 0, 0)
+FormatoCeldas(F:&filaIniPlazoFijo..F:&filaFinPlazoFijo, Exe('F8'))
+FormatoCeldas(G:&filaIniPlazoFijo..G:&filaFinPlazoFijo, Exe('F2'))
+FormatoCeldas(H:&filaIniPlazoFijo..H:&filaFinPlazoFijo, Exe('F2'))
+
+***TOTAL MONTO A LA FECHA PF
+ACN(H:&filaTotalPF, &totalPF)
+SetFont(H:&filaTotalPF, 2)
+FormatoCeldas(H:&filaTotalPF, Exe('F2'))
+AgregarMarco(H:&filaTotalPF, 0, 0)
+SetFilaActual(fac+3)
+
+
+**********************************************************************
+***---BLOQUE CAUCIONES
+**********************************************************************
+let &filaTotalCauciones fac-1
+let &filaIniCauciones fac+1
+ACT(A:fac, 'Vehiculo')
+ACT(B:fac, 'Instrumento')
+ACT(C:fac, 'Entidad')
+ACT(D:fac, 'Moneda')
+ACT(E:fac, 'Vencimiento')
+ACT(F:fac, 'Tasa')
+ACT(G:fac, 'Capital Inicial')
+ACT(H:fac, 'Monto a la Fecha')
+ACT(I:fac, '% Sobre Total Invertido')
+SetFont(A:fac..J:fac, 2)
+AgregarMarco(A:fac..J:fac, 0, 0, Exe('COLOR'))
+
+
+****SQL Bloque CAUCIONES***
+SQL.ADD("SELECT O.NrOperacion,SUM(M.Monto)/"~Fstr(&unidad, 0, 0)~" AS Monto, O.Especie As Moneda, M.TipoDevengado, M.Cliente, O.Vehiculo1 as 'Vehiculo',")
+SQL.ADD("O.Cliente1,O.FechaOp,O.FechaVto,O.Cantidad/"~Fstr(&unidad, 0, 0)~" AS Cantidad,O.Book1, O.Precio1, O.TipoOp")
+SQL.ADD("FROM MOVDEVENGADOS M,OPERACIONES O")
+SQL.ADD("WHERE M.NrOperacion = O.NrOperacion")
+SQL.ADD("AND M.Vehiculo='"~Dialogo.Vehiculo1~"'")
+SQL.ADD("AND O.TipoOp IN('SECAC', 'SECAT')")
+SQL.ADD("AND M.TipoDevengado = 'INTLEN'")
+SQL.ADD("AND O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+*SQL.ADD("AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"'")
+SQL.ADD("AND M.Fecha   <= '"~IdxDate(Dialogo.Fecha1)~"'")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND O.Book1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ENDIF
+SQL.ADD("GROUP By O.NrOperacion,O.Especie, M.TipoDevengado, M.Cliente, O.Vehiculo1,O.Cliente1,O.FechaOp,O.FechaVto,O.Cantidad,O.Book1, O.Precio1, O.TipoOp")
+
+SQL.ADD(" UNION ")
+
+SQL.ADD("SELECT O.NrOperacion,0 AS Monto, O.Especie As Moneda, '' As 'TipoDevengado', '' as 'Cliente', O.Vehiculo1 as 'Vehiculo',")
+SQL.ADD("O.Cliente1,O.FechaOp,O.FechaVto,O.Cantidad/"~Fstr(&unidad, 0, 0)~" AS Cantidad,O.Book1, O.Precio1, O.TipoOp")
+SQL.ADD("FROM OPERACIONES O")
+SQL.ADD("WHERE O.Vehiculo1='"~Dialogo.Vehiculo1~"'")
+SQL.ADD("AND O.TipoOp IN('SECAC', 'SECAT')")
+SQL.ADD("AND O.FechaOp = '"~IdxDate(Dialogo.Fecha1)~"'")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND O.Book1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ENDIF
+SQL.ADD("GROUP By O.NrOperacion,O.Especie, O.Vehiculo1,O.Cliente1,O.FechaOp,O.FechaVto,O.Cantidad,O.Book1, O.Precio1, O.TipoOp")
+
+SQL.ADD(" ORDER BY O.Vehiculo1,O.Book1, O.TipoOp, O.NrOperacion ")
+
+Watch(sql.Batch)
+Recorrer SQL
+IF Incluido(fbn('Vehiculo'), &vehiculosDolBillete)
+        let &cotVehiculo &cotDolBillete
+    ELSE
+        let &cotVehiculo &cotDolDivisa
+    ENDIF
+    IF Incluido(&monedaInforme, fbn('Moneda') )
+        let &tc 1
+    ELSE
+        IF Eqstr(&monedaInforme, &monedaLocal)
+            let &tc &cotVehiculo
+        ELSE
+            let &tc 1/&cotVehiculo
+        ENDIF
+    ENDIF
+    ACT(A:fac, fbn('Vehiculo')~' '~fbn('Book1'))
+    ACT(B:fac, 'CAUCION')
+    ACT(C:fac, fbn('Cliente1'))
+    ACT(D:fac, fbn('Moneda'))
+    ACT(E:fac, fbn('FechaVto'))
+    ACN(F:fac, fbn('Precio1'))
+    IF EqStr(FBN('TipoOp'), 'SECAT')
+        ACN(G:fac, fbn('Cantidad')*(-1))
+    ELSE
+        ACN(G:fac, fbn('Cantidad'))
+    EndIf
+    ACN(H:fac, Val(G:fac)+fbn('Monto') )
+    If EqStr(&MonedaInforme, fbn('Moneda'))
+        ACN(H:fac, Val(G:fac)+fbn('Monto') )
+    ELSE
+        ACN(H:fac, (Val(G:fac)+fbn('Monto'))*&tc) 
+    EndIf    
+    let &totalCauciones &totalCauciones + Val(H:fac)
+    ACT(K:FAC, FBN['NrOperacion'])
+    ACLO(K:FAC, FBN['NrOperacion'])
+Proximo
+
+****FORMATO DE CELDAS BLOQUE CAUCIONES****
+let &filaFinCauciones fac
+AgregarMarco(A:&filaIniCauciones..J:&filaFinCauciones, 0, 0)
+FormatoCeldas(F:&filaIniCauciones..F:&filaFinCauciones, Exe('F8'))
+FormatoCeldas(G:&filaIniCauciones..G:&filaFinCauciones, Exe('F2'))
+FormatoCeldas(H:&filaIniCauciones..H:&filaFinCauciones, Exe('F2'))
+
+****TOTAL MONTO A LA FECHA CAUCIONES
+ACN(H:&filaTotalCauciones, &totalCauciones)
+SetFont(H:&filaTotalCauciones, 2)
+FormatoCeldas(H:&filaTotalCauciones, Exe('F2'))
+AgregarMarco(H:&filaTotalCauciones, 0, 0)
+SetFilaActual(fac+3)
+
+
+**********************************************************************
+***---BLOQUE LETRAS
+**********************************************************************
+let &filaTotalLetras fac-1
+let &filaIniLetras fac+1
+ACT(A:fac, 'Vehiculo')
+ACT(B:fac, 'Letras')
+ACT(C:fac, 'Entidad')
+ACT(D:fac, 'Moneda')
+ACT(E:fac, 'Vencimiento')
+ACT(F:fac, 'Cotización ARS')
+ACT(G:fac, 'Nominales')
+ACT(H:fac, 'Monto a la Fecha')
+ACT(I:fac, '% Sobre Total Invertido')
+SetFont(A:fac..J:fac, 2)
+AgregarMarco(A:fac..J:fac, 0, 0, Exe('COLOR'))
+
+****SQL Bloque LETRAS***
+SQL.ADD(" Select P.Vehiculo,P.Especie,E.Issuer Entidad,E.MonedaEmision Moneda,E.Cotiza,E.Fecha, ")
+SQL.ADD(" P.CantidadFin/"~Fstr(&unidad, 0, 0)~" CantidadFin,  P.Book ")
+SQL.ADD(" From "~DBO~".POSICIONES2 P, "~DBO~".ESPECIES E ")
+SQL.ADD(" Where E.Codigo = P.Especie ")
+SQL.ADD(" AND dbo.DESCIENDEDEESPECIE(P.Especie,'LETRA') = 1 ")
+SQL.ADD(" AND P.NrSaldo = 1 ")
+SQL.ADD(" AND P.Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND P.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND P.Book IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ENDIF
+*SQL.ADD(" Order By 3, 4, 1 ")
+SQL.ADD(" Order By P.Vehiculo,P.Book ")
+Watch(sql.Batch)
+Recorrer SQL
+IF Incluido(fbn('Vehiculo'), &vehiculosDolBillete)
+        let &cotVehiculo &cotDolBillete
+    ELSE
+        let &cotVehiculo &cotDolDivisa
+    ENDIF
+    IF Incluido(&monedaInforme, fbn('Cotiza'))
+        let &tc 1
+    ELSE
+        IF Eqstr(&monedaInforme, &monedaLocal)
+            let &tc &cotVehiculo
+        ELSE
+            let &tc 1/&cotVehiculo
+        ENDIF
+    ENDIF
+    ACT(A:fac, fbn('Vehiculo')~' '~fbn('Book'))
+    ACT(B:fac, fbn('Especie'))
+    ACT(C:fac, fbn('Entidad'))
+    ACT(D:fac, fbn('Moneda'))
+    ACT(E:fac, fbn('Fecha')) 
+   *Si la Especie Cotiza en Pesos, pongo la Cotización a la fecha del informe
+    IF EqStr(fbn('Cotiza'), &monedaLocal)
+        ACN(F:fac, Cotizacion(fbn('Especie'),,,,Dialogo.Fecha1,1,SI)) 
+   ELSE 
+        IF EqStr(fbn('Cotiza'), &monedaExtr)
+            ACN(F:fac, Cotizacion(fbn('Especie'),,,,Dialogo.Fecha1,1,SI)*&cotVehiculo) 
+        EndIF
+    EndIf
+    ACN(G:fac, fbn('CantidadFin'))
+    ACN(H:fac, Val(G:fac)* Val(F:fac)*&tc)
+    let &totalLetras &totalLetras + Val(H:fac)
+Proximo
+
+****FORMATO DE CELDAS BLOQUE LETRAS****
+let &filaFinLetras fac
+AgregarMarco(A:&filaIniLetras..J:&filaFinLetras, 0, 0)
+FormatoCeldas(F:&filaIniLetras..F:&filaFinLetras, Exe('F8'))
+FormatoCeldas(G:&filaIniLetras..G:&filaFinLetras, Exe('F2'))
+FormatoCeldas(H:&filaIniLetras..H:&filaFinLetras, Exe('F2'))
+
+****TOTAL MONTO A LA FECHA LETRAS
+ACN(H:&filaTotalLetras, &TotalLetras)
+SetFont(H:&filaTotalLetras, 2)
+FormatoCeldas(H:&filaTotalLetras, Exe('F2'))
+AgregarMarco(H:&filaTotalLetras, 0, 0)
+SetFilaActual(fac+3)
+
+**********************************************************************
+***---BLOQUE BONOS
+**********************************************************************
+let &filaTotalBonos fac-1
+let &filaIniBonos fac+1
+ACT(A:fac, 'Vehiculo')
+ACT(B:fac, 'Bonos')
+ACT(C:fac, 'Entidad')
+ACT(D:fac, 'Moneda')
+ACT(E:fac, 'Vencimiento')
+ACT(F:fac, 'Cotización ARS')
+ACT(G:fac, 'Nominales')
+ACT(H:fac, 'Monto a la Fecha')
+ACT(I:fac, '% Sobre Total Invertido')
+SetFont(A:fac..J:fac, 2)
+AgregarMarco(A:fac..J:fac, 0, 0, Exe('COLOR'))
+
+
+****SQL Bloque BONOS***
+SQL.ADD(" Select P.Vehiculo,P.Especie,E.Issuer Entidad, E.MonedaEmision Moneda, E.Fecha, E.Cotiza, ")
+SQL.ADD(" P.CantidadFin/"~Fstr(&unidad, 0, 0)~" CantidadFin,  P.Book ")
+SQL.ADD(" From "~DBO~".POSICIONES2 P, "~DBO~".ESPECIES E ")
+SQL.ADD(" Where E.Codigo = P.Especie ")
+SQL.ADD(" AND dbo.DESCIENDEDEESPECIE(P.Especie,'PUBLIC') = 1 ")
+SQL.ADD(" AND NOT dbo.DESCIENDEDEESPECIE(P.Especie,'LETRA') = 1 ")
+SQL.ADD(" AND P.NrSaldo = 1 ")
+SQL.ADD(" AND P.Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND P.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND P.Book IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ENDIF
+*SQL.ADD(" Order By 3, 4, 1 ")
+SQL.ADD(" Order By P.Vehiculo,P.Book ")
+Watch(sql.Batch)
+Recorrer SQL
+IF Incluido(fbn('Vehiculo'), &vehiculosDolBillete)
+        let &cotVehiculo &cotDolBillete
+    ELSE
+        let &cotVehiculo &cotDolDivisa
+    ENDIF
+    IF Incluido(&monedaInforme, fbn('Cotiza'))
+        let &tc 1
+    ELSE
+        IF Eqstr(&monedaInforme, &monedaLocal)
+            let &tc &cotVehiculo
+        ELSE
+            let &tc 1/&cotVehiculo
+        ENDIF
+    ENDIF
+    ACT(A:fac, fbn('Vehiculo')~' '~fbn('Book'))
+    ACT(B:fac, fbn('Especie'))
+    ACT(C:fac, fbn('Entidad'))
+    ACT(D:fac, fbn('Moneda'))
+    ACT(E:fac, fbn('Fecha')) 
+    *Si la Especie Cotiza en Pesos, pongo la Cotización a la fecha del informe en moneda local
+    IF EqStr(fbn('Cotiza'), &monedaLocal)
+        ACN(F:fac, Cotizacion(fbn('Especie'),,,,Dialogo.Fecha1,1,SI)) 
+   ELSE 
+        IF EqStr(fbn('Cotiza'), &monedaExtr)
+            ACN(F:fac, Cotizacion(fbn('Especie'),,,,Dialogo.Fecha1,1,SI)*&cotVehiculo) 
+        EndIF
+    EndIf
+    ACN(G:fac, fbn('CantidadFin'))
+    ACN(H:fac, Val(G:fac)* Val(F:fac) * &tc)
+    let &totalBonos &totalBonos + Val(H:fac)
+Proximo
+****FORMATO DE CELDAS BLOQUE BONOS****
+let &filaFinBonos fac
+let &filaFinInversiones fac
+AgregarMarco(A:&filaIniBonos..J:&filaFinBonos, 0, 0)
+FormatoCeldas(F:&filaIniBonos..F:&filaFinBonos, Exe('F8'))
+FormatoCeldas(G:&filaIniBonos..G:&filaFinBonos, Exe('F2'))
+FormatoCeldas(H:&filaIniBonos..H:&filaFinBonos, Exe('F2'))
+
+****TOTAL MONTO A LA FECHA BONOS
+ACN(H:&filaTotalBonos, &TotalBonos)
+SetFont(H:&filaTotalBonos, 2)
+FormatoCeldas(H:&filaTotalBonos, Exe('F2'))
+AgregarMarco(H:&filaTotalBonos, 0, 0)
+SetFilaActual(fac+3)
+
+**********************************************************************
+****---BLOQUE DESCUENTO DE DOCUMENTOS
+**********************************************************************
+
+
+**********************************************************************
+***---Armo Cuadro Final de SubTotales por Vehiculo/Book/Instrumento
+**********************************************************************
+***---Inversiones
+*let &vehiculoBook ''
+let &filaIniSubTotales fac+1
+let &listaInvBooks ''
+let &cantBooks 0
+Recorrer&k &filaIniInversiones, &filaFinInversiones
+    IF Not(Vacio(Val(A:&k)) O Eqstr(Val(A:&k), 'Vehiculo'))   
+   ***--Reviso si el book está en &listaInvBooks, sino escribo un nuevo registro
+        If Not Incluido(Val(A:&k), &listaInvBooks )
+            ifa
+            ACT(B:fac, Val(A:&k))
+            ACT(C:fac, 'Inversiones '~Val(A:&k))
+            ACN(D:fac, Val(D:fac) + Val(H:&k))
+            let &listaInvBooks &listaInvBooks ~ '|'~Val(a:&k)
+            let &cantBooks &cantBooks + 1
+   ***--Si el Book ya existe, vuelvo a recorrer el cuadro para sumar el valor al book correspondiente        
+        ELSE
+        Recorrer&j &filaIniSubTotales, &filaIniSubTotales + &cantBooks
+                IF EqStr(Val(A:&k),Val(B:&j))
+                    ACN(D:&j, Val(D:&j) + Val(H:&k))
+                EndIf
+            Proximo
+        ENDIF
+    EndIf 
+Proximo
+SetFont(B:&filaIniSubTotales..D:fac, 1)
+FormatoCeldas(B:&filaIniSubTotales..D:fac, Exe('F2'))
+AgregarMarco(B:&filaIniSubTotales..D:fac, 0, 0)
+***---Ctas Vista
+ifa
+let &vehiculoBookInst ''
+let &totalVehiculoBookInst 0
+let &filaIniInst fac
+let &totalVehiculoBook 0
+let &instrumento ''
+Recorrer&k &filaIniCtasVista, &filaFinCtasVista
+    IF Not Eqstr(Val(A:&k)~Val(B:&k), &vehiculobookInst)
+    IF NoVacio(&VehiculobookInst)
+            ACN(D:fac, &totalVehiculoBookInst)
+            IF Not Eqstr(Val(B:&k), &instrumento)
+                SetFont(B:&filaIniInst..D:fac, 2)
+                FormatoCeldas(B:&filaIniInst..D:fac, Exe('F2'))
+                AgregarMarco(B:&filaIniInst..D:fac, 0, 0)
+            ENDIF
+            ifa
+            *let &filaIniInst fac
+        ENDIF
+        ACT(B:fac, Val(A:&k))
+        ACT(C:fac, Val(B:&k))
+        let &totalVehiculoBookInst 0
+    ENDIF
+    let &totalVehiculoBookInst &totalVehiculoBookInst + Val(F:&k)
+    let &VehiculobookInst Val(A:&k)~Val(B:&k)
+    let &instrumento Val(C:fac)
+Proximo
+ACN(D:fac, &totalVehiculoBookInst)
+SetFont(B:&filaIniInst..D:fac, 1)
+FormatoCeldas(B:&filaIniInst..D:fac, Exe('F2'))
+AgregarMarco(B:&filaIniInst..D:fac, 0, 0)
+let &filaFinInst fac
+
+ifa
+**********************************************************************
+***---Cuadro de Totales por Vehiculo/Book
+**********************************************************************
+let &cantVehiculoBook 0
+let &filaIniTotalVehiculoBook fac
+let &totalGeneral 0
+let &listaBooks ''
+Recorrer&k &filaIniSubTotales, &filaFinInst
+    ***---Recorro cada fila del cuadro de Vehiculo/Book/Instrumentos
+    If Not Incluido(Val(B:&k), &listaBooks)
+        ***---Si no encontro el vehiculo/book, sumo una fila al cuadro final, sumo el nombre del book a la lista
+        let &cantVehiculoBook &cantVehiculoBook + 1
+        ACT(C:fac, Val(B:&k))
+        ACN(D:fac, Val(D:&k))
+        let &totalGeneral &totalGeneral + Val(D:&k)
+        let &listaBooks &listaBooks~'|'~Val(B:&k)
+        ifa
+    ELSE
+        ***---Si el vehiculo/book está en la lista, vuelvo a recorrer el cuadro de totales por Vehiculo/Book
+        Recorrer&j &filaIniTotalVehiculoBook, &filaIniTotalVehiculoBook + &cantVehiculoBook
+           IF Eqstr(Val(B:&k), Val(C:&j))
+               ACN(D:&j, Val(D:&j) + Val(D:&k))
+               let &totalGeneral &totalGeneral + Val(D:&k)
+           ENDIF
+           Proximo
+    ENDIF
+Proximo
+Recorrer&k &filaIniTotalVehiculoBook, &filaIniTotalVehiculoBook + &cantVehiculoBook-1
+    ***---Recorro último cuadro para agregar palabra "Total"
+    ACT(C:&k, 'Total '~Val(C:&k))
+Proximo
+
+SetFont(C:&filaIniTotalVehiculoBook..D:fac-1, 2)
+FormatoCeldas(D:&filaIniTotalVehiculoBook..D:fac-1, Exe('F2'))
+AgregarMarco(C:&filaIniTotalVehiculoBook..D:fac-1, 0, 0)
+ACT(C:fac, 'Total')
+ACN(D:fac, &totalGeneral)
+SetFont(C:fac..D:fac, 3)
+FormatoCeldas(D:fac..D:fac, Exe('F2'))
+AgregarMarco(C:fac..D:fac, 0, 0, Exe('COLOR'))
+
+**********************************************************************
+***CÁLCULO % SOBRE TOTAL INVERTIDO***
+**********************************************************************
+***---Recorro Cuadro CTAS VISTA para calcular el % sobre total Invertido
+Recorrer&k &filaIniCtasVista, &filaFinCtasVista
+    ACN(G:&k, Val(F:&k) / &totalGeneral * 100)
+    ACN(G:&filaTotalCtasVista, Val(G:&filaTotalCtasVista) + Val(G:&k))
+    ACN(H:&k, Val(F:&k) / &totalCtasVista * 100)
+    ACN(H:&filaTotalCtasVista+1, Val(H:&filaTotalCtasVista+1) + Val(H:&k))
+Proximo
+SetFont(G:&filaIniCtasVista..H:&filaFinCtasVista, 1)
+SetFont(G:&filaTotalCtasVista..H:&filaTotalCtasVista+1, 2)
+FormatoCeldas(G:&filaTotalCtasVista..H:&filaFinCtasVista, Exe('F2%'))
+
+***---Recorro Cuadro FCI y Plazo Fijo para calcular el % sobre total Invertido
+Recorrer&k &filaIniFCI, &filaFinFCI
+    ACN(I:&k, Val(H:&k) / &totalGeneral * 100)
+    ACN(I:&filaTotalFCI, Val(I:&filaTotalFCI) + Val(I:&k))
+    ACN(J:&k, Val(H:&k) / &totalFCI * 100)
+    ACN(J:&filaTotalFCI+1, Val(J:&filaTotalFCI+1) + Val(J:&k))
+Proximo
+SetFont(I:&filaIniFCI..J:&filaFinFCI, 1)
+SetFont(I:&filaTotalFCI..J:&filaTotalFCI+1, 2)
+FormatoCeldas(I:&filaTotalFCI..J:&filaFinFCI, Exe('F2%'))
+
+***---Recorro Cuadro PLAZO FIJO para calcular el % sobre total Invertido
+Recorrer&k &filaIniPlazoFijo, &filaFinPlazoFijo
+    ACN(I:&k, Val(H:&k) / &totalGeneral * 100)
+    ACN(I:&filaTotalPF, Val(I:&filaTotalPF) + Val(I:&k))
+    ACN(J:&k, Val(H:&k) / &totalPF * 100)
+    ACN(J:&filaTotalPF+1, Val(J:&filaTotalPF+1) + Val(J:&k))
+Proximo
+SetFont(I:&filaIniPlazoFijo..J:&filaFinPlazoFijo, 1)
+SetFont(I:&filaTotalPF..J:&filaTotalPF+1, 2)
+FormatoCeldas(I:&filaTotalPF..J:&filaFinPlazoFijo, Exe('F2%'))
+
+***---Recorro Cuadro CAUCIONES para calcular el % sobre total Invertido
+Recorrer&k &filaIniCauciones, &filaFinCauciones
+    ACN(I:&k, Val(H:&k) / &totalGeneral * 100)
+    ACN(I:&filaTotalCauciones, Val(I:&filaTotalCauciones) + Val(I:&k))
+    ACN(J:&k, Val(H:&k) / &TotalCauciones * 100)
+    ACN(J:&filaTotalCauciones+1, Val(J:&filaTotalCauciones+1) + Val(J:&k))
+Proximo
+SetFont(I:&filaIniCauciones..J:&filaFinCauciones, 1)
+SetFont(I:&filaTotalCauciones..J:&filaTotalCauciones+1, 2)
+FormatoCeldas(I:&filaTotalCauciones..J:&filaFinCauciones, Exe('F2%'))
+
+***---Recorro Cuadro LETRAS para calcular el % sobre total Invertido
+Recorrer&k &filaIniLetras, &filaFinLetras
+    ACN(I:&k, Val(H:&k) / &totalGeneral * 100)
+    ACN(I:&filaTotalLetras, Val(I:&filaTotalLetras) + Val(I:&k))
+    ACN(J:&k, Val(H:&k) / &TotalLetras * 100)
+    ACN(J:&filaTotalLetras+1, Val(J:&filaTotalLetras+1) + Val(J:&k))
+Proximo
+SetFont(I:&filaIniLetras..J:&filaFinLetras, 1)
+SetFont(I:&filaTotalLetras..J:&filaTotalLetras+1, 2)
+FormatoCeldas(I:&filaTotalLetras..J:&filaFinLetras, Exe('F2%'))
+
+***---Recorro Cuadro BONOS para calcular el % sobre total Invertido
+Recorrer&k &filaIniBonos, &filaFinBonos
+    ACN(I:&k, Val(H:&k) / &totalGeneral * 100)
+    ACN(I:&filaTotalBonos, Val(I:&filaTotalBonos) + Val(I:&k))
+    ACN(J:&k, Val(H:&k) / &TotalBonos * 100)
+    ACN(J:&filaTotalBonos+1, Val(J:&filaTotalBonos+1) + Val(J:&k))
+Proximo
+SetFont(I:&filaIniBonos..J:&filaFinBonos, 1)
+SetFont(I:&filaTotalBonos..J:&filaTotalBonos+1, 2)
+FormatoCeldas(I:&filaTotalBonos..J:&filaFinBonos, Exe('F2%'))
+
+**********************************************************************
+SetFilaActual(fac+2)
+ACT(A:fac, 'Fin del Informe')
+SetFont(A:fac, 2)
+
+
+ACO(1, 15)
+ACO(2, 15)
+ACO(3, 20)
+ACO(4, 8)
+ACO(5, 12)
+ACO(6, 12)
+ACO(7, 15)
+ACO(8, 15)
+ACO(9, 15)
+ACO(10, 15)
+ACO(11, 15)
+ACO(12, 15)
+ACO(13, 15)
+ACO(14, 15)
+
+
+LimitesVision(L:fac+1)

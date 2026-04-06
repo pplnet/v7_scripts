@@ -1,0 +1,114 @@
+﻿CrearDialogo
+   NrOperacion1 : 'Nro. Operacion';;;;;;NoVacio(Dialogo.NrOperacion1);'Debe ingresar un numero de Op.';NO
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+SQL.ADD(" Select Vehiculo1, Vehiculo2, TipoOp, Cuotas1, FechaEj, Operador, CB1, RB7 ")
+SQL.ADD(" From "~DBO~".OPERACIONES ")
+SQL.ADD(" Where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Recorrer SQL
+   ACT(VH:1, fbn('Vehiculo1'))
+   ACT(VH:3, fbn('Vehiculo2'))
+   ACT(Z:7, fbn('TipoOp'))
+   ACN(CT:1, fbn('Cuotas1'))
+   ACD(FJ:1, fbn('FechaEj'))
+   ACT(OP:1, fbn('Operador'))
+   ACN(CB:1, fbn('CB1'))
+   ACN(RB:7, fbn('RB7'))
+Proximo
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+(.'CONTROLVH'.)
+
+If Incluido(Copy(Val(z7),1,2),'SE|FX|DT|DP') Y Not Incluido (Val(Z:7), 'SEPTMV|SEPVMV')
+   Cancelar("Las operaciones del Tipo "~Val(z7)~" no se modifican por evento")
+Endif
+
+If Incluido(Val(Z:7), 'MMPCCM|MMPCCV|SEPVMV') Y Val(CB:1) = 1
+   Cancelar(" Las operaciones automaticas del Tipo "~Val(z7)~" no se modifican por evento ")
+Endif
+
+If Incluido(Val(z7),'DTSFV|DTSFF|DTSVV')
+   Cancelar("Las operaciones del Tipo "~Val(z7)~" no se modifican por evento")
+Endif
+
+ACN(z9, SQL("Select count(*) from "~DBO~".MOVPENDIENTES where NrOperacion = '"~Dialogo.NrOperacion1~"' and NrSaldo = 1"))
+
+If Val(z9)=0 y Val(CT:1) < 1 y Incluido(Copy(Val(z7),1,2),'MM') y Not EqStr(Val(z7),'MMCCR')
+   Cancelar("Las operaciones liquidadas del Tipo "~Val(z7)~" no se modIfican")
+Endif
+
+If Val(z9)=0 y Val(FJ:1) < Fsys y Val(CT:1) < 1 y Incluido(Copy(Val(z7),1,2),'DP|DT')
+   Cancelar("Las operaciones liquidadas del Tipo "~Val(z7)~" no se modIfican")
+Endif
+
+If Not EqStr(Val(OP:1), UsuarioActivo) y Not Incluido(UsuarioActivo, Var('ULMODI'))
+    Cancelar('El usuario no esta autorizado a modIficar la operacion')
+Endif
+ACN(z:2, SQL("Select count(*) from "~DBO~".MOVEJECUTADOS where NrOperacion = '"~Dialogo.NrOperacion1~"' and NrSaldo = 1"))
+If Val(z:2)=0
+   Cancelar('La operacion no tiene liquidaciones')
+Else
+   ACN(z3, SQL("Select 1 from "~DBO~".OPERACIONESBITS where NrOperacion = '"~Dialogo.NrOperacion1~"' and NrBit in (20,50) and Valor = '1'"))
+   If Val(z3) <> 1
+      Cancelar('La Operacion no esta Aprobada')
+   Else
+      *- Terminal, Conciliar e Informar a Datanet
+      *ACN(z8, SQL("Select count(*) from "~DBO~".OPERACIONESBITS where NrOperacion = '"~BuscarCampo('TRANSACCIONES2','NrTrans','NrOperacionRef1',Dialogo.NrOperacion1)~"' and NrBit in (17,18,20) and Valor = '1'"))
+      *If Val(z8)=0 y Not Incluido(BuscarCampo('OPERACIONES','Vehiculo1','NrOperacion',Dialogo.NrOperacion1),Var('VLIQUIDAA'))
+         *Cancelar('La liquidacion de la operacion no fue supervisada aun')
+      *Endif
+      ***/// Para ON con PIKs, se ejecuta POSTEDICION
+      If Eqstr(Val(Z:7), 'MMONM') Y Val(RB:7)=1
+         ModIficarOperacion(Dialogo.NrOperacion1,0,NO,SI,SI,NO,SI,NO,NO,SI,SI,SI,SI,NO,NO,NO,NO,SI,SI,NO,SI,NO,NO,NO,NO,0)
+      Else
+         ModIficarOperacion(Dialogo.NrOperacion1,0,NO,SI,SI,NO,SI,NO,NO,SI,SI,SI,SI,NO,NO,NO,NO,NO,SI,NO,SI,NO,NO,NO,NO,0)
+      Endif
+      If Ok
+         SQL.ADD("Update "~DBO~".OPERACIONES set Impresa='1' where NrOperacion='"~Dialogo.NrOperacion1~"'")
+         SQL.NEW
+         SQL.EXEC
+         SQL.ADD(" Select NrBit from "~DBO~".OPERACIONESBITS where NrOperacion = '"~Dialogo.NrOperacion1~"' and Valor = '1' ")
+         Recorrer SQL
+             DFA
+             IF fbn('NrBit') = 50
+                 ***---Si esta en terminal verifico si estan las instancias
+                 IF SQL(" Select Count(*) From "~DBO~".OPERACIONESBITS Where NrOperacion = '"~Dialogo.NrOperacion1~"' ") = 1
+                     ***---No estan las otras instancias => las inserto
+                     EjecutarEvento('INSBIT', String1 = 'OPERACIONES', Entero1 = 50, NrOperacion1=Dialogo.NrOperacion1)
+                 ENDIF
+             ENDIF
+         Proximo
+         SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='0' where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+         SQL.NEW
+         SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='1' where NrOperacion = '"~Dialogo.NrOperacion1~"' and NrBit=19 ")
+         SQL.NEW
+         SQL.ADD(" Insert into "~DBO~".EXCEPCIONES ")
+         SQL.ADD(" (NrOperacion, Fecha, Tipo, Descripcion) Values ")
+         SQL.ADD(" ('"~Dialogo.NrOperacion1~"', '"~IdxDate(FSYS)~"','MODEVENTO','"~BuscarCampo('EVENTOS','Nombre','Codigo',CodigoInforme)~" "~Hora(Ahora)~"') ")
+         SQL.NEW
+         SQL.EXEC
+         *// Modificacion de vinculadas contrarias
+         **-// Reprocesa la op, cuotas y comisiones. Cambia de instancia la op contraria segun si opera con vh extranjero o no. Act Movimientos
+         If Eqstr(Val(z:7), 'SEPVMV')
+            (.'MVCOSEPVMV'.)
+         Endif
+         If Eqstr(Val(z:7), 'MMPCCM')
+            (.'MVCOMMPCCM'.)
+         Endif
+         If Eqstr(Val(z:7), 'MMPCCV')
+            (.'MVCOMMPCCV'.)
+         Endif
+*        ACT(z5, SQL("Select Alias4 from "~DBO~".VEHICULOS where Codigo = '"~Val(VH:1)~"'"))
+        ACT(z5, VAR('MAILDESTIN'))
+        SendMail(Val(z5),'Modificacion de Operaciones', 'Se modifico la operacion : '~Dialogo.NrOperacion1)
+      Endif
+   Endif     
+Endif
+

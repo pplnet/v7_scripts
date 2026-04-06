@@ -1,0 +1,217 @@
+﻿*-- Recupera las Operaciones de Alquileres de Bonos SEABD y SEABP
+*-- Hace Vencer la Operacion Original Especie Cupon N
+*-- Genera una Nueva Operacion con la Especie y Cupon N+1
+*-- Genera una Nueva Operacion con la CuponEspecie y Cupon N
+*-- val(aa:&i)=0 Si No Devuelve Cupones genera la Operacion de cupones hasta el final
+*-- val(aa:&i)=1 Si Devuelve Cupones genera la Operacion de cupones hasta la fecha del corte
+SQL.ADD("SELECT O.*  ")
+SQL.ADD("from  "~DBO~".OPERACIONES O ")
+SQL.ADD("where O.NrOperacion= '"~Val(ab:&i)~"' ")
+
+Recorrer SQL
+
+   Message('Procesando Operacion Tipo'~FBN['TipoOp']~' Nro. '~FBN['NrOperacion']~' ... ')
+
+   act(a:fac,fbn['NrOperacion'])
+   acd(r:fac,fbn['Fechavto'])
+
+   acn(e:fac,Val(g2) - fbn['Fechaop'])
+   acn(f:fac,fbn['Cantidad']*fbn['Precio1']*Val(e:fac)/IIF(EqStr(FBN['RB8'],'0'),36000,36500))
+   acn(g:fac,fbn['Cantidad'] + Val(f:fac))
+
+   *** Marca la operacion original ****
+   SQL.ADD("Update "~DBO~".OPERACIONES ")
+   SQL.ADD("Set Mercado3 = '"~VAL(b4)~"', RB4 = '1' ")
+   SQL.ADD("where  NrOperacion = '"~Val(a:fac)~"' ")
+   SQL.NEW
+   SQL.EXEC
+
+   Message('-- Procesando Operacion por CuponEspecie y Cupon Actual .... ')          
+   * h: Numerador  m: Nro.Operacion
+   ACN(h:fac,BuscarCampo('VEHICULOS','Alias1','Codigo',FBN['Vehiculo1']))
+   ACT(m:fac,GetNumerador(VAL(h:fac)))
+
+   *--  Si No Devuelve Cupones genera la Operacion de cupones hasta el final
+   *--  Si Devuelve Cupones genera la Operacion de cupones hasta la fecha del corte
+   acd(n:fac,Val(r:fac))
+
+   if val(aa:&i)=1 
+      IF Dialogo.Fecha2<Val(r:fac)
+         acd(n:fac,Dialogo.Fecha2)
+      ENDIF
+   endif
+
+   * O: Plazo P: TotalIntereses Q: TotalBrutoCli1 
+   acn(o:fac,Val(n:fac) - Val(g2))
+   acn(p:fac,fbn['Cantidad']*fbn['Precio1']*Val(o:fac)/IIF(EqStr(FBN['RB8'],'0'),36000,36500))
+
+   * s: InteresVR=InteresesCorr     t: InteresEspecie= TotalGanacias 
+   * q: ImporteBruto=TotalBrutoCli1 v: ImporteNeto=TotalnetoCli1
+   * u: Imp.Comision=ImpComMer1  w:ImporteComisionMercado Equivalente ImpComMerEq1
+   * x: ImpComCor1 y: ImpComCorEq1
+
+   acn(s:fac,val(p:fac)*FBN['Precio2']) 
+   acn(t:fac,FBN['Precio3']*val(s:fac))
+   acn(q:fac,(fbn['Cantidad']*fbn['Precio3'])+val(t:fac))
+
+   IF Not EqStr(BuscarCampo('ESPECIES','PaisOrigen','Codigo',FBN['Especie']),'ARG')
+      acn(q:fac,(fbn['Cantidad']*fbn['Precio3']*fbn['Precio2'])+val(t:fac))
+   ENDIF
+
+   acn(v:fac,0)
+   IF FBN['Precio3'] <> 0 
+      acn(v:fac,val(q:fac)-FBN['ImpGastos1']+Val(p:fac))
+   ENDIF
+
+   * Insert de la Operacion.
+   EjecutarEvento('INSOPE',NrOperacion1=Val(m:fac),NrOperacion2=FBN['NrOperacion'])
+
+   Message('Modifico los Atributos de la Operacion Cupon ')
+
+   SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+   SQL.ADD(" Set ")
+   SQL.ADD(" FechaOp2='"~IdxDate(Val(g2))~"', FechaOp='"~IdxDate(Val(g2))~"', ")
+   SQL.ADD(" Plazo="~Fstr(Val(o:fac),0,0)~",")
+   SQL.ADD(" Especie='"~VAL(b4)~"',TotalIntereses="~Fstr(Val(p:fac),0,4)~", ")
+   SQL.ADD(" InteresesCorr="~Fstr(Val(s:fac),0,2)~", ")
+   SQL.ADD(" TotalGanancias="~Fstr(Val(t:fac),0,2)~", ")
+   SQL.ADD(" TotalBrutoCli1="~Fstr(Val(q:fac),0,2)~", ")
+   SQL.ADD(" TotalNetoCli1= "~Fstr(Val(v:fac),0,2)~", ")
+   SQL.ADD(" FechaCarga='"~IdxDate(Fsys)~"', ")
+   SQL.ADD(" FechaVto='"~IdxDate(Val(n:fac))~"',")
+   SQL.ADD(" Mercado='OTC', PorComMer1=0, ImpComMer1=0, ImpComMerEq1=0, ")
+   SQL.ADD(" Corredor='',PorComCor1=0,TCComCor1=0,ImpComCor1=0,ImpComCorEq1=0,RB7='1', ")
+   SQL.ADD(" NrOperacion2= '"~Val(a:fac)~"' ")
+   SQL.ADD(" where NrOperacion = '"~Val(m:fac)~"' ")
+   SQL.NEW
+   SQL.EXEC
+ 
+   ActualizarMovimientos(Val(m:fac),SI)
+   SQL.EXEC
+
+   *****------------------------------------------------------------------------ 
+   * Si la Operacion vence despues de la fecha de pago genero la nueva opearcion
+   Message('-- Procesando Operacion por Especie y Cupon Siguiente .... ')          
+
+   * h: Numerador  m: Nro.Operacion
+   ACN(h:fac,BuscarCampo('VEHICULOS','Alias1','Codigo',FBN['Vehiculo1']))
+   ACT(m:fac,GetNumerador(VAL(h:fac)))
+  
+   * Plazo, TotalIntereses => Iguales a Operacion de Cupones 
+   * VResidual =>El de la Operacion Nueva  
+   * s: InteresVR=InteresesCorr     t: InteresEspecie= TotalGanacias 
+   * q: ImporteBruto=TotalBrutoCli1 v: ImporteNeto=TotalnetoCli1
+   * u: Imp.Comision=ImpComMer1  w:ImporteComisionMercado Equivalente ImpComMerEq1
+   * x: ImpComCor1 y: ImpComCorEq1 g:TasaInteresCupon i:FechaUltimoCupon
+   ACD(i:fac,IIF(EsHabil(UltCupon(FBN['Especie'],FBN['FechaVto']),'USA'),UltCupon(FBN['Especie'],FBN['FechaVto']),Habiles(UltCupon(FBN['Especie'],FBN['FechaVto']),IIF(EqStr(BuscarCampo('ESPECIES','CuponFeriado','Codigo',FBN['Especie']),'SIG'),1,IIF(EqStr(BuscarCampo('ESPECIES','CuponFeriado','Codigo',FBN['Especie']),'ANT'),-1,0)),'USA')))
+   ACN(g:fac,IIF(BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])>VAL(i:fac) y BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])<=FBN['FechaVto'],((BuscarCampo('ESPECIES','TasaIntVigente','Codigo',FBN['Especie'])*IIF(EspecieDiasAnio(FBN['Especie'])=0 y EspecieDiasMes(FBN['Especie'])=0,Dif360(VAL(i:fac),BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])-1,4),DifDias(VAL(i:fac),BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])-1,'USA',NO)))+(BuscarCampo('ESPECIES','TasaIntAnterior','Codigo',FBN['Especie'])*(IIF(EspecieDiasAnio(FBN['Especie'])=0 y EspecieDiasMes(FBN['Especie'])=0,Dif360(BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])-1,FBN['FechaVto'],4),DifDias(BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])-1,FBN['FechaVto'],'USA',NO)))))/(IIF(EspecieDiasAnio(FBN['Especie'])=0 y EspecieDiasMes(FBN['Especie'])=0,Dif360(VAL(i:fac),FBN['FechaVto'],4),DifDias(VAL(i:fac),FBN['FechaVto'],'USA',NO))),BuscarCampo('ESPECIES','TasaIntVigente','Codigo',FBN['Especie']))*100)
+
+   acn(o:fac,fbn['FechaVto']-Val(g2))
+   acn(p:fac,fbn['Cantidad']*fbn['Precio1']*Val(o:fac)/IIF(EqStr(FBN['RB8'],'0'),36000,36500))
+   acn(s:fac,val(p:fac)*Val(e3)) 
+   acn(t:fac,FBN['Precio3']*val(s:fac))
+   acn(q:fac,(fbn['Cantidad']*fbn['Precio3'])+val(t:fac))
+
+   IF Not EqStr(BuscarCampo('ESPECIES','PaisOrigen','Codigo',FBN['Especie']),'ARG')
+      acn(q:fac,(fbn['Cantidad']*fbn['Precio3']*val(e3))+val(t:fac))
+   ENDIF
+
+   acn(u:fac,val(q:fac)*(FBN['PorComMer1']/100))
+   acn(w:fac,val(u:fac)*IIF(FBN['CB6']=1,FBN['TCComMer1'],IIF(FBN['TCComMer1']<>0,1/FBN['TCComMer1'],0)))
+   
+   acn(x:fac,val(q:fac)*(FBN['PorComCor1']/100))
+   acn(y:fac,val(x:fac)*IIF(FBN['CB6']=1,FBN['TCComCor1'],IIF(FBN['TCComCor1']<>0,1/FBN['TCComCor1'],0)))
+
+   acn(v:fac,0)
+   IF FBN['Precio3'] <> 0 
+      acn(v:fac,val(q:fac)-IIF(FBN['RB7']=0,val(x:fac),0)-FBN['ImpGastos1']+Val(p:fac))
+   ENDIF
+
+   * Insert de la Operacion.
+   EjecutarEvento('INSOPE',NrOperacion1=Val(m:fac),NrOperacion2=FBN['NrOperacion'])
+
+   * Modifico los Atributos de la Nueva Operacion por la Especie y Nuevo Cupon
+   SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+   SQL.ADD(" Set ")
+   SQL.ADD(" RB4='0', ")
+   SQL.ADD(" FechaOp2='"~IdxDate(Val(g2))~"', FechaOp='"~IdxDate(Val(g2))~"', ")
+   SQL.ADD(" Cupon1='"~Fstr(Dialogo.Entero1+1,0,0)~"' ,")
+   SQL.ADD(" Plazo="~Fstr(Val(o:fac),0,0)~",")
+   SQL.ADD(" Precio2="~Fstr(Val(e3),0,7)~",")
+   SQL.ADD(" TasaInteresesCupon="~Fstr(Val(g:fac),0,2)~", ")
+   SQL.ADD(" TotalIntereses="~Fstr(Val(p:fac),0,4)~", ")
+   SQL.ADD(" InteresesCorr="~Fstr(Val(s:fac),0,2)~", ")
+   SQL.ADD(" TotalGanancias="~Fstr(Val(t:fac),0,2)~", ")
+   SQL.ADD(" TotalBrutoCli1="~Fstr(Val(q:fac),0,2)~", ")
+   SQL.ADD(" TotalNetoCli1= "~Fstr(Val(v:fac),0,2)~", ")
+   SQL.ADD(" FechaCarga='"~IdxDate(Fsys)~"', ")
+   SQL.ADD(" FechaUltCupon='"~IdxDate(VAL(i:fac))~"', ")
+   SQL.ADD(" ImpComMer1="~Fstr(Val(u:fac),0,2)~", ")
+   SQL.ADD(" ImpComMerEq1="~Fstr(Val(w:fac),0,2)~", ")
+   SQL.ADD(" ImpComCor1="~Fstr(Val(x:fac),0,2)~", ")
+   SQL.ADD(" ImpComCorEq1="~Fstr(Val(y:fac),0,2)~", ")
+   SQL.ADD(" NrOperacion2= '"~Val(a:fac)~"' ")
+   SQL.ADD(" where NrOperacion = '"~Val(m:fac)~"' ")
+   SQL.NEW
+   SQL.EXEC
+
+   ActualizarMovimientos(Val(m:fac),SI)
+   SQL.EXEC
+   *****------------------------------------------------------------------------
+
+   Message('Modifico la Operacion Original ')
+
+   *-- Hago Vencer la Operacion Original en la Fecha de Generacion de la Nueva
+   * Plazo, TotalIntereses => Iguales a Operacion de Cupones 
+   * VResidual =>El de la Operacion Nueva  
+   * s: InteresVR=InteresesCorr     t: InteresEspecie= TotalGanacias 
+   * q: ImporteBruto=TotalBrutoCli1 v: ImporteNeto=TotalnetoCli1
+   * u: Imp.Comision=ImpComMer1  w:ImporteComisionMercado Equivalente ImpComMerEq1
+   * x: ImpComCor1 y: ImpComCorEq1
+
+   acn(o:fac,Val(g2) - FBN['FechaOp'])
+   acn(p:fac,fbn['Cantidad']*fbn['Precio1']*Val(o:fac)/IIF(EqStr(FBN['RB8'],'0'),36000,36500))
+   acn(s:fac,val(p:fac)*FBN['Precio2']) 
+   acn(t:fac,FBN['Precio3']*val(s:fac))
+   acn(q:fac,(fbn['Cantidad']*fbn['Precio3'])+val(t:fac))
+
+   IF Not EqStr(BuscarCampo('ESPECIES','PaisOrigen','Codigo',FBN['Especie']),'ARG')
+      acn(q:fac,(fbn['Cantidad']*fbn['Precio3']*FBN['Precio2'])+val(t:fac))
+   ENDIF
+
+   acn(u:fac,val(q:fac)*(FBN['PorComMer1']/100))
+   acn(w:fac,val(u:fac)*IIF(FBN['CB6']=1,FBN['TCComMer1'],IIF(FBN['TCComMer1']<>0,1/FBN['TCComMer1'],0)))
+   
+   acn(x:fac,val(q:fac)*(FBN['PorComCor1']/100))
+   acn(y:fac,val(x:fac)*IIF(FBN['CB6']=1,FBN['TCComCor1'],IIF(FBN['TCComCor1']<>0,1/FBN['TCComCor1'],0)))
+
+   acn(v:fac,0)
+   IF FBN['Precio3'] <> 0 
+      acn(v:fac,val(q:fac)-IIF(FBN['RB7']=0,val(x:fac),0)-FBN['ImpGastos1']+Val(p:fac))
+   ENDIF
+
+   * Modifico los Atributos de la Nueva Operacion por la Especie y Nuevo Cupon
+   SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+   SQL.ADD(" Set ")
+   SQL.ADD(" FechaVto='"~IdxDate(Val(g2))~"',")
+   SQL.ADD(" Plazo="~Fstr(Val(o:fac),0,0)~",")
+   SQL.ADD(" TotalIntereses="~Fstr(Val(p:fac),0,4)~", ")
+   SQL.ADD(" InteresesCorr="~Fstr(Val(s:fac),0,2)~", ")
+   SQL.ADD(" TotalGanancias="~Fstr(Val(t:fac),0,2)~", ")
+   SQL.ADD(" TotalBrutoCli1="~Fstr(Val(q:fac),0,2)~", ")
+   SQL.ADD(" TotalNetoCli1= "~Fstr(Val(v:fac),0,2)~", ")
+   SQL.ADD(" ImpComMer1="~Fstr(Val(u:fac),0,2)~", ")
+   SQL.ADD(" ImpComMerEq1="~Fstr(Val(w:fac),0,2)~", ")
+   SQL.ADD(" ImpComCor1="~Fstr(Val(x:fac),0,2)~", ")
+   SQL.ADD(" ImpComCorEq1="~Fstr(Val(y:fac),0,2)~" ")
+   SQL.ADD(" where NrOperacion = '"~Val(a:fac)~"' ")
+   SQL.NEW
+   SQL.EXEC
+
+   SQL.ADD("Delete from "~DBO~".MOVPENDIENTES ")
+   SQL.ADD("where NrOperacion = '"~Val(m:fac)~"' ")
+   SQL.ADD("and   FechaMov <= '"~IdxDate(Val(g2))~"' ")
+   SQL.NEW
+   SQL.EXEC
+Proximo
+

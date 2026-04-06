@@ -1,0 +1,175 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1  : 'Fecha'         ;;;;;;NoVacio(Dialogo.Fecha1);'Debe ingresar la Fecha Desde';NO;FSys
+  Cliente1: 'Cliente'       ; ;;;;;Vacio(Dialogo.Cliente1) o EsTerminal(Dialogo.Cliente1,Clientes);'Cliente incorrecto';NO;;;;;;;;;
+FinDialogo
+if Not OK
+  Cancelar
+endif
+
+if NoVacio(Dialogo.Cliente1)
+  if EsTerminal(Dialogo.Cliente1,Clientes)
+    ACT(v1, Dialogo.Cliente1)
+  else
+    Cancelar('Cliente no valido')
+  endif 
+endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+
+SetFilaActual(4)
+ACN(w1,FAC)
+
+ACT(a:FAC, 'Control de Limites')
+ACT(a:FAC+1, 'Concentracion de Riesgo (BCRA)')
+ACT(a:FAC+2, 'Fecha de Proceso: '~Dialogo.Fecha1)
+
+if NoVacio(Dialogo.Cliente1)
+  ACT(a:FAC+3, 'Cliente : '~Dialogo.Cliente1)
+else
+  ACT(a:FAC+3, 'Cliente : Todos')
+endif
+
+ACT(a:FAC+4, 'RPC: ')
+ACN(b:FAC+4, BuscarCampo('CLIENTES','RPC','Codigo',Var('VEHICULODE')))
+
+*ACT(a:FAC+4, Val(a:FAC+4)~PYC(Clientes.Valor5,1,2))
+*ACT(c:FAC+4,'10% RPC mes ant.: ')
+*ACN(d:FAC+4, Clientes.Valor5*10/100)
+*FormatoCeldas(d:fac+4,',2R')
+*AlinearCeldas(c:fac+4,'D')
+           
+ACT(a:FAC+6, Pad('',25)~'Empresas')
+ACT(c:FAC+6, Pad('',25)~'Bancos Locales')
+ACT(a:FAC+7, Pad('',18)~'Mas de '~VAR('BCCONTNF')~' % de RPC')
+ACT(c:FAC+7, Pad('',18)~'Mas de '~VAR('BCCONTF')~' % de RPC')
+ACT(a:FAC+8, 'Cliente')
+ACT(b:FAC+8, 'Saldo')
+ACT(c:FAC+8, 'Cliente')
+ACT(d:FAC+8, 'Saldo')
+
+SetFont(a:FAC..d:FAC+8,2)
+AlinearCeldas(b:FAC+8,'D')
+AlinearCeldas(d:FAC+8,'D')
+AgregarMarco(a:FAC+6..b:FAC+6,2,0,EXE('COLOR10'))
+AgregarMarco(c:FAC+6..d:FAC+6,2,0,EXE('COLOR10'))
+AgregarMarco(a:FAC+7..b:FAC+7,2,0,EXE('COLOR10'))
+AgregarMarco(c:FAC+7..d:FAC+7,2,0,EXE('COLOR10'))
+AgregarMarco(a:FAC+8..d:FAC+8,2,2,EXE('COLOR10'))
+
+
+*SQL.ADD("SELECT Codigo, isnull(Sector,' ') as Sector FROM "~DBO~".CLIENTES C WHERE ")
+SQL.ADD("SELECT C.Codigo,CategDepositante, CT.Sector as Sector FROM "~DBO~".CLIENTES C ")
+SQL.ADD("join "~DBO~".CATEGORIACLIENTES CT on C.CategDepositante = CT.Codigo WHERE")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD(" Codigo='"~val(v1)~"' and")
+endif
+SQL.ADD("exists(select 1 from "~DBO~".LIMCONSUMIDOS where Limite in ('BCRAN','ACIDN','ACCON','BCRAG','ACIDG','ACCOG','ACMAN') and Cliente=C.Codigo) ")
+SQL.ADD("order by Codigo ")
+
+SetFilaActual(FAC+8)
+
+ACD(z2, Dialogo.Fecha1)
+
+ACN(w2, fac+1)
+ACN(w3, fac+1)
+ifa
+Recorrer SQL
+
+  if EsTerminal(fbn['Codigo'],Clientes)    
+    ACT(z1, fbn['Codigo'])
+    ACN(ad:FAC, LimConsumido(val(z1),'BCRAN','ARP',0,Var('VEHICULODE'),,,,val(z2)))
+    ACN(ae:FAC, LimConsumido(val(z1),'ACIDN','ARP',0,Var('VEHICULODE'),,,,val(z2)))
+    ACN(af:FAC, LimConsumido(val(z1),'ACCON','ARP',0,Var('VEHICULODE'),,,,val(z2)))
+    ACN(ag:FAC, LimConsumido(val(z1),'BCRAG','ARP',0,Var('VEHICULODE'),,,,val(z2)))
+    ACN(ah:FAC, LimConsumido(val(z1),'ACIDG','ARP',0,Var('VEHICULODE'),,,,val(z2)))
+    ACN(ai:FAC, LimConsumido(val(z1),'ACCOG','ARP',0,Var('VEHICULODE'),,,,val(z2)))
+    ACN(aj:FAC, LimConsumido(val(z1),'ACMAN','ARP',0,Var('VEHICULODE'),,,,val(z2)))
+    ACN(ak:FAC, Sum(ad:fac..aj:fac))
+
+    if val(ak:FAC)>VAR('BCCONTF')/100*val(b:val(w1)+4) y EqStr(fbn['Sector'],'FIN')
+       ACT(c:val(w3),val(z1))
+       ACN(d:val(w3),val(ak:FAC))
+       SCN(w3,1)      
+    else
+    if val(ak:FAC)>VAR('BCCONTNF')/100*val(b:val(w1)+4) y Not EqStr(fbn['Sector'],'FIN')
+         ACT(a:val(w2),val(z1))
+         ACN(b:val(w2),val(ak:FAC))
+         SCN(w2,1)
+      else
+       dfa
+      endif
+    endif
+  else
+    dfa
+  endif
+
+
+Proximo
+
+SetFont(a:Val(w1)+9..d:FAC-1,1)
+AgregarMarco(a:Val(w1)+9..d:FAC-1,1,3)
+
+*Celdas az1..6 son usadas por el Listado Mensual
+
+ACT(a:fac, 'Total Empresas')
+ACN(b:fac, Sum(b:val(w1)+9..b:fac-1))
+
+
+ACT(a:fac+1, VAR('BCCONLNF')~' veces RPC')
+ACN(b:fac+1, VAR('BCCONLNF')*val(b:val(w1)+4))
+ACT(a:fac+2, 'Exceso')
+
+ACN(ax1,0)
+ACN(ax2,val(b:fac+1))
+ACN(ax3,0)
+
+if val(b:fac)>val(b:fac+1)
+   ACN(b:fac+2, val(b:fac)-val(b:fac+1))  
+   ACN(ax1,val(b:fac))
+   ACN(ax3,val(b:fac+2))
+   ACN(ba:1,val(b:fac+2))
+endif
+
+ACT(c:fac, 'Total Bancos')
+ACN(d:fac, Sum(d:val(w1)+9..d:fac-1))
+ACT(c:fac+1, VAR('BCCONLF')~' veces RPC')
+ACN(d:fac+1, VAR('BCCONLF')*val(b:val(w1)+4))
+ACT(c:fac+2, 'Exceso')
+
+
+
+ACN(ay1,0)
+ACN(ay2,val(d:fac+1))
+ACN(ay3,0)
+
+
+if val(d:fac)+val(b:fac)>val(d:fac+1)
+  ACN(d:fac+2, val(d:fac)+val(b:fac)-val(d:fac+1))
+  ACN(ay1,val(d:fac))
+  ACN(ay3,val(d:fac+2))
+  ACN(ba:2,val(d:fac+2))
+endif
+
+SetFont(a:FAC..a:FAC+2,2)
+SetFont(c:FAC..c:FAC+2,2)
+AlinearCeldas(a:FAC..d:FAC+2,'D')
+AgregarMarco(a:FAC..d:FAC,2,2,EXE('COLOR10'))
+AgregarMarco(a:FAC+1..d:FAC+2,1,3)
+
+ACO(1,10)
+ACO(2,11)
+ACO(3,10)
+ACO(4,11)
+
+Impresion(1,2)
+SetFilaActual(FAC+4)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC,2)
+AgregarBMP(a1,Exe('LOGO'),Exe('ESCALOGO'))
+SetFont(d:3,2)
+LimitesVision(d:FAC)
+RangoTitulo(a:1..d:FAC, Val(w1)+8)
+
+

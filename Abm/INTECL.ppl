@@ -1,0 +1,101 @@
+﻿set ds_StatusPoder         = "VIG:Vigente|VEN:Vencido|REV:Revocado|"
+
+%%ifdef CMF
+    set ds_TipoDocum     = ppl.SQLSet("SELECT  rtrim(Valor)+':'+rtrim(Leyenda) from "+dbo+".CONFIGVALEXTERNOS where CodigoProceso = 'CLIONL' AND Atributo = 'TIPODOCUMENTO' ")
+    set ds_TipoPoderJ     = ppl.SQLSet("SELECT  rtrim(Valor)+':'+rtrim(Leyenda) from "+dbo+".CONFIGVALEXTERNOS where CodigoProceso = 'ONLPER' AND Atributo = 'TIPOPODERJ' ")
+    set ds_TipoPoderF    = ppl.SQLSet("SELECT  rtrim(Valor)+':'+rtrim(Leyenda) from "+dbo+".CONFIGVALEXTERNOS where CodigoProceso = 'ONLPER' AND Atributo = 'TIPOPODERF' ")
+%%else
+    set ds_TipoDocum     = "CI:C.D.I|CIL:CUIL|CUI:CUIT|DNI:DNI|LE:LE|LC:LC|IFI:Instit. Fcieras|PAS:Pasaporte|CED:Cedula Mercosur|PJE:Pers Jur Extr|FCI:Fondo Comun De inv.|DEX:Documento Extranjero|FID:Fideicomiso|EIR:Nro. Registro IERIC|CIE:C.I.E|CIP:C.I.Provincial|GCE:Grupo Crediticio/Economico|OTR:Otro|"
+    set ds_TipoPoder     = "TIT:Titular|CTI:Co Titular|AUT:Autorizado|APO:Apoderado|RLE:Representante Legal|TUT:Tutor|SDE:Sociedad depositaria|SGE:Sociedad Gerente|FID:Fiduciario|EMP:Empleado|DIR:Director|FPU:Funcionario Publico|FIR:Firmante|FTE:Fiduciante|BFI:Beneficiario Fideicomiso|FRI:Fideicomiso|SFI:Socio Funcionario|ACC:Socio/Accionista|FEM:Funcionario de la empresa|Ger:Gerente|PRE:Presidente|VPR:Vicepresidente|FBA:Firmante Dado de Baja|NC:No Corresponde|FBC:Funcionario del Banco|VIN:Vinculacion Indirecta Bco.|EMB:Empleado de Banco:|ACB:Accionista del Banco"
+%%endif 
+
+def abm "INTEGRANTESCLI"
+    def grid
+        NrIntegrante:,
+        TipoDocumento:,
+        NrDocumento:,
+        TipoPoder:,
+        Status:,
+        FAlta:,
+        FBaja:,
+        Codigo:
+    end
+    def filter
+        "Codigo = '" + $.parent('Codigo') + "'"
+    end
+    def key
+        Codigo:, TipoDocumento:, NrDocumento:
+    end
+    def dialog
+        #**************************************************************************
+        tab "General"
+            column
+                NrDocumento: ,'Nro. Documento', autocomplete, 'Personas','NrDocumento,Apellido'
+                NrIntegrante: ,, numeric, '###0'
+                FAlta:, 'Fecha Alta', date
+                FBaja:, 'Fecha Baja', date
+             column
+                TipoDocumento: , 'Tipo Documento', combo, ds_TipoDocum
+                Status:,          , combo, ds_StatusPoder
+                
+                %%ifdef CMF
+                    TipoPoderF:,          , combo, ds_TipoPoderF
+                    TipoPoderJ:,          , combo, ds_TipoPoderJ
+                    TipoPoder:,,
+                %%else
+                    TipoPoder:,          , combo, ds_TipoPoder
+                %%endif
+                
+                Codigo:,
+    end
+    
+    %%ifdef CMF
+        required_fields: Status:
+        hide_fields: Codigo:,TipoPoder:
+        do_not_map: TipoPoderJ:,TipoPoderF:
+        before_show_create_dialog: do
+            $.set_field  (Codigo:, $.parent("Codigo"))
+        
+            set xppl = $.NewExtendedPPL()
+            if xppl.Eqstri($.parent('Persona'),"Fisica")
+                $.hide(TipoPoderJ:)
+                $.show(TipoPoderF:)
+                if $.Modificacion()
+                    $.set_field  (TipoPoderF:, $.val(TipoPoder:))
+                endif
+            else
+                $.hide(TipoPoderF:)
+                $.show(TipoPoderJ:)
+                if $.Modificacion()
+                    $.set_field  (TipoPoderJ:, $.val(TipoPoder:))
+                endif
+            endif
+        end
+    
+        before_save: do
+        $.set_field  (TipoPoder:, $.val(TipoPoderF:))
+        end
+        validations:    
+            TipoDocumento:, NOt ppl.Vacio( ppl.SQL("Select 1 from Personas where NrDocumento = '"+$.val(NrDocumento:)+"' and TipoDocumento='" + $.val(TipoDocumento:)+ "'")), 'Esta persona no existe';
+            TipoPoderF:,ppl.NoVacio($.val(TipoPoderF:)) OR ppl.NoVacio($.val(TipoPoderJ:)),"Debe completar el tipo de poder";
+            TipoPoderJ:,ppl.NoVacio($.val(TipoPoderF:)) OR ppl.NoVacio($.val(TipoPoderJ:)),"Debe completar el tipo de poder";
+    
+    %%else
+        required_fields: Status:,TipoPoder:
+        hide_fields: Codigo:;
+        disable_fields: Codigo:
+        before_show_create_dialog: do
+            $.set_field  (Codigo:, $.parent("Codigo"))
+        end
+        validations:    
+            TipoDocumento:, NOt ppl.Vacio( ppl.SQL("Select 1 from Personas where NrDocumento = '"+$.val(NrDocumento:)+"' and TipoDocumento='" + $.val(TipoDocumento:)+ "'")), 'Esta persona no existe';  
+    
+   %%endif
+    
+    validates_max_length_of:
+       Codigo:,10,true; 
+       NrDocumento:,15,true;
+       NrIntegrante:,4,true;
+       
+    validates_uniqueness_of_set:  TipoDocumento:, NrDocumento: 
+end

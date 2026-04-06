@@ -1,0 +1,470 @@
+﻿*ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1     :'D.Concert.' ; 1;1;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha Desde';NO;FSys
+  Fecha2     :'H.Concert.' ; 2;1;;;;Dialogo.Fecha2<>0;'Debe Ingresar una Fecha Hasta';NO;FSys
+  Vehiculo1  :'Vehiculo'   ; 1;2;;;;;;;Var('VEHICULODE')
+  Radio1     :'Estado|Vigentes|Vencidas|Todas'; 3;1;;;;;;;2;
+FinDialogo
+
+If Not OK
+  Cancelar
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+AgregarBMP(a1,Exe('LOGO'),80)
+SetFilaActual(4)
+ACT(a:FAC, 'Estado Operaciones SIOPEL')
+SetFont(a:FAC,3)
+
+ACT(a:FAC+1, 'F.Concertacion Desde: '~Dialogo.Fecha1~' Hasta: '~Dialogo.Fecha2)
+If NoVacio(Dialogo.Vehiculo1)
+   ACT(a:FAC+2, 'Vehiculo: '~Dialogo.Vehiculo1)
+Else
+   ACT(a:FAC+2, 'Vehiculo: Todos')
+EndIf
+ACT(a:FAC+3,'Estado: '~iif(Dialogo.Radio1=0,'Vigentes',iif(Dialogo.Radio1=1,'Vencidas','Todas')))
+
+SetFilaActual(FAC+5)
+ACN(w:1,FAC)
+
+ACT(a:FAC, 'Instancia')
+ACT(b:FAC, 'Numero')
+ACT(c:FAC, 'Fecha Op.')
+ACT(d:FAC, 'Fecha Vto.')
+ACT(e:FAC, 'Especie')
+ACT(f:FAC, 'Moneda')
+ACT(g:FAC, 'Tipo Op.')
+ACT(h:FAC, 'Mercado')
+ACT(i:FAC, 'Cliente')
+ACT(j:FAC, 'Cantidad')
+ACT(k:FAC, 'Precio/Tasa')
+ACT(l:FAC, 'Vehiculo')
+ACT(m:FAC, 'Operador')
+ACT(n:FAC, 'Observaciones')
+ACT(o:FAC, '# Alta MAE')
+ACT(p:FAC, '# Ref MAE1')
+ACT(q:FAC, 'Observ. Preliquidacion')
+
+AlinearCeldas(j:FAC..k:FAC,'D')
+SetFont(a:5..z:FAC,2)
+AgregarMarco(a:FAC..q:FAC,1,0,Exe('COLOR6'))
+
+SQL.ADD("Select * from ")
+SQL.ADD("(Select O.*,OB.NrBit,I.Nombre,C.RazonSocial, ")
+SQL.ADD(" CASE WHEN  O.TipoOp in ('TICF','TIVF') THEN O.Mercado ELSE O.Mercado4 END MercNeg ")
+SQL.ADD("  From "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS OB, "~DBO~".INSTANCIAS I, "~DBO~".CLIENTES C ")
+SQL.ADD("Where O.NrOperacion = OB.NrOperacion ")
+SQL.ADD("  and OB.Valor      = '1' ")
+SQL.ADD("  and OB.NrBit      = I.NrInstancia ")
+SQL.ADD("  and I.Tabla       = 'OPERACIONES' ")
+SQL.ADD("  and O.Cliente1    = C.Codigo ")
+If Dialogo.Radio1=0
+    SQL.ADD("  and OB.NrBit not in (69) ")
+else
+    SQL.ADD("  and OB.NrBit in (69) ")
+endif
+SQL.ADD("  and O.FechaOp     between "~IdxDate2(Dialogo.Fecha1)~" and "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("  and O.TipoOp      In ('TIC','TIV','TICF','TIVF') ")
+** FJL - Las Operaciones de Ofertas no deberian listarse nunca
+SQL.ADD("  and O.CB5         = 0 ")
+SQL.ADD("  and IsNull(O.AceptaMAE,'NO') = 'NO' ")
+If NoVacio(Dialogo.Vehiculo1)
+  SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")  
+EndIf
+SQL.ADD(" ) as Aux")
+*-Mercado
+SQL.ADD(" Where MercNeg = '"~VAR('AMBMAE')~"' ")
+Recorrer SQL
+   Message(fbn('NrOperacion'))
+   ACT(a:fac, Copy(FBN['Nombre'],1,20))
+   If Incluido(Fbn['NrBit'],'13')
+      ColorCeldas(a:fac..a:fac,clBlue)
+   Endif
+   If Incluido(Fbn['NrBit'],'30')
+      ColorCeldas(a:fac..a:fac,clRED)
+   Endif
+   ACT(b:fac, FBN['NrOperacion'])
+   ACLO(b:fac, FBN['NrOperacion'])
+   ACD(c:FAC, FBN['FechaOp'])
+   ACD(d:FAC, FBN['FechaVto'])
+   ACT(e:fac, FBN['Especie'])
+   ACT(f:fac, FBN['ContraEspecie'])
+   ACT(g:fac, FBN['TipoOp']~IIF(EqStr(FBN['PaseCB'],'1'),' x Pase'))
+   ACT(h:fac, FBN['MercNeg'])
+   ACT(i:fac, FBN['Cliente1']~'-'~Copy(FBN['RazonSocial'],1,25))
+   
+   If Incluido(FBN['TipoOp'],'FXCTC|FXVTC|')
+      ACN(j:fac, FBN['Cantidad']* BuscarCampo('ESPECIES','TamanioLote','Codigo',FBN['Especie'])  )
+   Else
+      ACN(j:fac, FBN['Cantidad'])
+   EndIf
+   
+   ACN(k:fac, FBN['Precio1'])
+   ACT(l:fac, FBN['Vehiculo1'])
+   ACT(m:fac, FBN['Operador'])
+   ACT(n:fac, Copy(FBN['Observac2'],1,20))
+   ACT(o:fac, FBN['NroAltaMAE'])
+   ACT(p:fac, FBN['NrOperacion3'])
+   ACT(q:fac, fbn('ObservacDoc')~' '~fbn('ConceptoEmp')~' '~fbn('CodErrorCV')~' '~fbn('CodErrorMAE'))
+Proximo
+
+if FAC=Val(w:1)
+  IFA
+  ACT(a:FAC, 'No existen registros')
+  SetFont(a:fac,2)
+else
+  SetFont(a:Val(w:1)+1..z:fac,1)
+  FormatoCeldas(j:Val(w:1)+1..j:fac,Exe('F2'))
+  FormatoCeldas(k:Val(w:1)+1..k:fac,Exe('F9'))
+endif
+
+SetFilaActual(FAC+2)
+
+ACT(a:FAC, 'Registros de OPSIOPEL que no generaron operaciones')
+SetFont(a:FAC,3)
+
+SetFilaActual(FAC+2)
+ACN(w:2,FAC)
+
+ACT(a:FAC, 'Tipo Negociacion')
+ACT(b:FAC, 'Secuencia')
+ACT(c:FAC, 'Fecha Op.')
+ACT(d:FAC, 'Plazo')
+ACT(e:FAC, 'Especie')
+ACT(f:FAC, 'Moneda')
+ACT(g:FAC, 'Rueda')
+ACT(h:FAC, 'Agente')
+ACT(i:FAC, 'Cliente')
+ACT(j:FAC, 'Cantidad')
+ACT(k:FAC, 'Precio')
+ACT(l:FAC, 'Corredor')
+
+AlinearCeldas(j:FAC..k:FAC,'D')
+SetFont(a:FAC..z:FAC,2)
+AgregarMarco(a:FAC..l:FAC,1,0,Exe('COLOR6'))
+ACT(v:5, VAR('AGESIOP'))
+
+*******************************
+* Rueda de Ofertas con agentes
+*******************************
+SQL.ADD("Select * from "~DBO~".OPSIOPEL ")
+SQL.ADD("  where CodigoRegistro in ('0105','0205')  ")
+SQL.ADD("    and CodigoNego  in ("~Pipe2Comillas(Var('TIPONEGTIT'))~")  ")
+SQL.ADD("    and CodigoRueda Not in ("~Pipe2Comillas(Var('RUELICI'))~") ")
+SQL.ADD("    and CodigoRueda Not in ("~Pipe2Comillas(Var('RUECORR'))~") ")
+SQL.ADD("    and Fecha       between "~IdxDate2(Dialogo.Fecha1)~" and "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("    and Carga        is null                                     ")
+SQL.ADD("    and IsNull(Procesado,'0') = '0'                            ")
+Recorrer SQL
+  ACT(a:FAC, 'Rueda Ofertas')
+  ACT(b:FAC, fbn('Secuencia'))
+  if EqStr(Copy(fbn('CodigoRegistro'),3,2),'05')
+    ACT(aa:FAC, fbn('Fecha_dd')~'/'~fbn('Fecha_mm')~'/'~fbn('Fecha_aa'))
+    ACD(c:FAC, Fecha(Val(aa:FAC)))
+  endif
+  ACN(d:FAC, Num(fbn('Plazo')))
+  ACT(e:FAC, fbn('CodigoTitulo'))
+  if EqStr(fbn('Moneda'),'D')
+    ACT(f:FAC, 'USD')
+  else
+    if EqStr(fbn('Moneda'),'$')
+      ACT(f:FAC, 'ARP')
+    endif
+  endif
+  ACT(g:FAC, fbn('CodigoRueda'))
+  if EqStr(fbn('Agente'),Val(v:5))
+    ACT(h:FAC, fbn('AgenteContra'))
+  else
+    if EqStr(fbn('AgenteContra'),Val(v:5))
+      ACT(h:FAC, fbn('Agente'))
+    endif
+  endif
+  ACT(i:FAC, fbn('Cliente'))
+  ACN(j:FAC, fbn('Cantidad'))
+  ACN(k:FAC, fbn('Precio'))
+Proximo
+
+**************************
+* Corredores
+**************************
+SQL.ADD("Select * from "~DBO~".OPSIOPEL ")
+SQL.ADD("  where CodigoRegistro in ('0301','0303','0401','0403')       ")
+SQL.ADD("    and CodigoNego  in ("~Pipe2Comillas(Var('TIPONEGTIT'))~") ")
+SQL.ADD("    and CodigoRueda in ("~Pipe2Comillas(Var('RUECORR'))~")    ")
+SQL.ADD("    and Fecha       >= '"~IdxDate(Habiles(Dialogo.Fecha1,-Var('FVALORMAX'),'ARG'))~"' ")
+SQL.ADD("    and Fecha       <= '"~IdxDate(Dialogo.Fecha2)~"'                     ")
+SQL.ADD("    and Carga        is null                                  ")
+SQL.ADD("    and IsNull(Procesado,'0') = '0'                           ")
+Recorrer SQL
+  ACT(a:FAC, 'Corredores')
+  ACT(b:FAC, fbn('Secuencia'))
+  if Incluido(Copy(fbn('CodigoRegistro'),3,2),'01|03')
+    ACT(aa:FAC, fbn('Fecha_dd')~'/'~fbn('Fecha_mm')~'/'~fbn('Fecha_aa'))
+    ACD(c:FAC, Fecha(Val(aa:FAC)))
+  endif
+  ACN(d:FAC, Num(fbn('Plazo')))
+  ACT(e:FAC, fbn('CodigoTitulo'))
+  if EqStr(fbn('Moneda'),'D')
+    ACT(f:FAC, 'USD')
+  else
+    if EqStr(fbn('Moneda'),'$')
+      ACT(f:FAC, 'ARP')
+    endif
+  endif
+  ACT(g:FAC, fbn('CodigoRueda'))
+  if EqStr(fbn('Agente'),Val(v:5))
+    ACT(h:FAC, fbn('AgenteContra'))
+  else
+    if EqStr(fbn('AgenteContra'),Val(v:5))
+      ACT(h:FAC, fbn('Agente'))
+    endif
+  endif
+  ACT(i:FAC, fbn('Cliente'))
+  ACN(j:FAC, fbn('Cantidad'))
+  ACN(k:FAC, fbn('Precio'))
+  ACT(l:FAC, Copy(fbn('Corredor'),2,3))
+Proximo
+if FAC=Val(w:2)
+  IFA
+  ACT(a:FAC, 'No existen registros')
+  SetFont(a:fac,2)
+else
+  SetFont(a:Val(w:2)+1..z:fac,1)
+  FormatoCeldas(j:Val(w:2)+1..j:fac,Exe('F2'))
+  FormatoCeldas(k:Val(w:2)+1..k:fac,Exe('F9'))
+endif
+
+** FJL 23/01/20 - Bloque Nuevo
+*******************************
+* Pedidos de Confiramcion
+*******************************
+SetFilaActual(FAC+2)
+
+ACT(a:FAC, 'Pedidos de Confirmacion '~IIF(Dialogo.Radio1=0,'Pendientes',IIF(Dialogo.Radio1=1,'Vencidos','Pendientes y Vencidos')))
+SetFont(a:FAC,3)
+
+SetFilaActual(FAC+2)
+ACN(w:3,FAC)
+
+ACT(a:FAC, 'Tipo Negociacion')
+ACT(b:FAC, 'Secuencia')
+ACT(c:FAC, 'Fecha Op.')
+ACT(d:FAC, 'Plazo')
+ACT(e:FAC, 'Especie')
+ACT(f:FAC, 'Moneda')
+ACT(g:FAC, 'Rueda')
+ACT(h:FAC, 'Agente')
+ACT(i:FAC, 'Cliente')
+ACT(j:FAC, 'Cantidad')
+ACT(k:FAC, 'Precio')
+if Dialogo.Radio1=2
+  ACT(l:FAC, 'Estado')
+endif
+
+AlinearCeldas(j:FAC..k:FAC,'D')
+SetFont(a:FAC..z:FAC,2)
+if Dialogo.Radio1<2
+  AgregarMarco(a:FAC..k:FAC,1,0,Exe('COLOR6'))
+else
+  AgregarMarco(a:FAC..l:FAC,1,0,Exe('COLOR6'))
+endif
+
+SQL.ADD("Select * from "~DBO~".MENSAJESMAE ")
+SQL.ADD(" where Codigo  = 'CONALT' ")
+if Dialogo.Radio1=0
+  SQL.ADD("   and Estado = 'PEN' ")
+endif
+if Dialogo.Radio1=1
+  SQL.ADD("   and Estado = 'VEN' ")
+endif
+if Dialogo.Radio1=2
+  SQL.ADD("   and Estado in ('PEN','VEN') ")
+endif
+SQL.ADD("   and Fecha       between "~IdxDate2(Dialogo.Fecha1)~" and "~IdxDate2(Dialogo.Fecha2))
+Recorrer SQL
+  ACT(b:FAC, fbn('Secuencia'))
+
+* ad:8 Codigo Nego ==> a:FAC
+* ad:9 Cod Titulo ==> e:FAC
+* ad:13 Cod Moneda ==> f:FAC
+
+* C6 FechaOp ==> c:FAC
+
+* N6 Spot ==> ba:FAC
+* O6 Futuro ==> bb:FAC
+* L6 Pase ==> bc:FAC
+* R6 Pase Aforado ==> bd:FAC
+* ad:8 TipoNegociacion ==> be:FAC
+* D6 FechaVto ==> bf:FAC
+
+* ad:12 Plazo ==> ac:FAC
+* ae:12 Plazo (num) ==> ad:FAC
+* E6 Plazo ==> d:FAC
+* ad:22 Ente Liquidador==> ae:FAC
+* ad:27 Fecha a Conf ==> af:FAC
+* ad:9 Cod Titulo ==> e:FAC
+* ad:13 Cod Moneda ==> f:FAC
+* ad:16 Agente Contra ==> ag:FAC
+* G6 Agente Contra ==> ag:FAC
+* ad:17 Operador Contra ==> ah:FAC
+* x1 Es Agente ==> ai:FAC
+* A6 Cliente ==> aj:FAC
+
+
+* ad:18 Cantidad ==> aa:FAC
+* I6 Cantidad ==> j:FAC
+* ac:19 Precio ==> ab:FAC
+* J6 Precio ==> k:FAC
+
+
+  ACT(a:FAC, Copy(fbn('Mensaje1'),32,1))
+
+  *- Fecha de Operacion
+  * USA EN SELECT (C6 FechaOp)
+  ACT(af:FAC, Copy(fbn('Mensaje1'),107,6))
+  ACD(c:FAC, Fecha(Copy(Val(af:FAC),5,2)~'/'~Copy(Val(af:FAC),3,2)~'/20'~Copy(Val(af:FAC),1,2)))
+
+  ACT(be:FAC, Copy(fbn('Mensaje1'),32,1))
+  ACT(bd:FAC, '0')
+  if Incluido(Val(be:FAC),'5|7')
+    ACT(bc:FAC, '1')
+    if EqStr(Val(be:FAC),'7')
+      *- Es un Pase Aforado
+      ACT(bd:FAC, '1')
+    endif
+  else
+    ACT(bc:FAC, '0')
+    if Incluido(Val(be:FAC),'1|C|8')
+      *- Es Spot
+      ACN(ba:FAC,1)
+    endif
+    if Incluido(Val(be:FAC),'9')
+      *- Es Futuro
+      ACN(bb:FAC,1)
+    endif
+  endif
+
+  ACT(ac:FAC, Copy(fbn('Mensaje1'),42,3))
+  ACN(ad:FAC, Num(Val(ac:FAC)))
+  ACT(ae:FAC, Copy(fbn('Mensaje1'),91,1))
+
+  if EqStr(Val(bc:FAC),'0')
+    *- La operacion NO es pase
+    *- Fecha de Vencimiento
+    if Val(ba:FAC)=1
+      *- Spot
+      ACN(bf:FAC, Habiles(Val(C6),Val(ae:12),Val(S6)))
+    endif
+    if Val(bb:FAC)=1
+      *- Futuro
+      if Incluido(Val(ae:FAC),'D|6') y Not EsHabil(Val(c:FAC)+Val(ad:FAC),'USA')
+        ACN(bf:FAC, Habiles(Val(c:FAC)+Val(ad:FAC),1,'USA'))
+      else
+        ACN(bf:FAC, Val(c:FAC)+Val(ad:FAC))
+      endif
+    endif
+
+    *- Plazo
+    * USA EN SELECT (E6 Plazo)
+    if Val(ba:FAC)=1
+      *- Spot
+      ACN(d:FAC, Val(ad:FAC)*24)
+    endif
+    if Val(bb:FAC)=1
+      *- Futuro
+      if Incluido(Val(ae:FAC),'D|6')
+        ACN(d:FAC, DifDias(Val(bf:FAC),Val(c:FAC),'USA'))
+      else
+        ACN(d:FAC, DifDias(Val(bf:FAC),Val(c:FAC),'ARG'))
+      endif
+    endif
+  else
+** FJL 234/01/20 - No hay pases - ANALIZAR
+    *- Plazos si la operacion es pase expresados en horas y en dias
+    *- Si es la operacion Spot, el mae informa los dias corridos y Sam los tiene habiles
+    * => pasar a dias habiles
+*    ACN(D6, Val(C6)+Val(ae:12))
+*    ACN(x2, DifDias(Val(C6), Val(D6),'ARG',SI))
+*    ACN(E7, Val(x2))
+*    ACN(E8, Val(ae:12))
+  endif                           
+
+  ACT(e:FAC, Copy(fbn('Mensaje1'),33,5))
+  ACT(f:FAC, Copy(fbn('Mensaje1'),45,1))
+  ACT(g:FAC, Copy(fbn('Mensaje1'),93,4))
+  
+  *- Agente Contra                    
+  ACT(ag:FAC, Copy(fbn('Mensaje1'),48,3))
+  *- Operador Contra
+  ACT(ah:FAC, Copy(fbn('Mensaje1'),51,2))
+  if EqStr(Val(ag:FAC),'000') o EqStr(Val(ag:FAC),Var('AGESIOP'))
+    * Operacion con Tercero
+    ACN(ai:FAC,0)
+  else
+    * Operacion con Agente
+    ACN(ai:FAC,1)
+    *- Codigo Cliente
+    * USA EN SELECT (A6 Cliente1)
+    ACT(aj:FAC, SQL("Select Codigo From "~DBO~".CLIENTES Where NrMAE = '"~Val(ag:FAC)~"' "))
+  endif
+  if Val(ai:FAC)=0
+    ACT(h:FAC, 'Tercero')
+  else
+    ACT(h:FAC, Val(ag:FAC)~' - Op.'~Val(ah:FAC))
+    if Vacio(val(aj:FAC))
+      ACT(i:FAC, 'Agente No Encontrado')
+    else
+      ACT(i:FAC, Val(aj:FAC)~' - '~BuscarCampo('CLIENTES','RazonSocial','Codigo',Val(aj:FAC)))
+    endif
+  endif
+  
+  *- Cantidad (4 decimales)
+  ACT(aa:FAC, Copy(fbn('Mensaje1'),53,18))
+  ACN(j:FAC, Num(Val(aa:FAC))/10000)
+
+  *- Precio (8 decimales)
+  ACT(ab:FAC, Copy(fbn('Mensaje1'),71,18))
+  ACN(k:FAC, Num(Val(ab:FAC))/100000000)
+
+  if Dialogo.Radio1=2
+    ACT(l:FAC, fbn('Estado'))
+  endif
+proximo
+
+if FAC=Val(w:3)
+  IFA
+  ACT(a:FAC, 'No existen registros')
+  SetFont(a:fac,2)
+else
+  SetFont(a:Val(w:3)+1..z:fac,1)
+  FormatoCeldas(d:Val(w:3)+1..d:fac,Exe('F0'))
+  FormatoCeldas(j:Val(w:3)+1..j:fac,Exe('F2'))
+  FormatoCeldas(k:Val(w:3)+1..k:fac,Exe('F9'))
+endif
+
+ACO(1,12)
+ACO(2,7)
+ACO(3,7)
+ACO(4,7)
+ACO(5,7)
+ACO(6,7)
+ACO(7,7)
+ACO(8,7)
+ACO(9,18)
+ACO(10,12)
+ACO(11,10)
+ACO(12,7)
+ACO(13,7)
+ACO(14,12)
+ACO(17,15)
+
+Impresion(1,2)
+SetFilaActual(fac+2)
+ACT(a:fac,'FIN DEL INFORME')
+SetFont(a:fac,2)
+SetPrintFit(3,65)
+LimitesVision(o:FAC)
+RangoTitulo(a:1..q:fac+1, 10)

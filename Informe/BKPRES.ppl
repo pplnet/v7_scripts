@@ -1,0 +1,547 @@
+﻿* PRESTF: Detalle Prest.Financieros/Importaciones.
+ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1     : "Fecha Vigencia"    ;1;1;;;;Dialogo.Fecha1 <> 0 Y Dialogo.Fecha1 <= Fsys;'Fecha Vigencia Invalida';NO;Fsys;
+  Especie1   : "Especie"           ;;;;;;;;;;;;;
+  Cliente1   : "Entidad"           ;1;2;;;;;;;;;;;
+  Radio1     : "Expresado|ARP|USD" ;2;2;;;;;;;1
+  Radio4     : "Consolidado|NO|SI" ;3;2;;;;;;;0
+  NrOperacion1: "Operacion"        ; ; ;;;;;;;;;;;;" TipoOp In ('MMFIMV','MMPCLM','MMPEM','MMPIM','MMPOSM','MMFRNP','MMPCL','MMPE','MMPI','MMPCOS','MMPLME')"
+  Lista1     : "Vehiculo"          ;5;1;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') "))
+  Lista2     : "TipoOp"            ;6;1;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo In ('MMFIMV','MMPCLM','MMPEM','MMPIM','MMPOSM','MMFRNP','MMPCL','MMPE','MMPI','MMPCOS','MMPLME') ")
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(2)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,2)
+
+ACT(a:FAC  ,"Detalle de Prestamos ")
+ACT(a:FAC+1,"Vigentes al "~Dialogo.Fecha1~" "~IIf(Dialogo.Radio4=0,' Por Vehiculo','Consolidado')  )
+SetFont(a:fac..a:fac+1,3)
+
+SetFilaActual(4)
+
+ACT(mo1,VAR('MONEEXTR'))
+If Dialogo.Radio1=0
+   ACT(mo1,VAR('MONELOCA'))
+EndIf
+
+if NoVacio(Dialogo.Cliente1)
+  ACT(a:FAC+1, 'Entidad : '~Dialogo.Cliente1~'  '~BuscarCampo('Clientes','RazonSocial','Codigo',Dialogo.Cliente1))
+else
+  ACT(a:FAC+1, 'Entidad : Todos')
+endif
+if NoVacio(Dialogo.Lista1)
+  ACT(a:FAC+2, 'Vehiculo : '~Dialogo.Lista1)
+else
+  ACT(a:FAC+2, 'Vehiculo : '~IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")))
+endif
+if NoVacio(Dialogo.Especie1)
+  ACT(a:FAC+3, 'Especie : '~Dialogo.Especie1~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie1))
+else
+  ACT(a:FAC+3, 'Especie : Todas')
+endif
+if NoVacio(Dialogo.Lista2)
+  ACT(a:FAC+4, 'Tipo Op.: '~Dialogo.Lista2)
+else
+  ACT(a:FAC+4, 'Tipo Op.: Todas')
+endif
+if NoVacio(Dialogo.NrOperacion1)
+  ACT(a:FAC+5, 'NrOperacion: '~Dialogo.NrOperacion1)
+else
+  ACT(a:FAC+5, 'NrOperacion: Todas')
+endif
+if Dialogo.Radio4=1
+  ACT(a:FAC+6, 'Informacion CONSOLIDADA ')
+else
+  ACT(a:FAC+6, 'Por Vehiculo ')
+endif
+
+act(a:fac+7,'Expresado en  '~val(mo1))
+SetFont(a:fac..N:FAC+7,2)
+SetFilaActual(FAC+8)
+
+*- Llamo a la funcion pidiendo solamente los settlements vigentes vi1: Vigentes=1 , Todos los Settements=0
+ACN(vi1,1)
+(.'PFPRESFINA'.)
+If Dialogo.Radio4=1
+   *- Ordenado por Grupo,Especie,NrOperacion
+   SQL.ADD(" Order By 2,9,3 ")
+Else
+   *- Ordenado por Vehiculo,Grupo,Especie,NrOperacion
+   SQL.ADD(" Order By 1,2,9,3 ")
+EndIf
+
+*- va1: Vehiculo va2: Grupo va3: Especie
+ACT(va1, '')
+ACT(va2, '')
+ACT(va3, '')
+
+Recorrer SQL
+
+     Message(fbn['NrOperacion']~' '~fbn['FechaVto']~'  '~FBN['VResidual']~' '~fbn['TipoOp']~' '~FBN['Grupo']~' '~FBN['Especie'])
+
+     * Fin de Corte
+     If Not EqStr(val(va2)~val(va3),FBN['Grupo']~FBN['Especie']) o [Dialogo.Radio4=0 y Not EqStr(val(va1),FBN['Vehiculo1'])] y NoVacio(val(va3))
+        ACT(a:fac,'Total '~val(va2)~' En '~val(va3)~' Expresado en '~val(mo1))
+   
+        ACN(g:fac,SUM(g:val(lc1)..g:fac-1) )
+        ACN(i:fac,SUM(i:val(lc1)..i:fac-1) )
+        ACN(j:fac,SUM(j:val(lc1)..j:fac-1) )
+        ACN(q:fac,SUM(q:val(lc1)..q:fac-1) )
+        ACN(r:fac,SUM(r:val(lc1)..r:fac-1) )
+        ACN(t:fac,SUM(t:val(lc1)..t:fac-1) )
+        ACN(u:fac,SUM(u:val(lc1)..u:fac-1) )
+        ACN(w:fac,SUM(w:val(lc1)..w:fac-1) )
+        ACN(aa:fac,SUM(aa:val(lc1)..aa:fac-1) )
+        ACN(ab:fac,SUM(ab:val(lc1)..ab:fac-1) )
+        ACN(ac:fac,SUM(ac:val(lc1)..ac:fac-1) )
+
+        SCN(ag:1,val(g:fac) )
+        SCN(ai:1,val(i:fac) )
+        SCN(aj:1,val(j:fac) )
+        SCN(aq:1,val(q:fac) )
+        SCN(ar:1,val(r:fac) )
+        SCN(at:1,val(t:fac) )
+        SCN(au:1,val(u:fac) )
+        SCN(aw:1,val(w:fac) )
+        SCN(ay:1,val(aa:fac) )
+        SCN(az:1,val(ab:fac) )
+        SCN(bz:1,val(ac:fac) )
+
+        SetFont(a:fac..ah:fac,2)
+        AgregarMarco(a:fac..ah:fac,0,0,Exe('COLOR6'))       
+        ifa 
+     EndIf
+
+     If Dialogo.Radio4=0 y Not EqStr(val(va1),FBN['Vehiculo1']) y NoVacio(val(va1))
+        Ifa
+        *- Total Por Vehiculo
+        ACT(a:fac,'TOTAL de '~val(va1))
+
+        ACN(g:fac,val(ag:1) )
+        ACN(i:fac,val(ai:1) )
+        ACN(j:fac,val(aj:1) )
+        ACN(q:fac,val(aq:1) )
+        ACN(r:fac,val(ar:1) )
+        ACN(t:fac,val(at:1) )
+        ACN(u:fac,val(au:1) )
+        ACN(w:fac,val(aw:1) )
+        ACN(aa:fac,val(ay:1) )
+        ACN(ab:fac,val(az:1) )
+        ACN(ac:fac,val(bz:1) )
+
+        SCN(ag:2,val(ag:1))
+        SCN(ai:2,val(ai:1))
+        SCN(aj:2,val(aj:1))
+        SCN(aq:2,val(aq:1))
+        SCN(ar:2,val(ar:1))
+        SCN(at:2,val(at:1))
+        SCN(au:2,val(au:1))
+        SCN(aw:2,val(aw:1))
+        SCN(ay:2,val(ay:1))
+        SCN(az:2,val(az:1))
+        SCN(bz:2,val(bz:1))
+
+        ACN(ag:1,0)
+        ACN(ai:1,0)
+        ACN(aj:1,0)
+        ACN(aq:1,0)
+        ACN(ar:1,0)
+        ACN(at:1,0)
+        ACN(au:1,0)
+        ACN(aw:1,0)
+        ACN(ay:1,0)
+        ACN(az:1,0)
+        ACN(bz:1,0)
+
+        SetFont(a:fac..ah:fac,2)
+        AgregarMarco(a:fac..ah:fac,0,0,Exe('COLOR'))       
+        Ifa 
+     EndIf
+
+     If Dialogo.Radio4=0 y Not EqStr(val(va1),FBN['Vehiculo1']) 
+        *- Si no es consolidado ademas corta por Vehiculo
+        ACT(a:fac,FBN['Vehiculo1'])
+        SetFont(a:fac..a:fac,2)
+        AgregarMarco(a:fac..b:fac,0,0,Exe('COLOR'))       
+        ACT(va1,FBN['Vehiculo1']) 
+        Ifa 
+        Ifa
+     EndIf
+
+     *- Corte de Control por Grupo 
+     If Not EqStr(val(va2)~val(va3),FBN['Grupo']~FBN['Especie']) o [Dialogo.Radio4=0 y Not EqStr(val(va1),FBN['Vehiculo1'])]
+        ACT(a:fac,FBN['Grupo']~' En '~FBN['Especie'])
+
+        *- Por cada cambio de Especie tomo la cotizacion del USD
+        ACT(e:fac, 'Cotizacion:')
+        ACN(f:fac, CotizacionC(fbn['Especie'],,,,Dialogo.Fecha1,1,SI,val(mo1)) )
+        SetFont(a:fac..f:fac,2)
+        AgregarMarco(a:fac..f:fac,0,0,Exe('COLOR6'))       
+        acn(lc1,fac)
+
+        IFA
+        ACT(va2,FBN['Grupo']) 
+        ACT(va3,FBN['Especie']) 
+        (.'TITPRESTF'.)
+        ifa     
+     EndIf
+
+     ACT(a:fac , FBN['NrOperacion'])
+     ACLO(a:fac, FBN['NrOperacion'])
+
+     ACT(b:fac , FBN['Cliente1'])
+
+     If EqStr(FBN['Grupo'],'FRN')
+        ACT(b:fac , VAL(b:fac)~' - '~FBN['Cliente2'])
+     EndIf
+
+     IF Incluido(FBN['TipoOp'],'MMPEM|MMPIM|MMPE|MMPI|')
+        IF EqStr(FBN['RB6'],'0')
+           ACT(c:fac , 'Local')
+        EndIf
+        IF EqStr(FBN['RB6'],'1')
+           ACT(c:fac , 'Ent.Extr/Neg.Local')
+        EndIf
+        IF EqStr(FBN['RB6'],'2')
+           ACT(c:fac , 'Extranjero')     
+        EndIf
+     EndIf
+     IF Incluido(FBN['TipoOp'],'MMPCL|MMPCLM|')
+        IF EqStr(FBN['RB6'],'0')
+           ACT(c:fac , 'Local')
+        EndIf
+        IF EqStr(FBN['RB6'],'1')
+           ACT(c:fac , 'Extranjero')     
+        EndIf
+     EndIf
+     IF Incluido(FBN['TipoOp'],'MMPCOS|MMPOSM|')
+        IF EqStr(FBN['RB6'],'0')
+           ACT(c:fac , 'Local')
+        EndIf
+        IF EqStr(FBN['RB6'],'1')
+           ACT(c:fac , 'Extranjero')     
+        EndIf
+     EndIf
+
+     *- Recupero de la tabla de clientes el pais de la direccion para aclarar que tipo 
+     *- de fondeo es.
+     If NoVacio(val(c:fac))
+        ACT(pd1, BuscarCampo('CLIENTES','PaisDir','Codigo',val(b:fac)))
+        ACT(c:fac , val(c:fac)~'('~val(pd1)~')' )      
+     EndIf
+
+     ACD(d:fac, FBN['FInicio'])
+     ACD(e:fac, FBN['FFin'])
+     ACN(f:fac, FBN['Plazo'])
+
+     ACN(g:fac, FBN['Cantidad']*val(f:val(lc1)) )
+     ACN(i:fac, FBN['ImpAmort']*val(f:val(lc1)) )
+     ACN(h:fac, (val(i:fac)/val(g:fac))*100)
+     ACN(j:fac, FBN['VResidual']*val(f:val(lc1)))
+     ACD(k:fac, FBN['FechaOp'])
+     ACD(l:fac, FBN['FechaVto'])
+     ACT(m:fac, FBN['TipoTasa'])
+     ACN(n:fac, FBN['Tasa'])
+     ACN(o:fac, FBN['Spread'])
+     ACN(p:fac, FBN['Tasa']+FBN['Spread'])
+
+     ACN(q:fac,FBN['TotalIntereses']*val(f:val(lc1)))        
+     ACN(r:fac,FBN['VResidual']*((FBN['Spread']+FBN['Tasa'])/100)*FACTORDIAS(val(k:fac),Dialogo.Fecha1+1,FBN['RB8']+1))
+     ACN(r:fac,val(r:fac)*val(f:val(lc1)))
+
+     ACN(s:fac,FBN['TasaWH'] )        
+     ACN(t:fac,FBN['ImpWH'] )        
+
+     *- Dias transcurridos del periodo para calcular devengados
+     ACN(ff:fac,FactorDias2(val(k:fac),Dialogo.Fecha1+1,FBN['RB8']+1) )
+
+     *- Dias transcurridos Totales para calcular devengados de comisiones
+     ACN(fg:fac,FactorDias2(val(d:fac),Dialogo.Fecha1+1,FBN['RB8']+1) )
+
+     ACN(u:fac,val(fg:fac)*val(t:fac)/FBN['Plazo'])
+
+     *- IVA
+     ACN(v:fac,FBN['TasaIva'])    
+     ACN(w:fac,FBN['ImpIVA'])    
+     
+     *- Tasa Total
+     ACN(ad:fac,FBN['TTN'])    
+
+     *- nc2: VResidual na2: ImpAmor
+     ACN(na2,val(i:fac)*val(f:val(lc1)))
+     ACN(nc2,val(j:fac)*val(f:val(lc1)))
+
+     ACT(no1,FBN['NrOperacion'])
+     ACD(fe1,val(k:fac))
+     ACD(fe2,val(l:fac))
+     (.'DETOPSWAP'.)
+
+     If NoVacio(val(no4))     
+        ACN(ae:fac,val(ta1)+val(sp1))    
+        FormatoCeldas(ae:fac..ae:fac,EXE('F8'))
+        ACN(af:fac,val(nc2))    
+        ACN(ag:fac,val(na2))    
+        ACT(ah:fac,val(no4))    
+        If Elementos(val(no4))=1
+           ACLO(ah:fac,Copy(val(no4),1,8))    
+        EndIf
+
+     EndIf
+
+     SetFont(a:fac..ah:fac,1)
+     FormatoCeldas(ac:fac..ac:fac,EXE('F0'))
+     FormatoCeldas(f:fac..f:fac,EXE('F0'))
+
+     *- Por cada operacion recupero las comisiones
+     SQL.ADD(" SELECT C.Tipo, C.Especie1,C.Tasa1,C.Importe1,C.Importe2 IvaComi,C.Importe3 WHComi,C.Precio2 ImpIntComi, C.Fecha1 ")
+     SQL.ADD(" FROM   "~DBO~".COMISIONES2 C ")
+     SQL.ADD(" WHERE  C.NrOperacion='"~val(a:fac)~"' ")
+     SQL.ADD("        and C.Fecha1>='"~IdxDate(Val(k:fac))~"' and C.Fecha1<='"~IdxDate(Val(l:fac))~"' ")
+
+     acn(co1,0)
+     acn(lc2,fac)
+
+     Recorrer SQL   
+         If val(co1)=0
+            dfa
+            acn(co1,1)
+         EndIf
+         
+         If EqStr(FBN['Tipo'], '0')
+            ACT(x:fac,'FPD') 
+         Endif       
+         If EqStr(FBN['Tipo'], '1')
+            ACT(x:fac,'FFC') 
+         Endif       
+         If EqStr(FBN['Tipo'], '2')
+            ACT(x:fac,'CDO') 
+         Endif       
+         If EqStr(FBN['Tipo'], '3')
+            ACT(x:fac,'CPI') 
+         Endif    
+         If EqStr(FBN['Tipo'], '4')
+            ACT(x:fac,'CF') 
+         Endif       
+         If EqStr(FBN['Tipo'], '5')
+            ACT(x:fac,'EF') 
+         Endif          
+
+         ACN(y:fac,FBN['Tasa1'])
+         ACD(z:fac, FBN['Fecha1'])    
+         ACN(aa:fac,FBN['Importe1']*CotizacionC(fbn['Especie1'],,,,Dialogo.Fecha1,1,SI,val(mo1)))    
+
+         *- Devengado : Importe comision * Dias transcurridos desde inicio de op/ Plazo de Operacion
+         ACN(ab:fac,val(aa:fac)*val(fg:val(lc2))/val(f:val(lc2)) )     
+
+         *- Iva
+         ACN(ac:fac,FBN['IvaComi']*CotizacionC(fbn['Especie1'],,,,Dialogo.Fecha1,1,SI,val(mo1)))    
+         SetFont(a:fac..ad:fac,1)
+     Proximo      
+
+     *- CEC Variable
+     SQL.ADD(" Select O.ContraEspecie Especie1,'CECVARI' as Tipo,O.Precio3 Tasa,O.FechaVto2 Fecha, ")
+     SQL.ADD("        CASE O.TipoOp WHEN 'MMPCL ' THEN O.ImpComCorEq2 ELSE O.TotalGanancias END Importe, 0 Iva ")
+     SQL.ADD(" from   "~DBO~".OPERACIONES O ")
+     SQL.ADD(" WHERE  O.NrOperacion='"~val(a:val(lc2))~"' ")
+     SQL.ADD("        and O.TipoOp In ('MMPCL','MMPI','MMPE') AND (CASE O.TipoOp WHEN 'MMPCL ' THEN O.ImpComCorEq2 ELSE O.TotalGanancias END)<>0 ")
+     SQL.ADD("        and O.FechaVto2 >= '"~IdxDate(Val(k:fac))~"' and O.FechaVto2 <= '"~IdxDate(Val(l:fac))~"' ")
+     SQL.ADD(" Union All")
+     SQL.ADD(" Select CASE O.TipoOp WHEN 'MMPCLM' THEN C.Especie1 ELSE C.Especie2 END Especie1,'CECVARI' as Tipo,O.Precio3 Tasa,")
+     SQL.ADD("        CASE O.TipoOp WHEN 'MMPCLM' THEN C.Fecha2 ELSE C.Fecha3 END Fecha, ")
+     SQL.ADD("        CASE O.TipoOp WHEN 'MMPCLM' THEN C.Cantidad4 ELSE C.Total8 END Importe, 0 Iva ")
+     SQL.ADD(" from   "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+     SQL.ADD(" WHERE  O.NrOperacion='"~val(a:val(lc2))~"' and O.NrOperacion=C.NrOperacion ")
+     SQL.ADD("        and O.TipoOp In ('MMPCLM','MMPIM','MMPEM') AND (CASE O.TipoOp WHEN 'MMPCLM' THEN C.Cantidad4 ELSE C.Total8 END)<>0 ")
+     SQL.ADD("        and (CASE O.TipoOp WHEN 'MMPCLM' THEN C.Fecha2 ELSE C.Fecha3 END) >= '"~IdxDate(Val(k:fac))~"' ")
+     SQL.ADD("        and (CASE O.TipoOp WHEN 'MMPCLM' THEN C.Fecha2 ELSE C.Fecha3 END) <= '"~IdxDate(Val(l:fac))~"' ")
+     SQL.ADD(" Union All")
+     *- CEC Fija
+     SQL.ADD(" Select O.ContraEspecie Especie1,'CECFIJA' as Tipo,0 Tasa,O.FechaVto2 Fecha,O.ImpComCor2 Importe, 0 Iva ")
+     SQL.ADD(" from   "~DBO~".OPERACIONES O ")
+     SQL.ADD(" WHERE  O.NrOperacion='"~val(a:val(lc2))~"' ")
+     SQL.ADD("        and O.TipoOp In ('MMPCL','MMPI','MMPE') and O.ImpComCor2<>0 ")
+     SQL.ADD("        and O.FechaVto2 >= '"~IdxDate(Val(k:fac))~"' and O.FechaVto2 <= '"~IdxDate(Val(l:fac))~"' ")
+     SQL.ADD(" Union All")
+     SQL.ADD(" Select CASE O.TipoOp WHEN 'MMPCLM' THEN C.Especie1 ELSE C.Especie2 END Especie1,'CECFIJA' as Tipo,0 Tasa,")
+     SQL.ADD("        CASE O.TipoOp WHEN 'MMPCLM' THEN C.Fecha2 ELSE C.Fecha3 END Fecha,C.Cantidad5 Importe, 0 Iva ")
+     SQL.ADD(" from   "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+     SQL.ADD(" WHERE  O.NrOperacion='"~val(a:val(lc2))~"' and O.NrOperacion=C.NrOperacion ")
+     SQL.ADD("        and O.TipoOp In ('MMPCLM','MMPIM','MMPEM') and C.Cantidad5<>0 ")
+     SQL.ADD("        and (CASE O.TipoOp WHEN 'MMPCLM' THEN C.Fecha2 ELSE C.Fecha3 END) >= '"~IdxDate(Val(k:fac))~"' ")
+     SQL.ADD("        and (CASE O.TipoOp WHEN 'MMPCLM' THEN C.Fecha2 ELSE C.Fecha3 END) <= '"~IdxDate(Val(l:fac))~"' ")
+     SQL.ADD(" Union All")
+     *- Costo Financiero CEC
+     SQL.ADD(" Select O.ContraEspecie Especie1,'CSTOCEC' as Tipo,O.DeltaTasa Tasa,O.FechaVto2 Fecha,O.PeriodoInts Importe, 0 Iva ")
+     SQL.ADD(" from   "~DBO~".OPERACIONES O ")
+     SQL.ADD(" WHERE  O.NrOperacion='"~val(a:val(lc2))~"' ")
+     SQL.ADD("        and O.TipoOp In ('MMPCL','MMPI','MMPE') and O.PeriodoInts<>0 ")
+     SQL.ADD("        and O.FechaVto2 >= '"~IdxDate(Val(k:fac))~"' and O.FechaVto2 <= '"~IdxDate(Val(l:fac))~"' ")
+     SQL.ADD(" Union All")
+     SQL.ADD(" Select CASE O.TipoOp WHEN 'MMPCLM' THEN C.Especie1 ELSE C.Especie2 END Especie1,'CSTOCEC' as Tipo,O.DeltaTasa Tasa,")
+     SQL.ADD("        CASE O.TipoOp WHEN 'MMPCLM' THEN C.Fecha2 ELSE C.Fecha3 END Fecha,C.Cantidad7 Importe, 0 Iva ")
+     SQL.ADD(" from   "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+     SQL.ADD(" WHERE  O.NrOperacion='"~val(a:val(lc2))~"' and O.NrOperacion=C.NrOperacion ")
+     SQL.ADD("        and O.TipoOp In ('MMPCLM','MMPIM','MMPEM') and C.Cantidad7<>0 ")
+     SQL.ADD("        and CASE O.TipoOp WHEN 'MMPCLM' THEN C.Fecha2 ELSE C.Fecha3 END >= '"~IdxDate(Val(k:fac))~"' ")
+     SQL.ADD("        and CASE O.TipoOp WHEN 'MMPCLM' THEN C.Fecha2 ELSE C.Fecha3 END <= '"~IdxDate(Val(l:fac))~"' ")
+     SQL.ADD(" Union All")
+     *- CEN Variable
+     SQL.ADD(" Select O.ContraEspecie2 Especie1,'CENVARI' as Tipo,O.Precio2 Tasa,")
+     SQL.ADD("        O.FechaPrecan Fecha,O.ImpComCorEq1 Importe,O.TotalGastos Iva ")
+     SQL.ADD(" from   "~DBO~".OPERACIONES O ")
+     SQL.ADD(" WHERE  O.NrOperacion='"~val(a:val(lc2))~"' ")
+     SQL.ADD("        and O.TipoOp In ('MMPCOS','MMPI','MMPE') and O.ImpComCorEq1<>0 ")
+     SQL.ADD("        and O.FechaPrecan >= '"~IdxDate(Val(k:fac))~"' and O.FechaPrecan <= '"~IdxDate(Val(l:fac))~"' ")
+     SQL.ADD(" Union All")
+     SQL.ADD(" Select C.Especie1,'CENVARI' as Tipo,O.Precio2 Tasa,")
+     SQL.ADD("        C.Fecha3, C.Cantidad4 Importe, C.Tasa3 Iva ")
+     SQL.ADD(" from   "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+     SQL.ADD(" WHERE  O.NrOperacion='"~val(a:val(lc2))~"' and O.NrOperacion=C.NrOperacion ")
+     SQL.ADD("        and O.TipoOp In ('MMPOSM','MMPIM','MMPEM') and C.Cantidad4<>0 ")
+     SQL.ADD("        and C.Fecha3 >= '"~IdxDate(Val(k:fac))~"' and C.Fecha3 <= '"~IdxDate(Val(l:fac))~"' ")
+     SQL.ADD(" Union All")
+     *- CEN Fija
+     SQL.ADD(" Select O.ContraEspecie2 Especie1,'CENFIJA' as Tipo,0 Tasa,O.FechaPrecan Fecha,O.ImpComCor1 Importe,0 Iva ")
+     SQL.ADD(" from   "~DBO~".OPERACIONES O ")
+     SQL.ADD(" WHERE  O.NrOperacion='"~val(a:val(lc2))~"' ")
+     SQL.ADD("        and O.TipoOp In ('MMPCOS','MMPI','MMPE') and O.ImpComCor1<>0 ")
+     SQL.ADD("        and O.FechaPrecan >= '"~IdxDate(Val(k:fac))~"' and O.FechaPrecan <= '"~IdxDate(Val(l:fac))~"' ")
+     SQL.ADD(" Union All")
+     SQL.ADD(" Select C.Especie1,'CENFIJA' as Tipo,0 Tasa,C.Fecha3 Fecha,")
+     SQL.ADD("        CASE O.TipoOp WHEN 'MMPOSM' THEN C.Cantidad5 ELSE C.Plazo3 END Importe, 0 Iva ")
+     SQL.ADD(" from   "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+     SQL.ADD(" WHERE  O.NrOperacion='"~val(a:val(lc2))~"' and O.NrOperacion=C.NrOperacion ")
+     SQL.ADD("        and O.TipoOp In ('MMPOSM','MMPIM','MMPEM') and C.Cantidad5 <>0 ")
+     SQL.ADD("        and C.Fecha3 >= '"~IdxDate(Val(k:fac))~"' and C.Fecha3 <= '"~IdxDate(Val(l:fac))~"' ")
+
+     Recorrer SQL   
+        ACT(x:fac, FBN['Tipo'])
+        ACN(y:fac,FBN['Tasa'])
+        ACD(z:fac, FBN['Fecha'])    
+        ACN(aa:fac,FBN['Importe']*CotizacionC(fbn['Especie1'],,,,Dialogo.Fecha1,1,SI,val(mo1)))    
+
+        *- Devengado 
+        ACN(ab:fac,val(aa:fac)*val(fg:val(lc2))/val(f:val(lc2)) )     
+
+        *- Iva
+        ACN(ac:fac,FBN['Iva']*CotizacionC(fbn['Especie1'],,,,Dialogo.Fecha1,1,SI,val(mo1)))    
+        SetFont(a:fac..ad:fac,1)
+     Proximo      
+ 
+     If val(co1)=1 
+        AgregarMarco(a:val(lc2)..ah:fac,0,0)       
+        acn(co1,0)
+     EndIf
+
+     SetFont(a:fac..ah:fac,1)
+Proximo
+Ifa
+
+*- Totales Finales
+ACT(a:fac,'Total '~val(va2)~' En '~val(va3)~' Expresado en '~val(mo1))
+   
+ACN(g:fac,SUM(g:val(lc1)..g:fac-1) )
+ACN(i:fac,SUM(i:val(lc1)..i:fac-1) )
+ACN(j:fac,SUM(j:val(lc1)..j:fac-1) )
+ACN(q:fac,SUM(q:val(lc1)..q:fac-1) )
+ACN(r:fac,SUM(r:val(lc1)..r:fac-1) )
+ACN(t:fac,SUM(t:val(lc1)..t:fac-1) )
+ACN(u:fac,SUM(u:val(lc1)..u:fac-1) )
+ACN(w:fac,SUM(w:val(lc1)..w:fac-1) )
+ACN(aa:fac,SUM(aa:val(lc1)..aa:fac-1) )
+ACN(ab:fac,SUM(ab:val(lc1)..ab:fac-1) )
+ACN(ac:fac,SUM(ac:val(lc1)..ac:fac-1) )
+
+SCN(ag:1,val(g:fac) )
+SCN(ai:1,val(i:fac) )
+SCN(aj:1,val(j:fac) )
+SCN(aq:1,val(q:fac) )
+SCN(ar:1,val(r:fac) )
+SCN(at:1,val(t:fac) )
+SCN(au:1,val(u:fac) )
+SCN(aw:1,val(w:fac) )
+SCN(ay:1,val(y:fac) )
+SCN(az:1,val(z:fac) )
+SCN(bz:1,val(aa:fac) )
+SetFont(a:fac..ah:fac,2)
+AgregarMarco(a:fac..ah:fac,0,0,Exe('COLOR6'))       
+Ifa 
+Ifa
+
+*- Total Por Vehiculo
+ACT(a:fac,'TOTAL de '~val(va1))
+
+ACN(g:fac,val(ag:1) )
+ACN(i:fac,val(ai:1) )
+ACN(j:fac,val(aj:1) )
+ACN(q:fac,val(aq:1) )
+ACN(r:fac,val(ar:1) )
+ACN(t:fac,val(at:1) )
+ACN(u:fac,val(au:1) )
+ACN(w:fac,val(aw:1) )
+ACN(aa:fac,val(ay:1) )
+ACN(ab:fac,val(az:1) )
+ACN(ac:fac,val(bz:1) )
+
+SCN(ag:2,val(ag:1))
+SCN(ai:2,val(ai:1))
+SCN(aj:2,val(aj:1))
+SCN(aq:2,val(aq:1))
+SCN(ar:2,val(ar:1))
+SCN(at:2,val(at:1))
+SCN(au:2,val(au:1))
+SCN(aw:2,val(aw:1))
+SCN(ay:2,val(ay:1))
+SCN(az:2,val(az:1))
+SCN(bz:2,val(bz:1))
+
+SetFont(a:fac..ah:fac,2)
+AgregarMarco(a:fac..ah:fac,0,0,Exe('COLOR'))       
+Ifa 
+Ifa 
+
+*- Total GENERAL
+ACT(a:fac,'TOTAL GENERAL ')
+
+ACN(g:fac,val(ag:2) )
+ACN(i:fac,val(ai:2) )
+ACN(j:fac,val(aj:2) )
+ACN(q:fac,val(aq:2) )
+ACN(r:fac,val(ar:2) )
+ACN(t:fac,val(at:2) )
+ACN(u:fac,val(au:2) )
+ACN(w:fac,val(aw:2) )
+ACN(aa:fac,val(ay:2) )
+ACN(ab:fac,val(az:2) )
+ACN(ac:fac,val(bz:2) )
+
+SetFont(a:fac..ah:fac,2)
+AgregarMarco(a:fac..ah:fac,0,0,Exe('COLOR'))       
+Ifa 
+Ifa 
+ACT(a:fac,'FIN DEL INFORME')
+SetFont(a:fac..ah:fac,2)
+
+Recorrer&j 1,34
+   ACO(&j,8)
+Proximo
+ACO(3,12)
+ACO(34,15)
+
+BorrarCeldas(z:1..ah:2)
+LimitesVision(ah:fac+1)
+Impresion(1,2)
+SetPrintFit(3,94)
+
+

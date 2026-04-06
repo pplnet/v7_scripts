@@ -1,0 +1,69 @@
+﻿CrearDialogo
+    NrOperacion1:  'NrOperacion'   ;;;;;;EqStr(BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion1),'MMCPM') y BuscarCampo('OPERACIONES','CB9','NrOperacion',Dialogo.NrOperacion1)=1 ;'La operacion debe ser una renovacion y de tipo MMCPM';NO;;;;;;"TipoOp='MMCPM' and CB9='1'"
+FinDialogo
+
+If Not Ok
+    Cancelar
+Endif
+   
+If QUERY("Select 1 from "~DBO~".MOVEJECUTADOS Where NrOperacion = '"~Dialogo.NrOperacion1~"' AND NrSaldo=1")=1
+    Cancelar ('La operacion seleccionada se encuentra liquidada. Desliquidela e intente nuevamente')
+Endif
+
+*************************************************************SQL************************************************************************************
+SQL.ADD("Select O.Vehiculo1,O.Book1,O.Cliente1,O.Cuenta1,O.FechaOp,O.Plazo,O.FechaVto,O.Cantidad,O.Precio1 as 'TasaInt',O.ImpGastos1 as 'TasaRet',")
+SQL.ADD("C.Cantidad3 as 'Intereses',C.Cantidad4 as 'Retenciones'")
+SQL.ADD("From "~DBO~".OPERACIONES O JOIN "~DBO~".CUOTAS C  ON O.NrOperacion = C.NrOperacion ")
+SQL.ADD("Where O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+SetFilaActual(1)
+
+ACT(A:fac,Dialogo.NrOperacion1)
+dfa
+Recorrer SQL
+    ACT(B:fac,fbn['Vehiculo1'])
+    ACT(C:fac,fbn['Book1'])
+    ACT(D:fac,fbn['Cliente1'])
+    ACT(E:fac,fbn['Cuenta1'])
+    ACD(F:fac,fbn['FechaOp'])
+    ACN(G:fac,fbn['Plazo'])
+    ACD(H:fac,fbn['FechaVto'])
+    ACN(I:fac,fbn['TasaInt'])
+    ACN(J:fac,fbn['Intereses'])
+    ACN(K:fac,fbn['TasaRet'])
+    ACN(L:fac,fbn['Retenciones'])
+    ACN(M:fac,fbn['Cantidad'])
+Proximo
+
+**********************************************************************GRILLA*************************************************************************
+
+CrearListBox;'Arial,8,B'
+    'NrOperacion'    ; A:1..A:FAC; NO; NO;;100; STRING;;EXE('COLOR8')
+    'Vehiculo'       ; B:1..B:FAC; NO; NO;;100; STRING;;EXE('COLOR8')
+    'Book'           ; C:1..C:FAC; NO; NO;;100; STRING;;EXE('COLOR8')
+    'Cliente'        ; D:1..D:FAC; NO; NO;;100; STRING;;EXE('COLOR8')
+    'Cuenta'         ; E:1..E:FAC; NO; NO;;100; STRING;;EXE('COLOR8')
+    'FechaOp'        ; F:1..F:FAC; NO; NO;;80; FECHA;EXE('COLOR8')
+    'Plazo'          ; G:1..G:FAC; NO; NO;;60;  NUMERO;'####';EXE('COLOR8')
+    'FechaVto'       ; H:1..H:FAC; NO; NO;;80; FECHA;EXE('COLOR8')
+    'TasaInt'        ; I:1..I:FAC; NO; NO;;100; NUMERO;'###.########';EXE('COLOR8')
+    'Intereses'      ; J:1..J:FAC; NO; NO;;100; NUMERO;'###,###,###,###.##';EXE('COLOR8')
+    'TasaRet'        ; K:1..K:FAC; NO; NO;;100; NUMERO;'###.########';EXE('COLOR8')
+    'Retenciones'    ; L:1..L:FAC; NO; NO;;100; NUMERO;'###,###,###,###.##';EXE('COLOR8')
+    'Cantidad'       ; M:1..M:FAC; NO; NO;;100; NUMERO;'###,###,###,###.##';EXE('COLOR8')
+FinListBox
+If Not Ok
+    Cancelar
+Endif
+
+************ELIMINO LA OP DE LA TABLA OPERACIONES (POR TRIGGER SE ELIMINARÁ TAMBIEN DE LAS TABLAS CUOTAS Y OPERACIONESBITS)
+SQL.ADD("DELETE From "~DBO~".OPERACIONES Where NrOperacion = '"~Dialogo.NrOperacion1~"'")
+SQL.NEW
+SQL.EXEC
+
+********Ajusto Check 'Renovada' y OperacionRef en la OP original
+SQL.ADD("UPDATE "~DBO~".OPERACIONES Set CB8='0', OperacionRef=null Where OperacionRef='"~Dialogo.NrOperacion1~"'")
+SQL.NEW
+SQL.EXEC
+
+
+MessageBox("El proceso de Anulacion de la Renovacion de PF finalizó correctamente")

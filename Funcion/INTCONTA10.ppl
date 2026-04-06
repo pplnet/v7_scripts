@@ -1,0 +1,101 @@
+﻿*- Para Especies que tengan Saldo solamente si tienen INDICE
+SQL.ADD("SELECT DISTINCT S.EnteCustodia,E.Cotiza,S.Especie,E.Indice ")
+SQL.ADD("FROM   "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E ")
+SQL.ADD("WHERE  S.NrSaldo = 1  ")
+SQL.ADD("AND    E.EsCupon = 'SI' ")
+SQL.ADD("AND    S.EnteCustodia = '"~ItemLista(Val(LS:1), &k)~"' ")
+SQL.ADD("AND    E.Codigo = S.Especie ")
+SQL.ADD("AND    S.Saldo <> 0 ")
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("    and S.Especie='"~Dialogo.Especie1~"' ")
+Endif
+SQL.ADD("AND E.Indice IS NOT NULL and E.IndiceEnPrecio<>'SI'  ")
+SQL.ADD("AND S.Fecha IN (Select MAX(Fecha) from  "~DBO~".SALDOSDIA ")
+SQL.ADD("WHERE (Mercado = S.Mercado OR (Mercado IS NULL AND S.Mercado IS NULL) ) ")
+SQL.ADD("and  Cuenta       = S.Cuenta  ")
+SQL.ADD("and  Cliente      = S.Cliente ")
+SQL.ADD("and  Especie      = S.Especie ")
+SQL.ADD("and  Cupon        = S.Cupon   ")
+SQL.ADD("and  (EnteCustodia = S.EnteCustodia OR (EnteCustodia IS NULL AND S.EnteCustodia IS NULL) ) ")
+SQL.ADD("and  NrSaldo      = S.NrSaldo ")
+SQL.ADD("and  Fecha       <= "~IdxDate2(Dialogo.Fecha1)~") ")
+SQL.ADD("UNION ALL")
+SQL.ADD("SELECT DISTINCT S.Cliente as EnteCustodia,E.Cotiza,S.Especie,E.Indice ")
+SQL.ADD("FROM   "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E ")
+SQL.ADD("WHERE  S.NrSaldo = 3 ")
+SQL.ADD("AND E.Indice IS NOT NULL and E.IndiceEnPrecio<>'SI'  ")
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("    and S.Especie='"~Dialogo.Especie1~"' ")
+Endif
+SQL.ADD("       AND S.Cliente = '"~ItemLista(Val(LS:1), &k)~"' ")
+SQL.ADD("       AND E.Codigo = S.Especie ")
+SQL.ADD("       AND S.Saldo <> 0 ")
+SQL.ADD("       AND S.Fecha = (SELECT Max(D.Fecha) FROM "~DBO~".SALDOSDIA D ")
+SQL.ADD("                      WHERE  D.Cliente = S.Cliente ")
+SQL.ADD("                             AND D.Especie = S.Especie ")
+SQL.ADD("                             AND D.NrSaldo = S.NrSaldo ")
+SQL.ADD("                             AND D.Fecha < '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD(" AND S.Cliente = 'XX' ")
+SQL.ADD("ORDER BY 4,3,2,1")
+
+ACT(in1,'')
+Recorrer SQL
+   dfa
+   *- Recupero Cotizacion del Indice
+   If Not EqStr(val(in1),FBN['Indice']~FBN['Especie'])
+      ACT(in1,FBN['Indice']~FBN['Especie'])
+
+      ACT(LS:2, FBN['Indice']~'|'~FBN['Especie']~'|')
+      ACT(LS:66, 'Bloomberg|Bloomberg|')
+      ACT(LS:77, Fstr(Cotizacion(fbn('Indice'),,,,Dialogo.Fecha1,1),0,8)~'|'~Fstr(Cotizacion(fbn('Especie'),,,,Dialogo.Fecha1,1),0,8)~'|')
+   EndIf
+
+   ACT(et1,FBN['Especie'])
+   ACT(et2,FBN['Cotiza'])
+   ACT(et3,FBN['EnteCustodia'])
+
+   *- Por cada Especie con saldo recupero la minima fecha para invocar al informe
+   SQL.ADD("Select Min(Fecha) as MinFecha from  "~DBO~".SALDOSDIA ")
+   SQL.ADD("WHERE Especie  = '"~val(et1)~"' ")
+   SQL.ADD("and  Fecha     <= "~IdxDate2(Dialogo.Fecha1)~" ")
+
+   Recorrer SQL
+      dfa
+      LinkearHoja('DETOPA', 1, Fecha1=FBN['MinFecha'],Fecha2=Dialogo.Fecha1,Radio4=0,Especie1=val(et2),Vehiculo1='',Lista1=val(et3)~'|',Lista2=val(ls2),Lista3=val(ls3),Lista4=val(ls77),Especie2=val(et1))
+
+      ACN(FL:1, 14)
+      Repetir
+         SCN(FL:1, 1)  
+         ACN(IX:1, LinkH(1, EH:Val(FL:1)))
+
+         IF [Not Incluido(LinkH(1, C:Val(FL:1)), Val(EA:1))] y Val(IX:1) <> 0
+            Message('***---Resultado por Indice '~Fstr(val(ix1),0,2))
+            ***---Armo registro
+            ACT(LY:1, Var('IDXRESULT'))
+            ACN(CN:1, Val(IX:1))
+            ACN(QQ:1, 2)
+            ***---Tipo de Movimiento
+            IF Val(IX:1)> 0
+               ACT(TR:2, 'DEP')
+               ACN(SG:1, 1)
+            Else
+               ACT(TR:2, 'RET')
+               ACN(SG:1, -1)
+            EndIf
+            ***---Arma registro
+             (.'INTCONTA11'.)
+            ACN(Z:1, 1)
+            ACN(BD:3, 1)
+            IF Val(ZZ:1) = 0 O Val(ZZ:1) = 1
+               ***---Inserto el registro en MOVIMIENTOS
+                (.'INTCONTAB3'.)
+            ENDIF
+         ENDIF
+
+         IF Eqstr('Fin del Informe', Copy(LinkH(1, A:Val(FL:1)), 1, 15))
+            CerrarLink(1)
+            Break
+         ENDIF
+      Proximo
+   Proximo
+Proximo

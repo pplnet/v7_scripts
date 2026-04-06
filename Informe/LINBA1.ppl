@@ -1,0 +1,345 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1    : "Fecha"             ;;;;;;NoVacio(Dialogo.Fecha1);'Fecha Invalida';NO;Fsys;
+  Radio1    : "Expresado|ARP|USD" ;;;;;;;;;0
+  Lista1    : 'Vehiculo'          ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='')"),SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+  Radio2    : "Vinc-Terc|NO|SI"   ;;;;;;;;;0
+  Cliente1  : "Cliente"           ;;;;;;;;;;
+  Cantidad1 : "Expresado en:"     ;;;;NO;NO;;;;1000000;
+FinDialogo
+
+If Not Ok
+   Cancelar
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+act(mo1,VAR('MONEEXTR'))
+If Dialogo.Radio1=0 
+   act(mo1,VAR('MONELOCA'))
+EndIf
+
+
+SetFilaActual(2)
+ACT(a:fac  ,' LINEAS BANCARIAS A CORTO PLAZO ')
+ACT(a:fac+1,'      Millones de '~val(mo1) )
+ACT(e:fac+1,'Fecha: '~Dialogo.Fecha1)
+SetFont(a:fac,3)
+SetFont(a:fac+1..e:fac+1,2)
+SetFilaActual(fac+4)
+
+*- fi1: Fila donde se listan los vehiculos
+ACN(fi1,fac)
+
+ACT(a:fac, 'BANCO')
+ACT(b:fac, 'LINEAS')
+ACO(1, 9)
+ACO(2, 9)
+SetFont(a:fac..b:fac,2)
+AgregarMarco(a:fac..b:fac+1,1,2,Exe("COLOR"))
+
+
+SQL.ADD("Select Distinct Vehiculo1 from "~DBO~".OPERACIONES Where ")
+SQL.ADD("FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' and ((TipoOp in ('MMFRP','MMFIMV','MMON','MMONM','MMPCL','MMPCLM','MMPLME','MMPCOS','MMPE','MMPEM','MMPI','MMPIM','MMPOSM','MMPSI','MMSIMV','MMPCCM','MMPCCV')")
+SQL.ADD("and FechaVto>'"~IdxDate(Dialogo.Fecha1)~"')")
+SQL.ADD("or (TipoOp in ('MMFRNP','MMFIMV','MMPSI','MMSIMV') and FechaVto2>'"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD(" ) ")
+SQL.ADD(" and ((NrOperacion2 IS NULL or NrOperacion2='')  ")
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD("  and  Vehiculo1 In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD("  and  Cliente1='"~Dialogo.Cliente1~"' ")
+Endif
+SQL.ADD(" or NrOperacion2 NOT IN ")
+SQL.ADD(" (")
+SQL.ADD("Select NrOperacion from "~DBO~".OPERACIONES where ")
+SQL.ADD("FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' and ((TipoOp in ('MMFRP','MMFIMV','MMON','MMONM','MMPCL','MMPCLM','MMPLME','MMPCOS','MMPE','MMPEM','MMPI','MMPIM','MMPOSM','MMPSI','MMSIMV','MMPCCM','MMPCCV')")
+SQL.ADD("and FechaVto>'"~IdxDate(Dialogo.Fecha1)~"')")
+SQL.ADD("or (TipoOp in ('MMFRNP','MMFCMV','MMPSI','MMSCMV') and FechaVto2>'"~IdxDate(Dialogo.Fecha1)~"'))  ")
+SQL.ADD(" )) ")
+if NoVacio(Dialogo.Lista1)
+   SQL.ADD("  and  Vehiculo1 In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+endif
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD("  and  Cliente1='"~Dialogo.Cliente1~"' ")
+Endif
+If Dialogo.Radio2=1 
+   SQL.ADD(" Union ")
+   *- Selecciono los Vehiculos de Vinculados para Recuperar el Saldo
+   SQL.ADD(" Select Vehiculo1 FROM "~DBO~".PARESVEHICULO ")
+   SQL.ADD(" Where Estado='HAB' ")
+   If NoVacio(Dialogo.Lista1)
+      SQL.ADD("  and  (Vehiculo1 In ("~Pipe2Comillas(Dialogo.Lista1)~") or Vehiculo2 In ("~Pipe2Comillas(Dialogo.Lista1)~")) ")
+   Endif
+   If NoVacio(Dialogo.Cliente1)
+      SQL.ADD("  and  Vehiculo2='"~Dialogo.Cliente1~"' ")
+   Endif
+   SQL.ADD(" Union ")
+   *- Selecciono los Vehiculos de Terceros para Recuperar el Saldo
+   SQL.ADD(" Select Vehiculo FROM  "~DBO~".IMPTERCEROS ")
+   SQL.ADD(" Where Estado='HAB' ")
+   If NoVacio(Dialogo.Lista1)
+      SQL.ADD("  and  Vehiculo In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+   Endif
+   If NoVacio(Dialogo.Cliente1)
+      SQL.ADD("  and  Cliente='"~Dialogo.Cliente1~"' ")
+   Endif
+EndIf
+SQL.ADD("order by Vehiculo1")
+
+acn(cv1,3)
+
+Recorrer SQL
+    dfa
+    ACT(val(cv1)  :fac  ,FBN['Vehiculo1'])  
+    ACT(val(cv1)  :fac+1, 'Pr.Locales')
+    ACT(val(cv1)+1:fac+1, 'Pr.Off-shore')
+    ACT(val(cv1)+2:fac+1, 'Pr.Trade')
+    ACT(val(cv1)+3:fac+1, 'O.N.')
+    ACT(val(cv1)+4:fac+1, 'FRN/Sindicados')
+
+    ACO(val(cv1), 9)
+    ACO(val(cv1)+1, 9)
+    ACO(val(cv1)+2, 9)
+    ACO(val(cv1)+3, 9)
+    ACO(val(cv1)+4, 9)
+
+    If Dialogo.Radio2=1 
+       *- Lista Vinculados y Terceros
+       ACT(val(cv1)+5:fac+1, 'Vinculados')
+       ACT(val(cv1)+6:fac+1, 'Terceros')
+
+       AgregarMarco(val(cv1):fac  ..val(cv1)+6:fac,1,0,Exe("COLOR"))
+       AgregarMarco(val(cv1):fac+1..val(cv1)+6:fac+1,1,2,Exe("COLOR"))
+       SetFont(val(cv1):fac..val(cv1)+6:fac+1,2)
+       ACO(val(cv1)+5, 9)
+       ACO(val(cv1)+6, 9)
+       scn(cv1,7)   
+    Else
+       AgregarMarco(val(cv1):fac..val(cv1)+4:fac,1,0,Exe("COLOR"))
+       AgregarMarco(val(cv1):fac+1..val(cv1)+4:fac+1,1,2,Exe("COLOR"))
+       SetFont(val(cv1):fac..val(cv1)+4:fac+1,2)
+       scn(cv1,5)   
+    EndIf
+Proximo
+
+*- Utilizado y Saldo
+ACT(val(cv1)  :fac, 'Utilizado')
+ACT(val(cv1)+1:fac, 'Saldo    ')
+
+ACO(val(cv1)  , 9)
+ACO(val(cv1)+1, 9)
+
+SetFont(val(cv1):fac..val(cv1)+1:fac,2)
+AgregarMarco(val(cv1):fac..val(cv1):fac+1,1,2,Exe("COLOR"))
+AgregarMarco(val(cv1)+1:fac..val(cv1)+1:fac+1,1,2,Exe("COLOR"))
+
+SetFilaActual(fac+1)
+
+SQL.ADD("Select Especie, Cantidad, NrOperacion, TipoOp, Vehiculo1, MB3, Vehiculo2,Cliente1 from "~DBO~".OPERACIONES Where ")
+SQL.ADD("FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' and ((TipoOp in ('MMFRP','MMFIMV','MMON','MMONM','MMPCL','MMPCLM','MMPLME','MMPCOS','MMPE','MMPEM','MMPI','MMPIM','MMPOSM','MMPSI','MMSIMV','MMPCCM','MMPCCV')")
+SQL.ADD("and FechaVto>'"~IdxDate(Dialogo.Fecha1)~"')")
+SQL.ADD("or (TipoOp in ('MMFRNP','MMFIMV','MMPSI','MMSIMV') and FechaVto2>'"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD(" ) ")
+SQL.ADD(" and ((NrOperacion2 IS NULL or NrOperacion2='')  ")
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD("  and  Vehiculo1 In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD("  and  Cliente1='"~Dialogo.Cliente1~"' ")
+Endif
+SQL.ADD(" or NrOperacion2 NOT IN ")
+SQL.ADD(" (")
+SQL.ADD("Select NrOperacion from "~DBO~".OPERACIONES where ")
+SQL.ADD("FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' and ((TipoOp in ('MMFRP','MMFIMV','MMON','MMONM','MMPCL','MMPCLM','MMPLME','MMPCOS','MMPE','MMPEM','MMPI','MMPIM','MMPOSM','MMPSI','MMSIMV','MMPCCM','MMPCCV')")
+SQL.ADD("and FechaVto>'"~IdxDate(Dialogo.Fecha1)~"')")
+SQL.ADD("or (TipoOp in ('MMFRNP','MMFCMV','MMPSI','MMSCMV') and FechaVto2>'"~IdxDate(Dialogo.Fecha1)~"'))  ")
+SQL.ADD(" )) ")
+if NoVacio(Dialogo.Lista1)
+   SQL.ADD("  and  Vehiculo1 In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+endif
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD("  and  Cliente1='"~Dialogo.Cliente1~"' ")
+Endif
+
+If Dialogo.Radio2=1 
+   SQL.ADD(" Union All ")
+   *- Selecciono los Vehiculos de Vinculados para Recuperar el Saldo
+   SQL.ADD(" Select DISTINCT '' Especie,0 Cantidad,'' NrOperacion,'VINC' TipoOp,Vehiculo1,' ' MB3,' ' Vehiculo2,Vehiculo2 Cliente1 FROM "~DBO~".PARESVEHICULO ")
+   SQL.ADD(" Where Estado='HAB' ")
+   If NoVacio(Dialogo.Lista1)
+      SQL.ADD("  and  (Vehiculo1 In ("~Pipe2Comillas(Dialogo.Lista1)~") or Vehiculo2 In ("~Pipe2Comillas(Dialogo.Lista1)~")) ")
+   Endif
+   If NoVacio(Dialogo.Cliente1)
+      SQL.ADD("  and  Vehiculo2='"~Dialogo.Cliente1~"' ")
+   Endif
+   SQL.ADD(" Union All ")
+   *- Selecciono los Vehiculos de Terceros para Recuperar el Saldo
+   SQL.ADD(" Select DISTINCT '' Especie,0 Cantidad,'' NrOperacion,'TERC' TipoOp,Vehiculo ,' ' MB3,' ' Vehiculo2,Cliente Cliente1 FROM  "~DBO~".IMPTERCEROS ")
+   SQL.ADD(" Where Estado='HAB' ")
+   If NoVacio(Dialogo.Lista1)
+      SQL.ADD("  and  Vehiculo In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+   Endif
+   If NoVacio(Dialogo.Cliente1)
+      SQL.ADD("  and  Cliente='"~Dialogo.Cliente1~"' ")
+   Endif
+EndIf
+SQL.ADD("order by Cliente1, Vehiculo1, TipoOp")
+
+Recorrer SQL
+
+  Message(fbn['TipoOp']~' '~fbn['NrOperacion'])
+  dfa
+  ACN(z3, 0)
+
+  If Not EqStr(Val(a:fac), fbn('Cliente1')) 
+     ifa
+     ACT(a:fac,fbn('Cliente1'))        
+     acn(cv2,3)
+     ACN(b:fac, LimAsignado(Val(a:fac), 'CRECI', 'USD')/Dialogo.Cantidad1)
+     SetFont(a:fac..b:fac,2)  
+  EndIf
+
+  If Not EqStr(Val(vh1), fbn('Vehiculo1'))
+     act(vh1,fbn('Vehiculo1'))
+
+     *- Ubico la columna a Listar 
+     Recorrer&j val(cv2),val(cv1)
+        If EqStr(val(&j:val(fi1)),fbn('Vehiculo1'))
+           Break              
+        EndIf 
+     Proximo
+     acn(cv2,&j)
+  EndIf
+
+  if Incluido(fbn('TipoOp'),'MMPCL|MMPLME|MMPCLM')
+     *- 1er. Columna
+     ACN(z3, fbn('Cantidad'))     
+
+     if Incluido(fbn('TipoOp'),'MMPCLM')
+        ACN(z3, SQL("Select Cantidad2 from "~DBO~".CUOTAS where NrOperacion='"~fbn('NrOperacion')~"' and Fecha1<= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha2>'"~IdxDate(Dialogo.Fecha1)~"'"))
+     EndIf
+
+     ACN(z3, (val(z3)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,val(mo1))) /Dialogo.Cantidad1)
+     SCN(val(cv2)+6:fac, Val(z3))
+  endif
+
+  If Incluido(fbn('TipoOp'),'MMPCOS|MMPOSM')
+     *- 2da. Columna
+     ACN(z3, fbn('Cantidad'))
+
+     if Incluido(fbn('TipoOp'),'MMPOSM')
+        ACN(z3, SQL("Select Cantidad2 from "~DBO~".CUOTAS where NrOperacion='"~fbn('NrOperacion')~"' and Fecha1<= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha2>'"~IdxDate(Dialogo.Fecha1)~"'"))
+     EndIf
+
+     ACN(z3, (val(z3)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,val(mo1))) /Dialogo.Cantidad1)
+     SCN(val(cv2)+2:fac, Val(z3))     
+  Endif
+
+  If Incluido(fbn('TipoOp'),'MMPE|MMPEM|MMPI|MMPIM')     
+     *- 3er. Columna
+     ACN(z3, fbn('Cantidad'))
+
+     if Incluido(fbn('TipoOp'),'MMPEM|MMPIM')
+        ACN(z3, SQL("Select Cantidad2 from "~DBO~".CUOTAS where NrOperacion='"~fbn('NrOperacion')~"' and Fecha1<= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha2>'"~IdxDate(Dialogo.Fecha1)~"'"))
+     EndIf
+
+     ACN(z3, (val(z3)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,val(mo1))) /Dialogo.Cantidad1)
+     SCN(val(cv2)+3:fac, Val(z3))     
+  Endif
+
+  If Incluido(fbn('TipoOp'),'MMON|MMONM')
+     *- 4ta. Columna
+     ACN(z3, fbn('Cantidad'))
+
+     if Incluido(fbn('TipoOp'),'MMONM')
+        ACN(z3, SQL("Select Cantidad2 from "~DBO~".CUOTAS where NrOperacion='"~fbn('NrOperacion')~"' and Fecha1<= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha2>'"~IdxDate(Dialogo.Fecha1)~"'"))
+     EndIf
+
+     ACN(z3, (val(z3)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,val(mo1))) /Dialogo.Cantidad1)
+     SCN(val(cv2)+4:fac, Val(z3))     
+  Endif
+
+  if Incluido(fbn('TipoOp'),'MMPSI|MMSIMV|MMFRNP|MMFIMV')
+     *- 4ta. Columna
+     ACN(z3, fbn('Cantidad'))
+
+     if Incluido(fbn('TipoOp'),'MMSIMV|MMFIMV')
+        ACN(z3, SQL("Select Cantidad2 from "~DBO~".CUOTAS where NrOperacion='"~fbn('NrOperacion')~"' and Fecha1<= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha2>'"~IdxDate(Dialogo.Fecha1)~"'"))
+     EndIf
+
+     ACN(z3, (val(z3)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,val(mo1))) /Dialogo.Cantidad1)
+     SCN(val(cv2)+4:fac, Val(z3))     
+  endif
+
+  *- Vinculadas
+  if Incluido(fbn('TipoOp'),'MMPCCM|MMPCCV') y fbn('MB3')=0
+     *- 5ta. Columna
+     ACN(z3, fbn('Cantidad'))
+
+     if Incluido(fbn('TipoOp'),'MMPCCM')
+        ACN(z3, SQL("Select Cantidad2 from "~DBO~".CUOTAS where NrOperacion='"~fbn('NrOperacion')~"' and Fecha1<= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha2>'"~IdxDate(Dialogo.Fecha1)~"'"))
+     EndIf
+
+     ACN(z3, (val(z3)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,val(mo1))) /Dialogo.Cantidad1)
+     SCN(val(cv2)+5:fac, Val(z3))     
+   Endif
+
+   If EqStr(FBN['TipoOp'],'VINC')
+      *- 5ta. Columna
+      ACT(AV1,FBN['Vehiculo1'])
+      ACT(AV2,FBN['Cliente1'])
+      ACT(AE1,VAR('MONELOCA'))
+
+      Recorrer&j 1,2 
+         *- Pido el Saldo de Vinculados para ambas monedas ARP/USD
+         Message('Saldos Vehiculo: '~val(av1)~' Veh. ContraParte '~val(av2)~' Especie:'~val(ae1)~' ...')  
+         (."SALDIAVINC".)
+ 
+         SCN(val(cv2)+5:fac, (VAL(Z1)*CotizacionC(val(ae1),,,,Dialogo.Fecha1,1,SI,val(mo1))) /Dialogo.Cantidad1)
+         ACT(AE1,VAR('MONEEXTR'))
+      Proximo
+   EndIf
+ 
+   If EqStr(FBN['TipoOp'],'TERC')
+      *- 6ta. Columna
+      ACT(AV1,FBN['Vehiculo1'])
+      ACT(AV2,FBN['Cliente1'])
+      ACT(AE1,VAR('MONELOCA'))
+
+      Recorrer&j 1,2 
+         *- Pido el Saldo de Vinculados para ambas monedas ARP/USD
+         Message('Saldos Terceros: '~val(av1)~' Veh. ContraParte '~val(av2)~' Especie:'~val(ae1)~' ...')  
+         (."SALDIATER".)
+
+         SCN(val(cv2)+6:fac, (VAL(Z1)*CotizacionC(val(ae1),,,,Dialogo.Fecha1,1,SI,val(mo1))) /Dialogo.Cantidad1)
+         ACT(AE1,VAR('MONEEXTR'))
+      Proximo
+   EndIf
+   SetFont(val(cv2):fac..val(cv2)+6:fac,1)   
+Proximo
+Ifa
+
+Recorrer&j val(fi1)+2,fac
+   *- Recorro las Filas   
+   ACN(val(cv1)  :&j, sum(c:&j..val(cv1)-1:&j))
+   ACN(val(cv1)+1:&j, val(b:&j)-val(val(cv1):&j))
+   SetFont(val(cv1):&j..val(cv1)+1:&j,2)   
+   FormatoCeldas(val(cv1):&j..val(cv1)+1:&j,EXE('F2'))   
+Proximo
+
+ACT(a:fac,'Total')
+Recorrer&j 2,val(cv1)+1
+   *- Recorro las Columnas
+   ACN(&j:fac, sum(&j:val(fi1)+1..&j:fac-1) )
+Proximo
+SetFont(a:fac..val(cv1)+1:fac,2)   
+FormatoCeldas(b:fac..val(cv1)+1:fac,EXE('F2'))   
+
+FijarFila(val(fi1)+2)
+FijarCol(3)
+LimitesVision(val(cv1)+1:fac)
+BorrarCeldas(z:1..cv:val(fi1))

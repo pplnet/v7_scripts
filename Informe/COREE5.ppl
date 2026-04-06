@@ -1,0 +1,318 @@
+﻿ModoReproceso(SinDialogo)
+HojaVisible(SI)
+CrearDialogo
+   Fecha1  : 'Desde'          ;1;1;;;;Dialogo.Fecha1=PriDeMes(Dialogo.Fecha1,SI);'La Fecha Desde debe ser un Principio de Mes';NO;;PriDeMes(Fecha('01/01/'~FStr(Anio(Fsys),4,0)), SI)
+   Fecha2  : 'Hasta'          ;2;1;;;;Dialogo.Fecha1 <= Dialogo.Fecha2 y Dialogo.Fecha2 < Fsys;'Error en Fechas';NO;;PriDeMes(FSYS-1, SI)
+   Especie1: 'Moneda'         ;;;;;;;;;Var('MONEEXTR');;;;;" Jerarquia Like '"~Var('JERMONEDA')~"%' and SubString(Jerarquia,1,6) <> '"~Var('JERMONEDA')~"000' "
+   Radio3  : 'Origen|Todos|Activo|Pasivo';;;;;;;;;0;
+   Radio6  : 'Clientes|Todos|Vinculados|Terceros';;;;;;;;;0;
+   Lista1  : 'Vehiculo'       ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='')"),SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+FinDialogo
+
+IF NOT OK
+   Cancelar
+ENDIF
+
+* Veo solamente los tipos seleccionados
+SetListaClaves(2)
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+   ACT(zz6,Dialogo.Lista1)
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='')") )
+   Else 
+      ACT(zz6,SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+   EndIf
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+*-- Datos del encabezado para Activos
+*-- aa1: Activos o Pasivos
+ACT(aa1,Iif(Dialogo.Radio3=1,'ACTIVOS',Iif(Dialogo.Radio3=2,'PASIVOS','TOTALES')))
+
+ACT(a2, 'EVOLUTIVO '~VAL(aa1)~' POR TIPO DE OPERACION -Hoja 5-')
+ACT(a3, Iif(Dialogo.Radio6=0,'        Clientes TERCEROS y VINCULADOS',Iif(Dialogo.Radio6=2,'        Clientes TERCEROS','        Clientes VINCULADOS')))
+SetFont(a2..a3, 3)
+
+ACT(a5, 'Desde: '~Dialogo.Fecha1)
+ACT(a6, 'Hasta: '~Dialogo.Fecha2)
+ACT(a7, 'Moneda Expresa: '~BuscarCampo('ESPECIES','Nombre','Codigo',Dialogo.Especie1) )
+SetFont(a4..z7, 2)
+
+SetFilaActual(9)
+
+*-- Para todas las fechas entre la Fecha Valor y la del Sistema
+ACT(a:fac,'VEHICULO')
+
+* 1er. Columa de Meses: bb1 bb14: Cantidad de Meses
+ACN(bb1,4)
+ACD(bb2,Dialogo.Fecha1)
+ACN(bb14,DifMeses(Dialogo.Fecha2,Dialogo.Fecha1))
+ACN(bb10,0)
+
+Recorrer&j 1,DifMeses(Dialogo.Fecha2,Dialogo.Fecha1)
+
+    SetFilaActual(9)
+
+    *- Fila 8->1er. dia del mes
+    ACD(val(bb1):fac-1,VAL(bb2))
+
+    ACN(bb5,1) 
+
+    If val(bb14)>1   
+       ACN(bb5,DiasM(1,val(val(bb1):fac-1)) )        
+    EndIf
+    SCN(bb10,val(bb5))    
+
+    If Mes(VAL(bb2))=1
+       ACT(val(bb1):fac,'Enero')       
+    EndIf
+    If Mes(VAL(bb2))=2
+       ACT(val(bb1):fac,'Febrero')       
+    EndIf
+    If Mes(VAL(bb2))=3
+       ACT(val(bb1):fac,'Marzo')       
+    EndIf
+    If Mes(VAL(bb2))=4
+       ACT(val(bb1):fac,'Abril')       
+    EndIf
+    If Mes(VAL(bb2))=5
+       ACT(val(bb1):fac,'Mayo')       
+    EndIf
+    If Mes(VAL(bb2))=6
+       ACT(val(bb1):fac,'Junio')       
+    EndIf
+    If Mes(VAL(bb2))=7
+       ACT(val(bb1):fac,'Julio')       
+    EndIf
+    If Mes(VAL(bb2))=8
+       ACT(val(bb1):fac,'Agosto')       
+    EndIf
+    If Mes(VAL(bb2))=9
+       ACT(val(bb1):fac,'Septiembre')       
+    EndIf
+    If Mes(VAL(bb2))=10
+       ACT(val(bb1):fac,'Octubre')       
+    EndIf
+    If Mes(VAL(bb2))=11
+       ACT(val(bb1):fac,'Noviembre')       
+    EndIf
+    If Mes(VAL(bb2))=12
+       ACT(val(bb1):fac,'Diciembre')       
+    EndIf
+
+    *--
+    *-- Por Cada Mes Obtengo el CORENA para Un Vehiculo/Mes/Moneda y Tipo de Cliente
+    SQL.ADD(" SELECT Codigo FROM "~DBO~".VEHICULOS ")
+    If NoVacio(val(zz6))
+       SQL.ADD(" Where Codigo in ("~Pipe2Comillas(val(zz6))~") ")
+    EndIf
+    SQL.ADD(" ORDER BY Codigo ")
+    *--
+    * bb8: Cantidad de Vehiculos
+    ACN(bb8,0)
+    
+    Recorrer SQL  
+      * bb6: Guardo la Fila en que ubico el Consolidado agrupado Columna: 100
+      If val(bb8)=0
+         ACN(bb6,fac)
+      EndIf
+
+      ACT(a:fac, fbn('Codigo'))
+      (.'ENCOREE5'.)
+
+      LinkearHoja('LEEPMG',1,String1='CORENB',Fecha1=VAL(bb2),Especie1=Dialogo.Especie1,Radio6=Dialogo.Radio6,Radio3=Dialogo.Radio3,Lista1=val(a:fac)~'|')
+
+      (.'DECOREE5'.)
+    
+      *CerrarHoja('LEEPMG',1,String1='CORENB',Fecha1=VAL(bb2),Especie1=Dialogo.Especie1,Radio6=Dialogo.Radio6,Radio3=Dialogo.Radio3,Lista1=val(a:fac)~'|')
+      *CerrarLink(1)
+
+      * Consolidado Desglosado
+      If val(bb8)=0
+         acn(bb7,fac)
+      EndIf
+      SCN(bb8,1)
+    Proximo
+
+    *-------------------
+    SetFilaActual(fac+2)
+    * bb9: Linea a Partir del Cual listo agrupado
+    ACN(bb9,fac)                    
+    
+    ACT(a:fac,'CONS.AGRUPADO')      
+
+    (.'ENCOREE5'.)
+
+    Recorrer&j Val(bb6),val(bb7)
+          
+       ACN(val(bb1)  :fac,val(bc:&j))
+
+       SetFont(val(bb1):fac..val(bb1):fac, 1)
+
+       Ifa
+       *-- Borro el rango del Acumulado
+       ACN(bc:&j,0)
+    Proximo 
+
+    *----
+    Recorrer&i 1,35
+      ACD(bb3,PrideMes(HABILES(val(bb2),&i,'ARG',SI),SI))    
+      If Mes(val(bb3))>Mes(val(bb2))
+         ACD(bb2,Val(bb3))  
+         Break
+      EndIf
+    Proximo
+    ACO(val(bb1),9)
+    SCN(bb1,1)
+Proximo
+
+AgregarMarco(a:9..val(bb1):9,1,0,EXE('COLOR'))
+
+*-- Calculo los Totales para Las Empresas
+ACT(val(bb1):9,'Total')       
+
+*-- Calculo los Totales para Los Meses
+Recorrer&i 10,fac
+
+   Message('Calculando Totales por Vehiculo '~VAL(a:&i))
+
+   If EqStr(Val(c:&i),'Cap.Prom') 
+      ACN(val(bb1):&i,SUM(d:&i..val(bb1)-1:&i) )
+   EndIf
+
+   *- bb5: Cantidad de Dias del Mes
+   If EqStr(Val(c:&i),'Tasa')
+
+      *- Datos por Vehiculos
+      If &i<val(bb9)
+
+         Recorrer&j 4,Val(bb1)-1     
+            ACN(bb5,1) 
+
+            If val(bb14)>1          
+               ACN(bb5,DiasM(1,val(&j:8)) )               
+            EndIf
+
+            *- Si emito mas de un Mes: Capital * tasa * plazo 
+            * SCN(val(bb1):&i,VAL(&j:&i-1)*VAL(&j:&i)*VAL(&j:&i+1))      
+            SCN(val(bb1):&i,VAL(&j:&i-1)*VAL(&j:&i)*VAL(bb5))      
+
+            *- Capital * plazo 
+            SCN(val(bb1):&i+1,VAL(&j:&i-1)*VAL(bb5))      
+         Proximo        
+
+         *- Cap*Tasa*Plazo/(Cap*Plazo)
+         acn(val(bb1):&i,VAL(val(bb1):&i)/VAL(val(bb1):&i+1))                
+
+         *-- Total de Capital Promedio: Sum Cap*Plazo/Sum Plazo
+         ACN(val(bb1):&i-1,val(val(bb1):&i+1)/val(bb10))
+      Else
+         *- Datos por Agrupados
+         ACN(val(bb1):&i  ,SUM(d:&i..val(bb1)-1:&i))
+         ACN(val(bb1):&i+1,SUM(d:&i+1..val(bb1)-1:&i+1))
+         ACN(val(bb1):&i+2,SUM(d:&i+2..val(bb1)-1:&i+2))
+
+         If EqStr(Val(c:&i+1),'Plazo')                
+            *- Calcula la tasa ponderando con cap*plazo
+            *- Tasa           
+            ACN(val(bb1):&i,val(val(bb1):&i)/val(val(bb1):&i+1))         
+            ACN(val(bb1):&i+1,0)
+
+            Recorrer&j 4,Val(bb1)-1      
+              *- Tasa
+              ACN(&j:&i  ,VAL(&j:&i  )/VAL(&j:&i+1))      
+ 
+              *- Plazo
+              ACN(&j:&i+1,VAL(&j:&i+2)/VAL(&j:&i-1))      
+              SetFont(&j:&i..&j:&i+1, 1)
+            Proximo        
+
+         Else 
+            *- Calcula la tasa ponderando con cap
+            ACN(val(bb1):&i,val(val(bb1):&i)/val(val(bb1):&i-1))         
+
+            ACN(val(bb1):&i+1,0)
+
+            Recorrer&j 4,Val(bb1)-1         
+              ACN(bb5,1) 
+              If val(bb14)>1              
+                 ACN(bb5,DiasM(1,val(&j:8)) ) 
+              EndIf
+
+              ACN(&j:&i  ,VAL(&j:&i)/VAL(&j:&i-1))      
+              SetFont(&j:&i..&j:&i+1, 1)
+
+              *- Acumulo Cap.
+              SCN(val(bb1)+1:&i-1,VAL(&j:&i-1) )      
+      
+              *- Acumulo Cap*Plazo del Mes
+              SCN(val(bb1)+2:&i,VAL(&j:&i-1)*VAL(bb5))      
+
+              *- Acumulo Cap*Plazo del Mes*Tasa
+              SCN(val(bb1)+3:&i,VAL(&j:&i-1)*VAL(bb5)*VAL(&j:&i))      
+            Proximo        
+
+            *-- Total de Capital Promedio: Sum Cap*Plazo/Sum Plazo
+            ACN(val(bb1):&i-1,val(val(bb1)+2:&i)/val(bb10))
+
+            *-- Total de Tasa Promedio: Sum Cap*Plazo*Tasa/Sum Cap*Plazo
+            ACN(val(bb1):&i  ,val(val(bb1)+3:&i)/val(val(bb1)+2:&i))
+
+         EndIf
+      EndIf
+
+   EndIf
+
+   If EqStr(Val(c:&i),'Plazo')
+      *- En la sgte columna del total calculo cap*plazo
+      Recorrer&j 4,Val(bb1)-1      
+         ACN(bb5,1) 
+         If val(bb14)>1              
+            ACN(bb5,DiasM(1,val(&j:8)) ) 
+         EndIf
+
+         *- Acumulo Cap.
+         SCN(val(bb1)+1:&i-2,VAL(&j:&i-2) )      
+
+         *- Acumulo Cap*Plazo Real
+         SCN(val(bb1)+1:&i,VAL(&j:&i-2)*VAL(&j:&i))      
+
+         *- Acumulo Cap*Plazo del Mes
+         SCN(val(bb1)+2:&i,VAL(&j:&i-2)*VAL(bb5))      
+      Proximo    
+
+      acn(val(bb1):&i,VAL(val(bb1)+1:&i)/VAL(val(bb1)+1:&i-2))      
+
+      *-- Total de Capital Promedio: Sum Cap*Plazo/Sum Plazo
+      ACN(val(bb1):&i-2,val(val(bb1)+2:&i)/val(bb10))
+   EndIf
+
+   If Vacio(Val(c:&i)) y Vacio(Val(a:&i))
+      BorrarCeldas(a:&i ..val(bb1):&i)
+   EndIf
+
+Proximo
+
+AgregarMarco(val(bb1):10..val(bb1):fac-2,1,0)
+SetFont(val(bb1):10..val(bb1):fac-2,2)
+AgregarMarco(b:fac-4..val(bb1):fac-2,2,0)
+SetFont(b:fac-4..val(bb1):fac-2,2)
+
+BorrarCeldas(a:8 ..val(bb1):8)
+
+ACO(1,12)
+ACO(2,12)
+ACO(3,10)
+ACO(val(bb1),9)
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(val(bb1):fac)
+Impresion(1,2)

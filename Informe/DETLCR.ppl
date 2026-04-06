@@ -1,0 +1,126 @@
+﻿*ModoReproceso(ConDialogo)
+CrearDialogo
+  Cliente1   : 'Cliente' ;;;;;;NoVacio(Dialogo.Cliente1);'Debe ingresar un Cliente';NO;
+** FJL 8/8/18 - V6 No acepta TipoLimite1
+  String1: 'Limite'  ;;;;;;NoVacio(Dialogo.String1) y EqStr(BuscarCampo('TIPOSLIMITE','Clase','Codigo',Dialogo.String1),'C');'Debe ingresar un Tipo de Limite de Credito';NO;;;;;'XXXXXXXXXX';"  Clase='C' "
+  Vehiculo1  : 'Vehiculo';;;;;;;;;VAR('VEHICULODE')
+  Fecha1     : 'Fecha'   ;;;;;;Dialogo.Fecha1>0;'Fecha incorrecta';NO;FSys;
+FinDialogo
+** FJL 8/8/18 - V6 No acepta TipoLimite1
+*  TipoLimite1: 'Limite'  ;;;;;;NoVacio(Dialogo.TipoLimite1) y EqStr(BuscarCampo('TIPOSLIMITE','Clase','Codigo',Dialogo.TipoLimite1),'C');'Debe ingresar un Tipo de Limite de Credito';NO;;;;;;"  Clase='C' "
+
+if Not Ok
+   Cancelar
+endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+
+AgregarBMP(a1,Exe('LOGO'),Exe('ESCALOGO'))
+
+ACT(a:4, 'Detalle de Limites de Credito')
+ACT(a:5, 'Cliente : '~Dialogo.Cliente1)
+** FJL 8/8/18 - V6 No acepta TipoLimite1
+*ACT(a:6, 'Limite : '~Dialogo.TipoLimite1)
+ACT(a:6, 'Limite : '~Dialogo.String1)
+ACT(a:7, 'Fecha : '~Dialogo.Fecha1)
+
+ACT(a:9, 'Cliente')
+ACT(b:9, 'Limite')
+ACT(c:9, 'Fecha')
+ACT(d:9, 'Especie')
+ACT(e:9, 'Operacion')
+ACT(f:9, 'Tipo')
+ACT(g:9, 'Cantidad')
+ACT(h:9, 'Acumulado')
+AgregarMarco(a:9..h:9,1,1,Exe('COLOR6'))
+SetFont(a:1..h:9,2)
+
+SetFilaActual(9)
+SQL.ADD("Select * from "~DBO~".MOVLIMITES ")
+SQL.ADD("where Cliente = '"~Dialogo.Cliente1~"' ")
+if NoVacio(Dialogo.Vehiculo1)
+  SQL.ADD("and Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+endif
+SQL.ADD("and FechaMov <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("and Bits = 'P' ")
+** FJL 8/8/18 - V6 No acepta TipoLimite1
+*if EqStr(Dialogo.TipoLimite1,'SETTLEMENT')
+if EqStr(Dialogo.String1,'SETTLEMENT')
+  SQL.ADD("and (")
+** FJL 8/8/18 - V6 No acepta TipoLimite1
+*  SQL.ADD("(Limite = '"~Dialogo.TipoLimite1~"' and FechaLim = '"~IdxDate(Dialogo.Fecha1)~"') ")
+  SQL.ADD("(Limite = '"~Dialogo.String1~"' and FechaLim = '"~IdxDate(Dialogo.Fecha1)~"') ")
+*  SQL.ADD("or ")
+*  SQL.ADD("(Limite = 'SETTFAIL' and FechaLim = '"~IdxDate(Dialogo.Fecha1)~"') ")
+  SQL.ADD(")")
+  SQL.ADD("order by Limite,Especie,FechaMov")
+else
+** FJL 8/8/18 - V6 No acepta TipoLimite1
+*  SQL.ADD("and Limite = '"~Dialogo.TipoLimite1~"' ")
+  SQL.ADD("and Limite = '"~Dialogo.String1~"' ")
+  SQL.ADD("order by FechaMov  ")
+endif
+recorrer SQL
+  ACN(x1, SQL("Select Sum(Monto) from "~DBO~".MOVLIMITES where NrOperacion='"~FBN['NrOperacion']~"' and Limite='"~FBN['Limite']~"' and Cliente='"~FBN['Cliente']~"' and Especie='"~FBN['Especie']~"' and Bits ='P' and FechaMov <= '"~IdxDate(Dialogo.Fecha1)~"'"))
+  if Val(x1)>0.01 o Val(x1)<-0.01
+    ACT(a:FAC, FBN['Cliente'])
+    ACT(b:FAC, FBN['Limite'])
+    ACT(c:FAC, FBN['FechaMov'])
+    ACT(d:FAC, FBN['Especie'])
+    ACT(e:FAC, FBN['NrOperacion'])
+    if Incluido(Copy(FBN['NrOperacion'],1,2),VAR('NUMVT2')) o Incluido(Copy(FBN['NrOperacion'],1,1),VAR('NUMVT1'))
+      ACT(f:FAC, BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',FBN['NrOperacion']))
+      ACLO(e:fac, Val(e:fac))
+    else
+      if Incluido(Copy(FBN['NrOperacion'],1,2),VAR('NUMOR2')) o Incluido(Copy(FBN['NrOperacion'],1,1),VAR('NUMOR1'))
+         ACT(f:FAC, BuscarCampo('ORDENES','TipoOrden','NrOrden',FBN['NrOperacion']))
+         ACLR(e:fac, Val(e:fac))
+      else
+         ACT(f:FAC, BuscarCampo('OPERACIONES','TipoOp','NrOperacion',FBN['NrOperacion']))
+         if NoVacio(val(f:fac))
+            ACLO(e:fac, Val(e:fac))
+         endif   
+      endif
+    endif
+    ACN(g:FAC, FBN['Monto'])
+    ACN(h:FAC, Val(h:FAC-1)+Val(g:FAC))
+  else
+    DFA
+  endif
+proximo
+SetFont(a:10..h:FAC,1)
+SetFilaActual(FAC+2)
+ACT(f:FAC, 'Limite Consumido')
+** FJL 8/8/18 - V6 No acepta TipoLimite1
+*if EqStr(Dialogo.TipoLimite1,'SETTLEMENT')
+if EqStr(Dialogo.String1,'SETTLEMENT')
+  ACN(h:FAC, LimSumado(Dialogo.Cliente1, 'SETTLEMENT',Dialogo.Fecha1,Dialogo.Vehiculo1))
+*  SCN(h:FAC, LimSumado(Dialogo.Cliente1, 'SETTFAIL'  ,Dialogo.Fecha1,Dialogo.Vehiculo1))
+else
+** FJL 8/8/18 - V6 No acepta TipoLimite1
+*  if EqStr(Dialogo.TipoLimite1,'BCRAN')
+  if EqStr(Dialogo.String1,'BCRAN')
+** FJL 8/8/18 - V6 No acepta TipoLimite1
+*     ACN(h:FAC, LimConsumido(Dialogo.Cliente1, Dialogo.TipoLimite1,'ARP',0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1))
+     ACN(h:FAC, LimConsumido(Dialogo.Cliente1, Dialogo.String1,'ARP',0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1))
+  else
+** FJL 8/8/18 - V6 No acepta TipoLimite1
+*    ACN(h:FAC, LimConsumido(Dialogo.Cliente1, Dialogo.TipoLimite1,'USD',0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1))
+    ACN(h:FAC, LimConsumido(Dialogo.Cliente1, Dialogo.String1,'USD',0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1))
+  endif
+endif
+
+SetFont(f:FAC..h:FAC,2)
+FormatoCeldas(g:10..h:FAC,EXE('F2'))
+
+ACO(1,7)
+ACO(2,10)
+ACO(3,7)
+ACO(4,7)
+ACO(5,7)
+ACO(6,7)
+ACO(7,10)
+ACO(8,10)
+
+LimitesVision(h:FAC)

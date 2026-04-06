@@ -1,0 +1,127 @@
+﻿ACT(v:1, IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') "))) 
+CrearDialogo
+   Fecha1:  'Fecha'             ;;;;;;;;;Habiles(Fsys,-1,'ARG',SI);
+   Radio1:  'Tipo|VN|Efectivo'  ;;;;;;Dialogo.Radio1=0 O Dialogo.Radio1=1;'Debe indicar Tipo de Ajuste';NO;
+   Check1:  'Ajusta Ef?'        ;;;;SI;Dialogo.Radio1=0;;;;0;
+   Lista1:  'Vehiculos'         ;;;;;;NoVacio(Dialogo.Lista1);'Debe seleccionar al menos 1 vehiculo';NO;;;Val(v:1)
+FinDialogo
+**   Lista1:  'Vehiculos'   ;;;;;;NoVacio(Dialogo.Lista1);'Debe seleccionar al menos 1 vehiculo';NO;;;iif(Vacio(UsrVehiculos(UsuarioActivo)), SQLSET(" Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+
+If Not OK
+  Cancelar
+Endif
+
+***/// Obtengo FSYS en formato DDMMAA
+ACT(FE:1, PAD0(Fstr(Dia(FSYS),0,0),2)~PAD0(Fstr(Mes(FSYS),0,0),2)~Copy(Fstr(Anio(FSYS),0,0),3,2))
+***MessageBox(Val(FE:1))
+
+SQL.ADD("SELECT NrOperacion, ")
+SQL.ADD("       TipoOp, ")
+SQL.ADD("       Vehiculo1, ")
+SQL.ADD("       Especie    as Fondo, ")
+SQL.ADD("       Cliente1   as Entidad, ")
+SQL.ADD("       Cantidad   as CuotasParte, ")
+SQL.ADD("       Precio1    as ValorCuotasParte, ")
+SQL.ADD("       TotalNetoCli1 as Efectivo, ") 
+SQL.ADD("       Observaciones ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES ")
+SQL.ADD(" WHERE TipoOp  IN ('FCR','FCS') ")
+SQL.ADD("   AND FechaOp = '"~IdxDate(Dialogo.Fecha1)~"' ")
+IF Dialogo.Radio1 = 0
+   SQL.ADD("   AND Round(Cantidad,0) <> Cantidad ")
+Endif
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("AND Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+else
+   SQL.ADD("AND Vehiculo1 IN ("~Pipe2Comillas(Val(v:1))~") ")
+ENDIF
+SQL.ADD("ORDER BY Vehiculo1, Especie, NrOperacion")
+
+Recorrer SQL
+   Act(A:Fac, Fbn('NrOperacion'))
+   Act(B:Fac, Fbn('TipoOp'))
+   Act(C:Fac, Fbn('Vehiculo1'))
+   Act(D:Fac, Fbn('Fondo'))
+   Act(E:Fac, Fbn('Entidad'))
+   Acn(F:Fac, Fbn('CuotasParte'))
+   Acn(G:Fac, Fbn('ValorCuotasParte'))
+   Acn(H:Fac, Fbn('Efectivo'))
+   If Dialogo.Radio1 = 0
+      **// Variable AJUVNFCI = Valor Configurable para Ajuste de VN.
+      Acn(I:Fac, Val(F:FAC)-VAR('AJUVNFCI'))
+      Acn(J:Fac, Val(F:FAC)+VAR('AJUVNFCI'))
+   Else
+      **// Variable AJUEFEFCI = Valor Configurable para Ajuste de efectivo.
+      Acn(I:Fac, Val(H:FAC)-VAR('AJUEFEFCI'))
+      Acn(J:Fac, Val(H:FAC)+VAR('AJUEFEFCI'))
+   Endif
+   ACT(O:Fac, Fbn('Observaciones')~' AJUFCI '~Val(FE:1))
+   Scn(xx:1,1)
+Proximo
+
+*Verifico que haya algun registro o cancelo
+If Val(xx:1)=0
+    Cancelar('No Hay Operaciones FCI para Ajustar que Cumplan con las condiciones Solicitadas')
+EndIf
+
+
+If Dialogo.Radio1 = 0
+   CrearListBox;'Arial,8,B';'Ajuste decimales FCI '~Dialogo.Fecha1
+      'NrOperacion'             ;A:1..A:Fac;NO;;;80 ;STRING;;
+      'TipoOp'                  ;B:1..B:Fac;NO;;;50 ;STRING;;
+      'Vehiculo'                ;C:1..C:Fac;NO;;;70 ;STRING;;
+      'Fondo'                   ;D:1..D:Fac;NO;;;50 ;STRING;;
+      'Entidad'                 ;E:1..E:Fac;NO;;;80 ;STRING;;
+      'Cuotas Parte'            ;F:1..F:Fac;NO;;;80 ;NUMERO;'###########.##';
+      'Valor Cuota Parte'       ;G:1..G:Fac;NO;;;110;NUMERO;'###########.########';
+      'Efectivo'                ;H:1..H:Fac;NO;;;80 ;NUMERO;'########.##';
+      'Cuota Parte Inferior'    ;I:1..I:Fac;NO;;;120;NUMERO;'###########.##';
+      'Cuota Parte Superior'    ;J:1..J:Fac;NO;;;120;NUMERO;'###########.##';
+      'Cuota Parte Ajustada'    ;K:1..K:Fac;SI;Val(M:Flb)=0 O [Val(K:Flb)>=Val(I:Flb) Y Val(K:Flb)<=Val(J:Flb)];'Cuota Parte Fuera de Rango: Entre '~Fstr(Val(I:Flb),0,2)~' y '~Fstr(Val(J:Flb),0,2);120;NUMERO;'###########.######';RGB(255,255,193)
+      'Efectivo Ajustado'       ;L:1..L:Fac;NO;;;100;NUMERO;'########.##';;Val(G:Flb)*Val(K:Flb)
+      'OK'                      ;M:1..M:Fac;SI;;;30 ;CHECK; 
+   FinListBox
+Else
+   CrearListBox;'Arial,8,B';'Ajuste decimales FCI '~Dialogo.Fecha1
+      'NrOperacion'             ;A:1..A:Fac;NO;;;80 ;STRING;;
+      'TipoOp'                  ;B:1..B:Fac;NO;;;50 ;STRING;;
+      'Vehiculo'                ;C:1..C:Fac;NO;;;70 ;STRING;;
+      'Fondo'                   ;D:1..D:Fac;NO;;;50 ;STRING;;
+      'Entidad'                 ;E:1..E:Fac;NO;;;80 ;STRING;;
+      'Cuotas Parte'            ;F:1..F:Fac;NO;;;80 ;NUMERO;'###########.##';
+      'Valor Cuota Parte'       ;G:1..G:Fac;NO;;;110;NUMERO;'###########.########';
+      'Efectivo'                ;H:1..H:Fac;NO;;;80 ;NUMERO;'########.##';
+      'Efectivo Inferior'       ;I:1..I:Fac;NO;;;120;NUMERO;'########.##';
+      'Efectivo Superior'       ;J:1..J:Fac;NO;;;120;NUMERO;'########.##';
+      'Efectivo Ajustado'       ;L:1..L:Fac;SI;Val(M:Flb)=0 O [Val(L:Flb)>=Val(I:Flb) Y Val(L:Flb)<=Val(J:Flb)];'Efectivo Fuera de Rango: Entre '~Fstr(Val(I:Flb),0,2)~' y '~Fstr(Val(J:Flb),0,2);120;NUMERO;'########.######';RGB(255,255,193)
+      'OK'                      ;M:1..M:Fac;SI;;;30 ;CHECK; 
+   FinListBox
+Endif
+
+If Not Ok 
+    Cancelar
+EndIf
+
+
+Recorrer&i 1,Fac
+   IF Val(M:&i)=1        
+      *Actualizo Operaciones
+      SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+      If Dialogo.Radio1 = 0
+         SQL.ADD("   SET Cantidad      = "~Fstr(Val(K:&i),0,6)~", ")
+         If Dialogo.Check1 = 1
+            SQL.ADD("       TotalNetoCli1 = "~Fstr(Val(L:&i),0,2)~", ")
+         EndIf
+      Else
+         SQL.ADD("   SET TotalNetoCli1 = "~Fstr(Val(L:&i),0,2)~", ")
+      Endif
+      SQL.ADD("   Observaciones = '"~Copy(Val(O:&i),1,255)~"' ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(A:&i)~"' ")
+      SQL.NEW
+      SQL.EXEC
+      ***Movimientos (Solo se actualizan movimientos)
+      Esperar(4)
+      SQL.ActualizarMovimientos2(Val(A:&i),SI,NO,NO,SI)
+      SQL.EXEC
+   EndIf
+Proximo

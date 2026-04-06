@@ -1,0 +1,224 @@
+﻿* INTVIN - Interfase para Movimientos VIMD, TEMD Y APORTE
+HOJAVISIBLE(SI)
+CrearDialogo
+  Fecha1       : 'Fecha'       ;;;;;;NoVacio(Dialogo.Fecha1);'Debe Ingresar una Fecha';NO;FSys
+  Especie1     : 'Especie'     ;;;;;;;;;
+  Vehiculo1    : 'Vehiculo'    ;;;;;;;;;
+  Lista2       : 'TipoOp'      ;;;;;;;;;;;SQLSet("Select Codigo from "~DBO~".TIPOSOPERACION Where Codigo in ('VIMD','TEMD','APORTE') ") 
+  NrOperacion1 : 'NrOperacion' ;;;;;;;;;
+FinDialogo
+
+If not Ok
+  Cancelar
+Endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+endif
+
+* Vehiculos permitidos por el usuario
+ACT(zz6,SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+
+If NoVacio(Dialogo.NrOperacion1)
+   *- Control de vehiculo habilitado para el usuario
+   *- vh1: vehiculo de la operacion o transaccion
+   *- vh3: devuelve 1 si el vehiuclo no esta habilitado para el usuario activo
+   
+   ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+   
+   (.'CONTROLVH'.)
+Endif
+
+
+ACT(a1, 'Listado de Movimientos Generados para Interfase Contable')
+ACT(a2, 'Vinculadas y Terceros Movimientos Diarios y Aportes sin Desembolso')
+
+SetFilaActual(fac+4)
+
+If NoVacio(Dialogo.Vehiculo1)
+  ACT(a:fac, 'Vehiculo: '~Dialogo.Vehiculo1)
+Else
+  ACT(a:fac, 'Vehiculo: Todos')
+Endif
+
+If NoVacio(Dialogo.Especie1)
+  ACT(a:fac+1, 'Especie: '~Dialogo.Especie1)
+Else
+  ACT(a:fac+1, 'Especie: Todas')
+Endif
+
+SetFilaActual(fac+2)
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+ACT(a:fac,'Especie')
+ACT(b:fac,'Vehiculo')
+ACT(c:fac,'TipoOp')
+ACT(d:fac,'NrOperacion')
+ACT(e:fac,'Cantidad')
+ACT(f:fac,'Toma/Coloca')
+ACT(g:fac,'Cliente')
+AgregarMarco(a:fac..g:fac,1,0,Exe('COLOR'))
+
+Setfont(a1..g:fac, 1)
+
+* Elimino los mov. anteriores de Retiros => MB3=0
+SQL.ADD("DELETE "~DBO~".MOVIMIENTOS where ")
+SQL.ADD("NrOperacion IN ")
+SQL.ADD("(Select  O.NrOperacion from "~DBO~".OPERACIONES O,"~DBO~".MOVIMIENTOS M where ")
+SQL.ADD("O.FechaOp= '"~IdxDate(Dialogo.Fecha1)~"' and O.TipoOp in ('VIMD','TEMD','APORTE') ")
+
+If Vacio(Dialogo.NrOperacion1)
+   If NoVacio(Dialogo.Especie1)
+      SQL.ADD("and O.Especie = '"~Dialogo.Especie1~"' ")
+   Endif
+   if NoVacio(Dialogo.Vehiculo1)
+      SQL.ADD("and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+   Else
+      If NoVacio(UsrVehiculos(UsuarioActivo))
+         SQL.ADD(" and Vehiculo IN ("~Pipe2Comillas(val(zz6))~") ")
+      EndIf
+   endif
+   If NoVacio(Dialogo.Lista2)
+      SQL.ADD("and O.TipoOp In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+   Endif
+Else
+   SQL.ADD("and O.NrOperacion='"~Dialogo.NrOperacion1~"' ")
+Endif
+
+SQL.ADD("and O.CB7='0' ")
+SQL.ADD("and O.MB3='0' ")
+SQL.ADD("and M.Tipo_Movimiento_Codigo='RET' ")
+SQL.ADD("and M.Tipo_Operacion_Codigo=O.TipoOp ")
+SQL.ADD("and M.NrOperacion=O.NrOperacion ")
+SQL.ADD("and M.Movimiento_Numero=1) ")
+SQL.NEW
+
+* Elimino los mov. anteriores de Depositos => MB3=1
+SQL.ADD("DELETE "~DBO~".MOVIMIENTOS where ")
+SQL.ADD("NrOperacion IN ")
+SQL.ADD("(Select  O.NrOperacion from "~DBO~".OPERACIONES O,"~DBO~".MOVIMIENTOS M where ")
+SQL.ADD("O.FechaOp= '"~IdxDate(Dialogo.Fecha1)~"' and O.TipoOp in ('VIMD','TEMD','APORTE')")
+
+If Vacio(Dialogo.NrOperacion1)
+   If NoVacio(Dialogo.Especie1)
+      SQL.ADD("and O.Especie = '"~Dialogo.Especie1~"' ")
+   Endif
+   if NoVacio(Dialogo.Vehiculo1)
+      SQL.ADD("and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+   Else
+      If NoVacio(UsrVehiculos(UsuarioActivo))
+         SQL.ADD(" and Vehiculo IN ("~Pipe2Comillas(val(zz6))~") ")
+      EndIf
+   endif
+   If NoVacio(Dialogo.Lista2)
+      SQL.ADD("and O.TipoOp In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+   Endif
+Else
+   SQL.ADD("and O.NrOperacion='"~Dialogo.NrOperacion1~"' ")
+Endif
+SQL.ADD("and O.CB7='0' ")
+SQL.ADD("and O.MB3='1' ")
+SQL.ADD("and M.Tipo_Movimiento_Codigo='DEP' ")
+SQL.ADD("and M.Tipo_Operacion_Codigo=O.TipoOp ")
+SQL.ADD("and M.NrOperacion=O.NrOperacion ")
+SQL.ADD("and M.Movimiento_Numero=1) ")
+SQL.NEW
+SQL.EXEC
+
+SQL.ADD("Select * ")
+SQL.ADD("from "~DBO~".OPERACIONES where")
+SQL.ADD("FechaOp= '"~IdxDate(Dialogo.Fecha1)~"' and TipoOp in ('VIMD','TEMD','APORTE')")
+
+If Vacio(Dialogo.NrOperacion1)
+   If NoVacio(Dialogo.Especie1)
+      SQL.ADD("and Especie = '"~Dialogo.Especie1~"' ")
+   Endif
+   if NoVacio(Dialogo.Vehiculo1)
+      SQL.ADD("and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+   Else
+      If NoVacio(UsrVehiculos(UsuarioActivo))
+         SQL.ADD(" and Vehiculo IN ("~Pipe2Comillas(val(zz6))~") ")
+      EndIf
+   endif
+   If NoVacio(Dialogo.Lista2)
+      SQL.ADD("and TipoOp In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+   Endif
+Else
+   SQL.ADD("and NrOperacion='"~Dialogo.NrOperacion1~"' ")
+Endif
+SQL.ADD("and CB7='0' order by Especie,Vehiculo1,TipoOp,NrOperacion")
+
+ACN(z1,0)
+
+Recorrer SQL 
+  
+  If Not Incluido(FBN['Vehiculo1'],Var('VLIQUIDAA')) o Incluido(FBN['Vehiculo1'],Var('VINT'))
+     Message('Procesando '~fbn['Especie']~' '~fbn['Vehiculo1']~' '~fbn['TipoOp']~' '~fbn['NrOperacion']~' ...')
+      MessageBox ('Testeo Positivo ') 
+     * Generando Listado
+     If Not  EqStr(val(aa1),fbn['Especie']~' '~fbn['Vehiculo1']~' '~fbn['TipoOp'])
+        ACT(aa1,fbn['Especie']~' '~fbn['Vehiculo1']~' '~fbn['TipoOp'])
+        ACT(a:fac,fbn['Especie'])
+        ACT(b:fac,fbn['Vehiculo1'])
+        ACT(c:fac,fbn['TipoOp'])
+        SetFont(a:fac..c:fac, 1)
+     Endif
+  
+     ACT(d:fac,fbn['NrOperacion'])
+     ACN(e:fac,fbn['Cantidad'])
+     ACT(f:fac,IIf(EqStr(FBN['MB3'],'1'),'Toma','Coloca'))
+     ACT(g:fac,fbn['Cliente1'])
+  
+     SetFont(d:fac..g:fac, 2)
+ 
+     * Generando Interfase
+     ACN(z1,1)
+     ACT(z2,FBN['TipoOp'])  
+     ACN(z3,Cotizacion(fbn('Especie'),,,,Dialogo.Fecha1,1))
+     acn(z4, SQL("Select User_Id('"~UsuarioActivo~"')"))
+     ACT(z5, SQLAhora)
+     ACN(z6,1)  
+     ACT(z7,'Convert(varbinary(8),'~SQLAhora~')')
+     ACT(z8,IIf(Eqstr(FBN['TipoOp'],'VIMD'),'Vinculada Mov.Diario ',IIf(EqStr(fbn['TipoOp'],'TEMD'),'Terceros Mov.Diario ','Aporte'))  
+  
+     * Si el Vehiculo coloca el cliente retira
+     * z9: Deposito o Retiro
+     ACT(Z9,'DEP')
+  
+     If EqStr(FBN['MB3'],'0')
+        ACT(Z9,'RET')
+     Endif
+
+     SQL.ADD("Insert into "~DBO~".MOVIMIENTOS (")
+     SQL.ADD("Tipo_Operacion_Codigo, Tipo_Movimiento_Codigo, NrOperacion, ")
+     SQL.ADD("Compania_Codigo_FPA, Entidad_Codigo, Moneda_Codigo, ")
+     SQL.ADD("Movimiento_Fecha, Movimiento_Monto, Tipo_de_Cambio, ")
+     SQL.ADD("Estado, Add_Uid, Add_Date, ")
+     SQL.ADD("Update_Uid, Update_Date, Movimiento_Numero, Concepto")
+     SQL.ADD(") Values (")
+     SQL.ADD(" '"~Val(z2)~"', '"~VAL(Z9)~"', '"~FBN['NrOperacion']~"', ")
+     SQL.ADD(" '"~fbn('Vehiculo1')~"', '"~fbn('Cliente1')~"', '"~fbn('Especie')~"', ")
+     SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', "~FStr(fbn('Cantidad'),1,2)~", "~FStr(Val(z3),1,6)~", ")
+     SQL.ADD(" 'Pendiente', "~Val(z4)~", "~Val(z5)~",  ")
+     SQL.ADD(" "~Val(z4)~", "~Val(z5)~", "~FStr(Val(z6),1,0)~", '"~Val(z8)~"' ")
+     SQL.ADD(")")
+     SQL.NEW
+     SQL.EXEC
+  Else
+     dfa
+  Endif
+
+Proximo
+
+If Val(z1)=0
+   MessageBox('No se encontraron Registros') 
+Endif
+
+act(a:fac+2,'FIN DE LISTADO')
+SetFont(a:fac..a:fac, 1)
+FormatoCeldas(e1..e:fac, Exe('F2'))
+LimitesVision(g:fac+1)

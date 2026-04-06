@@ -1,0 +1,161 @@
+﻿CrearDialogo
+  Fecha1     : "Fecha Desde"    ;;;;;;Dialogo.Fecha1<>0;'Fecha Incorrecta';NO;PriDeMes(Fecha('01/01/'~FStr(Anio(Fsys),4,0)), SI)
+  Fecha2     : "Fecha Hasta"    ;;;;;;Dialogo.Fecha2<>0;'Fecha Incorrecta';NO;FinDeMes(Fecha('31/12/'~FStr(Anio(Fsys)+1,4,0)), SI)
+  Vehiculo1  : 'Vehiculo'       ;;;;;;NoVacio(Dialogo.Vehiculo1);'Debe ingresar un Vehiculo';NO;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Especie1   : 'Especie'        ;;;;;;;;;'WTI';;;;;; 
+  Radio1     : 'Volumen|Mensual|Diario' ;;;;;;;;;0;;
+  ListBox; 'Arial,8,N'; 100; 300
+     'Precio'           ;ba2..ba:20;  ;;;;50;NUMERO;'###.#######'
+  FinListBox  
+FinDialogo
+
+If not OK
+  Cancelar
+EndIf
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+CrearFont(3, "Arial,10,B")
+
+ACT(a1, 'Planilla de Cobertura - Commodities ')
+SetFont(a:1..a:1,3)
+
+ACT(a2, 'F.Desde : '~Dialogo.Fecha1)
+ACT(a3, 'F.Hasta : '~Dialogo.Fecha2)
+
+if NoVacio(Dialogo.Vehiculo1)
+   ACT(a:4, 'Vehiculo : '~Dialogo.Vehiculo1)
+else
+   ACT(a:4, 'Vehiculo : Todos')
+endif
+If Dialogo.Radio1=0
+   ACT(a:5, 'Expresado en Volumen Mensual')
+Else
+   ACT(a:5, 'Expresado en Volumen Diario')
+EndIf
+
+SetFont(a:2..a:5,1)
+
+*-- Listo Los Precios
+* ac201: Nro. de Columna ac202: Nro. de Fila en que se listan los precios
+acn(ac201,2)
+acn(ac202,7)
+SetFilaActual(7)
+
+
+Recorrer&i 2,20
+
+   If Val(ba:&i)=0
+      Break
+   EndIf
+
+   acn(val(ac201):fac,Val(ba:&i))       
+   FormatoCeldas(val(ac201):fac..val(ac201):fac, Exe('F7'))
+
+   act(val(ac201):fac+1,'Volumen')
+   aco(val(ac201),10)
+
+   act(val(ac201)+1:fac+1,'Precio')
+   aco(val(ac201)+1,5)
+
+   SetFont(val(ac201):fac..val(ac201)+1:fac+1,1)
+   AgregarMarco(val(ac201):fac..val(ac201)+1:fac,2,0,Exe('COLOR'))
+   AgregarMarco(val(ac201):fac+1..val(ac201)+1:fac+1,2,2,Exe('COLOR'))
+   scn(ac201,2)
+Proximo
+
+aco(1,15)
+SetFilaActual(8)
+
+acd(az2,Dialogo.Fecha1)
+acd(val(ac201)+1:fac, val(az2))    
+
+*- Listo los Meses
+Recorrer&i 1,DifMeses(Dialogo.Fecha2,Dialogo.Fecha1)+1)*2
+
+   ifa 
+   act(a:fac,Meses(Mes(val(az2)))~"' "~Fstr(Anio(val(az2)),2,0) ) 
+   SetFont(a:fac..a:fac,1)
+
+        
+   *- Si cambia el Año, calculo los Promedios
+   If Anio(val(az2))<>Anio(PriDeMes(Habiles(val(az2),25,'ARG',SI),SI))
+      ifa    
+      act(a:fac,'Promedio '~Fstr(Anio(val(az2)),0,0) )       
+      SetFont(a:fac..a:fac,1)
+      AgregarMarco(a:fac..a:fac,2,0)
+      ifa    
+      acd(az2, PriDeMes(Habiles(val(az2),25,'ARG',SI),SI))    
+      acd(val(ac201)+1:fac-2, val(az2))    
+      acd(val(ac201)+1:fac  , val(az2))    
+   Else 
+      acd(az2, PriDeMes(Habiles(val(az2),25,'ARG',SI),SI))    
+      acd(val(ac201)+1:fac, val(az2))    
+   EndIf 
+Proximo 
+
+
+Recorrer&j 2,val(ac201)
+    If Val(&j:val(ac202))<>0 
+       act(lp1,val(lp1)~'|'~Val(&j:val(ac202)))
+    EndIf
+Proximo
+
+acn(bp1,0)
+acn(bp2,0)
+acn(bp3,0)
+
+Recorrer&i 9,fac
+
+   If NoVacio(Val(a:&i))
+      If Not EqStr(Copy(Val(a:&i),1,4),'Prom')
+         LinkearHoja('COBER1',1,Vehiculo1=Dialogo.Vehiculo1,Especie1=Dialogo.Especie1,TipoOp1='',Fecha1=val(val(ac201)+1:&i-1),Fecha2=val(val(ac201)+1:&i)-1,Lista1=Val(lp1)~'|',Radio1=Dialogo.Radio1 ) 
+         
+         Recorrer&j 2,val(ac201)
+
+            If Val(&j:val(ac202))<>0
+               Message('Linkeando ...')
+               ACN(&j:&i  , LinkH(1, la:&j-1) )           
+               ACN(&j+1:&i, LinkH(1, lb:&j-1) )
+
+               SetFont(&j:&i..&j+1:&i,2)
+
+               FormatoCeldas(&j:&i..&j:&i, Exe('F2N'))
+               FormatoCeldas(&j+1:&i..&j+1:&i, Exe('F7'))
+          
+               *- bp1: Sumatoria volumenes bp2: Sumatoria Precios
+               scn(&j:6  ,val(&j:&i))                
+               scn(&j+1:6,val(&j:&i)*val(&j+1:&i))
+               scn(&j:5  ,1)
+            EndIf
+         Proximo 
+      Else
+         Recorrer&j 2,val(ac201)
+            If Val(&j:val(ac202))<>0
+               Message('Linkeando ...')
+               ACN(&j:&i, val(&j:6)/val(&j:5))
+               ACN(&j+1:&i,val(&j+1:6)/val(&j:6))
+
+               acn(&j:6  ,0)
+               acn(&j+1:6,0)
+               acn(&j:5  ,0)
+     
+               SetFont(&j:&i..&j+1:&i,1)
+               AgregarMarco(&j:&i..&j+1:&i,2,0)
+
+               FormatoCeldas(&j:&i..&j:&i, Exe('F2N'))
+               FormatoCeldas(&j+1:&i..&j+1:&i, Exe('F7'))        
+            EndIf
+         Proximo 
+      EndIf
+   EndIf
+Proximo 
+
+BorrarCeldas(2:5..val(ac201):6)
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(val(ac201):fac)
+*LimitesVision(bp:fac)

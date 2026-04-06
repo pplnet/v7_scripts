@@ -1,0 +1,290 @@
+﻿**// DC:1 = DC de Capital Cte
+**// DC:2 = DC de Interes
+**// DC:4 = DC de Capital No Cte
+**// FC:1 = Fecha Fin de mes anterior
+**// FC:2 = Fecha Fin de mes
+**// FC:9 = Inicio Cuota Vigente
+**// CP:1 = Capital correspondiente
+
+***/// Inicializar
+ACN(CP:2, 0)
+ACN(DN:1, 0)
+ACN(DN:2, 0)
+ACN(DN:3, 0)
+
+If Val(FC:1) < Val(FC:9)
+   ACD(FC:1, Val(FC:9))
+Endif
+
+*        Messagebox('Fecha Inicial: '~Fecha(Val(FC:9)))
+*        Messagebox('Fecha 1: '~Fecha(Val(FC:1)))
+*        Messagebox('Fecha 2: '~Fecha(Val(FC:2)))
+
+**// Si es prestamo o ON divido el capital en Cte y no Cte
+IF Incluido(FBN('TipoOp'),'MMPCLM|MMPOSM|MMPEM|MMPIM|MMPCCM|')
+   **// Capital cte a la fecha
+   ACN(CP:1, SQL(" Select Sum(Cantidad1) From "~DBO~".CUOTAS Where NrOperacion = '"~fbn('NrOperacion')~"' AND Fecha2 <= '"~IdxDate(Val(FV:1)+VAR('PLCAPCORR'))~"' AND Fecha2 >= '"~IdxDate(Val(FV:1))~"' ") )
+   **//Capital no cte a la fecha
+   ACN(CP:2, SQL(" Select Sum(Cantidad1) From "~DBO~".CUOTAS Where NrOperacion = '"~fbn('NrOperacion')~"' AND Fecha2 >  '"~IdxDate(Val(FV:1)+VAR('PLCAPCORR'))~"'  ") )
+Else
+   IF #OBLIGNEG
+      **// Capital cte a la fecha
+      ACN(CP:1, SQL(" Select Sum(Cantidad4) From "~DBO~".CUOTAS Where NrOperacion = '"~fbn('NrOperacion')~"' AND Fecha2 <= '"~IdxDate(Val(FV:1)+VAR('PLCAPCORR'))~"' AND Fecha2 >= '"~IdxDate(Val(FV:1))~"' ") )
+      **//Capital no cte a la fecha
+      ACN(CP:2, SQL(" Select Sum(Cantidad4) From "~DBO~".CUOTAS Where NrOperacion = '"~fbn('NrOperacion')~"' AND Fecha2 >  '"~IdxDate(Val(FV:1)+VAR('PLCAPCORR'))~"'  ") )
+   Else
+      ACN(CP:2, 0)
+   Endif
+Endif
+
+SQL.ADD(" Select Sum(Monto) DEV ")
+SQL.ADD(" From "~DBO~".MOVDEVENGADOS ")
+SQL.ADD(" Where NrOperacion = '"~FBN('NrOperacion')~"' ")
+SQL.ADD(" and TipoDevengado = '"~FBN('TipoDevengado')~"' ")
+SQL.ADD(" and Fecha > "~IdxDate2(Val(FC:9))~" ")
+SQL.ADD(" and Fecha <= "~IdxDate2(Val(FC:1))~" ")
+Recorrer SQL
+   ACN(TI:1, ABS(FBN('DEV')))
+Proximo
+
+**// Seteo en AP:1 si la Op. es Activa o Pasiva
+If Incluido(FBN('TipoOp'),Var('OPEACT'))
+   ACN(AP:1, 1)
+Else
+   ACN(AP:1, 2)
+Endif
+
+*       Messagebox('Capital: '~Fstr(Val(CP:1),0,2))
+*       Messagebox('Interes: '~Fstr(Val(TI:1),0,2))
+
+**//Si la moneda local del vehiculo es ARP
+IF Eqstr(#MONELOCAVH, #MONELOCAL)
+    ***//Obtengo la Dif Cambio en Pesos
+      ACN(DC:1, Val(CP:1) * ( CotizacionBNA(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO) - CotizacionBNA(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO) ) )
+      ACN(DC:2, Val(TI:1) * ( CotizacionBNA(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO) - CotizacionBNA(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO) ) )
+      ACN(DC:4, Val(CP:2) * ( CotizacionBNA(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO) - CotizacionBNA(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO) ) )
+
+*        Messagebox('DC Capital cte: '~Fstr(Val(DC:1),0,2))
+*        Messagebox('DC Capital no cte: '~Fstr(Val(DC:4),0,2))
+*        Messagebox('DC Interes: '~Fstr(Val(DC:2),0,2))
+
+    ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+    ACN(DC:1, Val(DC:1) / CotizacionBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+    ACN(DC:2, Val(DC:2) / CotizacionBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+    ACN(DC:4, Val(DC:4) / CotizacionBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+Else
+**//Si la moneda local del vehiculo NO es ARP se asume UYU
+   ***//Obtengo la Dif Cambio en Uruguayos
+   IF Eqstr(#MONEDA, #MONELOCAL)
+      **//Si la moneda de la operacion es ARP se utiliza triangulacion BNACBU
+      ACN(DC:1, Val(CP:1) * ( CotizacionBNABCU(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO) - CotizacionBNABCU(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO) ) )
+      ACN(DC:2, Val(TI:1) * ( CotizacionBNABCU(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO) - CotizacionBNABCU(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO) ) )
+      ACN(DC:4, Val(CP:2) * ( CotizacionBNABCU(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO) - CotizacionBNABCU(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO) ) )
+
+*        Messagebox('Cotizacion1: '~Fstr(CotizacionBNABCU(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO),0,4))
+*        Messagebox('Cotizacion2: '~Fstr(CotizacionBNABCU(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO),0,4))
+
+*        Messagebox('DC Capital cte: '~Fstr(Val(DC:1),0,2))
+*        Messagebox('DC Capital no cte: '~Fstr(Val(DC:4),0,2))
+*        Messagebox('DC Interes: '~Fstr(Val(DC:2),0,2))
+
+      ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+      ACN(DC:1, Val(DC:1) / CotizacionBNABCU(Var('MONEEXTR'),Val(FV:1),Val(AP:1),NO,NO) )
+      ACN(DC:2, Val(DC:2) / CotizacionBNABCU(Var('MONEEXTR'),Val(FV:1),Val(AP:1),NO,NO) )
+      ACN(DC:4, Val(DC:4) / CotizacionBNABCU(Var('MONEEXTR'),Val(FV:1),Val(AP:1),NO,NO) )
+   Else
+      **//Si la moneda de la operacion NO es ARP (USD|EUR|) se utilica CotizacionBCU
+      ACN(DC:1, Val(CP:1) * ( CotizacionBCU(fbn('Moneda'),Val(FC:2),Val(AP:1),NO,NO) - CotizacionBCU(fbn('Moneda'),Val(FC:1),Val(AP:1),NO,NO) ) )
+      ACN(DC:2, Val(TI:1) * ( CotizacionBCU(fbn('Moneda'),Val(FC:2),Val(AP:1),NO,NO) - CotizacionBCU(fbn('Moneda'),Val(FC:1),Val(AP:1),NO,NO) ) )
+      ACN(DC:4, Val(CP:2) * ( CotizacionBCU(fbn('Moneda'),Val(FC:2),Val(AP:1),NO,NO) - CotizacionBCU(fbn('Moneda'),Val(FC:1),Val(AP:1),NO,NO) ) )
+
+*        Messagebox('Cotizacion1: '~Fstr(CotizacionBCU(fbn('Moneda'),Val(FC:1),Val(AP:1),NO,NO),0,4))
+*        Messagebox('Cotizacion2: '~Fstr(CotizacionBCU(fbn('Moneda'),Val(FC:2),Val(AP:1),NO,NO),0,4))
+
+*        Messagebox('DC Capital cte: '~Fstr(Val(DC:1),0,2))
+*        Messagebox('DC Capital no cte: '~Fstr(Val(DC:4),0,2))
+*        Messagebox('DC Interes: '~Fstr(Val(DC:2),0,2))
+
+      ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+      ACN(DC:1, Val(DC:1) / CotizacionBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+      ACN(DC:2, Val(DC:2) / CotizacionBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+      ACN(DC:4, Val(DC:4) / CotizacionBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+
+*        Messagebox('DC Capital en '~FBN('Moneda')~' : '~Fstr(Val(DC:1),0,2))
+*        Messagebox('DC Interes en '~FBN('Moneda')~' : '~Fstr(Val(DC:2),0,2))
+
+   Endif
+Endif
+
+
+**// Si es Op. Vinculada se saca el promedio de las Cotizacion de Compra y Venta
+If EqStr(BuscarCampo('TIPOSOPERACION','ClaseOperacion','Codigo',FBN('TipoOp')),VAR('CLASEOPVIN'))
+   **// Si es TOMA es Pasiva, si es COLOCACION es Activa
+   If #TOMAMUTUO
+      ACN(AP:1, 2)
+   Else
+      ACN(AP:1, 1)
+   Endif
+   **//Si la moneda local del vehiculo es ARP
+   IF Eqstr(#MONELOCAVH, #MONELOCAL)
+      ***//Obtengo la Dif Cambio en Pesos
+      ACN(CT:1, (CotizacionBNA(fbn('Moneda'),Val(FC:1),1,NO,NO)+CotizacionBNA(fbn('Moneda'),Val(FC:1),2,NO,NO))/2)
+      ACN(CT:2, (CotizacionBNA(fbn('Moneda'),Val(FC:2),1,NO,NO)+CotizacionBNA(fbn('Moneda'),Val(FC:2),2,NO,NO))/2)
+      ACN(DC:1, Val(CP:1) * (Val(CT:2) - Val(CT:1)) )
+      ACN(DC:2, Val(TI:1) * (Val(CT:2) - Val(CT:1)) )
+      ACN(DC:4, Val(CP:2) * (Val(CT:2) - Val(CT:1)) )
+
+*        Messagebox('Cotizacion1: '~Fstr(Val(CT:1),0,4))
+*        Messagebox('Cotizacion2: '~Fstr(Val(CT:2),0,4))
+
+*        Messagebox('DC Capital: '~Fstr(Val(DC:1),0,2))
+*        Messagebox('DC Interes: '~Fstr(Val(DC:2),0,2))
+   
+      ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+      ACN(DC:1, Val(DC:1) / CotizacionBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+      ACN(DC:2, Val(DC:2) / CotizacionBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+      ACN(DC:4, Val(DC:4) / CotizacionBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+   Else
+   **//Si la moneda local del vehiculo NO es ARP se asume UYU
+      ***//Obtengo la Dif Cambio en Uruguayos
+      IF Eqstr(#MONEDA, #MONELOCAL)
+         ACN(CT:1, (CotizacionBNABCU(Var('MONEEXTR'),Val(FC:1),1,NO,NO)+CotizacionBNABCU(Var('MONEEXTR'),Val(FC:1),2,NO,NO))/2)
+         ACN(CT:2, (CotizacionBNABCU(Var('MONEEXTR'),Val(FC:2),1,NO,NO)+CotizacionBNABCU(Var('MONEEXTR'),Val(FC:2),2,NO,NO))/2)
+         **//Si la moneda de la operacion es ARP se utiliza triangulacion BNACBU
+         ACN(DC:1, Val(CP:1) * (Val(CT:2) - Val(CT:1)) )
+         ACN(DC:2, Val(TI:1) * (Val(CT:2) - Val(CT:1)) )
+         ACN(DC:4, Val(CP:2) * (Val(CT:2) - Val(CT:1)) )
+
+         ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+         ACN(DC:1, Val(DC:1) / CotizacionBNABCU(Var('MONEEXTR'),Val(FV:1),Val(AP:1),NO,NO) )
+         ACN(DC:2, Val(DC:2) / CotizacionBNABCU(Var('MONEEXTR'),Val(FV:1),Val(AP:1),NO,NO) )
+         ACN(DC:4, Val(DC:4) / CotizacionBNABCU(Var('MONEEXTR'),Val(FV:1),Val(AP:1),NO,NO) )
+      Else
+         ACN(CT:1, (CotizacionBCU(fbn('Moneda'),Val(FC:1),1,NO,NO)+CotizacionBCU(fbn('Moneda'),Val(FC:1),2,NO,NO))/2)
+         ACN(CT:2, (CotizacionBCU(fbn('Moneda'),Val(FC:2),1,NO,NO)+CotizacionBCU(fbn('Moneda'),Val(FC:2),2,NO,NO))/2)
+
+         **//Si la moneda de la operacion NO es ARP (USD|EUR|) se utilica CotizacionBCU
+         ACN(DC:1, Val(CP:1) * (Val(CT:2) - Val(CT:1)) )
+         ACN(DC:2, Val(TI:1) * (Val(CT:2) - Val(CT:1)) )
+         ACN(DC:4, Val(CP:2) * (Val(CT:2) - Val(CT:1)) )
+
+*        Messagebox('Cotizacion1: '~Fstr(Val(CT:1),0,4))
+*        Messagebox('Cotizacion2: '~Fstr(Val(CT:2),0,4))
+
+*        Messagebox('DC Capital cte: '~Fstr(Val(DC:1),0,2))
+*        Messagebox('DC Capital no cte: '~Fstr(Val(DC:4),0,2))
+*        Messagebox('DC Interes: '~Fstr(Val(DC:2),0,2))
+
+         ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+         ACN(DC:1, Val(DC:1) / CotizacionBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+         ACN(DC:2, Val(DC:2) / CotizacionBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+         ACN(DC:4, Val(DC:4) / CotizacionBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+      Endif
+   Endif
+Endif
+
+***---DI = DC Interes
+***---DK = DC Capital
+***///DN = DC Capital No Cte
+***---DI:1, DK:1 Y DN:1 Moneda Fuerte = ARP
+***---DI:2, DK:2 Y DN:2 Moneda Local
+***---DI:3, DK:3 Y DN:3 Moneda Grupo = USD
+
+**MessageBox(Val(FD:1))
+**MessageBox(Val(FH:1))
+
+SQL.ADD(" Select Sum(Monto) DEV ")
+SQL.ADD(" From "~DBO~".MOVDEVENGADOS ")
+SQL.ADD(" Where NrOperacion = '"~FBN('NrOperacion')~"' ")
+SQL.ADD(" and TipoDevengado = '"~FBN('TipoDevengado')~"' ")
+SQL.ADD(" and Fecha > "~IdxDate2(Val(FC:9))~" ")
+SQL.ADD(" and Fecha <= "~IdxDate2(Val(FD:1))~" ")
+Recorrer SQL
+   ACN(TI:1, ABS(FBN('DEV')))
+Proximo
+
+IF Eqstr(fbn('Moneda'), Val(ME:1))
+    ACN(DI:1, (Val(TI:1) * CotizacionBNA(fbn('Moneda'),Val(FH:1),Val(AP:1),NO,NO)) - (Val(TI:1) * CotizacionBNA(fbn('Moneda'),Val(FD:1),Val(AP:1),NO,NO)))
+    ACN(DK:1, (Val(CP:1) * CotizacionBNA(fbn('Moneda'),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:1) * CotizacionBNA(fbn('Moneda'),Val(FD:1),Val(AP:1),NO,NO)))
+    ACN(DN:1, (Val(CP:2) * CotizacionBNA(fbn('Moneda'),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:2) * CotizacionBNA(fbn('Moneda'),Val(FD:1),Val(AP:1),NO,NO)))
+    IF Eqstr(fbn('Alias4'), Val(ML:1))
+        ACN(DI:2, Val(DI:1))
+        ACN(DK:2, Val(DK:1))
+        ACN(DN:2, Val(DN:1))
+    ELSE
+        ACN(DI:2, (Val(TI:1) * CotizacionBCU(fbn('Moneda'),Val(FH:1),Val(AP:1),NO,NO)) - (Val(TI:1) * CotizacionBCU(fbn('Moneda'),Val(FD:1),Val(AP:1),NO,NO)))
+        ACN(DK:2, (Val(CP:1) * CotizacionBCU(fbn('Moneda'),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:1) * CotizacionBCU(fbn('Moneda'),Val(FD:1),Val(AP:1),NO,NO)))
+        ACN(DN:2, (Val(CP:2) * CotizacionBCU(fbn('Moneda'),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:2) * CotizacionBCU(fbn('Moneda'),Val(FD:1),Val(AP:1),NO,NO)))
+    ENDIF
+    ACN(DI:3, 0)
+    ACN(DK:3, 0)
+    ACN(DN:3, 0)
+IF Incluido(fbn('NrOperacion'), 'PI000498')
+*MessageBox(Val(TI:1))
+*MessageBox(Val(FD:1))
+*MessageBox(Val(FH:1))
+*MessageBox(Fstr(CotizacionBNA(fbn('Moneda'),Val(FD:1),Val(AP:1),NO,NO), 0, 8))
+*MessageBox(Fstr(CotizacionBNA(fbn('Moneda'),Val(FH:1),Val(AP:1),NO,NO), 0, 8))
+Endif
+ELSE
+    IF Eqstr(fbn('Moneda'), Val(ML:1))
+        ACN(DI:1, 0)
+        ACN(DK:1, 0)
+        ACN(DN:1, 0)
+        IF Eqstr(fbn('Alias4'), Val(ML:1))
+            ACN(DI:2, Val(DI:1))
+            ACN(DK:2, Val(DK:1))
+            ACN(DN:2, Val(DN:1))
+        ELSE
+            ACN(DI:2, (Val(TI:1) * CotizacionBNABCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(TI:1) * CotizacionBNABCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+            ACN(DK:2, (Val(CP:1) * CotizacionBNABCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:1) * CotizacionBNABCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+            ACN(DN:2, (Val(CP:2) * CotizacionBNABCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:2) * CotizacionBNABCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+        ENDIF
+        ACN(DI:3, (Val(TI:1) / CotizacionBNA(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(TI:1) / CotizacionBNA(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+        ACN(DK:3, (Val(CP:1) / CotizacionBNA(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:1) / CotizacionBNA(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+        ACN(DN:3, (Val(CP:2) / CotizacionBNA(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:2) / CotizacionBNA(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+IF Incluido(fbn('NrOperacion'), '50000069')
+*MessageBox(Val(DN:3))
+*MessageBox(Val(CP:2))
+*MessageBox(Val(FC:9))
+*MessageBox(Val(FD:1))
+*MessageBox(Val(FH:1))
+*MessageBox(Fstr(CotizacionBNA(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO), 0, 8))
+*MessageBox(Fstr(CotizacionBNA(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO), 0, 8))
+*MessageBox(Val(DK:3))
+ENDIF
+    ELSE
+        IF Eqstr(fbn('Moneda'), Val(MU:1))
+            ACN(DI:1, (Val(TI:1) / CotizacionBNABCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(TI:1) / CotizacionBNABCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+            ACN(DK:1, (Val(CP:1) / CotizacionBNABCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:1) / CotizacionBNABCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+            ACN(DN:1, (Val(CP:2) / CotizacionBNABCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:2) / CotizacionBNABCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+            IF Eqstr(fbn('Alias4'), Val(ML:1))
+                ACN(DI:2, (Val(TI:1) / CotizacionBNABCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(TI:1) / CotizacionBNABCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+                ACN(DK:2, (Val(CP:1) / CotizacionBNABCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:1) / CotizacionBNABCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+                ACN(DN:2, (Val(CP:2) / CotizacionBNABCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:2) / CotizacionBNABCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+            ELSE
+                ACN(DI:2, 0)
+                ACN(DK:2, 0)
+                ACN(DN:2, 0)
+            ENDIF
+            ACN(DI:3, (Val(TI:1) / CotizacionBCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(TI:1) / CotizacionBCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+            ACN(DK:3, (Val(CP:1) / CotizacionBCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:1) / CotizacionBCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+            ACN(DN:3, (Val(CP:2) / CotizacionBCU(Val(ME:1),Val(FH:1),Val(AP:1),NO,NO)) - (Val(CP:2) / CotizacionBCU(Val(ME:1),Val(FD:1),Val(AP:1),NO,NO)))
+        ENDIF
+    ENDIF
+ENDIF
+
+*IF Incluido(fbn('NrOperacion'), '50000068|50000069|50000070|50000071|50000072|50000073|50000074|50000075|50000076|50000077|50000078|50000079|')
+IF Incluido(fbn('NrOperacion'), '50000076')
+*MessageBox(fbn('NrOperacion'))
+*MessageBox(Val(DK:1))
+*MessageBox(Val(DK:2))
+*MessageBox(Val(DI:3))
+*MessageBox(Val(CP:1))
+*MessageBox(Val(FH:1))
+*MessageBox(Val(FD:1))
+*MessageBox(Val(DN:1))
+*MessageBox(Val(CP:1))
+*MessageBox(Fstr(CotizacionBNA(fbn('Moneda'),Val(FH:1),Val(AP:1),NO,NO), 0, 8))
+*MessageBox(Fstr(CotizacionBNA(fbn('Moneda'),Val(FD:1),Val(AP:1),NO,NO), 0, 8))
+ENDIF

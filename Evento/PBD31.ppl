@@ -1,0 +1,233 @@
+﻿MostrarCuadroDeMensajes
+
+ACT(VH:1, SQLSet(" Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+(.'DNLISTA'.)
+
+CrearDialogo
+  Check1: 'CONFIRMA'  ;1;1;1;NO;NO;;;;1
+  Fecha1: 'F.Bajada'  ;1;1;1;;;;;;fsys
+  Radio2: 'Tipo Cta|Cta.Cte|Interm|Recaud|C.Ahorro|Todos' ;2;1;;;;;;;4
+  Check2:  'Incluye Pagadoras';3;1;;;;;;;1
+*  Lista1: 'Archivo'   ;4;1;;;;;;;;;'DNCTAS|DNAHMS|DNCCDO|DNCADO|DNCOBR|DNOTRO'
+  Lista1   : 'Archivo' ;4;1;;;;;;;;;VAL(L:1)
+  Lista2: 'Vehiculos' ;-2;2;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"), Val(VH:1))
+  Lista3:  'Bancos'   ;  ;1;1;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CLIENTES WHERE Sector='BAN' ");
+  Lista4:  'Cuentas'  ;-7;2;1;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS  WHERE Comitente IN ("~Pipe2Comillas(Dialogo.Lista3)~") "~IIF(NOVACIO(Dialogo.Lista2)," AND Cliente IN ("~Pipe2Comillas(Dialogo.Lista2)~")",iif(NoVacio(UsrVehiculos(UsuarioActivo))," AND Cliente IN ("~Pipe2Comillas(Val(VH:1))~") " ) )~"  ");
+FinDialogo
+
+If Not Ok
+   Cancelar 
+Endif
+
+ACT(DN:1, Var('DNNODEPU'))
+
+ SQL.ADD(" Select /*+ RULE */ M.FechaAcreditacion, M.Vehiculo, M.NrDatanet, M.Moneda, M.Importe, M.Cuenta, ")
+ SQL.ADD(" M.Banco, M.NrMovDatanet, M.TipoMov, D.Archivo ")
+ SQL.ADD(" FROM "~DBO~".MOVDATANET M, "~DBO~".DATANET D, "~DBO~".VEHICULOS V, "~DBO~".CUENTAS C, ")
+ SQL.ADD(" "~DBO~".CODIGOSDATANET CD ")
+ SQL.ADD(" WHERE  M.NrDatanet   = D.NrDatanet ")
+ SQL.ADD(" AND    M.Cuenta      = C.Numero ")
+ SQL.ADD(" AND    M.TipoMov     = CD.Codigo (+) ")
+ SQL.ADD(" AND    D.FechaBajada = "~IdxDate2(Dialogo.Fecha1)~" ")
+ SQL.ADD(" AND    M.DC          = 'C' ")
+ SQL.ADD(" AND    M.Vehiculo    = V.Codigo ")
+ SQL.ADD(" AND    M.EstadoConciliacion = 'P' ")
+* If NoVacio(VAR('DNNODEPU'))
+ If Not CeldaVacia(DN:1)
+   SQL.ADD(" AND    CD.Tipo NOT IN ("~Pipe2Comillas(Val(DN:1))~") ")
+ Endif
+ If Dialogo.Radio2=0
+   SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+ Endif
+ If Dialogo.Radio2=1
+   SQL.ADD(" AND C.TipoCuenta IN ('INT')")
+ Endif
+ If Dialogo.Radio2=2
+   SQL.ADD(" AND C.TipoCuenta IN ('REC')")
+ Endif
+ If Dialogo.Radio2=3
+   SQL.ADD(" AND C.TipoCuenta IN ('CA')")
+ Endif
+ If Dialogo.Check2=0
+   SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+ Endif
+ If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" AND   D.Archivo IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ Endif
+ If NoVacio(Dialogo.Lista2)
+   SQL.ADD(" AND   M.Vehiculo IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+ Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+     SQL.ADD(" AND M.Vehiculo IN ("~Pipe2Comillas(Val(VH:1))~") ")
+   Endif
+ Endif
+ If NoVacio(Dialogo.Lista3)
+   SQL.ADD(" AND   C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista3)~") ")
+ Endif
+ If NoVacio(Dialogo.Lista4)
+   SQL.ADD(" AND   C.Codigo IN ("~Pipe2Comillas(Dialogo.Lista4)~") ")
+ Endif
+
+ IF Dialogo.Check1 = 1
+     SQL.ADD(" ORDER BY M.NrDataNet, M.Vehiculo, M.Banco, M.Cuenta ")
+ ENDIF
+ ACN(z:1,0)
+* ACT(li:1,' ')
+ Recorrer SQL
+   ACN(a:fac, 0)
+   ACD(b:fac, fbn('FechaAcreditacion'))
+   ACT(c:fac, fbn('Vehiculo'))
+   ACT(d:fac, fbn('NrDatanet'))
+   ACT(e:fac, fbn('Moneda'))
+   ACN(f:fac, fbn('Importe'))
+   ACT(g:fac, fbn('Cuenta'))
+   ACT(h:fac, fbn('Banco'))
+   ACN(p:fac, fbn('NrMovDatanet'))
+   ACT(q:fac, fbn('Archivo'))
+   ACT(or:fac, fbn('TipoMov'))
+   ACN(op:1, fbn('NrMovDatanet'))
+   ACT(op:2, fbn('NrDatanet'))
+   ACN(kk:1,0)
+
+   SQL.ADD(" Select /*+ RULE */ M1.FechaAcreditacion, M1.Vehiculo, M1.NrDatanet, M1.Moneda, M1.Importe, ")
+   SQL.ADD(" M1.Cuenta, M1.NrMovDatanet, M1.TipoMov ")
+   SQL.ADD(" FROM "~DBO~".MOVDATANET M1, "~DBO~".DATANET D1  ") 
+   SQL.ADD(" WHERE  M1.NrDataNet  = D1.NrDatanet ")
+   SQL.ADD(" AND    ABS(M1.Importe) = "~fstr(fbn('Importe'),0,4)~" ")
+   SQL.ADD(" AND    M1.Vehiculo   = '"~fbn('Vehiculo')~"' ")
+   SQL.ADD(" AND    M1.Cuenta     = '"~fbn('Cuenta')~"' ")
+   SQL.ADD(" AND    M1.Moneda     = '"~fbn('Moneda')~"' ")
+   SQL.ADD(" AND    M1.Banco      = '"~fbn('Banco')~"' ")
+   SQL.ADD(" AND    M1.TipoMov    = '"~fbn('TipoMov')~"' ")
+   SQL.ADD(" AND    M1.DC         = 'D' ")
+   SQL.ADD(" AND    M1.EstadoConciliacion = 'P' ")
+   Recorrer SQL
+     ACN(z:1,1)
+     If Val(kk:1)=0
+       dfa
+       ACN(a:fac, 1)
+       ACN(i:fac, 1)
+     Else
+       ACN(i:fac, 0)
+     Endif
+     ACN(kk:1,1)
+     ACD(j:fac, fbn('FechaAcreditacion'))
+     ACT(k:fac, fbn('Vehiculo'))
+     ACT(l:fac, fbn('NrDatanet'))
+     ACT(m:fac, fbn('Moneda'))
+     ACN(n:fac, fbn('Importe'))
+     ACT(o:fac, fbn('Cuenta'))
+     ACN(q:fac, fbn('NrMovDatanet'))
+     ACT(os:fac, fbn('TipoMov'))
+     ACN(r:fac, Val(op:1))
+     ACT(s:fac, Val(op:2))
+   Proximo
+   If Val(kk:1)=0
+     dfa
+   Endif
+ Proximo
+
+ If Val(z:1)=0
+    Message('No se encontraron movimientos para depurar.')
+    Cancelar
+ Endif
+
+ If Dialogo.Check1=1
+   CrearListBox; 'Arial,8,'
+    'OK'            ;a:1..a:FAC;SI;;;30;CHECK;RGB(232,255,215);
+    'NrDatanet'     ;d:1..d:FAC;NO;;;70;STRING;;RGB(232,232,232);
+    'NrMovDatanet'  ;p:1..p:FAC;NO;;;80;NUMERO;'###,###,###';RGB(232,232,232);
+    'FechaValor'    ;b:1..b:FAC;NO;;;80;FECHA;RGB(232,232,232);
+    'Vehiculo'      ;c:1..c:FAC;NO;;;70;STRING;;RGB(232,232,232);
+    'Moneda'        ;e:1..e:FAC;NO;;;70;STRING;;RGB(232,232,232);
+    'Cantidad'      ;f:1..f:FAC;NO;;;80;NUMERO;'###,###,###,###.##';RGB(232,232,232);
+    'Codigo DN'   ;or:1..or:FAC;NO;;;70;STRING;;RGB(232,232,232);
+    'Banco'         ;h:1..h:FAC;NO;;;70;STRING;;RGB(232,232,232);
+    'Cuenta'        ;g:1..g:FAC;NO;;;80;STRING;;RGB(232,232,232);
+ 
+    'OK'            ;i:1..i:FAC;SI;;;30;CHECK;RGB(232,255,215);
+    'NrDatanet'     ;l:1..l:FAC;NO;;;70;STRING;;RGB(221,242,255);
+    'NrMovDatanet'  ;q:1..q:FAC;NO;;;80;NUMERO;'###,###,###';RGB(221,242,255);
+    'FechaValor'    ;j:1..j:FAC;NO;;;80;FECHA ; RGB(221,242,255);
+    'Vehiculo'      ;k:1..k:FAC;NO;;;70;STRING;;RGB(221,242,255);
+    'Moneda'        ;m:1..m:FAC;NO;;;70;STRING;;RGB(221,242,255);
+    'Cantidad'      ;n:1..n:FAC;NO;;;80;NUMERO;'###,###,###,###.##';RGB(221,242,255);
+    'Codigo DN'   ;os:1..os:FAC;NO;;;70;STRING;;RGB(221,242,255);
+    'Cuenta'        ;o:1..o:FAC;NO;;;80;STRING;;RGB(221,242,255);
+   FinListBox
+ Endif
+
+ If Not Ok
+   Cancelar
+ Endif
+
+ ACN(fi:2,1)
+
+ Recorrer&i 1,fac
+  **  &I  RECORRE TODA LA LISTA **
+
+   If Val(a:&i)=1
+     * Busco los movimientos amarillos chequeados
+     ACN(fi:1,0)
+     ACN(kk:2,0)
+
+     Recorrer&j &i,fac
+     * Busco los movimientos violetas chequeados para el mov anterior
+         
+       If Val(r:&j)<>Val(p:&i) o Not eqstr(Val(s:&j),Val(d:&i))
+         ACN(fi:2,fac)
+         * Guardo la fila a partir de la cual voy a seguir
+         * Cuando cambio de mov me voy
+         Break
+       Endif
+
+       If Val(i:&j)=1 
+         * Si el violeta esta chequeado guardo la fila en fi:1, en kk:2 la cant de violetas para cada amarillo (solo puede haber uno)
+         ACN(fi:1,&j)
+         SCN(kk:2,1)
+       Endif
+     Proximo
+
+     If Val(kk:2)=1
+*       ACN(xx:1, SQL(" SELECT COUNT(*) FROM "~DBO~".MOVDATANET WHERE NrDataNet = '"~Val(l:Val(fi:1))~"' AND NrMovDataNet = "~fstr(Val(q:Val(fi:1)),0,0)~" AND EstadoConciliacion = 'FC' "))
+***---Comento la linea que sigue porque cuando se levanto el NrMov se pidio EstadoConciliacion 'P'
+***---con lo que no puede ser 'FC'
+*       ACN(xx:1, SQL(" SELECT /*+ RULE */ 1 FROM "~DBO~".MOVDATANET WHERE NrDataNet = '"~Val(l:Val(fi:1))~"' AND NrMovDataNet = "~fstr(Val(q:Val(fi:1)),0,0)~" AND EstadoConciliacion = 'FC' "))
+       ACN(XX:1, 0)
+       IF Val(XX:1) <> 1
+           ACN(XX:1, 0)
+       ENDIF
+       If Val(xx:1)<>0
+         Message('Movimiento ya conciliado.')
+       Else
+         message('Actualizando Conciliacion Nro. '~Val(d:&i))
+         * Actualizo los amarillos
+*         SQL.ADD(" UPDATE "~DBO~".MOVDATANET SET EstadoConciliacion = 'FC' ")
+*         SQL.ADD(" WHERE NrDataNet     = '"~Val(d:&i)~"' ")
+*         SQL.ADD(" AND   NrMovDatanet  = "~fstr(Val(p:&i),0,0)~" ")
+*         SQL.NEW
+*         SQL.EXEC
+
+         * Actualizo los violetas
+         message('Actualizando Operacion '~Val(l:Val(fi:1)))
+*         SQL.ADD(" UPDATE "~DBO~".MOVDATANET SET EstadoConciliacion = 'FC' ")
+*         SQL.ADD(" WHERE NrDataNet    = '"~Val(l:Val(fi:1))~"' ")
+*         SQL.ADD(" AND   NrMovDataNet = "~fstr(Val(q:Val(fi:1)),0,0)~" ")
+*         SQL.NEW
+*         SQL.EXEC
+         ***---10/09/03: Se unifican en este los dos updates anteriores por problemas de 
+         ***---performance
+         SQL.ADD(" UPDATE /*+ RULE */ "~DBO~".MOVDATANET SET EstadoConciliacion = 'FC' ")
+         SQL.ADD(" WHERE (NrDataNet = '"~Val(d:&i)~"' AND NrMovDatanet = "~fstr(Val(p:&i),0,0)~") ")
+         SQL.ADD(" OR (NrDataNet = '"~Val(l:Val(fi:1))~"' AND NrMovDatanet = "~fstr(Val(q:Val(fi:1)),0,0)~") ")
+         SQL.NEW
+         SQL.EXEC
+       Endif
+     Endif
+
+     If Val(kk:2)>1
+       Messagebox('Solo puede seleccionar uno para matchear.')
+     Endif
+
+   Endif
+ Proximo

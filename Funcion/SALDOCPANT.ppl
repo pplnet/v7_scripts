@@ -1,0 +1,94 @@
+﻿*????????????????????????????????????????????????????????
+ACT(at1, 'SI')
+          *IF Dialogo.Radio2 = 0
+             IF Val(hs1) > 0
+                BorrarCeldas(sa0..sg:Val(hs1))
+             ENDIF
+             ACT(sd0, '')
+             ACT(at1, 'SI')
+             Recorrer&i 4, Val(b1)  
+                *** toma solo lo marcado ***
+                IF Val(k:&i) = 1
+                   IF DesciendeDeEspecie(Val(d:&i),'TITULO')
+                      ACN(se0, BuscarLista(Val(d:&i)~'/'~Val(al:&i),Val(sd0)))
+                      IF Val(se0) = 0
+                         * en la variable sd0 pongo todos los mercados
+                         ACT(sd0, Val(sd0)~Val(d:&i)~'/'~Val(al:&i)~'|')
+                         ACN(se0, BuscarLista(Val(d:&i)~'/'~Val(al:&i),Val(sd0)))
+                      ENDIF
+                      * Coloco el Mercado
+                      ACT(se:Val(se0), Val(d:&i)~'/'~Val(al:&i))
+                      * Cuando es deposito la cantidad esta positiva y cuando es retiro la cant.
+                      * esta negativa porque es deposito o retiro del cliente, en este caso con 
+                      * un signo negativo delante alcanza.... (creo)
+                      SCN(sd:Val(se0), -Val(f:&i))
+                   ENDIF
+                ENDIF
+             Proximo
+
+             ACN(hs1, Elementos(Val(sd0)))
+             Recorrer&i 1, Val(hs1)
+                ACN(sa0, Posicion('/',ItemLista(Val(sd0),&i)))
+                * Longitud
+                ACN(sa1, Longitud(ItemLista(Val(sd0),&i)))
+                * Especie
+                ACT(sa2, COPY(ItemLista(Val(sd0),&i),1,Val(sa0)-1))
+                * Mercado
+                ACT(sa3, COPY(ItemLista(Val(sd0),&i),Val(sa0)+1,Val(sa0)-Longitud(Val(sa2))+1))
+                * Cupon
+                ACN(sa4, NrCupon2(Val(sa2),Dialogo.Fecha1))
+                * Dependiendo del mercado, selecciono la cuenta propia
+                * Si el mercado es 'CV'
+                IF EqStr(Val(sa3), 'CLHODEFA')
+                   ACT(sa5, VAR('CTAEXT'))
+                ELSE
+                   SQL.ADD("SELECT Codigo FROM "~DBO~".CUENTAS ")
+                   SQL.ADD("WHERE Cliente = '"~VAR('VEHICULODE')~"' AND ")
+                   SQL.ADD("      Estado = 'HAB' AND ")
+                   SQL.ADD("      TipoCuenta = 'CUS' AND ")
+                   SQL.ADD("      Mercado = '"~Val(sa3)~"' ")
+                   Recorrer SQL
+                      ACT(sa5, FBN['Codigo'])
+                   Proximo
+                ENDIF
+
+                * Recupero el Sldo para la cta propia de un determ. mercado de una determ especie
+                ACN(sf:&i, SaldoC(VAR('VEHICULODE'),Val(sa2),,,,Val(sa3),VAR('VEHICULODE'),Val(sa5),Val(sl0),Dialogo.Fecha1,FStr(Val(sa4),0,0)))
+
+                * Recupero los movimientos de las operaciones de Compra pendientes de liquidar 
+                * para sumar al saldo, y luego hago lo mismo con ventas para restarlo al sldo
+                SQL.ADD("SELECT -SUM(M.Cantidad) Cant ")
+                SQL.ADD("FROM "~DBO~".MOVEJECUTADOS M WITH (NOLOCK INDEX = INDME1), "~DBO~".OPERACIONES O ")
+                SQL.ADD("WHERE O.TipoOp IN ('TIC','TIFC') AND ")
+                SQL.ADD("      O.NrOperacion = M.NrOperacion AND ")
+                SQL.ADD("      M.Especie = '"~Val(sa2)~"' AND ")
+                SQL.ADD("      M.Mercado = '"~Val(sa3)~"' AND ")
+                SQL.ADD("      M.EnteCustodia = '"~VAR('VEHICULODE')~"' AND ")
+                SQL.ADD("      M.NrSaldo = 31 ")
+                Recorrer SQL
+                   dfa
+                   SCN(sf:&i, FBN['Cant'])
+                Proximo
+
+                SQL.ADD("SELECT -SUM(M.Cantidad) Cant ")
+                SQL.ADD("FROM "~DBO~".MOVEJECUTADOS M WITH (INDEX = INDME1), "~DBO~".OPERACIONES O ")
+                SQL.ADD("WHERE O.TipoOp IN ('TIV','TIFV') AND ")
+                SQL.ADD("      O.NrOperacion = M.NrOperacion AND ")
+                SQL.ADD("      M.Especie = '"~Val(sa2)~"' AND ")
+                SQL.ADD("      M.Mercado = '"~Val(sa3)~"' AND ")
+                SQL.ADD("      M.EnteCustodia = '"~VAR('VEHICULODE')~"' AND ")
+                SQL.ADD("      M.NrSaldo = 31 ")
+                Recorrer SQL
+                   dfa
+                   SCN(sf:&i, FBN['Cant'])
+                Proximo
+
+                IF (Val(sf:&i) + Val(sd:&i)) < 0
+                   MessageBox("Se excede el saldo de cartera propia: "~Val(sa2)~" / "~Val(sa3)~" Sldo: "~FStr(Val(sf:&i),0,0)~" a Liq.: "~FStr(Val(sd:&i),0,0))
+                   ACT(at1, 'NO')
+                ENDIF
+             Proximo
+         * ELSE
+          *   ACT(at1, 'SI')
+          *ENDIF
+*????????????????????????????????????????????????????????

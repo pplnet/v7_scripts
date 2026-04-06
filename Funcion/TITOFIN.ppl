@@ -1,0 +1,61 @@
+﻿**//Elimino datos de DETITOFIN para la fecha de corrida y la especie
+If Not EqStr(&especieAnterior, val(ES:1))
+    let &especieAnterior val(ES:1)
+    SQL.ADD("Delete "~DBO~".DETITOFIN WHERE Fecha = '"~Idxdate(val(FV:1))~"' and Especie ='"~val(ES:1)~"' ")
+    SQL.NEW
+    SQL.EXEC 
+EndIf
+
+**//Inserto datos en DETITOFIN
+let &valorResidual 0
+let &valorContable 0
+let &valorContValuado 0
+
+let &cotiza fbn('Cotiza')
+let &especie fbn('Especie')
+let &book val(BK:1)
+
+let &nrCupon NrCupon2(&especie,val(FV:1))
+let &tipoCupon SQL("Select TipoCupon from "~DBO~".AGENDACUPONES where NrCupon = '"~Fstr(&nrCupon, 0, 0)~"' AND Especie = '"~&especie~"' ")
+**TipoCupon
+**1=Amort, 2 = Renta, 3 = Amort e renta, 0= Otros
+If EqStr(&tipoNrCupon,'AMO')
+    let &tipoCupon 1
+Else
+    If EqStr(&tipoNrCupon,'REN')
+        let &tipoCupon 2
+    EndIf
+    If EqStr(&tipoNrCupon,'RYA')
+        let &tipoCupon 3
+    Else
+    let &tipoCupon 0
+    EndIf                
+EndIf
+let &cuentaContable RelacionCuenta('','','','','TIC','','','','TITULO','',val(MS:1),'','','',val(TS:1),'',val(BK:1),#VEHICULO,,,,,,#CTACUSTODIA,#CONCEPTO)           
+let &valorContable val(CA:1)            
+let &valorResidual iif(fbn('VTeorico') <> 0, fbn('VTeorico'),1) *&valorContable
+
+let &cotiNiif CotizacionNIIF(&especie, val(FV:1), &book)
+
+IF Vacio(&cotiNiif)
+    let &precioNiif 0
+ELSE
+    let &precioNiif &cotiNiif.PrecioCotizacionDeterminada
+ENDIF
+
+IF Not Eqstr(&cotiza, val(ML:1))
+    let &monedaAConvertir &cotiza
+    let &monedaExpresion val(ML:1)
+    let &valorContValuado  &valorContable * &precioNiif * #TCCONTABREVAL
+ELSE
+    let &valorContValuado &valorContable * &precioNiif
+ENDIF
+
+SQL.ADD("INSERT INTO "~DBO~".DETITOFIN ( ")
+SQL.ADD("Fecha, Especie, TipCupon, CuentaContable, ValorResidual, ")
+SQL.ADD("ValorContable, ValorContValuado) ")
+SQL.ADD("VALUES ( ")
+SQL.ADD("'"~Idxdate(val(FV:1))~"','"~val(ES:1)~"', "~Fstr(&tipoCupon, 0, 0)~",'"~&cuentaContable~"',"~Fstr(&valorResidual, 0, 0)~", ")
+SQL.ADD(" "~Fstr(&valorContable, 0, 0)~", "~Fstr(&valorContValuado, 0, 2)~") ")
+SQL.NEW
+SQL.EXEC            
