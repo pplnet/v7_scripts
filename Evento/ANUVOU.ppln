@@ -1,0 +1,84 @@
+Messagebox('La anulacion no debe hacerse por este evento')
+if (NO)
+creardialogo
+nrtrans1: 'Nro.Voucher';;;;;;Incluido(BuscarCampo('TRANSACCIONES2', 'TipoTr2', 'NrTrans', dialogo.nrtrans1), 'DEP|RET|MATCH');'Tipo de Comprobante incorrecto';NO;
+cliente1: 'ClienteVou';;;;NO;;;;;;BuscarCampo('TRANSACCIONES2', 'Cliente1', 'NrTrans', dialogo.nrtrans1)
+especie1: 'EspecieVou';;;;NO;;;;;;BuscarCampo('TRANSACCIONES2', 'Especie', 'NrTrans', dialogo.nrtrans1)
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Act(az3, sql("Select NrOperacion from "~Dbo()~".MOVEJECUTADOS where NrTrans2='"~dialogo.nrtrans1~"' "))
+Act(az4, 'TRANSACCIONES2')
+Acn(az5, 12)
+Acn(az6, 11)
+
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+sql.add("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+sql.new
+
+if (sql(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+ejecutarevento('INSBIT', entero1 = Val(az5), nroperacion1 = Val(az3))
+endif
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+
+Acn(zz1, 0)
+Acn(zz1, sql("Select 1 from "~Dbo()~".CLIENTES where Codigo='"~dialogo.cliente1~"' and (CategDepositante='CLI' OR Alias1='CP') "))
+Acn(zz2, iif (DesciendeDeEspecie(dialogo.especie1, 'MONEDA'), 1, 0))
+
+sql.add("INSERT INTO "~Dbo()~".MOVPENDIENTES  ")
+sql.add("( Especie, FechaEj, PrecioEj, CallPut, Cliente, Cantidad, ")
+sql.add("  FechaMov, NrOperacion, Cuenta, Leyenda, NrSaldo,  ")
+sql.add("  EnteCustodia, Bits, NrGrupo, Concepto, Formula,  ")
+sql.add("  NrMov, NrLiq, Mercado, NrTrans2,Book, Cupon ) ")
+sql.add("SELECT M.Especie, M.FechaEj, M.PrecioEj, M.CallPut, M.Cliente, M.Cantidad, ")
+sql.add(" M.FechaMov, M.NrOperacion, M.Cuenta, M.Leyenda,  ")
+sql.add(" 1 ,  ")
+sql.add(" M.EnteCustodia, M.Bits, M.NrGrupo, M.Concepto,  "~iif (Val(zz1) = 1 y Val(zz2) = 0, '10', 'NULL')~", ")
+sql.add(" M.NrMov, M.NrLiq, Mercado,'',Book, Cupon ")
+sql.add("from "~Dbo()~".MOVEJECUTADOS M ")
+sql.add("where ")
+sql.add("M.NrTrans2     = '"~dialogo.nrtrans1~"' ")
+sql.new
+
+sql.add("  DELETE from "~Dbo()~".MOVEJECUTADOS ")
+sql.add("  where ")
+sql.add("  NrTrans2     =  '"~dialogo.nrtrans1~"'  ")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".MOVEJECUTADOS  ")
+sql.add("WHERE NrOperacion IN (SELECT NrTrans ")
+sql.add("         FROM "~Dbo()~".TRANSACCIONES2 ")
+sql.add("         WHERE NrOperacionRef1 = '"~dialogo.nrtrans1~"') ")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".TRANSACCIONES2  ")
+sql.add("WHERE NrOperacionRef1 = '"~dialogo.nrtrans1~"' ")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".MOVEJECUTADOS  ")
+sql.add("where NrOperacion = '"~dialogo.nrtrans1~"' ")
+sql.new
+sql.exec
+
+sql.add("DELETE from "~Dbo()~".TRANSACCIONES2  ")
+sql.add("where NrTrans = '"~dialogo.nrtrans1~"' ")
+sql.new
+sql.exec
+endif
+

@@ -1,0 +1,125 @@
+modoreproceso(condialogo)
+creardialogo
+fecha1:"Fecha";;;;;;dialogo.fecha1 <> 0;'Debe Ingresar la Fecha';NO;Habiles(FSys() - 1, 1, 'ARG', SI)
+vehiculo1:"Vehiculo";;;;;;;;;;;;;;iif (NoVacio(UsrVehiculos(UsuarioActivo())), " Codigo in (Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"') ")
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (not Vacio(dialogo.vehiculo1))
+if (not Incluido(dialogo.vehiculo1, UsrVehiculos(UsuarioActivo())) y not Vacio(UsrVehiculos(UsuarioActivo())))
+Cancelar()('El Operador no esta habilitado para operar con el Vehiculo ')
+endif
+endif
+
+Act(zz6, SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+
+
+Acn(h2, 0)
+
+Act(zz6, SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+
+sql.add("SELECT  P.Vehiculo,P.Cliente,P.ListaEspecies FROM  "~Dbo()~".IMPTERCEROS P ")
+sql.add("Where Estado='HAB' ")
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" and P.Vehiculo IN ("~pipe2comillas(Val(zz6))~") ")
+endif
+sql.add("Order By P.Vehiculo,P.Cliente")
+
+recorrer sql
+
+Dfa()
+Message('Pares de Vehiculos: '~Fbn()['Vehiculo']~'/'~Fbn()['Cliente']~'  ...')
+
+Act(av1, Fbn()['Vehiculo'])
+Act(av2, Fbn()['Cliente'])
+
+sql.add("SELECT Codigo FROM  "~Dbo()~".ESPECIES Where Codigo IN ("~pipe2comillas(Fbn()['ListaEspecies'])~") ")
+
+recorrer sql
+
+Acn(f:fac, sql("SELECT Tasa from "~Dbo()~".TASASTERCEROS where Vehiculo='"~Val(av1)~"' and Cliente='"~Val(av2)~"' and Especie ='"~Fbn()['Codigo']~"' and Fecha='"~IdxDate(dialogo.fecha1)~"' "))
+
+if (Val(f:fac) = 0)
+Cancelar()("La Tasa '"~Val(av1)~"'/'"~Val(av2)~"'-'"~Fbn()['Codigo']~"' Es Incorrecta")
+Scn(h2, 1)
+endif
+proximo
+proximo
+
+
+
+sql.add("SELECT DISTINCT O.Vehiculo1,O.Cliente1,O.Especie  ")
+sql.add("from "~Dbo()~".OPERACIONES O")
+sql.add("where ((O.TipoOp='TEMD' and O.FechaOp='"~IdxDate(dialogo.fecha1)~"') ")
+sql.add("    or (O.TipoOp='TEMINM' and O.FechaVto='"~IdxDate(dialogo.fecha1)~"') ")
+sql.add("    or (O.TipoOp='TEMIND' and O.FechaVto='"~IdxDate(dialogo.fecha1)~"')) ")
+if (NoVacio(dialogo.vehiculo1))
+sql.add(" and O.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" and O.Vehiculo1 IN ("~pipe2comillas(Val(zz6))~") ")
+endif
+endif
+sql.add(" and NOT EXISTS ")
+sql.add(" (SELECT * ")
+sql.add("from "~Dbo()~".OPERACIONES Op")
+sql.add("where Op.TipoOp='TEMIND' and Op.FechaOp='"~IdxDate(dialogo.fecha1)~"'  ")
+sql.add("      and Op.Vehiculo1=O.Vehiculo1 and Op.Cliente1=O.Cliente1  and Op.Especie=O.Especie) ")
+sql.add("Order By O.Vehiculo1,O.Cliente1,O.Especie ")
+
+Acn(ab1, 0)
+
+recorrer sql
+Message('Procesando Vehiculo: '~Fbn()['Vehiculo1']~' Veh. ContraParte '~Fbn()['Cliente1']~' Especie:'~Fbn()['Especie']~' ...')
+
+Act(av1, Fbn()['Vehiculo1'])
+Act(av2, Fbn()['Cliente1'])
+Act(ae1, Fbn()['Especie'])
+Acd(af1, dialogo.fecha1)
+
+sql.add("SELECT O.* ")
+sql.add("from "~Dbo()~".OPERACIONES O")
+sql.add("where ((TipoOp='TEMD' and FechaOp='"~IdxDate(Val(af1))~"') ")
+sql.add(" or (TipoOp='TEMIND' and FechaVto='"~IdxDate(Val(af1))~"') ")
+sql.add(" or (TipoOp='TEMINM' and FechaVto='"~IdxDate(Val(af1))~"')) ")
+sql.add(" and O.Especie='"~Val(ae1)~"' ")
+sql.add(" and ((O.Vehiculo1='"~Val(av1)~"' and O.Cliente1='"~Val(av2)~"') or (O.Vehiculo1='"~Val(av2)~"' and O.Cliente1='"~Val(av1)~"')) ")
+sql.add(" AND NOT EXISTS ")
+sql.add(" (SELECT TipoOp ")
+sql.add("from "~Dbo()~".OPERACIONES O")
+sql.add("where TipoOp='TEMIND' and FechaOp='"~IdxDate(Val(af1))~"' ")
+sql.add(" and O.Especie ='"~Val(ae1)~"' ")
+sql.add(" and ((O.Vehiculo1='"~Val(av1)~"' and O.Cliente1='"~Val(av2)~"') or (O.Vehiculo1='"~Val(av2)~"' and O.Cliente1='"~Val(av1)~"'))) ")
+sql.add(" Order By O.FechaOp,O.NrOperacion ")
+
+recorrer sql
+
+Dfa()
+Acn(x1, sql("Select NrBit FROM "~Dbo()~".OPERACIONESBITS  Where NrOperacion='"~Fbn()['NrOperacion']~"' AND Valor='1'"))
+
+if (Val(x1) <> 20 y Val(x1) <> 50)
+Cancelar()("La Operacion '"~Fbn()['NrOperacion']~"' Debe estar en BackOffice o Terminal. Instancia Actual="~sql("Select Nombre FROM "~Dbo()~".INSTANCIAS  Where NrInstancia="~FStr(Val(x1), 0, 0)~" AND Tabla='OPERACIONES'"))
+endif
+proximo
+
+
+
+
+Acn(a1, sql("SELECT Tasa from "~Dbo()~".TASASTERCEROS where Vehiculo='"~Fbn()['Vehiculo1']~"' and Cliente='"~Fbn()['Cliente1']~"' and Especie ='"~Fbn()['Especie']~"' and Fecha='"~IdxDate(dialogo.fecha1)~"' "))
+
+if (Val(a1) <> 0)
+ejecutarevento('TEMIND', fecha1 = dialogo.fecha1, vehiculo1 = Fbn()['Vehiculo1'], cliente1 = Fbn()['Cliente1'], especie1 = Fbn()['Especie'], precio1 = Val(a1))
+else
+Cancelar()(' Falta cargar la Tasa Diaria para '~Fbn()['Vehiculo1']~'/'~Fbn()['Cliente1']~' '~Fbn()['Especie']~' ....')
+endif
+
+Scn(ab1, 1)
+proximo
+
+if (Val(ab1) = 0)
+Messagebox('No Existen Operaciones Terceros para la fecha ...')
+endif
+

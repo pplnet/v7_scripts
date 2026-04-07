@@ -1,0 +1,217 @@
+HojaVisible(NO)
+mostrarcuadrodemensajes
+creardialogo
+label1:'';1;1;;;;;;;;'Ingrese Periodo a Generar';;;
+entero1:'Año';;1;;;;dialogo.entero1 >= 2004 y dialogo.entero1 <= 2050;'Debe Ingresar un anio valido';NO;Anio(FSys());;;;'####'
+entero2:'Mes';;1;;;;dialogo.entero2 >= 1 y dialogo.entero2 <= 12;'Debe Ingresar un mes valido';NO;Mes(FSys());;;;'##'
+string1:'Periodo';;1;;NO;NO;;;;'01/'~Pad0(dialogo.entero2, 2)~'/'~Pad0(dialogo.entero1, 4);'01/'~Pad0(dialogo.entero2, 2)~'/'~Pad0(dialogo.entero1, 4)
+fecha1:'Fecha desde';;1;;NO;;;;;Fecha(dialogo.string1);Fecha(dialogo.string1)
+fecha2:'Fecha hasta';;1;;NO;;;;;FinDeMes(dialogo.fecha1, SI);FinDeMes(dialogo.fecha1, SI)
+findialogo
+
+
+if (not ok)
+Cancelar()
+endif
+
+
+
+Message(' - Borrando Archivos RTI - UIFRTI - UIFRTIOTR')
+sql.new
+sql.add("Delete from "~Dbo()~".UIFRTI Where Periodo='"~Pad0(dialogo.entero1, 4)~Pad0(dialogo.entero2, 2)~"' ")
+sql.new
+sql.add("Delete from "~Dbo()~".UIFRTIOTR Where Periodo='"~Pad0(dialogo.entero1, 4)~Pad0(dialogo.entero2, 2)~"' ")
+sql.new
+sql.exec
+
+Act(pe:1, Pad0(dialogo.entero1, 4)~Pad0(dialogo.entero2, 2))
+
+sql.add("Select O.NrOperacion, TipoOp,")
+sql.add("Case O.TipoOp when 'TIC' Then 'Recibida' Else 'Emitida' End Transferencia, C.Persona, ")
+sql.add(" O.FechaVto FechaLiq, Case when O.Mercado in ("~pipe2comillas(Var('UIFRTIMER'))~") then M.DescUIF else 'Otra' end EntExterior,  ")
+sql.add(" Case when O.Mercado not in ("~pipe2comillas(Var('UIFRTIMER'))~") then M.Descripcion else '' end DenomExterior, ")
+sql.add("  TE.DescUIF EspecieTransf , ")
+sql.add(" C.CodComitente , (select Top(1) NrDepositante from "~Dbo()~".CUENTAS Where Cliente = O.Cliente1 and Comitente = '"~Var('VEHICULODE')~"' and TipoCuenta = 'CUS' and NrDepositante is not Null) as ComitArgentina, ")
+sql.add(" O.Cliente1 Cliente, (select ISO from "~Dbo()~".ESPECIES Where Codigo=O.ContraEspecie)  MonedaVN,")
+sql.add(" E.Nombre DenomEspecieOtra, O.Especie TickerVN,  O.Cantidad CantidadVN, ")
+sql.add(" C.CUIT NroCUIT, Case when E.ISIN <> '' Then 'ISIN' when E.CUSIP <> '' Then 'CUSIP' else 'Otro' End TipoEspecieVN, ")
+sql.add(" Case when E.ISIN <> '' Then E.ISIN when E.CUSIP <> '' Then E.CUSIP else 'SinCodigo' End CodEspecieVN, ")
+sql.add(" Case When C.Jerarquia like '"~Var('JERFONDOS')~"%' Then 'FCI' When C.Sector = 'PUB' Then 'Organismo Publico' When C.TipoInscripcion = 'FDI' Then 'Fideicomiso' Else 'Otro' End TipoCliente, ")
+sql.add(" Case When C.Persona = 'NO' Then 'Persona jurídica' When C.Persona = 'SI' Then 'Persona humana' Else 'SinTipoPersona' End TipoPersona, ")
+sql.add(" Deposdelcomitente NroCuentaDepos, C.Pais, E.PaisOrigen PaisEspecie, ")
+sql.add(" (select count(*) from "~Dbo()~".INTEGRANTESCLI IT where IT.Codigo = C.Codigo) as CantidadCli, C.RazonSocial DenomPersona, ")
+sql.add(" CU.Numero NroCtaTransferencia, CO.Pais PaisCtaTransferencia, 'NO' ComparteComit , '"~Var('RTICONTEXT')~"' DenNoComparteComit ")
+sql.add("  From "~Dbo()~".OPERACIONES O  ")
+sql.add("  LEFT OUTER JOIN "~Dbo()~".CLIENTES C on O.Cliente1=C.Codigo ")
+sql.add("  LEFT JOIN "~Dbo()~".CUENTAS CU on O.Cuenta2=CU.Codigo ")
+sql.add("       Left JOIN "~Dbo()~".CORRESPONSALES CO WITH (NOLOCK) ON CU.Corresponsal=CO.Codigo ")
+sql.add("       Left JOIN "~Dbo()~".ESPECIES E WITH (NOLOCK) ON O.Especie=E.Codigo ")
+sql.add("       Left JOIN "~Dbo()~".MERCADOS M WITH (NOLOCK) ON O.Mercado=M.Codigo ")
+sql.add("       Left JOIN "~Dbo()~".OPERACIONESBITS B WITH (NOLOCK) ON  O.NrOperacion=B.NrOperacion ")
+sql.add("       Left JOIN "~Dbo()~".TIPOESPECIE TE WITH (NOLOCK) ON  E.Tipo=TE.Codigo ")
+sql.add("Where  B.Valor='1' and B.Nrbit not in (30)")
+sql.add("  and O.FechaOp between "~IdxDate2(dialogo.fecha1)~" and "~IdxDate2(dialogo.fecha2))
+sql.add("  and O.Mercado in  ("~pipe2comillas(Var('UIFRTIMERC'))~") ")
+sql.add(" and O.TipoOp In  ('TIC','TIV') ")
+Watch(sql.batch)
+Acn(xy1, 0)
+recorrer sql
+
+borrarceldas(x:1..x:10)
+
+Act(ap:1, '')
+Act(ap:2, '')
+Act(ap:3, '')
+Act(ap:4, '')
+
+if (Eqstr(Fbn()['Persona'], 'SI'))
+sql.add("Select ICL.TipoPoder,ICL.FAlta FechaAlta,ICL.TipoDocumento,ICL.NrDocumento, Apellido, Nombre, Sexo, Nacionalidad,Pais, CodigoPEP, FechaNacimiento,  ")
+sql.add("CodigoPostal,Provincia,Localidad,Direccion Calle,Numero Altura, ")
+sql.add("P.EmpleadoGobierno,P.Telefono")
+sql.add("from INTEGRANTESCLI ICL ")
+sql.add("left join PERSONAS P with (nolock) on ICL.TipoDocumento=P.TipoDocumento and ICL.NrDocumento=P.NrDocumento ")
+sql.add(" Where ICL.Codigo='"~Fbn()['Cliente']~"' and ICL.NrDocumento= (select Isnull(substring(CUIT,3,8),'00000000') from CLIENTES where Codigo='"~Fbn()['Cliente']~"') ")
+
+Watch(sql.batch)
+recorrer sql
+Act(ap:1, Trim(Fbn()['Apellido']))
+Act(ap:2, Trim(Fbn()['Nombre']))
+Act(ap:3, Trim(Fbn()['TipoDocumento']))
+Act(x1, Trim(Fbn()['NrDocumento']))
+Act(ap:4, Val(x1))
+proximo
+
+endif
+
+
+Act(NO:1, Fbn()['NrOperacion'])
+Message('--- #Op : '~Val(NO:1)~' Tipo : '~Fbn()['TipoOp']~' Especie : '~Fbn()['TickerVN']~' Cliente : '~Fbn()['Cliente'])
+sql.add("Insert into "~Dbo()~".UIFRTI (")
+
+sql.add("Periodo, ")
+sql.add("NrOperacion, ")
+sql.add("Cliente, ")
+sql.add("Transferencia, ")
+sql.add("FechaLiq, ")
+sql.add("EntidadDep, ")
+sql.add("DenomEntidadOtra, ")
+sql.add("NroCtaTransferencia, ")
+sql.add("PaisCtaTransferencia, ")
+sql.add("NroCuentaDepos, ")
+sql.add("NroCuentaComit, ")
+sql.add("EspecieTransf, ")
+sql.add("DenomEspecieOtra, ")
+sql.add("TickerVN, ")
+sql.add("TipoEspecieVN, ")
+sql.add("CodEspecieVN, ")
+sql.add("CotizMonedaVN, ")
+sql.add("MonedaVN, ")
+sql.add("CantidadVN, ")
+sql.add("ComparteComit, ")
+sql.add("DenNoComparteComit, ")
+sql.add("CantidadCli, ")
+sql.add("TipoCliente, ")
+sql.add("NroCUIT, ")
+sql.add("TipoPersona, ")
+sql.add("DenomPersona, ")
+sql.add("Apellido, ")
+sql.add("Nombre, ")
+sql.add("TipoDoc, ")
+sql.add("NroDoc ")
+
+sql.add(") values (")
+
+sql.add(" '"~Val(pe:1)~"', ")
+sql.add(" '"~Val(NO:1)~"', ")
+sql.add(" '"~Fbn()['Cliente']~"', ")
+sql.add(" '"~Fbn()['Transferencia']~"', ")
+sql.add(" '"~IdxDate(Fbn()['FechaLiq'])~"', ")
+sql.add(" '"~Fbn()['EntExterior']~"', ")
+sql.add(" '"~Fbn()['DenomExterior']~"', ")
+sql.add(" '"~Fbn()['NroCtaTransferencia']~"', ")
+sql.add(" '"~Fbn()['PaisCtaTransferencia']~"', ")
+sql.add(" "~FStr(Fbn()['NroCuentaDepos'], 0, 0)~", ")
+sql.add(" "~FStr(Fbn()['ComitArgentina'], 0, 0)~", ")
+sql.add(" '"~Fbn()['EspecieTransf']~"', ")
+sql.add(" '"~Fbn()['DenomEspecieOtra']~"', ")
+sql.add(" '"~Fbn()['TickerVN']~"', ")
+sql.add(" '"~Fbn()['TipoEspecieVN']~"', ")
+sql.add(" '"~Fbn()['CodEspecieVN']~"', ")
+Act(x3, Trim(sql(" Select Valor from CONFIGVALEXTERNOS where CodigoProceso='UIF' and Atributo='MONPAIS' AND ValorSistemaExterno ='"~Fbn()['PaisEspecie']~"'")))
+Acn(zx1, 100 * sql("Select Top(1) Precio1 From COTIZACIONES CO Where Codigo = '"~Fbn()['TickerVN']~"' AND Moneda = '"~Val(x3)~"' AND Fecha between "~IdxDate2(Fbn()['FechaLiq'] - 31)~" and "~IdxDate2(Fbn()['FechaLiq'] - 1)~" Order By Fecha Desc"))
+Acn(zx2, Trunc(Val(zx1), 0))
+sql.add(" "~FStr(Val(zx2) / 100, 0, 2)~", ")
+Act(x2, Trim(sql(" Select Valor from CONFIGVALEXTERNOS where CodigoProceso='UIF' and Atributo='MONEDA' AND ValorSistemaExterno ='"~Val(x3)~"'")))
+sql.add(" '"~Val(x2)~"', ")
+sql.add(" "~FStr(Fbn()['CantidadVN'], 0, 2)~", ")
+sql.add(" '"~Fbn()['ComparteComit']~"', ")
+sql.add(" '"~Fbn()['DenNoComparteComit']~"', ")
+sql.add(" "~FStr(Fbn()['CantidadCli'], 0, 0)~", ")
+sql.add(" '"~Fbn()['TipoCliente']~"', ")
+sql.add(" "~FStr(Fbn()['NroCUIT'], 0, 0)~", ")
+sql.add(" '"~iif (Eqstr(Fbn()['Pais'], Var('PAISARG')), Fbn()['TipoPersona'], Fbn()['TipoPersona']~' extranjera')~"', ")
+sql.add(" '"~Fbn()['DenomPersona']~"', ")
+sql.add(" '"~Val(ap:1)~"', ")
+sql.add(" '"~Val(ap:2)~"', ")
+sql.add(" '"~Val(ap:3)~"', ")
+sql.add(" '"~Val(ap:4)~"' ")
+
+sql.add(")")
+sql.new
+sql.exec
+
+
+Acn(ni:1, 0)
+sql.add("Select ICL.TipoPoder,ICL.FAlta FechaAlta,ICL.TipoDocumento,ICL.NrDocumento,  ")
+sql.add("'Persona humana' TipoPersona, Apellido,Nombre, Sexo, Nacionalidad,P.Pais, CodigoPEP, FechaNacimiento,  ")
+sql.add("CodigoPostal,Provincia,Localidad,Direccion Calle,Numero Altura, NrIntegrante, ICL.Codigo Cliente, ")
+sql.add("P.EmpleadoGobierno,P.Telefono, Isnull(P.Cuit,'') CUIT ")
+sql.add("from INTEGRANTESCLI ICL ")
+sql.add("left join PERSONAS P with (nolock) on ICL.TipoDocumento=P.TipoDocumento and ICL.NrDocumento=P.NrDocumento ")
+sql.add(" Where ICL.Codigo='"~Fbn()['Cliente']~"' and ICL.NrDocumento <> (select Isnull(substring(CUIT,3,8),'00000000') from CLIENTES where Codigo='"~Fbn()['Cliente']~"') ")
+
+Watch(sql.batch)
+recorrer sql
+
+Message('--- #Op : '~Val(NO:1)~' Cliente : '~Fbn()['Cliente']~' Integrante : '~Fbn()['TipoPoder'])
+
+
+Act(po:1, Trim(sql(" Select Valor from CONFIGVALEXTERNOS where CodigoProceso='UIF' and Atributo='TIPOINTEGRANTE' AND ValorSistemaExterno ='"~Fbn()['TipoPoder']~"'")))
+Scn(ni:1, 1)
+
+sql.add("Insert into "~Dbo()~".UIFRTIOTR (")
+sql.add("Periodo, ")
+sql.add("NrOperacion, ")
+sql.add("NroIntegrante, ")
+sql.add("Vinculo, ")
+sql.add("NroCUIT, ")
+sql.add("TipoPersona, ")
+sql.add("Apellido, ")
+sql.add("Nombre, ")
+sql.add("TipoDoc, ")
+sql.add("NroDoc ")
+
+sql.add(") values (")
+
+sql.add(" '"~Val(pe:1)~"', ")
+sql.add(" '"~Val(NO:1)~"', ")
+sql.add(" '"~FStr(Val(ni:1), 0, 0)~"', ")
+sql.add(" '"~Val(po:1)~"', ")
+Act(x1, FStr(Fbn()['CUIT'], 0, 0))
+sql.add(" "~Val(x1)~", ")
+sql.add(" '"~iif (Eqstr(Fbn()['Pais'], Var('PAISARG')), Fbn()['TipoPersona'], Fbn()['TipoPersona']~' extranjera')~"', ")
+sql.add(" '"~Fbn()['Apellido']~"', ")
+sql.add(" '"~Fbn()['Nombre']~"', ")
+sql.add(" '"~Fbn()['TipoDocumento']~"', ")
+Act(x1, Trim(Fbn()['NrDocumento']))
+sql.add(" '"~Val(x1)~"' ")
+
+sql.add(")")
+sql.new
+sql.exec
+
+proximo
+
+
+proximo
+

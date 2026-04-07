@@ -1,0 +1,788 @@
+creardialogo
+nroperacion1: 'Nr.Operacion';1;1;;;;;;;;;;;;" TipoOp in ('PME','PMU') and RB9='1' and NrOperacion in (Select OB.NrOperacion  from "~Dbo()~".OPERACIONESBITS OB where OB.NrOperacion=NrOperacion  and OB.NrBit in ('10','70') and OB.Valor='1' ) and NrOperacion Not In (Select M.NrOperacion from  "~Dbo()~".MOVEJECUTADOS M where M.NrOperacion = NrOperacion  and M.NrSaldo in (80,81,83) )  "
+vehiculo1:'Vehiculo';1;2;;NO;NO;;;;;BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', dialogo.nroperacion1)
+fecha1:'Fecha';2;1;;NO;;;;;;FSys()
+radio1:'Paga WHT|SI|NO';3;1;;Eqstr(dialogo.vehiculo1, 'INGCURA');Eqstr(dialogo.vehiculo1, 'INGCURA');dialogo.radio1 >= 0 o not Eqstr(dialogo.vehiculo1, 'INGCURA');'Debe indicar si paga WHT';NO;;
+precio3:'WHT % Com.';4;1;;Eqstr(dialogo.vehiculo1, 'INGCURA');Eqstr(dialogo.vehiculo1, 'INGCURA');;;;;iif (Eqstr(BuscarCampo('OPERACIONES', 'MB3', 'NrOperacion', dialogo.nroperacion1), '0'), MontoImpuesto('WHTNORCOM', dialogo.fecha1, 3, ''), MontoImpuesto('WHTACRCOM', dialogo.fecha1, 3, ''))
+precio2:'Tipo de Cambio';5;1;;NoVacio(dialogo.nroperacion1) y (Eqstr(dialogo.vehiculo1, 'INGCURA') o not (Eqstr(BuscarCampo('OPERACIONES', 'Especie', 'NrOperacion', dialogo.nroperacion1), 'ARP')));NoVacio(dialogo.nroperacion1) y (Eqstr(dialogo.vehiculo1, 'INGCURA') o not (Eqstr(BuscarCampo('OPERACIONES', 'Especie', 'NrOperacion', dialogo.nroperacion1), 'ARP')));dialogo.precio2 > 0 o not Eqstr(dialogo.vehiculo1, 'INGCURA');'Debe ingresar el tipo de cambio';NO;;CotizacionC(BuscarCampo('OPERACIONES', 'Especie', 'NrOperacion', dialogo.nroperacion1), null, null, null, dialogo.fecha1, 1, SI, 'ARP')
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Act(z1, dialogo.nroperacion1)
+Acd(z2, dialogo.fecha1)
+Acn(z4, dialogo.radio1)
+Acn(z6, dialogo.precio2)
+Acn(z7, dialogo.precio3)
+
+Acn(z3, sql("Select 1 from "~Dbo()~".OPERACIONESBITS where NrOperacion='"~Val(z1)~"' and NrBit in ('10','70') and Valor='1'"))
+if (Val(z3) <> 1)
+Cancelar()('La Operacion '~Val(z1)~' debe estar en instancia de Liquidacion o Terminal')
+endif
+
+sql.add("Select FechaMov from "~Dbo()~".MOVEJECUTADOS where NrOperacion='"~dialogo.nroperacion1~"' ")
+sql.add("and NrSaldo in (74,76,80,81,82,83) ")
+recorrer sql
+Acd(z8, Fbn()['FechaMov'])
+proximo
+
+if (Val(z8) > 0)
+Cancelar()('Existe una Cancelacion de Comision Up-Front de '~Val(z1)~' a fecha '~Val(z8))
+endif
+
+sql.add("Select C.CondicionIVA, C.AgPercepcionIVA, C.ExIVA, C.PorcExIVA, C.FDesdeExIVA, ")
+sql.add("C.FHastaExIVA, C.IVAPISE, O.MB3, O.Especie, O.Mercado, O.Cliente1, O.Cantidad, ")
+sql.add("O.FechaOp, O.Plazo, O.FechaVto, O.TotalComisiones, O.Vehiculo1 ")
+sql.add("from "~Dbo()~".OPERACIONES O, "~Dbo()~".CLIENTES C ")
+sql.add("where O.NrOperacion = '"~Val(z1)~"' ")
+sql.add("and   C.Codigo      = O.Cliente1    ")
+
+recorrer sql
+Act(a1, Fbn()['Especie'])
+Act(b1, Fbn()['Cliente1'])
+Acn(c1, Fbn()['Cantidad'])
+Acd(d1, Fbn()['FechaOp'])
+Acn(e1, Fbn()['Plazo'])
+Acd(f1, Fbn()['FechaVto'])
+Act(q1, Fbn()['Mercado'])
+Act(j1, Fbn()['CondicionIVA'])
+Act(k1, Fbn()['AgPercepcionIVA'])
+Act(l1, Fbn()['ExIVA'])
+Acn(m1, Fbn()['PorcExIVA'])
+Acd(n1, Fbn()['FDesdeExIVA'])
+Acd(o1, Fbn()['FHastaExIVA'])
+Act(r1, Fbn()['IVAPISE'])
+Act(p1, Fbn()['Vehiculo1'])
+Act(s1, Fbn()['MB3'])
+Acn(v1, Fbn()['TotalComisiones'])
+proximo
+
+if (Eqstr(Val(p1), 'INGCURA'))
+Acn(co1, Round(Val(v1) * Val(z7) / 100 * Val(z6), 2))
+
+if (Eqstr(Val(r1), 'SI'))
+Acn(co2, (Val(v1) * Val(z6) + iif (Eqstr(Val(s1), '1'), Val(co1), 0)) * MontoImpuesto('IVAPISCOM', Val(z2), 3, '') / 100)
+endif
+else
+Acn(pm1, Val(v1))
+Acn(pf1, dialogo.fecha1)
+Act(pt1, 'COM')
+Acn(pr1, Round(Val(pm1) * MontoImpuesto('IVANOR'~Val(pt1), Val(pf1), 3, Val(j1)) / 100, 2))
+Acn(pr2, Round(Val(pm1) * MontoImpuesto('IVAADI'~Val(pt1), Val(pf1), 3, Val(j1)) / 100, 2))
+
+Acn(pr3, 0)
+if (Eqstr(Val(k1), 'SI'))
+if (Eqstr(Val(l1), 'SI') y Val(pf1) >= Val(n1) y Val(pf1) <= Val(o1))
+Acn(pr3, Round(Val(pm1) * MontoImpuesto('IVAPER'~Val(pt1), Val(pf1), 3, '') * (1 - Val(m1) / 100), 2) / 100)
+else
+Acn(pr3, Round(Val(pm1) * MontoImpuesto('IVAPER'~Val(pt1), Val(pf1), 3, '') / 100, 2))
+endif
+endif
+if (Val(pr3) < Var('IVAPERMIN'))
+Acn(pr3, 0)
+endif
+
+
+
+
+endif
+
+creardialogo
+nroperacion1:"Operacion";1;1;;NO;;;;;Val(z1)
+cliente1:"Cliente";2;1;;NO;;;;;Val(b1)
+especie1:"Moneda";3;1;;NO;;;;;Val(a1)
+cantidad1:"Cantidad";4;1;;NO;;;;;Val(c1)
+fecha1:"F.Concer.";1;2;;NO;;;;;Val(d1)
+entero3:"Pl.Original";2;2;;NO;;;;;Val(e1)
+fecha2:"F.Vto.Original";3;2;;NO;;;;;Val(f1)
+cantidad2:"Comision";6;1;;NO;;;;;Val(v1)
+cantidad3:"Impuestos";7;1;;not (Eqstr(Val(p1), 'INGCURA'));;;;;Val(pr1) + Val(pr2) + Val(pr3)
+cantidad4:"Monto Total";8;1;;NO;;;;;Val(v1) + dialogo.cantidad3
+check1:'Procesa';9;1;;NO;NO;;;;1
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (Messagebox('Confirma Cancelacion Comision Up-Front Prestamo '~Val(z1)~' ?', 3, 1) = 1)
+Acn(ss1, 80)
+Acn(ss2, -Val(v1))
+Act(ss3, 'Comisiones Up-Front')
+Acn(ss4, 1)
+Act(ss5, Val(a1))
+Act(ss6, Val(q1))
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVPENDIENTES ( ")
+sql.add("  NrOperacion, Cliente,  Especie,      Mercado, ")
+sql.add("  NrSaldo,     FechaMov, Leyenda,      Bits,    ")
+sql.add("  NrMov,       Cantidad, EnteCustodia, NrGrupo, Cuenta, ")
+sql.add("  NrGrupo2,    NrInstan, Concepto,     Status   ")
+sql.add("  ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(ss5)~"', ")
+sql.add(" '"~Val(ss6)~"', ")
+
+sql.add(" 1, ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'MV', ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" "~Val(ss2)~", ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" '"~Var('VEHICULODE')~"', ")
+else
+sql.add(" '"~Val(p1)~"', ")
+endif
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~Val(bo8)~"', ")
+
+
+sql.add(" "~Val(ss4)~", ")
+sql.add(" 0, ")
+sql.add(" 'PM', ")
+sql.add(" '' ")
+sql.add(" ) ")
+sql.new
+endif
+
+
+
+Acn(ss1, 80)
+Acn(ss2, Val(v1))
+Act(ss3, 'Comisiones Up-Front cobradas')
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVEJECUTADOS ( ")
+sql.add("  NrOperacion, Cliente,    Especie, NrGrupo2, ")
+sql.add("  NrSaldo,     FechaMov,   Leyenda, Bits, ")
+sql.add("  FechaEje,    UsuarioEje, Cantidad, Cuenta  ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+sql.add(", Formula ")
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , PrecioEj, Status ")
+endif
+sql.add(" ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(a1)~"', ")
+sql.add(" "~Val(ss4)~", ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'AV', ")
+
+sql.add(" '"~IdxDate(FSys())~"', ")
+sql.add(" '"~UsuarioActivo()~"', ")
+sql.add(" "~Val(ss2)~", ")
+sql.add(" '"~Val(bo8)~"' ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+
+if (Incluido(FStr(Val(ss1), 1), '41|81|42|82|43|83') y Val(z2) > Val(cw:Val(x1)))
+sql.add(" ,'"~FStr(Val(z10), 0, 7)~"' ")
+else
+sql.add(" ,'"~FStr(Val(z6), 0, 7)~"' ")
+endif
+
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , ")
+if (Val(ss1) = 73 o Val(ss1) = 77)
+sql.add(" "~FStr(Val(z5), 0, 7)~", ")
+endif
+if (Val(ss1) = 74)
+sql.add(" "~FStr(Val(z7), 0, 7)~", ")
+endif
+if (Val(ss1) = 75 o Val(ss1) = 78)
+sql.add(" "~FStr(MontoImpuesto('IVAPISINT', Val(z2), 3, ''), 0, 7)~", ")
+endif
+if (Val(ss1) = 76)
+sql.add(" "~FStr(MontoImpuesto('IVAPISCOM', Val(z2), 3, ''), 0, 7)~", ")
+endif
+sql.add(" '"~iif (Val(z4) = 0, iif (Eqstr(Val(s1), '1'), '1', '2'), iif (Eqstr(Val(s1), '1'), '3', '4'))~"' ")
+endif
+sql.add(" )")
+sql.new
+endif
+
+
+
+if (Eqstr(Val(p1), 'INGCURA'))
+if (Val(co1) > 0)
+Acn(ss1, 74)
+Acn(ss2, Val(co1))
+Act(ss3, 'WHT sobre Comisiones Up-Front')
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVEJECUTADOS ( ")
+sql.add("  NrOperacion, Cliente,    Especie, NrGrupo2, ")
+sql.add("  NrSaldo,     FechaMov,   Leyenda, Bits, ")
+sql.add("  FechaEje,    UsuarioEje, Cantidad, Cuenta  ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+sql.add(", Formula ")
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , PrecioEj, Status ")
+endif
+sql.add(" ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(a1)~"', ")
+sql.add(" "~Val(ss4)~", ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'AV', ")
+
+sql.add(" '"~IdxDate(FSys())~"', ")
+sql.add(" '"~UsuarioActivo()~"', ")
+sql.add(" "~Val(ss2)~", ")
+sql.add(" '"~Val(bo8)~"' ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+
+if (Incluido(FStr(Val(ss1), 1), '41|81|42|82|43|83') y Val(z2) > Val(cw:Val(x1)))
+sql.add(" ,'"~FStr(Val(z10), 0, 7)~"' ")
+else
+sql.add(" ,'"~FStr(Val(z6), 0, 7)~"' ")
+endif
+
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , ")
+if (Val(ss1) = 73 o Val(ss1) = 77)
+sql.add(" "~FStr(Val(z5), 0, 7)~", ")
+endif
+if (Val(ss1) = 74)
+sql.add(" "~FStr(Val(z7), 0, 7)~", ")
+endif
+if (Val(ss1) = 75 o Val(ss1) = 78)
+sql.add(" "~FStr(MontoImpuesto('IVAPISINT', Val(z2), 3, ''), 0, 7)~", ")
+endif
+if (Val(ss1) = 76)
+sql.add(" "~FStr(MontoImpuesto('IVAPISCOM', Val(z2), 3, ''), 0, 7)~", ")
+endif
+sql.add(" '"~iif (Val(z4) = 0, iif (Eqstr(Val(s1), '1'), '1', '2'), iif (Eqstr(Val(s1), '1'), '3', '4'))~"' ")
+endif
+sql.add(" )")
+sql.new
+endif
+
+
+
+if (Val(z4) = 0)
+Acn(ss2, -Val(co1) * Val(z6))
+Act(ss5, 'ARP')
+Act(ss6, Val(me2))
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVPENDIENTES ( ")
+sql.add("  NrOperacion, Cliente,  Especie,      Mercado, ")
+sql.add("  NrSaldo,     FechaMov, Leyenda,      Bits,    ")
+sql.add("  NrMov,       Cantidad, EnteCustodia, NrGrupo, Cuenta, ")
+sql.add("  NrGrupo2,    NrInstan, Concepto,     Status   ")
+sql.add("  ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(ss5)~"', ")
+sql.add(" '"~Val(ss6)~"', ")
+
+sql.add(" 1, ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'MV', ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" "~Val(ss2)~", ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" '"~Var('VEHICULODE')~"', ")
+else
+sql.add(" '"~Val(p1)~"', ")
+endif
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~Val(bo8)~"', ")
+
+
+sql.add(" "~Val(ss4)~", ")
+sql.add(" 0, ")
+sql.add(" 'PM', ")
+sql.add(" '' ")
+sql.add(" ) ")
+sql.new
+endif
+
+
+endif
+endif
+
+if (Eqstr(Val(r1), 'SI'))
+if (Val(co2) > 0)
+Acn(ss1, 76)
+Acn(ss2, Val(co2))
+Act(ss3, ' PISE sobre Comisiones Up-Front')
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVEJECUTADOS ( ")
+sql.add("  NrOperacion, Cliente,    Especie, NrGrupo2, ")
+sql.add("  NrSaldo,     FechaMov,   Leyenda, Bits, ")
+sql.add("  FechaEje,    UsuarioEje, Cantidad, Cuenta  ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+sql.add(", Formula ")
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , PrecioEj, Status ")
+endif
+sql.add(" ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(a1)~"', ")
+sql.add(" "~Val(ss4)~", ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'AV', ")
+
+sql.add(" '"~IdxDate(FSys())~"', ")
+sql.add(" '"~UsuarioActivo()~"', ")
+sql.add(" "~Val(ss2)~", ")
+sql.add(" '"~Val(bo8)~"' ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+
+if (Incluido(FStr(Val(ss1), 1), '41|81|42|82|43|83') y Val(z2) > Val(cw:Val(x1)))
+sql.add(" ,'"~FStr(Val(z10), 0, 7)~"' ")
+else
+sql.add(" ,'"~FStr(Val(z6), 0, 7)~"' ")
+endif
+
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , ")
+if (Val(ss1) = 73 o Val(ss1) = 77)
+sql.add(" "~FStr(Val(z5), 0, 7)~", ")
+endif
+if (Val(ss1) = 74)
+sql.add(" "~FStr(Val(z7), 0, 7)~", ")
+endif
+if (Val(ss1) = 75 o Val(ss1) = 78)
+sql.add(" "~FStr(MontoImpuesto('IVAPISINT', Val(z2), 3, ''), 0, 7)~", ")
+endif
+if (Val(ss1) = 76)
+sql.add(" "~FStr(MontoImpuesto('IVAPISCOM', Val(z2), 3, ''), 0, 7)~", ")
+endif
+sql.add(" '"~iif (Val(z4) = 0, iif (Eqstr(Val(s1), '1'), '1', '2'), iif (Eqstr(Val(s1), '1'), '3', '4'))~"' ")
+endif
+sql.add(" )")
+sql.new
+endif
+
+
+
+if (Val(z4) = 0)
+Acn(ss2, -Val(co2) * Val(z6))
+Act(ss5, 'ARP')
+Act(ss6, Val(me2))
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVPENDIENTES ( ")
+sql.add("  NrOperacion, Cliente,  Especie,      Mercado, ")
+sql.add("  NrSaldo,     FechaMov, Leyenda,      Bits,    ")
+sql.add("  NrMov,       Cantidad, EnteCustodia, NrGrupo, Cuenta, ")
+sql.add("  NrGrupo2,    NrInstan, Concepto,     Status   ")
+sql.add("  ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(ss5)~"', ")
+sql.add(" '"~Val(ss6)~"', ")
+
+sql.add(" 1, ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'MV', ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" "~Val(ss2)~", ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" '"~Var('VEHICULODE')~"', ")
+else
+sql.add(" '"~Val(p1)~"', ")
+endif
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~Val(bo8)~"', ")
+
+
+sql.add(" "~Val(ss4)~", ")
+sql.add(" 0, ")
+sql.add(" 'PM', ")
+sql.add(" '' ")
+sql.add(" ) ")
+sql.new
+endif
+
+
+endif
+endif
+endif
+
+else
+if (not (Eqstr(Val(a1), 'ARP')))
+Act(ss5, 'ARP')
+Act(ss6, 'BCRA')
+Acn(pr1, Val(pr1) * Val(z6))
+Acn(pr2, Val(pr2) * Val(z6))
+Acn(pr3, Val(pr3) * Val(z6))
+else
+Act(ss5, Val(a1))
+Act(ss6, Val(q1))
+endif
+
+if (Val(pr3) > 0)
+Acn(ss1, 83)
+Acn(ss2, Val(pr3) / Val(z6))
+Act(ss3, 'IVA Percepcion Comisiones Up-Front')
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVEJECUTADOS ( ")
+sql.add("  NrOperacion, Cliente,    Especie, NrGrupo2, ")
+sql.add("  NrSaldo,     FechaMov,   Leyenda, Bits, ")
+sql.add("  FechaEje,    UsuarioEje, Cantidad, Cuenta  ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+sql.add(", Formula ")
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , PrecioEj, Status ")
+endif
+sql.add(" ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(a1)~"', ")
+sql.add(" "~Val(ss4)~", ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'AV', ")
+
+sql.add(" '"~IdxDate(FSys())~"', ")
+sql.add(" '"~UsuarioActivo()~"', ")
+sql.add(" "~Val(ss2)~", ")
+sql.add(" '"~Val(bo8)~"' ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+
+if (Incluido(FStr(Val(ss1), 1), '41|81|42|82|43|83') y Val(z2) > Val(cw:Val(x1)))
+sql.add(" ,'"~FStr(Val(z10), 0, 7)~"' ")
+else
+sql.add(" ,'"~FStr(Val(z6), 0, 7)~"' ")
+endif
+
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , ")
+if (Val(ss1) = 73 o Val(ss1) = 77)
+sql.add(" "~FStr(Val(z5), 0, 7)~", ")
+endif
+if (Val(ss1) = 74)
+sql.add(" "~FStr(Val(z7), 0, 7)~", ")
+endif
+if (Val(ss1) = 75 o Val(ss1) = 78)
+sql.add(" "~FStr(MontoImpuesto('IVAPISINT', Val(z2), 3, ''), 0, 7)~", ")
+endif
+if (Val(ss1) = 76)
+sql.add(" "~FStr(MontoImpuesto('IVAPISCOM', Val(z2), 3, ''), 0, 7)~", ")
+endif
+sql.add(" '"~iif (Val(z4) = 0, iif (Eqstr(Val(s1), '1'), '1', '2'), iif (Eqstr(Val(s1), '1'), '3', '4'))~"' ")
+endif
+sql.add(" )")
+sql.new
+endif
+
+
+
+Acn(ss2, -Val(pr3))
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVPENDIENTES ( ")
+sql.add("  NrOperacion, Cliente,  Especie,      Mercado, ")
+sql.add("  NrSaldo,     FechaMov, Leyenda,      Bits,    ")
+sql.add("  NrMov,       Cantidad, EnteCustodia, NrGrupo, Cuenta, ")
+sql.add("  NrGrupo2,    NrInstan, Concepto,     Status   ")
+sql.add("  ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(ss5)~"', ")
+sql.add(" '"~Val(ss6)~"', ")
+
+sql.add(" 1, ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'MV', ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" "~Val(ss2)~", ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" '"~Var('VEHICULODE')~"', ")
+else
+sql.add(" '"~Val(p1)~"', ")
+endif
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~Val(bo8)~"', ")
+
+
+sql.add(" "~Val(ss4)~", ")
+sql.add(" 0, ")
+sql.add(" 'PM', ")
+sql.add(" '' ")
+sql.add(" ) ")
+sql.new
+endif
+
+
+endif
+
+if (Val(pr2) > 0)
+Acn(ss1, 82)
+Acn(ss2, Val(pr2) / Val(z6))
+Act(ss3, 'IVA Adicional Comisiones Up-Front')
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVEJECUTADOS ( ")
+sql.add("  NrOperacion, Cliente,    Especie, NrGrupo2, ")
+sql.add("  NrSaldo,     FechaMov,   Leyenda, Bits, ")
+sql.add("  FechaEje,    UsuarioEje, Cantidad, Cuenta  ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+sql.add(", Formula ")
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , PrecioEj, Status ")
+endif
+sql.add(" ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(a1)~"', ")
+sql.add(" "~Val(ss4)~", ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'AV', ")
+
+sql.add(" '"~IdxDate(FSys())~"', ")
+sql.add(" '"~UsuarioActivo()~"', ")
+sql.add(" "~Val(ss2)~", ")
+sql.add(" '"~Val(bo8)~"' ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+
+if (Incluido(FStr(Val(ss1), 1), '41|81|42|82|43|83') y Val(z2) > Val(cw:Val(x1)))
+sql.add(" ,'"~FStr(Val(z10), 0, 7)~"' ")
+else
+sql.add(" ,'"~FStr(Val(z6), 0, 7)~"' ")
+endif
+
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , ")
+if (Val(ss1) = 73 o Val(ss1) = 77)
+sql.add(" "~FStr(Val(z5), 0, 7)~", ")
+endif
+if (Val(ss1) = 74)
+sql.add(" "~FStr(Val(z7), 0, 7)~", ")
+endif
+if (Val(ss1) = 75 o Val(ss1) = 78)
+sql.add(" "~FStr(MontoImpuesto('IVAPISINT', Val(z2), 3, ''), 0, 7)~", ")
+endif
+if (Val(ss1) = 76)
+sql.add(" "~FStr(MontoImpuesto('IVAPISCOM', Val(z2), 3, ''), 0, 7)~", ")
+endif
+sql.add(" '"~iif (Val(z4) = 0, iif (Eqstr(Val(s1), '1'), '1', '2'), iif (Eqstr(Val(s1), '1'), '3', '4'))~"' ")
+endif
+sql.add(" )")
+sql.new
+endif
+
+
+
+Acn(ss2, -Val(pr2))
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVPENDIENTES ( ")
+sql.add("  NrOperacion, Cliente,  Especie,      Mercado, ")
+sql.add("  NrSaldo,     FechaMov, Leyenda,      Bits,    ")
+sql.add("  NrMov,       Cantidad, EnteCustodia, NrGrupo, Cuenta, ")
+sql.add("  NrGrupo2,    NrInstan, Concepto,     Status   ")
+sql.add("  ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(ss5)~"', ")
+sql.add(" '"~Val(ss6)~"', ")
+
+sql.add(" 1, ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'MV', ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" "~Val(ss2)~", ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" '"~Var('VEHICULODE')~"', ")
+else
+sql.add(" '"~Val(p1)~"', ")
+endif
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~Val(bo8)~"', ")
+
+
+sql.add(" "~Val(ss4)~", ")
+sql.add(" 0, ")
+sql.add(" 'PM', ")
+sql.add(" '' ")
+sql.add(" ) ")
+sql.new
+endif
+
+
+endif
+
+if (Val(pr1) > 0)
+Acn(ss1, 81)
+Acn(ss2, Val(pr1) / Val(z6))
+Act(ss3, 'IVA Normal Comisiones Up-Front')
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVEJECUTADOS ( ")
+sql.add("  NrOperacion, Cliente,    Especie, NrGrupo2, ")
+sql.add("  NrSaldo,     FechaMov,   Leyenda, Bits, ")
+sql.add("  FechaEje,    UsuarioEje, Cantidad, Cuenta  ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+sql.add(", Formula ")
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , PrecioEj, Status ")
+endif
+sql.add(" ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(a1)~"', ")
+sql.add(" "~Val(ss4)~", ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'AV', ")
+
+sql.add(" '"~IdxDate(FSys())~"', ")
+sql.add(" '"~UsuarioActivo()~"', ")
+sql.add(" "~Val(ss2)~", ")
+sql.add(" '"~Val(bo8)~"' ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78 o (Eqstr(Copy(Val(ss3), 1, 3), 'IVA') y not Eqstr(Val(a1), 'ARP')))
+
+if (Incluido(FStr(Val(ss1), 1), '41|81|42|82|43|83') y Val(z2) > Val(cw:Val(x1)))
+sql.add(" ,'"~FStr(Val(z10), 0, 7)~"' ")
+else
+sql.add(" ,'"~FStr(Val(z6), 0, 7)~"' ")
+endif
+
+endif
+if (Eqstr(Val(p1), 'INGCURA') y Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" , ")
+if (Val(ss1) = 73 o Val(ss1) = 77)
+sql.add(" "~FStr(Val(z5), 0, 7)~", ")
+endif
+if (Val(ss1) = 74)
+sql.add(" "~FStr(Val(z7), 0, 7)~", ")
+endif
+if (Val(ss1) = 75 o Val(ss1) = 78)
+sql.add(" "~FStr(MontoImpuesto('IVAPISINT', Val(z2), 3, ''), 0, 7)~", ")
+endif
+if (Val(ss1) = 76)
+sql.add(" "~FStr(MontoImpuesto('IVAPISCOM', Val(z2), 3, ''), 0, 7)~", ")
+endif
+sql.add(" '"~iif (Val(z4) = 0, iif (Eqstr(Val(s1), '1'), '1', '2'), iif (Eqstr(Val(s1), '1'), '3', '4'))~"' ")
+endif
+sql.add(" )")
+sql.new
+endif
+
+
+
+Acn(ss2, -Val(pr1))
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".MOVPENDIENTES ( ")
+sql.add("  NrOperacion, Cliente,  Especie,      Mercado, ")
+sql.add("  NrSaldo,     FechaMov, Leyenda,      Bits,    ")
+sql.add("  NrMov,       Cantidad, EnteCustodia, NrGrupo, Cuenta, ")
+sql.add("  NrGrupo2,    NrInstan, Concepto,     Status   ")
+sql.add("  ) values ( ")
+
+sql.add(" '"~Val(z1)~"', ")
+sql.add(" '"~Val(b1)~"', ")
+sql.add(" '"~Val(ss5)~"', ")
+sql.add(" '"~Val(ss6)~"', ")
+
+sql.add(" 1, ")
+sql.add(" '"~IdxDate(Val(z2))~"', ")
+sql.add(" '"~Val(ss3)~"', ")
+sql.add(" 'MV', ")
+
+sql.add(" "~Val(ss1)~", ")
+sql.add(" "~Val(ss2)~", ")
+if (Val(ss1) >= 73 y Val(ss1) <= 78)
+sql.add(" '"~Var('VEHICULODE')~"', ")
+else
+sql.add(" '"~Val(p1)~"', ")
+endif
+sql.add(" "~Val(ss1)~", ")
+sql.add(" '"~Val(bo8)~"', ")
+
+
+sql.add(" "~Val(ss4)~", ")
+sql.add(" 0, ")
+sql.add(" 'PM', ")
+sql.add(" '' ")
+sql.add(" ) ")
+sql.new
+endif
+
+
+endif
+
+
+sql.add("Update "~Dbo()~".OPERACIONES set ")
+sql.add("  TotalAux8   = "~FStr(0, 1, 2)~"  ")
+sql.add("where NrOperacion = '"~dialogo.nroperacion1~"'")
+sql.new
+
+endif
+sql.exec
+
+Act(pc1, '1')
+Acn(x3, dialogo.cantidad4)
+Act(nm1, getnumerador(iif (Eqstr(Val(p1), 'INGCURA'), 301, 201)))
+
+sql.add("INSERT INTO "~Dbo()~".TRANSACCIONES2 ")
+sql.add("(TipoTr2,NrTrans, NrOperacionRef1, Cupon1, ")
+sql.add("Fecha1, Fecha2, Cantidad1, Especie, ")
+sql.add("Vehiculo1, FechaCargaSys) ")
+sql.add("VALUES ")
+sql.add("('CUPPAG','"~Val(nm1)~"','"~Val(z1)~"','"~Val(pc1)~"', ")
+sql.add(""~IdxDate2(Val(z2))~","~IdxDate2(Val(z2))~","~Val(x3)~",'"~Val(a1)~"', ")
+sql.add("'"~Val(p1)~"', '"~IdxDate(FSys())~"') ")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".MOVEJECUTADOS ")
+sql.add("SET NrTrans2='"~Val(nm1)~"' ")
+sql.add("WHERE NrOperacion='"~Val(z1)~"' AND NrGrupo2="~Val(pc1)~" ")
+sql.add("AND FechaMov="~IdxDate2(Val(z2))~" AND NrSaldo between 2 and 99 and NrSaldo not between 73 and 78")
+sql.new
+
+sql.exec
+
+linkearhoja('PMOPAG', 5, nrtrans1 = Val(nm1), check1 = 0)
+
+endif

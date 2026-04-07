@@ -1,0 +1,247 @@
+creardialogo
+vehiculo1:'Vehiculo';;;;;;NoVacio(dialogo.vehiculo1);'Debe Ingresar el Vehiculo';NO;'BANCO'
+fecha1:'F.Posicion';;;;;;dialogo.fecha1 <> 0 y dialogo.fecha1 <= FSys();'Debe Ingresar una Fecha';NO;FSys()
+fecha2:'F.Pago';;;;;;dialogo.fecha2 <> 0 y dialogo.fecha2 <= FSys() y dialogo.fecha1 <= dialogo.fecha2;'Debe Ingresar una Fecha';NO;FSys()
+especie1:'Especie';;;;;;NoVacio(dialogo.especie1) y DesciendeDeEspecie(dialogo.especie1, 'TITULO');'Debe Ingresar una Especie';NO;
+check1:'Div.Efec.';5;1;;
+precio1:'Porc.';5;2;;;;dialogo.precio1 >= 0;'El Porcentaje debe ser Positivo';NO;
+especie2:'Moneda';6;1;;;;Vacio(dialogo.especie2) o DesciendeDeEspecie(dialogo.especie2, 'MONEDA'));'Debe Ingresar una Moneda';NO;
+check2:'Div.Acc.';7;1;;
+precio2:'Porc.';7;2;;;;dialogo.precio2 >= 0;'El Porcentaje debe ser Positivo';NO;
+check3:'Revaluo';8;1;;
+precio9:'Porc.';8;2;;;;dialogo.precio9 >= 0;'El Porcentaje debe ser Positivo';NO;
+check4:'Canje';9;1;;
+precio10:'Porc.';9;2;;;;dialogo.precio10 >= 0;'El Porcentaje debe ser Positivo';NO;
+precio3:'Fraccion';10;1;;;;dialogo.precio3 >= 0;'La Fraccion debe ser Positiva';NO;
+precio4:'Precio Fr.';10;2;;;;dialogo.precio4 >= 0;'El Precio de Fraccion debe ser Positivo';NO;
+precio5:'Arancel CV';11;1;;;;dialogo.precio5 >= 0;'El Arancel de CV debe ser Positivo';NO;
+precio6:'Minimo CV';11;2;;;;dialogo.precio6 >= 0;'El Minimo de CV debe ser Positivo';NO;
+precio7:'Arancel MBA';12;1;;;;dialogo.precio7 >= 0;'El Arancel de MBA debe ser Positivo';NO;
+precio8:'Minimo MBA';12;2;;;;dialogo.precio8 >= 0;'El Minimo de MBA debe ser Positivo';NO;
+cuenta1:'C.Propia';13;1;;;;NoVacio(dialogo.cuenta1);'Debe Existir la Cuenta Contraparte';NO;Var('PCUPON')
+radio1:'Cuentas |Vista |Caja Ahorros ';13;2;;;;;;;0
+cuenta2:'C.Ganan.';14;1;;;;NoVacio(dialogo.cuenta2);'Debe Existir la Cuenta Ganancias';NO;Var('AMORT')
+cuenta3:'C.Arancel';;;;;;NoVacio(dialogo.cuenta3);'Debe Existir la Cuenta Arancel';NO;Var('ARANCEL')
+cuenta4:'C.IVA';;;;;;NoVacio(dialogo.cuenta4);'Debe Existir la Cuenta IVA';NO;Var('CTAIVA')
+findialogo
+if (not ok)
+Cancelar()
+endif
+
+if (not Incluido(dialogo.vehiculo1, UsrVehiculos(UsuarioActivo())) y not Vacio(UsrVehiculos(UsuarioActivo())))
+Cancelar()('El Operador no esta habilitado para operar con el Vehiculo ')
+endif
+
+if (DifDias(dialogo.fecha2, FSys(), 'ARG', SI) > Var('FVALORMAX'))
+Cancelar()('Fecha Valor No Puede Superar '~Var('FVALORMAX')~' Dias')
+endif
+
+if (dialogo.fecha2 < Fecha(Var('FECHAVALOR')))
+Cancelar()('Fecha Valor No Puede Superar '~Var('FECHAVALOR'))
+endif
+
+sql.add("Select * FROM "~Dbo()~".TRANSACCIONES2 ")
+sql.add("where  Especie = '"~dialogo.especie1~"' ")
+sql.add("and    Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+sql.add("and    (Bit7 = 0 or Bit7 is Null) ")
+
+Acn(z1, 0)
+recorrer sql
+Acn(z1, 1)
+proximo
+
+if (Val(z1) > 0)
+Cancelar()('La Especie '~dialogo.especie1~' tiene Vouchers Pendientes de Confirmacion')
+endif
+
+SetFilaActual(Fac())
+
+
+sql.add("Select Cliente, Cuenta, Mercado, ")
+sql.add("       EnteCustodia, NrSaldo, Max(Fecha) as Fe from "~Dbo()~".SALDOSDIA ")
+sql.add("where  Especie = '"~dialogo.especie1~"'  ")
+sql.add("  and  Fecha <= '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add("  and  NrSaldo =1  ")
+sql.add("  and CallPut is Null ")
+sql.add("group by Cliente, Cuenta, Mercado, EnteCustodia, NrSaldo")
+sql.add("order by Cliente, Cuenta, Mercado, EnteCustodia, NrSaldo")
+
+
+
+
+
+SetFilaActual(3)
+recorrer sql
+Acn(d:fac, SaldoC(Fbn()['Cliente'], dialogo.especie1, null, null, null, Fbn()['Mercado'], null, Fbn()['Cuenta'], Fbn()['NrSaldo'], Fbn()['Fe']))
+if (Val(d:fac) <> 0)
+if (dialogo.check1 = 1)
+Acn(ae:fac, Val(d:fac) * dialogo.precio1 / 100)
+Acn(ae:fac, Round(Val(ae:fac), 2))
+endif
+
+if (dialogo.check2 = 1)
+Acn(p:fac, Val(d:fac) * (dialogo.precio2 / 100))
+endif
+
+if (dialogo.check3 = 1)
+Acn(q:fac, Val(d:fac) * (dialogo.precio9 / 100))
+endif
+
+Acn(s:fac, Val(d:fac) + Val(p:fac) + Val(q:fac))
+
+if (dialogo.check4 = 1)
+Acn(r:fac, Val(s:fac) * (dialogo.precio10 / 100))
+endif
+
+Acn(t:fac, Val(s:fac) / dialogo.precio3)
+Acn(u:fac, Trunc(Val(s:fac) / dialogo.precio3))
+Acn(v:fac, (Val(t:fac) - Val(u:fac)) * dialogo.precio3)
+
+Acn(af:fac, (Val(p:fac) + Val(q:fac)) - Val(v:fac))
+Acn(ag:fac, Val(v:fac))
+Acn(ah:fac, Round(Val(ag:fac) * dialogo.precio4 / 0.01) * 0.01)
+
+Acn(aj:fac, 0)
+Acn(ak:fac, 0)
+
+Acn(al:fac, Val(ae:fac) + Val(ah:fac) - Val(ai:fac) - Val(aj:fac) - Val(ak:fac))
+
+
+Acn(e:fac, Val(ae:fac))
+Acn(f:fac, Val(af:fac))
+
+if (Eqstr(Fbn()['Cliente'], Fbn()['Mercado']))
+Act(am:fac, dialogo.cuenta2)
+Act(an:fac, 'CCO')
+endif
+else
+Dfa()
+endif
+proximo
+
+ACO(1, 7)
+ACO(2, 28)
+ACO(3, 8)
+ACO(4, 11)
+ACO(5, 11)
+ACO(6, 11)
+
+listbox(a4..f:fac, 'Cliente                                           Tenencia')
+AlinearCeldas(a4..f:fac, 'I')
+
+if (ok)
+recorrersel
+Act(aa1, '0')
+
+if (Incluido(Val(b:Val(w1)), 'SERP|SERPV|'))
+Act(aa1, '1')
+endif
+
+Message('Generando Operacion de Dividendo '~Val(b:Val(w1))~' '~FStr(Val(n:Val(w1)), 0, 0))
+
+Act(z3, getnumerador(BuscarCampo('VEHICULOS', 'Alias1', 'Codigo', Val(c:Val(w1)))))
+
+Act(z4, '0')
+if (Incluido(Val(b:Val(w1)), 'SECT|SECTV|SEVT|SEVTV'))
+Act(z4, '1')
+endif
+if (Incluido(Val(b:Val(w1)), 'SERA|SERAV|SERP|SERPV'))
+Act(z4, '2')
+endif
+if (Incluido(Copy(Val(b:Val(w1)), 1, 3), 'SAL'))
+Act(z4, '3')
+endif
+
+if (Vacio(dialogo.especie2))
+Act(aa5, 'ARP')
+else
+Act(aa5, dialogo.especie2)
+endif
+
+sql.add("INSERT INTO "~Dbo()~".OPERACIONES ")
+sql.add("(TipoOp, MB3, NrOperacion, Especie, ContraEspecie, Cliente1, ")
+sql.add(" Cantidad, TotalBrutoCli1, TotalBrutoCli3, TotalBrutoCli2, TotalNetoCli1, TotalNetoCli2, TotalNetoCli3, ")
+sql.add(" FechaOp, FechaPago, FechaCargaSys, FechaCarga, ")
+sql.add(" Vehiculo1, ")
+sql.add(" Precio1, Precio2, Precio3, Precio4, Spread, ")
+sql.add(" TipoCambio2, RB1, RB2, RB4, RB5, Direccion, ")
+sql.add(" OperacionRef,TipoCambio,RB3,MB4,TipoCambio3,MB2, Book1, Cuenta1, UsrInput, Operador) ")
+sql.add("Values")
+sql.add("('DIVIDE','"~Val(aa1)~"', '"~Val(z3)~"', '"~dialogo.especie1~"', '"~Val(aa5)~"', '"~Val(a:Val(w1))~"',")
+sql.add(" "~FStr(Val(d:Val(w1)), 0, 4)~", "~FStr(Val(af:Val(w1)), 0, 4)~", ")
+sql.add(" "~FStr(Val(ah:Val(w1)), 0, 4)~", "~FStr(Val(ai:Val(w1)), 0, 4)~", ")
+sql.add(" "~FStr(Val(al:Val(w1)), 0, 4)~", "~FStr(Val(ak:Val(w1)), 0, 4)~", "~FStr(Val(aj:Val(w1)), 0, 4)~", ")
+sql.add(" '"~IdxDate(dialogo.fecha1)~"', '"~IdxDate(dialogo.fecha2)~"', '"~IdxDate(FSys())~"', "~SQLAhora()~", ")
+sql.add(" '"~Val(c:Val(w1))~"', ")
+sql.add(" "~FStr(dialogo.precio1, 0, 7)~", "~FStr(dialogo.precio2, 0, 7)~", ")
+sql.add(" "~FStr(dialogo.precio3, 0, 7)~", "~FStr(dialogo.precio4, 0, 8)~", ")
+sql.add("  "~FStr(Val(g:fac), 0, 7)~", "~FStr(dialogo.precio10, 0, 7)~", ")
+sql.add(" '"~FStr(dialogo.check1, 0, 0)~"', '"~FStr(dialogo.check2, 0, 0)~"',  ")
+sql.add(" '"~FStr(dialogo.check3, 0, 0)~"', '"~FStr(dialogo.check4, 0, 0)~"',2, ")
+sql.add(" '"~Val(k:Val(w1))~"',"~FStr(dialogo.precio5, 0, 5)~",'1', ")
+sql.add(" '"~Val(z4)~"',"~FStr(Val(n:Val(w1)), 0, 0)~",'"~FStr(Val(o:Val(w1)), 0, 0)~"', '"~Val(l:Val(w1))~"', '"~Val(cc:Val(w:1))~"', '"~UsuarioActivo()~"', '"~UsuarioActivo()~"') ")
+sql.new
+sql.exec
+
+if (Eqstr(Val(z4), '3') y Val(n:Val(w1)) = 3) o Eqstr(Val(z4), '0')
+Message('Ingresando Instancias Operacion '~Val(az3)~' ...')
+
+sql.add("SELECT NrInstancia FROM "~Dbo()~".INSTANCIAS Where Tabla='"~Val(az4)~"' ")
+sql.add("ORDER BY NrInstancia ")
+
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+sql.add("(NrOperacion,NrBit,Valor) ")
+sql.add(" Values ")
+sql.add("('"~Val(az3)~"',"~FStr(Fbn()['NrInstancia'], 3, 0)~",")
+if (Incluido(Fbn()['NrInstancia'], Val(az5)))
+sql.add("'1')")
+else
+sql.add("'0')")
+endif
+sql.new
+sql.exec
+proximo
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set ")
+sql.add("Observaciones=Observaciones+'"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~"' ")
+sql.add("Where NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+else
+Message('Ingresando Instancias Operacion '~Val(z3)~' ...')
+
+Acn(i1, 50)
+
+sql.add("SELECT * FROM "~Dbo()~".INSTANCIAS ")
+sql.add(" Where Tabla = 'OPERACIONES' ")
+sql.add(" ORDER BY NrInstancia ")
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ( ")
+sql.add(" NrOperacion, NrBit, Valor ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(z3)~"', ")
+sql.add(" "~FStr(Fbn()['NrInstancia'], 2, 0)~", ")
+sql.add(" '"~iif (Val(i1) = Fbn()['NrInstancia'], '1', '0')~"' ")
+sql.add(" ) ")
+sql.new
+sql.exec
+proximo
+
+
+endif
+
+sql.actualizarmovimientos2(Val(z3), SI, NO, NO, SI)
+sql.exec
+
+
+
+proximo
+endif
+
+

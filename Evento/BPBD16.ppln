@@ -1,0 +1,106 @@
+mostrarcuadrodemensajes
+
+Act(vh:1, SQLSet(" Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+
+creardialogo
+fecha1: 'Fecha';;;;;;;;;FSys()
+radio1: 'TipoCta|Intermedia|Pagadora|Ambas';;;;NO;NO;;;;1
+lista1: 'Vehiculos';3;1;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), Val(vh: 1))
+lista2: 'Bancos';;1;;;;;;;;;SQLSet(" Select Codigo From "~Dbo()~".CLIENTES WHERE Sector='BAN' ");
+lista3: 'Cuentas';-2;2;;;;;;;;;SQLSet(" Select Codigo From "~Dbo()~".CUENTAS  WHERE Comitente IN ("~pipe2comillas(dialogo.lista2)~") "~iif (dialogo.radio1 = 0, " AND TipoCuenta='INT' ", iif (dialogo.radio1 = 1, " AND Pagadora='SI' ", " AND (Pagadora='SI' OR TipoCuenta='INT') "))~"  "~iif (NoVacio(dialogo.lista1), " AND Cliente IN ("~pipe2comillas(dialogo.lista1)~")", iif (NoVacio(UsrVehiculos(UsuarioActivo())), " AND Cliente IN ("~pipe2comillas(Val(vh: 1))~") "))~"  ");
+check1: 'Confirma';;;;NO;NO;;;;1
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+sql.add(" SELECT /*+ RULE */ T.NrTrans, T.Vehiculo1, T.Vehiculo2, T.Cuenta1, T.Cuenta2, T.Cliente1, T.Cliente2, ")
+sql.add(" T.Cantidad1, T.Fecha1, T.Fecha2, T.Especie ")
+sql.add(" FROM "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".CUENTAS C2, "~Dbo()~".CUENTAS C1")
+sql.add(" Where T.Cuenta2 = C2.Codigo ")
+sql.add(" AND   T.Cuenta1 = C1.Codigo ")
+sql.add(" AND   T.Fecha1  = "~IdxDate2(dialogo.fecha1)~" ")
+sql.add(" AND   T.CB6     = '1' ")
+sql.add(" AND   T.TipoTr2 = 'TRANSF' ")
+if (NoVacio(dialogo.lista1))
+sql.add(" AND   T.Vehiculo2 IN ("~pipe2comillas(dialogo.lista1)~") ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" AND T.Vehiculo2 IN ("~pipe2comillas(Val(vh:1))~") ")
+endif
+endif
+if (NoVacio(dialogo.lista2))
+sql.add(" AND  T.Cliente2 IN ("~pipe2comillas(dialogo.lista2)~") ")
+endif
+if (NoVacio(dialogo.lista3))
+sql.add(" AND  T.Cuenta2 IN ("~pipe2comillas(dialogo.lista3)~") ")
+endif
+if (dialogo.radio1 = 0)
+sql.add(" AND  C1.TipoCuenta = 'INT' ")
+endif
+if (dialogo.radio1 = 1)
+sql.add(" AND  C2.Pagadora = 'SI' ")
+endif
+if (dialogo.radio1 = 2)
+sql.add(" AND  (C1.TipoCuenta = 'INT' OR C2.Pagadora = 'SI' )")
+endif
+sql.add(" ORDER BY T.NrTrans ")
+
+Acn(z:1, 0)
+recorrer sql
+Acn(a:fac, 1)
+Acn(z:1, 1)
+Act(b:fac, Fbn('NrTrans'))
+Acd(c:fac, Fbn('Fecha1'))
+Acd(d:fac, Fbn('Fecha2'))
+Act(e:fac, Fbn('Vehiculo1'))
+Act(f:fac, Fbn('Cuenta1'))
+Act(g:fac, Fbn('Especie'))
+Acn(h:fac, Fbn('Cantidad1'))
+Act(i:fac, Fbn('Vehiculo2'))
+Act(j:fac, Fbn('Cuenta2'))
+proximo
+
+if (Val(z:1) = 0)
+Cancelar()('No se encontraron registros.')
+endif
+
+crearlistbox;'Arial,8,'
+'OK ';a:1..a:fac;SI;;;50;check;RGB(232, 255, 215);
+'NrTrans';b:1..b:fac;NO;;;70;string;;RGB(232, 232, 232);
+'F.Ingreso ';c:1..c:fac;NO;;;70;fecha;RGB(232, 232, 232);
+'F.Acredit.';d:1..d:fac;NO;;;70;fecha;RGB(232, 232, 232);
+'Vh.Origen';e:1..e:fac;NO;;;70;string;;RGB(232, 232, 232);
+'Cta Origen';f:1..f:fac;NO;;;90;string;;RGB(232, 232, 232);
+'Importe';h:1..h:fac;NO;;;90;numero;'###,###,###,###.##';RGB(232, 232, 232);
+'Moneda';g:1..g:fac;NO;;;50;string;;RGB(232, 232, 232);
+'Vh.Destino';i:1..i:fac;NO;;;70;string;;RGB(232, 232, 232);
+'Cta Destino';j:1..j:fac;NO;;;90;string;;RGB(232, 232, 232);
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+
+recorrer&i 1, Fac()
+Acn(xx:1, 0)
+Acn(xx:1, sql("SELECT /*+ RULE */ 1 Ejecutado FROM "~Dbo()~".MOVEJECUTADOS WHERE NrOperacion = '"~Val(b:&i)~"' "))
+
+if (Val(xx:1) = 0)
+if (Val(a:&i) = 1)
+sql.add(" DELETE /*+ RULE */ FROM "~Dbo()~".MOVPENDIENTES WHERE NrOperacion = '"~Val(b:&i)~"' ")
+sql.new
+
+sql.add(" DELETE /*+ RULE */ FROM "~Dbo()~".OPERACIONESBITS WHERE NrOperacion = '"~Val(b:&i)~"' ")
+sql.new
+
+sql.add(" DELETE /*+ RULE */ FROM "~Dbo()~".TRANSACCIONES2 WHERE NrTrans = '"~Val(b:&i)~"' ")
+sql.new
+Message('Transferencia '~Val(b:&i)~' anulada.')
+sql.exec
+endif
+else
+Messagebox('La transferencia '~Val(b:&i)~' esta conciliada. No se puede anular.')
+endif
+proximo

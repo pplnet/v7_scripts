@@ -1,0 +1,589 @@
+creardialogo
+fecha1:'Fecha';1;1;;;;;;;FSys()
+cliente1:'Cliente';;;;;;;;;
+especie1:'Especie';;;;;;Vacio(dialogo.especie1) o (NoVacio(dialogo.especie1) y DesciendeDeEspecie(dialogo.especie1, 'TITULO') y not DesciendeDeEspecie(dialogo.especie1, 'CUPON'));'Debe Ingresar una Especie Valida';NO;;;;;;"Status = 'HAB' and Jerarquia Like '002%' and IsNull(EsCupon,'NO')='NO ' "
+mercado1:'Mercado';;;;;;;;;;;;;;" Codigo in ('CV','A3') "
+nrtrans1:'Transaccion';;;;;;;;;;;;;;" Mercado1='CV' and ((TipoTr2 in ('DTP','RTP') and CB6=1) or (TipoTr2 = 'DRT'))"
+check1:'Reprocesa';;;;;;;
+lista1:'MERCADOS';1;2;;;;;;;'CV|A3';;SQLSet("Select Codigo From "~Dbo()~".MERCADOS Where Codigo in ('CV','A3') ")
+string:'Path';;1;;NO;;;;;Var('PATHTRF');;;;'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+string1:'Archivo .si1';;1;;NO;;;;;Var('SI1NOMB')~'-'~Fecha(dialogo.fecha1, 'yymmdd');
+string2:'Archivo .si2';;1;;NO;;;;;Var('SI2NOMB')~'-'~Fecha(dialogo.fecha1, 'yymmdd');
+string3:'Encodig';;1;;NO;NO;;;;Var('TRFENCO');
+check3:'Procesa';2;2;;NO;NO;;;;1
+findialogo
+if (not ok)
+Cancelar()
+endif
+if (dialogo.check3 = 0)
+HojaVisible(SI)
+endif
+
+Act(bu:1, 'Inmediata|Diferida|')
+Act(bu:2, 'I|D|')
+Act(bv:1, 'NO|SI|')
+Act(bv:2, 'N|S|')
+Act(az:1, BuscarCampo('CLIENTES', 'CodDepCajaValores', 'Codigo', Var('VEHICULODE')))
+
+Acn(z1, 0)
+
+Act(ba:1, '*')
+Act(bb:1, '*')
+
+Acn(dd:1, Fac() + 1)
+Acn(dd:2, Fac())
+
+Acn(ax:3, 1)
+
+Message('Recuperando Movimientos...')
+sql.add(" Select  T.Especie,         T.Cliente1 ClienteTr, T.Fecha1 FechaLiq, T.NrTrans, ")
+sql.add("         T.Fecha2,          T.Fecha4,             T.NrOperacionRef1, ")
+sql.add("         T.TipoTr2,         T.Cliente1,           T.Cantidad1 Cantidad, ")
+sql.add("         T.Cuenta1,         T.Mercado1,           T.Cuenta2,         T.Mercado2, ")
+sql.add("         C.NrAgenteBolsa,   T.RB1,                T.Cliente3,  CU.Numero, ")
+sql.add("         E.ISIN, CU.NrDepositante, C.DeposDelComitente Depositante, CU.Alias2 ")
+sql.add("   From "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".CLIENTES C, "~Dbo()~".ESPECIES E, "~Dbo()~".CUENTAS CU   ")
+sql.add("  Where T.Cliente1 = C.Codigo ")
+sql.add("    and T.Cuenta1  = CU.Codigo ")
+sql.add("    and T.Especie  = E.Codigo ")
+sql.add("    and E.Jerarquia like '002%' ")
+sql.add("    and T.Mercado1 In ('CV','A3' )")
+sql.add("    and T.Mercado2 In ('CV','A3') ")
+sql.add("    and ((T.TipoTr2  in ('DTP','RTP') and T.CB6=1) ")
+sql.add("      or (T.TipoTr2  = 'DRT' ) ) ")
+sql.add("    and T.Vehiculo1 = '"~Var('VEHICULODE')~"' ")
+sql.add("    and T.Fecha1    = "~IdxDate2(dialogo.fecha1)~" ")
+if (NoVacio(dialogo.mercado1))
+sql.add("    and T.Mercado1 In ('CV','A3')")
+sql.add("    and T.Mercado2 In ('CV','A3') ")
+endif
+if (NoVacio(dialogo.nrtrans1))
+sql.add(" and T.NrTrans = '"~dialogo.nrtrans1~"' ")
+endif
+if (NoVacio(dialogo.especie1))
+sql.add(" and (T.Especie = '"~dialogo.especie1~"' or "~Dbo()~".DesciendeDeEspecie(T.Especie,'"~dialogo.especie1~"') = 1) ")
+endif
+if (NoVacio(dialogo.cliente1))
+sql.add(" and T.Cliente3 = '"~dialogo.cliente1~"' ")
+endif
+if (dialogo.check1 = 0)
+sql.add(" and Not Exists(SELECT 1 FROM "~Dbo()~".TRANSFCVA3 CT  ")
+sql.add("                 WHERE CT.NrTrans = T.NrTrans ")
+sql.add("                   AND CT.Especie = T.Especie ")
+sql.add("                   AND CT.Status  = '1' ")
+sql.add("                   AND ABS(IsNull(CT.Monto,0)) >= T.Cantidad1 ) ")
+else
+sql.add(" and Exists(SELECT 1 FROM "~Dbo()~".TRANSFCVA3 CT  ")
+sql.add("                 WHERE CT.NrTrans = T.NrTrans ")
+sql.add("                   AND CT.Especie = T.Especie ")
+sql.add("                   AND CT.Status  = '1' ")
+sql.add("                   AND ABS(IsNull(CT.Monto,0)) >= T.Cantidad1 ) ")
+endif
+sql.add("Order By 1, 2, 3, 4 ")
+
+Watch(sql.batch)
+recorrer sql
+
+
+Acn(tr1, 1)
+
+Scn(dd:2, 1)
+
+Act(a:fac, Fbn('Especie'))
+Act(b:fac, Fbn('ClienteTr'))
+Acn(j:fac, NrCupon2(Fbn('Especie'), Fbn('FechaLiq')))
+
+
+if (Incluido(Fbn()['TipoTr2'], 'DTP|RTP'))
+if (Incluido(Fbn()['TipoTr2'], 'DTP'))
+Act(ce:fac, 'Receive')
+Act(ca:fac, Fbn('Cuenta1'))
+Act(cb:fac, Fbn('Mercado1'))
+Act(cc:fac, Fbn('Cuenta2'))
+Act(cd:fac, Fbn('Mercado2'))
+else
+Act(ce:fac, 'Deliver')
+Act(cc:fac, Fbn('Cuenta1'))
+Act(cd:fac, Fbn('Mercado1'))
+Act(ca:fac, Fbn('Cuenta2'))
+Act(cb:fac, Fbn('Mercado2'))
+endif
+Acn(c:fac, Fbn('Cantidad'))
+Acn(p:fac, Fbn('Cantidad'))
+else
+if (Eqstr(Fbn('Cuenta1'), Var('CTAVEHIC')))
+Act(ca:fac, Fbn('Cuenta1'))
+Act(cb:fac, Fbn('Mercado1'))
+Act(cc:fac, Fbn('Cuenta2'))
+Act(cd:fac, Fbn('Mercado2'))
+Act(ce:fac, 'Rece/Deli')
+Acn(c:fac, Fbn('Cantidad'))
+Acn(p:fac, Fbn('Cantidad'))
+else
+Act(ca:fac, Fbn('Cuenta2'))
+Act(cb:fac, Fbn('Mercado2'))
+Act(cc:fac, Fbn('Cuenta1'))
+Act(cd:fac, Fbn('Mercado1'))
+Act(ce:fac, 'Deli/Rece')
+Acn(c:fac, Fbn('Cantidad'))
+Acn(p:fac, Fbn('Cantidad'))
+endif
+endif
+Act(cf:fac, BuscarCampo('CUENTAS', 'Comitente', 'Codigo', Val(cc:fac)))
+Act(cg:fac, Fbn('Cliente3'))
+
+
+Act(cm:fac, BuscarCampo('CUENTAS', 'NrDepositante', 'Codigo', Val(ca:fac)))
+Act(xy1, BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(ca:fac)))
+Act(cs:fac, Copy(Val(xy1), Posicion('-', Val(xy1)) + 1, Longitud(Val(xy1)) - Posicion('-', Val(xy1))))
+Act(cn:fac, BuscarCampo('CUENTAS', 'NrDepositante', 'Codigo', Val(cc:fac)))
+Act(xy1, BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(cc:fac)))
+Act(ct:fac, Copy(Val(xy1), Posicion('-', Val(xy1)) + 1, Longitud(Val(xy1)) - Posicion('-', Val(xy1))))
+
+Acd(d:fac, Fbn('FechaLiq'))
+Acd(h:fac, Fbn('FechaLiq'))
+Act(e:fac, Fbn('NrTrans'))
+Act(f:fac, Fbn('NrOperacionRef1'))
+Act(g:fac, Fbn('Mercado1'))
+Act(l:fac, Fbn('ISIN'))
+Act(u:fac, Fbn('TipoTr2'))
+
+Acn(ch:fac, Fbn('RB1'))
+if (Val(ch:fac) = 1)
+Acn(k:fac, 1)
+else
+Acn(k:fac, 0)
+endif
+Acn(ci:fac, 0)
+Acn(cj:fac, 1)
+
+if (dialogo.check1 = 1)
+Act(o:fac, sql("SELECT Max(CVTransfer) FROM "~Dbo()~".TRANSFCVA3 WHERE NrTrans='"~Fbn()['NrTrans']~"' "))
+endif
+Act(m:fac, Val(cm:fac))
+Act(n:fac, Val(cn:fac))
+
+Acn(q:fac, Val(ax:3))
+Act(r:fac, Fbn('NrAgenteBolsa'))
+Act(s:fac, Val(cs:fac))
+Act(t:fac, Val(ct:fac))
+
+Act(v:fac, Val(ce:fac))
+
+Acn(w:fac, iif (Incluido(Val(g:fac), dialogo.lista1), 1, 0))
+if (Val(w:fac) = 1)
+Acn(i:fac, Val(c:fac))
+endif
+Scn(z1, 1)
+proximo
+
+if (Val(z1) = 0)
+Cancelar()('Error, NO se encontraron Vouchers con estas caracteristicas!!!')
+endif
+
+
+Acn(x:3, 0)
+Act(bx:&k, 'SI')
+crearlistbox;'Arial,8,';iif (dialogo.check1 = 0, ' Transferencias a CV-A3 del '~Fecha(dialogo.fecha1), 'Transferencias a CV-A3 del '~Fecha(dialogo.fecha1)~' REPROCESO')
+'Ok?';w:1..w:fac;SI;;;30;check;RGB(220, 220, 193)
+'Movement';v:1..v:fac;NO;;;60;string;;RGB(180, 180, 193)
+'TradeDate';d:1..d:fac;NO;;;80;fecha;RGB(180, 180, 193)
+'SettlementDate';h:1..h:fac;NO;;;90;fecha;RGB(180, 180, 193)
+'NrTrans';e:1..e:fac;NO;;;60;string;;RGB(180, 180, 193)
+'Nro.Enviada';o:1..o:fac;NO;;;70;string;;RGB(180, 180, 193)
+'Referencia';f:1..f:fac;NO;;;60;string;;RGB(180, 180, 193)
+'Especie';a:1..a:fac;NO;;;70;string;;RGB(180, 180, 193)
+'Instrument';l:1..l:fac;NO;;;70;string;;RGB(180, 180, 193);BuscarCampo('ESPECIES', 'ISIN', 'Codigo', Val(a:flb))
+'Cupon';j:1..j:fac;NO;;;50;numero;'###';RGB(180, 180, 193);
+'Mercado';g:1..g:fac;NO;;;60;string;;RGB(180, 180, 193)
+'Quantity';c:1..c:fac;NO;;;90;numero;'#,###,###,###.####';RGB(240, 190, 150)
+
+'Cta Propia';ca:1..ca:fac;NO;;;100;string;;RGB(180, 180, 193)
+'Depositante';m:1..m:fac;SI;Val(w:flb) = 0 o NoVacio(Val(m:flb));'Falta Depositante Cuenta Propia';70;string;;RGB(180, 180, 193)
+'SubCta';s:1..s:fac;SI;Val(w:flb) = 0 o NoVacio(Val(s:flb));'Falta Sub Cuenta de Cuenta Propia';50;string;;RGB(180, 180, 193)
+
+'Contraparte';cg:1..cg:fac;NO;;;100;string;;RGB(180, 180, 193)
+'Cta Contraparte';cc:1..cc:fac;NO;;;100;string;;RGB(180, 180, 193)
+'Depositante';n:1..n:fac;SI;Val(w:flb) = 0 o NoVacio(Val(n:flb));'Falta Depositante de Contraparte';70;string;;RGB(180, 180, 193)
+'SubCta';t:1..t:fac;SI;Val(w:flb) = 0 o NoVacio(Val(t:flb));'Falta Sub Cuenta de Contraparte';50;string;;RGB(180, 180, 193)
+finlistbox
+
+
+
+if (not ok)
+if (dialogo.check3 = 1)
+Cancelar()('Transferencias CV-A3, ha sido Cancelado!!!')
+
+endif
+endif
+
+Acn(x:2, 0)
+recorrer&j 1, Fac()
+
+Message('...Validando ')
+if (Val(w:&j) = 1)
+Acn(aw:&j, 1)
+Scn(ax:1, 1)
+Scn(ax:2, 1)
+else
+Acn(aw:&j, 0)
+endif
+
+if (Val(w:&j) = 1)
+if (Incluido(Val(u:&j), 'DRT'))
+Acn(tp2, 1)
+else
+Acn(tp1, 1)
+endif
+endif
+proximo
+
+if (Val(ax:1) < 1)
+Cancelar()('La Generacion de Transferencias CV-A3, ha sido Cancelada!!!')
+endif
+
+
+if (Val(x:3) = 0)
+
+Message('Borrando Archivos Originales '~dialogo.string1~' '~dialogo.string2)
+if (dialogo.check3 = 1)
+borrararchivo(dialogo.string~dialogo.string1~'.si1')
+borrararchivo(dialogo.string~dialogo.string2~'.si2')
+
+Act(aa1, dialogo.string~dialogo.string1~'.si1')
+Act(aa2, dialogo.string~dialogo.string2~'.si2')
+
+Act(ah:1, 'InstructingParty;SettlementParty;SecuritiesAccount;Instrument;InstrumentIdentifierType;CSDOfCounterparty;SettlementCounterparty;SecuritiesAccountOfCounterparty;InstructionReference;Instrument(MovementOfSecurities);Quantity;QuantityType;TransactionType;SettlementMethod;TradeDate;IntendedSettlementDate;PaymentType')
+if (Val(tp:1) = 1)
+abrirascii(Val(aa1), 0, SI)
+if (not ok)
+Cancelar()('No se pudo abrir el archivo '~dialogo.string1)
+endif
+escribirascii(Val(ah:1))
+cerrarascii
+endif
+if (Val(tp:2) = 1)
+abrirascii(Val(aa2), 0, SI)
+if (not ok)
+Cancelar()('No se pudo abrir el archivo '~dialogo.string2)
+endif
+escribirascii(Val(ah:1))
+cerrarascii
+endif
+endif
+
+Acn(az:4, 1)
+
+if (Val(tp:1) = 1)
+abrirascii(Val(aa1), 0, SI)
+recorrer&i 1, Val(z1)
+
+if (Val(w:&i) = 1 y Incluido(Val(u:&i), 'DTP|RTP'))
+Act(vv:&i, Val(v:&i))
+Act(uu:&i, Val(u:&i))
+Act(m:&i, Val(cm:&i))
+Act(n:&i, Val(cn:&i))
+Act(s:&i, Val(cs:&i))
+Act(t:&i, Val(ct:&i))
+
+if (dialogo.check3 = 1 y dialogo.check1 = 0)
+Act(cy:&i, getnumerador(160))
+else
+Act(cy:&i, sql("select cvtransfer from "~Dbo()~".TRANSFCVA3 where NrTrans='"~Val(e:&i)~"' and MovementOfSecurities='"~Val(vv:&i)~"' "))
+endif
+
+
+Act(aa:1, Trim(Val(m:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(n:&i))~';')
+        * securitiesaccount
+Act(aa:1, Val(aa:1)~Trim(Val(m:&i))~'/'~Trim(Val(s:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(l:&i))~';')
+Act(aa:1, Val(aa:1)~'LOCAL_CODE;')
+        * csdofcounterparty
+Act(aa:1, Val(aa:1)~'CVSA;')
+Act(aa:1, Val(aa:1)~Trim(Val(n:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(n:&i))~'/'~Trim(Val(t:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(cy:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(v:&i))~';')
+Act(aa:1, Val(aa:1)~FStr(Abs(Val(c:&i)), 0, 0)~';')
+Act(aa:1, Val(aa:1)~'Face Amount;')
+        * transactiontype
+Act(aa:1, Val(aa:1)~'TRAD;')
+Act(aa:1, Val(aa:1)~'RTGS;')
+Act(aa:1, Val(aa:1)~Fecha(Val(d:&i), 'YYYYMMDD')~';')
+Act(aa:1, Val(aa:1)~Fecha(Val(h:&i), 'YYYYMMDD')~';')
+Act(aa:1, Val(aa:1)~'NOTHING')
+if (dialogo.check3 = 1)
+escribirascii(Val(aa:1))
+
+if (dialogo.check1 = 1)
+sql.add(" UPDATE "~Dbo()~".TRANSFCVA3 ")
+sql.add("    SET Status     = '2' ")
+sql.add("  WHERE NrTrans    = '"~Val(e:&i)~"' ")
+sql.new
+else
+
+
+sql.add(" INSERT INTO "~Dbo()~".TRANSFCVA3 ( ")
+sql.add(" CvTransfer, Fecha, FechaMatch,  NrOperacion, Tipotr2, ")
+sql.add(" Monto, QuantityType,  Especie,   Cupon,       Cliente, ")
+sql.add(" InstructingParty,       SettlementParty, SecuritiesAccount, SettlementCounterparty, SecuritiesAccountOfCounterparty, ")
+sql.add(" Instrument,  InstrumentIdentifierType,  CSDOfCounterparty, NrTrans,  Status,    ")
+sql.add(" MovementOfSecurities,     TransactionType, SettlementMethod,    PaymentType,   Mercado ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(cy:&i)~"', ")
+sql.add(" "~SQLAhora()~", ")
+sql.add(" '"~IdxDate(Val(d:&i))~"', ")
+sql.add(" '"~Val(f:&i)~"', ")
+sql.add(" '"~Val(u:&i)~"', ")
+sql.add(" "~FStr(Val(c:&i), 0, 0)~", ")
+sql.add(" '', ")
+sql.add(" '"~Val(a:&i)~"', ")
+sql.add(" "~FStr(Val(j:&i), 0, 0)~", ")
+sql.add(" '"~Val(cg:&i)~"', ")
+
+if (Eqstr(Val(v:&i), 'Deliver'))
+sql.add(" '"~Trim(Val(m:&i))~"', ")
+sql.add(" '"~Trim(Val(m:&i))~"', ")
+sql.add(" '"~Trim(Val(m:&i))~"/"~Trim(Val(s:&i))~"', ")
+sql.add(" '"~Val(s:&i)~"', ")
+sql.add(" '"~Val(t:&i)~"', ")
+else
+sql.add(" '"~Trim(Val(n:&i))~"', ")
+sql.add(" '"~Trim(Val(n:&i))~"', ")
+sql.add(" '"~Trim(Val(n:&i))~"/"~Trim(Val(t:&i))~"', ")
+sql.add(" '"~Val(t:&i)~"', ")
+sql.add(" '"~Val(s:&i)~"', ")
+endif
+sql.add(" '"~Trim(Val(l:&i))~"', ")
+sql.add(" 'LOCAL_CODE', ")
+sql.add(" 'CVSA', ")
+sql.add(" '"~Val(e:&i)~"', ")
+sql.add(" '1', ")
+sql.add(" '"~Val(vv:&i)~"', ")
+sql.add(" 'TRAD', ")
+sql.add(" 'RTGS', ")
+sql.add(" 'NOTHING', ")
+sql.add(" '"~Val(g:&i)~"' ")
+
+sql.add(" ) ")
+sql.new
+endif
+endif
+
+
+
+endif
+
+proximo
+endif
+
+if (Val(tp:2) = 1)
+abrirascii(Val(aa2), 0, SI)
+
+recorrer&i 1, Val(z1)
+
+if (Val(w:&i) = 1 y Incluido(Val(u:&i), 'DRT'))
+Act(vv:&i, 'Receive')
+Act(uu:&i, 'DTP')
+Act(m:&i, Val(cm:&i))
+Act(n:&i, Val(cn:&i))
+Act(s:&i, Val(cs:&i))
+Act(t:&i, Val(ct:&i))
+if (dialogo.check3 = 1 y dialogo.check1 = 0)
+Act(cy:&i, getnumerador(160))
+else
+Act(cy:&i, sql("select cvtransfer from "~Dbo()~".TRANSFCVA3 where NrTrans='"~Val(e:&i)~"' and MovementOfSecurities='"~Val(vv:&i)~"' "))
+endif
+
+
+Act(aa:1, Trim(Val(m:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(n:&i))~';')
+        * securitiesaccount
+Act(aa:1, Val(aa:1)~Trim(Val(m:&i))~'/'~Trim(Val(s:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(l:&i))~';')
+Act(aa:1, Val(aa:1)~'LOCAL_CODE;')
+        * csdofcounterparty
+Act(aa:1, Val(aa:1)~'CVSA;')
+Act(aa:1, Val(aa:1)~Trim(Val(n:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(n:&i))~'/'~Trim(Val(t:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(cy:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(v:&i))~';')
+Act(aa:1, Val(aa:1)~FStr(Abs(Val(c:&i)), 0, 0)~';')
+Act(aa:1, Val(aa:1)~'Face Amount;')
+        * transactiontype
+Act(aa:1, Val(aa:1)~'TRAD;')
+Act(aa:1, Val(aa:1)~'RTGS;')
+Act(aa:1, Val(aa:1)~Fecha(Val(d:&i), 'YYYYMMDD')~';')
+Act(aa:1, Val(aa:1)~Fecha(Val(h:&i), 'YYYYMMDD')~';')
+Act(aa:1, Val(aa:1)~'NOTHING')
+if (dialogo.check3 = 1)
+escribirascii(Val(aa:1))
+
+if (dialogo.check1 = 1)
+sql.add(" UPDATE "~Dbo()~".TRANSFCVA3 ")
+sql.add("    SET Status     = '2' ")
+sql.add("  WHERE NrTrans    = '"~Val(e:&i)~"' ")
+sql.new
+else
+
+
+sql.add(" INSERT INTO "~Dbo()~".TRANSFCVA3 ( ")
+sql.add(" CvTransfer, Fecha, FechaMatch,  NrOperacion, Tipotr2, ")
+sql.add(" Monto, QuantityType,  Especie,   Cupon,       Cliente, ")
+sql.add(" InstructingParty,       SettlementParty, SecuritiesAccount, SettlementCounterparty, SecuritiesAccountOfCounterparty, ")
+sql.add(" Instrument,  InstrumentIdentifierType,  CSDOfCounterparty, NrTrans,  Status,    ")
+sql.add(" MovementOfSecurities,     TransactionType, SettlementMethod,    PaymentType,   Mercado ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(cy:&i)~"', ")
+sql.add(" "~SQLAhora()~", ")
+sql.add(" '"~IdxDate(Val(d:&i))~"', ")
+sql.add(" '"~Val(f:&i)~"', ")
+sql.add(" '"~Val(u:&i)~"', ")
+sql.add(" "~FStr(Val(c:&i), 0, 0)~", ")
+sql.add(" '', ")
+sql.add(" '"~Val(a:&i)~"', ")
+sql.add(" "~FStr(Val(j:&i), 0, 0)~", ")
+sql.add(" '"~Val(cg:&i)~"', ")
+
+if (Eqstr(Val(v:&i), 'Deliver'))
+sql.add(" '"~Trim(Val(m:&i))~"', ")
+sql.add(" '"~Trim(Val(m:&i))~"', ")
+sql.add(" '"~Trim(Val(m:&i))~"/"~Trim(Val(s:&i))~"', ")
+sql.add(" '"~Val(s:&i)~"', ")
+sql.add(" '"~Val(t:&i)~"', ")
+else
+sql.add(" '"~Trim(Val(n:&i))~"', ")
+sql.add(" '"~Trim(Val(n:&i))~"', ")
+sql.add(" '"~Trim(Val(n:&i))~"/"~Trim(Val(t:&i))~"', ")
+sql.add(" '"~Val(t:&i)~"', ")
+sql.add(" '"~Val(s:&i)~"', ")
+endif
+sql.add(" '"~Trim(Val(l:&i))~"', ")
+sql.add(" 'LOCAL_CODE', ")
+sql.add(" 'CVSA', ")
+sql.add(" '"~Val(e:&i)~"', ")
+sql.add(" '1', ")
+sql.add(" '"~Val(vv:&i)~"', ")
+sql.add(" 'TRAD', ")
+sql.add(" 'RTGS', ")
+sql.add(" 'NOTHING', ")
+sql.add(" '"~Val(g:&i)~"' ")
+
+sql.add(" ) ")
+sql.new
+endif
+endif
+
+
+
+Act(vv:&i, 'Deliver')
+Act(uu:&i, 'RTP')
+Act(m:&i, Val(cn:&i))
+Act(n:&i, Val(cm:&i))
+Act(s:&i, Val(ct:&i))
+Act(t:&i, Val(cs:&i))
+if (dialogo.check3 = 1 y dialogo.check1 = 0)
+Act(cy:&i, getnumerador(160))
+else
+Act(cy:&i, sql("select cvtransfer from "~Dbo()~".TRANSFCVA3 where NrTrans='"~Val(e:&i)~"' and MovementOfSecurities='"~Val(vv:&i)~"' "))
+endif
+
+
+Act(aa:1, Trim(Val(m:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(n:&i))~';')
+        * securitiesaccount
+Act(aa:1, Val(aa:1)~Trim(Val(m:&i))~'/'~Trim(Val(s:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(l:&i))~';')
+Act(aa:1, Val(aa:1)~'LOCAL_CODE;')
+        * csdofcounterparty
+Act(aa:1, Val(aa:1)~'CVSA;')
+Act(aa:1, Val(aa:1)~Trim(Val(n:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(n:&i))~'/'~Trim(Val(t:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(cy:&i))~';')
+Act(aa:1, Val(aa:1)~Trim(Val(v:&i))~';')
+Act(aa:1, Val(aa:1)~FStr(Abs(Val(c:&i)), 0, 0)~';')
+Act(aa:1, Val(aa:1)~'Face Amount;')
+        * transactiontype
+Act(aa:1, Val(aa:1)~'TRAD;')
+Act(aa:1, Val(aa:1)~'RTGS;')
+Act(aa:1, Val(aa:1)~Fecha(Val(d:&i), 'YYYYMMDD')~';')
+Act(aa:1, Val(aa:1)~Fecha(Val(h:&i), 'YYYYMMDD')~';')
+Act(aa:1, Val(aa:1)~'NOTHING')
+if (dialogo.check3 = 1)
+escribirascii(Val(aa:1))
+
+if (dialogo.check1 = 1)
+sql.add(" UPDATE "~Dbo()~".TRANSFCVA3 ")
+sql.add("    SET Status     = '2' ")
+sql.add("  WHERE NrTrans    = '"~Val(e:&i)~"' ")
+sql.new
+else
+
+
+sql.add(" INSERT INTO "~Dbo()~".TRANSFCVA3 ( ")
+sql.add(" CvTransfer, Fecha, FechaMatch,  NrOperacion, Tipotr2, ")
+sql.add(" Monto, QuantityType,  Especie,   Cupon,       Cliente, ")
+sql.add(" InstructingParty,       SettlementParty, SecuritiesAccount, SettlementCounterparty, SecuritiesAccountOfCounterparty, ")
+sql.add(" Instrument,  InstrumentIdentifierType,  CSDOfCounterparty, NrTrans,  Status,    ")
+sql.add(" MovementOfSecurities,     TransactionType, SettlementMethod,    PaymentType,   Mercado ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(cy:&i)~"', ")
+sql.add(" "~SQLAhora()~", ")
+sql.add(" '"~IdxDate(Val(d:&i))~"', ")
+sql.add(" '"~Val(f:&i)~"', ")
+sql.add(" '"~Val(u:&i)~"', ")
+sql.add(" "~FStr(Val(c:&i), 0, 0)~", ")
+sql.add(" '', ")
+sql.add(" '"~Val(a:&i)~"', ")
+sql.add(" "~FStr(Val(j:&i), 0, 0)~", ")
+sql.add(" '"~Val(cg:&i)~"', ")
+
+if (Eqstr(Val(v:&i), 'Deliver'))
+sql.add(" '"~Trim(Val(m:&i))~"', ")
+sql.add(" '"~Trim(Val(m:&i))~"', ")
+sql.add(" '"~Trim(Val(m:&i))~"/"~Trim(Val(s:&i))~"', ")
+sql.add(" '"~Val(s:&i)~"', ")
+sql.add(" '"~Val(t:&i)~"', ")
+else
+sql.add(" '"~Trim(Val(n:&i))~"', ")
+sql.add(" '"~Trim(Val(n:&i))~"', ")
+sql.add(" '"~Trim(Val(n:&i))~"/"~Trim(Val(t:&i))~"', ")
+sql.add(" '"~Val(t:&i)~"', ")
+sql.add(" '"~Val(s:&i)~"', ")
+endif
+sql.add(" '"~Trim(Val(l:&i))~"', ")
+sql.add(" 'LOCAL_CODE', ")
+sql.add(" 'CVSA', ")
+sql.add(" '"~Val(e:&i)~"', ")
+sql.add(" '1', ")
+sql.add(" '"~Val(vv:&i)~"', ")
+sql.add(" 'TRAD', ")
+sql.add(" 'RTGS', ")
+sql.add(" 'NOTHING', ")
+sql.add(" '"~Val(g:&i)~"' ")
+
+sql.add(" ) ")
+sql.new
+endif
+endif
+
+
+
+endif
+
+proximo
+endif
+
+if (dialogo.check3 = 1 y (Val(tp:1) = 1 o Val(tp:2) = 1))
+sql.exec
+endif
+
+if (dialogo.check3 = 1)
+cerrarascii
+Messagebox('El Evento Transferencias CV Finalizo OK!!!')
+else
+Messagebox('El Evento Transferencias CV Finalizo OK!!! - Sin Procesar')
+endif
+endif
+

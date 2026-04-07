@@ -1,0 +1,148 @@
+creardialogo
+fecha1:'Fecha';;;;;;;;;FSys()
+entero1:'Copias';;;;;;;;;1
+lista1:'Vehiculos';;;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+CrearFont(1, "Arial,8,B")
+
+
+if (NoVacio(dialogo.lista1))
+Act(zz6, dialogo.lista1)
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+Act(zz6, SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+endif
+endif
+
+sql.add("Select T.* from "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".OPERACIONESBITS O ")
+sql.add("where  T.NrTrans = O.NrOperacion ")
+sql.add(" and   O.NrBit = 2 and O.Valor ='1' ")
+sql.add(" and   T.Fecha1 = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" and   T.TipoTr2 In ('RET','DEP') ")
+sql.add(" and  T.Cuenta2 Is Not Null ")
+if (NoVacio(Val(zz6)))
+sql.add("      and T.Vehiculo1 in ("~pipe2comillas(Val(zz6))~") ")
+endif
+sql.add(" order by T.NrOperacionRef1, T.NrTrans ")
+
+recorrer sql
+Act(aa:fac, Fbn()['NrTrans'])
+Act(ab:fac, Fbn()['Fecha2'])
+Act(ac:fac, Fbn()['Cliente1'])
+Act(ad:fac, Fbn()['TipoTr2'])
+Act(ae:fac, Fbn()['Especie'])
+if (Eqstr(Fbn()['TipoTr2'], 'RET'))
+Acn(af:fac, -Fbn()['Cantidad1'])
+else
+Acn(af:fac, Fbn()['Cantidad1'])
+endif
+Act(ag:fac, Fbn()['NrOperacionRef1'])
+if (not Eqstr(Val(ag:fac), Val(v1)))
+Scn(z1, 1)
+Act(a:Val(z1), Val(ag:fac))
+Act(b:Val(z1), Val(ab:fac))
+Act(c:Val(z1), Val(ac:fac))
+Act(d:Val(z1), BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', Fbn()['NrOperacionRef1']))
+Act(e:Val(z1), BuscarCampo('OPERACIONES', 'Especie', 'NrOperacion', Fbn()['NrOperacionRef1']))
+Acn(f:Val(z1), BuscarCampo('OPERACIONES', 'Cantidad', 'NrOperacion', Fbn()['NrOperacionRef1']))
+Act(g:Val(z1), BuscarCampo('OPERACIONES', 'ContraEspecie', 'NrOperacion', Fbn()['NrOperacionRef1']))
+Act(h:Val(z1), Fbn('NrOperacionRef2'))
+Act(v1, Val(ag:fac))
+endif
+proximo
+
+
+if (Val(z1) = 0)
+Cancelar()('No existen Cartas para imprimir')
+else
+ACO(1, 7)
+ACO(2, 8)
+ACO(3, 8)
+ACO(4, 5)
+ACO(5, 5)
+ACO(6, 13)
+ACO(7, 5)
+FormatoCeldas(f:1..f:Val(z1), exe('F2'))
+
+listbox(a:1..g:Val(z1), 'Nr.Oper. Fecha Liq. Cliente    Tipo   Especie        Cantidad Moneda')
+
+if (ok)
+recorrersel
+if (Incluido(Val(d:filaciclo), exe('CARTA1C')) o Incluido(Val(d:filaciclo), exe('CARTA1V')))
+if (Vacio(Val(h:filaciclo)))
+Act(i:filaciclo, getnumerador(20))
+recorrer&i 1, Fac()
+if (Eqstr(Val(ag:&i), Val(a:filaciclo)))
+sql.add("Update "~Dbo()~".TRANSACCIONES2 ")
+sql.add("Set    NrOperacionRef2 = '"~Val(i:filaciclo)~"' ")
+sql.add("where  NrTrans = '"~Val(aa:&i)~"' ")
+sql.new
+endif
+proximo
+sql.exec
+recorrer&i 1, dialogo.entero1
+linkearhoja('xCART1', 1, nroperacion1 = Val(a:filaciclo), nroperacion2 = Val(i:filaciclo), fecha1 = dialogo.fecha1, check1 = 1)
+proximo
+else
+recorrer&i 1, dialogo.entero1
+linkearhoja('xCART1', 1, nroperacion1 = Val(a:filaciclo), nroperacion2 = Val(h:filaciclo), fecha1 = dialogo.fecha1, check1 = 0)
+proximo
+endif
+else
+if (Incluido(Val(d:filaciclo), exe('CARTA2')))
+Act(i:filaciclo, getnumerador(20))
+
+recorrer&i 1, Fac()
+if (Eqstr(Val(ag:&i), Val(a:filaciclo)))
+
+sql.add("Update "~Dbo()~".TRANSACCIONES2 ")
+sql.add("Set    NrOperacionRef2 = '"~Val(i:filaciclo)~"' ")
+sql.add("where  NrTrans = '"~Val(aa:&i)~"' ")
+sql.new
+endif
+proximo
+sql.exec
+recorrer&i 1, dialogo.entero1
+linkearhoja('xCART2', 1, nroperacion1 = Val(a:filaciclo), nroperacion2 = Val(i:filaciclo), fecha1 = dialogo.fecha1, check1 = 1)
+proximo
+else
+Messagebox('Carta no definida para Operacion '~Val(d:filaciclo))
+endif
+endif
+if (Vacio(Val(j:filaciclo)))
+recorrer&i 1, Fac()
+if (Eqstr(Val(ag:&i), Val(a:filaciclo)))
+sql.add("Insert Into "~Dbo()~".INSTANCIASOP ")
+sql.add("( NrOperacion, NrInstancia, Usuario, Fecha ) ")
+sql.add(" Values ")
+sql.add("( '"~Val(aa:&i)~"', 2, '"~UsuarioActivo()~"', ")
+sql.add("  '"~IdxDate(Hoy())~" "~Hora(Ahora())~"' ) ")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("SET Valor = '0' ")
+sql.add("where NrOperacion = '"~Val(aa:&i)~"' ")
+sql.add("and NrBit = 2 ")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("SET Valor = '1' ")
+sql.add("where NrOperacion = '"~Val(aa:&i)~"' ")
+sql.add("and NrBit = 3 ")
+sql.new
+endif
+proximo
+sql.exec
+endif
+proximo
+endif
+endif
+
+FormatoCeldas(af:1..af:Val(z1), exe('F2'))
+SetFont(a:1..az:fac, 1)
+

@@ -1,0 +1,182 @@
+HojaVisible(NO)
+
+creardialogo
+vehiculo1:"Vehiculo";;;;;;NoVacio(dialogo.vehiculo1) y iif (Vacio(UsrVehiculos(UsuarioActivo())), sql("Select Count(*) from "~Dbo()~".VEHICULOS Where Codigo='"~dialogo.vehiculo1~"' "), sql("Select Count(*) from "~Dbo()~".USRVEHICULO where Codigo='"~UsuarioActivo()~"' and Vehiculo='"~dialogo.vehiculo1~"' ")) > 0;'Debe ingresar un Vehiculo';NO;iif (Vacio(UsrVehiculos(UsuarioActivo())), sql("Select Codigo from "~Dbo()~".VEHICULOS Where Codigo='"~Var('VEHICULODE')~"' "), sql("Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo='"~UsuarioActivo()~"' and Vehiculo='"~Var('VEHICULODE')~"' "));;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS "), SQLSet("Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo='"~UsuarioActivo()~"' "));NO
+fecha2:"F.Desde";;;;;;Vacio(dialogo.fecha2) o dialogo.fecha2 <= dialogo.fecha1;'Fecha Desde Debe ser Blanco o Inferior a Fecha Hasta';NO;;
+fecha1:"F.Hasta";;;;;;dialogo.fecha1 > 0;'Debe ingresar una Fecha Hasta';NO;FSys();
+especie1:"Especie";;;;;;
+cliente1:"Entidad";;;;;;
+vehiculo2:"Vehiculo";;;;;NO;NoVacio(dialogo.vehiculo2);'Debe ingresar un Vehiculo';NO;;iif (Vacio(UsrVehiculos(UsuarioActivo())), sql("Select Codigo from "~Dbo()~".VEHICULOS Where Codigo='"~dialogo.vehiculo1~"' "), sql("Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo='"~UsuarioActivo()~"' and Vehiculo='"~dialogo.vehiculo1~"' "));
+
+nroperacion1: "NrOperacion";;;;;;;;
+
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (not Vacio(dialogo.vehiculo1))
+if (not Incluido(dialogo.vehiculo1, UsrVehiculos(UsuarioActivo())) y not Vacio(UsrVehiculos(UsuarioActivo())))
+Cancelar()('El Operador no esta habilitado para operar con el Vehiculo ')
+endif
+endif
+mostrarcuadrodemensajes
+
+if (NoVacio(dialogo.nroperacion1))
+
+Act(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', dialogo.nroperacion1))
+
+sql.add("SELECT U.Vehiculo FROM "~Dbo()~".USRVEHICULO U,"~Dbo()~".VEHICULOS V ")
+sql.add("WHERE  U.Codigo='"~UsuarioActivo()~"' and U.Vehiculo=V.Codigo ")
+sql.add("       and (Status='HAB' or Status Is Null or Status='')")
+
+recorrer sql
+Dfa()
+Act(vh2, Fbn()['Vehiculo']~'|'~Val(vh2))
+proximo
+if (not Incluido(Val(vh1), Val(vh2)) y NoVacio(Val(vh2)))
+Cancelar()('Usuario no Habilitado para Trabajar con el Vehiculo ')
+endif
+
+endif
+
+Act(z1, SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+
+SetFilaActual(0)
+
+Act(ta1, 'MOVPENDIENTES')
+
+if (NoVacio(dialogo.vehiculo1) y not Incluido(dialogo.vehiculo1, Var('VLIQUIDA')~Var('VLIQUIDA2')))
+Act(ta1, 'MOVEJECUTADOS')
+endif
+
+
+
+sql.add("Select * from  "~Dbo()~"."~Val(ta1)~"  ")
+sql.add("where FechaMov <='"~IdxDate(dialogo.fecha1)~"' and NrSaldo =1 ")
+sql.add("and Especie<>'"~Var('MONELOCA')~"' and ")
+sql.add(" (Leyenda like '%IVA %' or Leyenda like '%WH %' or Leyenda like  '%Impto.Int %' or Leyenda like '%Imp_Cs_Fin%' or Leyenda like '%Imp.DB%') ")
+if (NoVacio(dialogo.vehiculo1))
+sql.add("and EnteCustodia = '"~dialogo.vehiculo1~"' ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" and EnteCustodia IN ("~pipe2comillas(Val(z1))~") ")
+endif
+endif
+
+if (dialogo.fecha2 > 0)
+sql.add("    and FechaMov >= '"~IdxDate(dialogo.fecha2)~"' ")
+endif
+
+if (NoVacio(dialogo.especie1))
+sql.add("    and Especie = '"~dialogo.especie1~"' ")
+endif
+
+if (NoVacio(dialogo.cliente1))
+sql.add("    and Cliente = '"~dialogo.cliente1~"' ")
+endif
+
+if (NoVacio(dialogo.nroperacion1))
+sql.add("and NrOperacion = '"~dialogo.nroperacion1~"' ")
+endif
+sql.add("Order By NrOperacion, FechaMov")
+
+
+
+recorrer sql
+
+Message(' Operacion '~Fbn()['NrOperacion']~' '~Fbn()['Leyenda']~' ...')
+
+Acn(k:fac, 1)
+Act(a:fac, Fbn()['NrOperacion'])
+Acd(b:fac, Fbn()['FechaMov'])
+Act(c:fac, Fbn()['Cliente'])
+Act(d:fac, Fbn()['Especie'])
+Acn(e:fac, -Fbn()['Cantidad'])
+Act(f:fac, BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', Val(a:fac)))
+Act(g:fac, Fbn()['Leyenda'])
+Acn(j:fac, BuscarCampo('OPERACIONES', 'Precio1', 'NrOperacion', Val(a:fac)))
+Acn(i:fac, Fbn()['NrMov'])
+
+Acn(p:fac, Fbn()['NrMov'])
+Acn(o:fac, Fbn('NrGrupo2'))
+Act(q:fac, Fbn()['Concepto'])
+
+Acn(h:fac, CotizacionC(Fbn('Especie'), null, null, null, dialogo.fecha1 - 1, 1, null, Var('MONELOCA')))
+Acn(i:fac, Val(h:fac))
+
+proximo
+if (Fac() > 0)
+Acn(z3, Fac())
+
+crearlistbox;'Arial,8,B'
+'Convierte';k1..k:fac;SI;SI;;60;combo;'Si|No|'
+'# Operacion';a1..a:fac;NO;SI;;80;string
+'TipoOp';f1..f:fac;NO;SI;;80;string
+'Fecha Mov.';b1..b:fac;NO;SI;;70;fecha
+'Entidad';c1..c:fac;NO;SI;;70;string
+'Especie';d1..d:fac;NO;SI;;70;string
+'Cantidad';e1..e:fac;NO;SI;;100;numero;'###,###,###.##p'
+'Leyenda';g1..g:fac;NO;SI;;150;string
+'Cotizacion';h1..h:fac;SI;Val(k:flb) = 1 o (Val(h:flb) <= Val(i:flb) * (1 + Var('RPRECIO2') / 100) y Val(h:flb) >= Val(i:flb) * (1 - Var('RPRECIO2') / 100));'Rango de Precio Excedido '~PYC(Val(i:flb) * (1 - Var('RPRECIO2') / 100), 0, 2)~' '~PYC(Val(i:flb) * (1 + Var('RPRECIO2') / 100), 0, 2);100;numero;'###,###.#####p'
+'# Mov';i1..i:fac;NO;SI;;50;numero;'###,###p'
+finlistbox
+
+if (ok)
+recorrer&i 1, Fac()
+
+if (Val(k:&i) = 0)
+Message('Actualizando Operacion Nro. '~Val(a:&i))
+
+if (not Incluido(Val(q:&i), 'CUOTAS|COMISI'))
+sql.add("Update "~Dbo()~".OPERACIONES Set ")
+sql.add("IntDevengados2 ="~FStr(Val(h:&i), 0, 2)~" ")
+sql.add("where NrOperacion='"~Val(a:&i)~"' and (IntDevengados2<=0 or IntDevengados2 Is Null) ")
+sql.new
+else
+
+if (Incluido(Val(q:&i), 'CUOTAS'))
+sql.add("Update "~Dbo()~".CUOTAS Set ")
+sql.add("Cotizacion1 ="~FStr(Val(h:&i), 0, 2)~" ")
+sql.add("where NrOperacion='"~Val(a:&i)~"' and Cotizacion1<0 ")
+sql.add("and NrCuota="~FStr(Val(o:&i), 0, 0)~" ")
+sql.new
+else
+sql.add("Update "~Dbo()~".COMISIONES2 Set ")
+if (Eqstr(Val(d:&i), BuscarCampo('OPERACIONES', 'Especie', 'NrOperacion', Val(a:&i))))
+sql.add("Cotizacion1 ="~FStr(Val(h:&i), 0, 2)~" ")
+sql.add("where NrOperacion='"~Val(a:&i)~"' and (Cotizacion1<=0 or Cotizacion1 Is NUll) ")
+else
+sql.add("Cotizacion2 ="~FStr(Val(h:&i), 0, 2)~" ")
+sql.add("where NrOperacion='"~Val(a:&i)~"' and (Cotizacion2<=0 or Cotizacion2 Is NUll) ")
+endif
+sql.add("and NrComision="~FStr(Val(o:&i), 0, 0)~" ")
+sql.new
+endif
+
+endif
+
+sql.add("Update "~Dbo()~"."~Val(ta1)~" Set ")
+sql.add("Especie = '"~Var('MONELOCA')~"', Cantidad="~FStr(-Val(e:&i) * Val(h:&i), 0, 2)~" ")
+sql.add("where NrOperacion='"~Val(a:&i)~"' and NrMov="~Val(p:&i)~" ")
+sql.add("and NrGrupo2="~Val(o:&i)~" ")
+if (NoVacio(Val(q:&i)))
+sql.add("and Concepto='"~Val(q:&i)~"'  ")
+endif
+sql.add("and Leyenda='"~Val(g:&i)~"' and FechaMov='"~IdxDate(Val(b:&i))~"' ")
+if (NoVacio(dialogo.vehiculo1))
+sql.add("and EnteCustodia = '"~dialogo.vehiculo1~"' ")
+endif
+sql.new
+sql.exec
+endif
+proximo
+endif
+
+else
+Cancelar()("No Hay Movimientos a Convertir")
+endif
+
+
+

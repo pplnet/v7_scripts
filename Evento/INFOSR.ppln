@@ -1,0 +1,261 @@
+if (Eqstr(Var('INSTALACIO'), 'MLASA'))
+require'FPA.BOFA.COMMON.dll'
+
+importservicefpa, 'FPA.BOFA.COMMON.Services.Default.ServiceFPA'
+importinputdealcreate, 'FPA.BOFA.COMMON.Entities.Raiden_IO.Input_SisExt_DealCreateResponse'
+importinputdealcancel, 'FPA.BOFA.COMMON.Entities.Raiden_IO.Input_SisExt_DealCancelResponse'
+importinputdealcreatesiopel, 'FPA.BOFA.COMMON.Entities.Raiden_IO.Input_SisExt_Siopel_DealCreationContingency'
+importinputdealcancelsiopel, 'FPA.BOFA.COMMON.Entities.Raiden_IO.Input_SisExt_Siopel_DealCancelationContingency'
+
+let(&serv, newservicefpa())
+
+
+def DealCreateResp(success, raidenid, nrop, siopelid, settdate, errors)
+let(&input, newinputdealcreate())
+&input.action := "ND"
+&input.success := success
+&input.raidenrefid := Str(raidenid)
+&input.timesent := Dat(Ahora())
+&input.fpaid := Str(nrop)
+&input.siopelid := Str(siopelid)
+&input.settlementdate := Dat(settdate)
+&input.seterrormessage(Str(errors))
+let(&resp, &serv.sisext_dealcreateresponse(&input))
+outputwrite("DealCreateResp: "~&resp)
+return &resp
+end
+
+
+def DealCancelResp(success, raidenid, nrop, errors)
+let(&input, newinputdealcancel())
+&input.action := "CD"
+&input.success := success
+&input.raidenrefid := Str(raidenid)
+&input.timesent := Dat(Ahora())
+&input.fpaid := Str(nrop)
+&input.seterrormessage(Str(errors))
+let(&resp, &serv.sisext_dealcancelresponse(&input))
+outputwrite("DealCancelResp: "~&resp)
+return &resp
+end
+
+def DealCreateSiopelCont(nrop, siopelid, tipoopera, especie, tipoesp, cliente, coperid, amount, precio, moneda, tipocambio, book, fechacargasys, fechaliq, fechaop, plazo, operad, mercad)
+let(&input, newinputdealcreatesiopel())
+&input.action := "NA"
+&input.timesent := Dat(Ahora())
+&input.fpaid := Str(nrop)
+&input.siopelid := Str(siopelid)
+&input.side := Str(tipoopera)
+&input.instrumentid := Str(especie)
+&input.instrumenttypeid := Str(tipoesp)
+&input.client := Str(cliente)
+&input.coperid := Str(coperid)
+&input.amount := Dbl(amount)
+&input.pricetype := "Price"
+&input.fpaprice := Dbl(precio)
+&input.settlementcurrency := Str(moneda)
+&input.fxrate := Dbl(tipocambio)
+&input.book := Str(book)
+&input.tradedate := Dat(fechacargasys)
+&input.settlementdate := Dat(fechaliq)
+&input.dealdate := Dat(fechaop)
+&input.settlementdays := _int(plazo)
+&input.tradernbk := Str(operad)
+&input.clearinglocation := Str(mercad)
+let(&resp, &serv.sisext_siopel_dealcreationcontingency(&input))
+outputwrite("DealCreateSiopelCont: "~&resp)
+return &resp
+end
+
+def DealCancelSiopelCont(raidenid, nrop, operad)
+let(&input, newinputdealcancelsiopel())
+&input.action := "CA"
+&input.raidenrefid := Str(raidenid)
+&input.fpaid := Str(nrop)
+&input.timesent := Dat(Ahora())
+&input.tradernbk := Str(operad)
+let(&resp, &serv.sisext_siopel_dealcancelationcontingency(&input))
+outputwrite("DealCancelSiopelCont: "~&resp)
+return &resp
+end
+
+endif
+
+
+
+creardialogo
+nroperacion1: '# Operacion';;;;;;NoVacio(dialogo.nroperacion1);;NO;
+check1:'Procesa';;;;SI;SI;;;;0
+findialogo
+if (not ok)
+Cancelar()
+endif
+if (dialogo.check1 = 0)
+HojaVisible(SI)
+endif
+
+Act(a:1, 'NrOperacion')
+Act(a:26, 'FechaEnvAlta')
+Act(a:27, 'FechaEnvBaja')
+Act(a:28, 'Mercado')
+Act(a:29, 'CodExt1')
+Act(a:30, 'errores')
+Act(a:31, 'Respuesta')
+Act(a:32, 'Nue FEASE')
+
+Act(d:1, 'Largo Resp')
+Act(d:2, 'Mensaje')
+Act(d:3, 'Tipo Excep')
+Act(d:4, '# Excep Tipo')
+Act(d:5, '# Excep Desc')
+
+sql.add("Select NrOperacion, NroAltaMAE, TipoOp, Especie, Mercado, ")
+sql.add("       Cliente1, Cantidad, Precio1, ContraEspecie, ")
+sql.add("       PorDerechoMercado, Book1, FechaOp, FechaVto, ")
+sql.add("       FechaCargaSys, Plazo, Operador, RB6, ")
+sql.add("       CB5, CodSisExterno, NrExterno, FechaEnvAltaSisExterno, ")
+sql.add("       FechaEnvBajaSisExterno, TotalAux8, TotalAux5  ")
+sql.add("  from "~Dbo()~".OPERACIONES ")
+sql.add(" Where NrOperacion= '"~dialogo.nroperacion1~"' ")
+recorrer sql
+Acn(z:1, 0)
+Act(b:1, Fbn('NrOperacion'))
+Act(b:2, Fbn('NroAltaMAE'))
+Acn(b:3, Fbn('RB6'))
+Acn(b:4, Fbn('CB5'))
+Act(b:5, Fbn('CodSisexterno'))
+Act(b:6, Fbn('NrExterno'))
+
+Act(b:7, Fbn('TipoOp'))
+if (Eqstr(Fbn('TipoOp'), 'TIC'))
+Act(b:8, 'Buy')
+endif
+if (Eqstr(Fbn('TipoOp'), 'TIV'))
+Act(b:8, 'Sell')
+endif
+if (Vacio(b:8))
+Scn(z:1, 1)
+Act(c:8, 'Tipo operacion invalido')
+Act(aa:Val(z:1), 'Tipo operacion invalido')
+endif
+
+Act(b:9, Fbn('Especie'))
+Act(b:10, BuscarCampo('ESPECIES', 'ISIN', 'Codigo', Fbn('Especie')))
+if (NoVacio(Val(b:10)))
+Act(b:11, 'ISIN')
+else
+Act(b:10, BuscarCampo('ESPECIES', 'Codigo2', 'Codigo', Fbn('Especie')))
+if (NoVacio(Val(b:10)))
+Act(b:11, 'BBGID')
+endif
+endif
+if (Vacio(b:11))
+Scn(z:1, 1)
+Act(c:11, 'Especie sin codigo para informar a Raiden')
+Act(aa:Val(z:1), 'Especie sin codigo para informar a Raiden')
+endif
+
+Act(b:12, Fbn('Cliente1'))
+sql.add("Select NrCOPERS  ")
+sql.add("  from "~Dbo()~".CLIENTESDOCUMENTACION ")
+sql.add(" Where Codigo    = '"~Fbn('Cliente1')~"' ")
+sql.add("   and Documento = 'COPERS' ")
+recorrer sql
+Dfa()
+Act(b:13, Fbn('NrCopers'))
+proximo
+if (Vacio(Val(b:13)))
+Scn(z:1, 1)
+Act(c:13, 'Cliente sin Coper')
+Act(aa:Val(z:1), 'Cliente sin Coper')
+endif
+
+Acn(b:14, Fbn('Cantidad'))
+Acn(b:15, Fbn('Precio1'))
+
+Act(b:16, Fbn('ContraEspecie'))
+Act(b:17, BuscarCampo('ESPECIES', 'ISO', 'Codigo', Fbn('ContraEspecie')))
+if (Vacio(Val(b:17)))
+Act(b:17, Val(b:16))
+endif
+
+Acn(b:18, Fbn('TotalAux5'))
+Act(b:19, Fbn('Book1'))
+
+Acd(b:20, Fbn('FechaOp'))
+Acd(b:21, Fbn('FechaVto'))
+Acd(b:22, Fbn('FechaCargaSys'))
+
+Acn(b:23, Fbn('Plazo'))
+Acn(b:24, Fbn('Plazo') / 24)
+Act(b:25, Fbn('Operador'))
+
+Acd(b:26, Fbn('FechaEnvAltaSisExterno'))
+if (Val(b:26) > 0)
+Scn(z:1, 1)
+Act(c:26, 'Operacion ya Informada')
+Act(aa:Val(z:1), 'Operacion ya Informada')
+endif
+Acd(b:27, Fbn('FechaEnvBajaSisExterno'))
+Act(b:28, Fbn('Mercado'))
+Act(b:29, BuscarCampo('MERCADOS', 'CodigoExterno1', 'Codigo', Fbn('Mercado')))
+if (Vacio(Val(b:29)))
+Act(b:29, Fbn('Mercado'))
+endif
+
+Acn(b:30, Val(z:1))
+if (Val(z:1) = 0)
+Act(b:31, dealcreatesiopelcont(Fbn('NrOperacion'), Fbn('NroAltaMAE'), Val(b:8), Val(b:10), Val(b:11), Fbn('Cliente1'), Val(b:13), Fbn('Cantidad'), Fbn('Precio1'), Val(b:17), Fbn('TotalAux5'), Fbn('Book1'), Fbn('FechaCargaSys'), Fbn('FechaVto'), Fbn('FechaOp'), Val(b:24), Fbn('Operador'), Val(b:29)))
+if (Eqstr(Copy(Val(b:31), 1, 2), 'OK'))
+Act(b:32, SQLAhora())
+if (dialogo.check1 = 1)
+sql.add("Update "~Dbo()~".OPERACIONES ")
+sql.add("   Set FechaEnvAltaSisExterno  = "~Val(b:32)~" ")
+sql.add(" where NrOperacion   = '"~Val(b:1)~"' ")
+sql.new
+sql.exec
+
+endif
+else
+Acn(e:1, Longitud(Val(b:31)))
+Act(e:2, Copy(Val(b:31), 9, Val(e:1) - 8))
+Act(e:3, 'INFSEXTNOK')
+Acn(e:4, Query("Select Count(*) from "~Dbo()~".EXCEPCIONES where NrOperacion='"~Val(b:1)~"' and Tipo='"~Val(e:3)~"' "))
+Acn(e:5, Query("Select Count(*) from "~Dbo()~".EXCEPCIONES where NrOperacion='"~Val(b:1)~"' and Tipo='"~Val(e:3)~"' and Descripcion='"~Val(e:2)~"' "))
+if (dialogo.check1 = 1)
+if (Val(e:5) = 0)
+sql.add("Insert into "~Dbo()~".EXCEPCIONES ( ")
+sql.add(" NrOperacion, Fecha, Tipo, Descripcion ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(b:1)~"', ")
+sql.add(" "~SQLAhora()~", ")
+sql.add(" '"~Val(e:3)~"', ")
+sql.add(" '"~Copy(Val(e:2), 1, 100)~"' ")
+sql.add(" ) ")
+sql.new
+sql.exec
+endif
+endif
+endif
+else
+recorrer&i 1, Val(z:1)
+if (dialogo.check1 = 1)
+sql.add("Insert into "~Dbo()~".EXCEPCIONES ( ")
+sql.add(" NrOperacion, Fecha, Tipo, Descripcion ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(b:1)~"', ")
+sql.add(" "~SQLAhora()~", ")
+sql.add(" 'ERRINFSEXT', ")
+sql.add(" '"~Copy(Val(aa:&i), 1, 100)~"' ")
+sql.add(" ) ")
+sql.new
+sql.exec
+endif
+proximo
+if (dialogo.check1 = 1)
+ejecutarevento('CBOINS', string1 = Fbn()['NrOperacion'], radio1 = 1, radio2 = 2, entero1 = 68, entero2 = 9)
+endif
+endif
+
+proximo
+

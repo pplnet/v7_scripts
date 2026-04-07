@@ -1,0 +1,216 @@
+mostrarcuadrodemensajes
+creardialogo
+fecha1:'D.FechaConc';1;1;;;;;;;FSys()
+fecha2:'H.FechaConc';2;1;;;;;;;FSys()
+vehiculo1: 'Vehiculo';3;1;;;;NoVacio(dialogo.vehiculo1) y (Incluido(dialogo.vehiculo1, UsrVehiculos(UsuarioActivo())) o Vacio(UsrVehiculos(UsuarioActivo())));'Vehiculo Invalido';NO;BuscarCampo('USRVEHICULO', 'Vehiculo', 'Codigo', UsuarioActivo());;;;;iif (NoVacio(UsrVehiculos(UsuarioActivo())), " Codigo in (Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"') ")
+label1:'';4;;;NO;;;;;'Concilia por ______________________________________________________________________'
+check1:'Fecha';5;;;;;;;;1
+check3:'Importe';6;;;;;;;;1
+cantidad1: 'Tolerancia';6;2;;;dialogo.check3 = 0;;;;1
+label2:'';7;1;;NO;;;;;'_______________________________________________________________________________________'
+lista2: 'Bancos';8;1;;;;;;;;;SQLSet(" Select Codigo From "~Dbo()~".CLIENTES WHERE Sector='BAN' ");
+lista3: 'Cuentas';2;2;;;;;;;;;SQLSet(" Select Codigo From "~Dbo()~".CUENTAS  WHERE Comitente IN ("~pipe2comillas(dialogo.lista2)~") AND Cliente = '"~dialogo.vehiculo1~"' ");
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+Acn(ch:3, dialogo.check3)
+Acn(ch:1, dialogo.check1)
+Acn(tl:1, dialogo.cantidad1)
+Acd(fe:1, dialogo.fecha1)
+Act(vh:1, dialogo.vehiculo1)
+Act(li:2, dialogo.lista2)
+Act(li:3, dialogo.lista3)
+
+sql.add(" SELECT /*+ RULE */ C.NrOperacion, T.TipoTr2, T.CNFormaPago, FP.Tipo, M.Cuenta, T.Cliente2, ")
+sql.add(" M.Cantidad, C.Fecha, T.NrTrans, T.Fecha1, M.FechaMov, M.Especie, T.Cantidad2, T.Vehiculo1  ")
+sql.add(" FROM "~Dbo()~".CONCILIACIONES C, "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".CNFORMASPAGOCOBRO FP, "~Dbo()~".MOVEJECUTADOS M ")
+sql.add(" WHERE C.NrOperacion = T.NrTrans     ")
+sql.add(" AND   T.NrTrans     = M.NrOperacion ")
+sql.add(" AND   T.CNFormaPago = FP.Codigo ")
+sql.add(" AND   C.Fecha       >= "~IdxDate2(dialogo.fecha1)~" ")
+sql.add(" AND   C.Fecha       <= "~IdxDate2(dialogo.fecha2)~" ")
+sql.add(" AND   T.TipoTr2     = 'DEVM' ")
+sql.add(" AND   FP.Tipo       = 'CHE' ")
+sql.add(" AND   (T.CB5 = '0' OR T.CB5 IS NULL OR T.CB5='') ")
+if (NoVacio(dialogo.lista2))
+sql.add(" AND T.Cliente2 IN ("~pipe2comillas(dialogo.lista2)~")  ")
+endif
+if (NoVacio(dialogo.lista3))
+sql.add(" AND M.Cuenta IN ("~pipe2comillas(dialogo.lista3)~")  ")
+endif
+if (NoVacio(dialogo.vehiculo1))
+sql.add(" AND T.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+endif
+sql.add(" ORDER BY T.Vehiculo1, T.Cliente2, M.Cuenta, M.FechaMov, T.Cantidad2 ")
+
+Acn(z:1, 0)
+Acn(tc:1, 0)
+
+recorrer sql
+Acn(z:1, 1)
+Acn(a:fac, 1)
+Acd(b:fac, Fbn('Fecha'))
+Act(c:fac, Fbn('NrTrans'))
+Acd(d:fac, Fbn('Fecha1'))
+Acd(e:fac, Fbn('FechaMov'))
+Act(f:fac, Fbn('Especie'))
+Acn(g:fac, Fbn('Cantidad'))
+Act(h:fac, Fbn('Cliente2'))
+Act(i:fac, Fbn('Cuenta'))
+Acn(j:fac, Fbn('Cantidad2'))
+Act(k:fac, Fbn('Vehiculo1'))
+Scn(tc:1, 1)
+proximo
+
+if (Val(z:1) = 0)
+Cancelar()('No se encontraron cheques conciliados para los parametros solicitados.')
+endif
+
+crearlistbox;'Arial,8,'
+'OK';a:1..a:Val(tc:1);SI;;;30;check;RGB(232, 255, 215);
+'Vehiculo';k:1..k:Val(tc:1);NO;;;80;string;;RGB(232, 232, 232);
+'Banco';h:1..h:Val(tc:1);NO;;;80;string;;RGB(232, 232, 232);
+'Cuenta';i:1..i:Val(tc:1);NO;;;80;string;;RGB(232, 232, 232);
+'FechaMov';e:1..e:Val(tc:1);NO;;;70;fecha;RGB(232, 232, 232);
+'FechaOp';d:1..d:Val(tc:1);NO;;;70;fecha;RGB(232, 232, 232);
+'F.Conciliacion';b:1..b:Val(tc:1);NO;;;70;fecha;RGB(232, 232, 232);
+'NrTrans';c:1..c:Val(tc:1);NO;;;70;string;;RGB(232, 232, 232);
+'Moneda';f:1..f:Val(tc:1);NO;;;60;string;;RGB(232, 232, 232);
+'Importe';g:1..g:Val(tc:1);NO;;;80;numero;'###,###,###,###.##';RGB(232, 232, 232);
+'Cheque';j:1..j:Val(tc:1);NO;;;70;numero;'###,###,###,###';RGB(232, 232, 232);
+finlistbox
+
+if (not ok)
+Cancelar()('Evento Cancelado.')
+endif
+
+recorrer&i 1, Fac()
+if (Val(a:&i) = 1)
+Message('Transaccion: '~Val(c:&i))
+
+sql.add(" SELECT M.*, C.Comitente ")
+sql.add(" FROM "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".CUENTAS C ")
+sql.add(" WHERE M.Cuenta     = C.Codigo ")
+sql.add(" AND   M.NrSaldo    = 99 ")
+sql.add(" AND C.Comitente    = '"~Val(h:&i)~"'  ")
+sql.add(" AND M.Cuenta       = '"~Val(i:&i)~"'  ")
+sql.add(" AND M.EnteCustodia = '"~Val(vh:1)~"' ")
+if (Val(ch:1) = 1)
+sql.add(" AND  M.FechaMov = "~IdxDate2(Val(e:&i))~" ")
+endif
+sql.add(" ORDER BY M.EnteCustodia, C.Comitente, M.Cuenta, M.FechaMov ")
+
+Acn(dz:1, 0)
+
+recorrer sql
+Message('Voucher: '~Fbn('NrOperacion')~' Movimiento: '~Fbn('NrMov'))
+Scn(dz:1, 1)
+Acn(da:Val(dz:1), 0)
+Act(db:Val(dz:1), Fbn('NrOperacion'))
+Acn(dc:Val(dz:1), Fbn('NrMov'))
+Act(dd:Val(dz:1), Fbn('EnteCustodia'))
+Acd(df:Val(dz:1), Fbn('FechaMov'))
+Act(dg:Val(dz:1), Fbn('Comitente'))
+Act(dh:Val(dz:1), Fbn('Cuenta'))
+Act(di:Val(dz:1), Fbn('Especie'))
+Acn(dj:Val(dz:1), Fbn('Cantidad'))
+proximo
+
+creardialogo
+listbox;'Arial,8,N';510;100
+'Fecha Valor';e: &i..e: &i;NO;;;;80;fecha
+'Banco';h: &i..h: &i;NO;;;;70;string
+'Cuenta';i: &i..i: &i;NO;;;;80;string
+'Moneda';f: &i..f: &i;NO;;;;70;string
+'Cantidad';g: &i..g: &i;NO;;;;80;numero;'###,###,###,###.##'
+'Cheque';j: &i..j: &i;NO;;;;70;string
+'Transaccion';c: &i..c: &i;NO;;;;70;string
+finlistbox
+
+listbox;'Arial,8,N';510;300
+'OK';da: 1..de: Val(dz: 1);SI;;;;80;check
+'Fecha Valor';df: 1..df: Val(dz: 1);NO;;;;80;fecha
+'Banco';dg: 1..dg: Val(dz: 1);NO;;;;70;string
+'Cuenta';dh: 1..dh: Val(dz: 1);NO;;;;80;string
+'Moneda';di: 1..di: Val(dz: 1);NO;;;;70;string
+'Cantidad';dj: 1..dj: Val(dz: 1);NO;;;;80;numero;'###,###,###,###.##'
+'Voucher';db: 1..db: Val(dz: 1);NO;;;;80;string
+finlistbox
+findialogo
+
+if (ok)
+Acn(tt:1, 0)
+Acn(tt:2, 0)
+Acn(tt:3, 0)
+
+recorrer&j 1, Val(dz:1)
+if (Val(da:&j) = 1)
+Scn(tt:1, Val(dj:&j))
+endif
+proximo
+
+if (Val(ch:3) = 1)
+if (Val(g:&i) < 0)
+
+if (Abs(Val(tt:1)) = Abs(Val(g:&i))) y Val(tt:1) < 0
+Acn(tt:2, 1)
+else
+Messagebox('La suma de los item seleccionados es incorrecta.')
+Acn(tt:2, 0)
+endif
+else
+if (Abs(Val(tt:1)) = Abs(Val(g:&i))) y Val(tt:1) > 0
+Acn(tt:2, 1)
+else
+Acn(tt:2, 0)
+endif
+endif
+else
+if (Abs(Abs(Val(g:&i)) - Abs(Val(tt:1)))) <= Val(tl:1)
+Acn(tt:3, Abs(Val(g:&i)) - Abs(Val(tt:1)))
+Acn(tt:2, 1)
+else
+Acn(tt:2, 0)
+Messagebox('La suma de los item seleccionados es incorrecta. Supera el rango de tolerancia.')
+endif
+endif
+
+if (Val(tt:2) = 1)
+recorrer&j 1, Val(dz:1)
+if (Val(da:&j) = 1)
+sql.add(" UPDATE /*+ RULE */ "~Dbo()~".TRANSACCIONES2 SET NrTransRef1 = '"~Val(c:&i)~"' WHERE NrTrans = '"~Val(db:&j)~"' ")
+sql.new
+
+sql.add(" UPDATE /*+ RULE */ "~Dbo()~".TRANSACCIONES2 SET CB5='1' WHERE NrTrans = '"~Val(c:&i)~"' ")
+sql.new
+
+sql.add(" INSERT INTO "~Dbo()~".MOVEJECUTADOS ( ")
+sql.add(" FechaEje, UsuarioEje, NrTrans2, NrOperacion, ")
+sql.add(" Leyenda, Cantidad, Cliente, Especie, ")
+sql.add(" CallPut, NrSaldo, NrGrupo, NrGrupo2, ")
+sql.add(" Bits, Cupon, NrMov, NrInstan, ")
+sql.add(" FechaMov, EnteCustodia, Cuenta, Transaccion ) ")
+sql.add(" SELECT "~IdxDate2(Val(b:&i))~", '"~UsuarioActivo()~"', NrTrans2, NrOperacion, ")
+sql.add(" Leyenda, Cantidad, Cliente, Especie, ")
+sql.add(" CallPut, NrSaldo, NrGrupo, NrGrupo2, ")
+sql.add(" Bits, Cupon, NrMov, NrInstan, ")
+sql.add(" FechaMov, EnteCustodia, Cuenta, Transaccion  ")
+sql.add(" FROM "~Dbo()~".MOVPENDIENTES WHERE NrOperacion = '"~Val(db:&j)~"' AND NrMov = "~FStr(Val(dc:&j), 0, 0)~" AND NrSaldo=99 ")
+sql.new
+
+sql.add(" DELETE /*+ RULE */ FROM "~Dbo()~".MOVPENDIENTES WHERE NrOperacion = '"~Val(db:&j)~"' AND NrMov = "~FStr(Val(dc:&j), 0, 0)~" AND NrSaldo=99 ")
+sql.new
+sql.exec
+Message(' Voucher '~Val(db:&j)~' conciliado.')
+
+endif
+proximo
+endif
+endif
+endif
+proximo
+

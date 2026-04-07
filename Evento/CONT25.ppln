@@ -1,0 +1,154 @@
+mostrarcuadrodemensajes
+creardialogo
+fecha1: 'Fecha';1;;;;;;;;FSys()
+lista1: 'Vehiculos';3;;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), SQLSet("Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo = '"~UsuarioActivo()~"'"))
+check1: 'Contab.Procesada';;;;NO;NO;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Message('- Asientos Diferencia de Cambio - Saldos en Ctas Comitentes -')
+
+let(&fhasta, (PriDeMes(dialogo.fecha1, SI) - 1))
+let(&fdesde, PriDeMes(&fhasta, SI))
+let(&monedalocal, Var('MONELOCA'))
+let(&monedaextranjera, Var('MONEEXTR'))
+let(&dolarbillete, Var('DOLBILLETE'))
+let(&dcacumulada, 0)
+let(&pridemes, PriDeMes(dialogo.fecha1))
+let(&ultdiamesant, &pridemes - 1)
+
+sql.add(" SELECT Codigo FROM "~Dbo()~".MODELOSASIENTO MA WHERE TipoAsiento IN ("~pipe2comillas(Var('TIPASIDCFM'))~") AND Habilitado = 'SI' ")
+sql.add(" AND Entorno = '"~sigla~"' ")
+if (NoVacio(dialogo.lista1))
+sql.add(" AND (( ")
+recorrer&i 1, Elementos(dialogo.lista1)
+sql.add(" '|'+rtrim(MA.Vehiculo)+'|' like '%|"~ItemLista(dialogo.lista1, &i)~"|%' ")
+if (not Elementos(dialogo.lista1) = &i)
+sql.add(" OR ")
+endif
+proximo
+sql.add(") OR MA.Vehiculo is null OR MA.Vehiculo = '' OR MA.Vehiculo = ' ' )")
+endif
+Watch(sql.batch)
+recorrer sql
+Dfa()
+let(&modelos, &modelos~Fbn('Codigo')~'|')
+proximo
+
+sql.add("Select Distinct S.EnteCustodia as 'Vehiculo', S.Cuenta, S.Especie as 'Moneda', V.Alias4 MonLocalVeh,S.Book ")
+sql.add("from "~Dbo()~".SALDOSDIA S, "~Dbo()~".VEHICULOS V ")
+sql.add(" Where V.Codigo = S.EnteCustodia ")
+sql.add(" AND Round(S.Saldo, 2) <> 0")
+if (NoVacio(dialogo.lista1))
+sql.add(" and S.EnteCustodia IN ("~pipe2comillas(dialogo.lista1)~")")
+endif
+sql.add("and S.NrSaldo = 50 ")
+sql.add("and S.Especie <> '"~&monedalocal~"'")
+sql.add(" and S.Fecha IN (SELECT MAX(SD.Fecha) FROM "~Dbo()~".SALDOSDIA SD")
+sql.add("                   WHERE SD.NrSaldo = S.NrSaldo  ")
+sql.add("                   AND SD.EnteCustodia = S.EnteCustodia ")
+sql.add("                   AND SD.Especie = S.Especie ")
+sql.add("                   AND SD.Cuenta = S.Cuenta ")
+sql.add("                   AND SD.Fecha  <= '"~IdxDate(&fhasta)~"') ")
+sql.add("Order By 1")
+Watch(sql.batch)
+recorrer sql
+let(&vehiculo, Fbn('Vehiculo'))
+let(&cuenta, Fbn('Cuenta'))
+let(&moneda, Fbn('Moneda'))
+let(&monlocveh, Fbn('MonLocalVeh'))
+let(&dcacumulada, 0)
+let(&book, Fbn()['Book'])
+let(&tipo, BuscarCampo('ESPECIES', 'Tipo', 'Codigo', &moneda))
+recorrer&i &fdesde, &fhasta
+let(&diadc, &i)
+if (DiaSem(&diadc) > 1 y DiaSem(&diadc) < 7)
+let(&vehiculosdolbillete, Var('VEHDOLBI'))
+sql.add(" Select S.Fecha,S.Saldo,S.EnteCustodia as 'Vehiculo', S.Especie as 'Moneda' ")
+sql.add(" FROM "~Dbo()~".SALDOSDIA S ")
+sql.add(" Where S.EnteCustodia = '"~&vehiculo~"' ")
+sql.add(" and S.Cuenta = '"~&cuenta~"' ")
+sql.add(" and S.NrSaldo = 50 ")
+sql.add(" and S.Especie = '"~&moneda~"'")
+sql.add(" AND S.Fecha IN (SELECT MAX(SD.Fecha) FROM "~Dbo()~".SALDOSDIA SD")
+sql.add("                   WHERE SD.NrSaldo = S.NrSaldo  ")
+sql.add("                   AND SD.EnteCustodia = S.EnteCustodia ")
+sql.add("                   AND SD.Especie = S.Especie ")
+sql.add("                   AND SD.Cuenta = S.Cuenta ")
+sql.add("                   AND SD.Fecha  <= '"~IdxDate(&diadc)~"') ")
+Watch(sql.batch)
+recorrer sql
+let(&monto, Fbn('Saldo'))
+let(&fechadc, Fecha(&diadc))
+let(&fechadesde, Fecha(&fechadc - 1))
+
+if (Eqstr(Fbn('Moneda'), &monedaextranjera))
+if (Incluido(Fbn('Vehiculo'), &vehiculosdolbillete))
+let(&monedacot, &dolarbillete)
+else
+let(&monedacot, &monedaextranjera)
+endif
+else
+let(&monedacot, Fbn('Moneda'))
+endif
+let(&tipocotizacion, 0)
+let(&tipocambio, 2)
+if (&tipocotizacion = 0)
+let(&dc, ((&monto * CotizacionBNA(&monedacot, &fechadc, &tipocambio, NO, NO)) - (&monto * CotizacionBNA(&monedacot, &fechadesde, &tipocambio, NO, NO))))
+let(&hoy, CotizacionBNA(&monedacot, &fechadc, &tipocambio, NO, NO))
+let(&ayer, CotizacionBNA(&monedacot, &fechadesde, &tipocambio, NO, NO))
+else
+let(&dc, ((&monto * Cotizacion(&monedacot, null, null, null, &fechadc, &tipocambio)) - (&monto * Cotizacion(&monedacot, null, null, null, &fechadesde, &tipocambio))))
+endif
+
+proximo
+
+let(&dcacumulada, &dcacumulada + &dc)
+endif
+proximo
+if (&dcacumulada <> 0)
+recorrer&k 1, Elementos(&modelos)
+sql.add(" Select '"~&moneda~"' Especie, '"~&monedalocal~"' Moneda, '"~&vehiculo~"' Vehiculo1, Comitente Cliente1, ")
+sql.add(" '"~&monlocveh~"' MonLocalVeh,'"~&book~"' Book, ' ' NrOperacion,' ' TipoOp ,'"~&tipo~"' Tipo ")
+sql.add(" From "~Dbo()~".CUENTAS ")
+sql.add(" Where Codigo = '"~&cuenta~"' ")
+recorrer sql
+Acd(fv:1, &ultdiamesant)
+if (Val(fv:1) >= Fecha(Var('FECHAMIGRA')))
+Act(vh:1, Fbn('Vehiculo1'))
+Acd(fo:1, Val(fv:1))
+Acd(fo:2, Habiles(FinDeMes(Val(fo:1), NO, 'ARG')))
+Acd(fv:2, Val(fv:1))
+Acn(v1, 0)
+sql.add("Select FechaInicio, FechaFin    from "~Dbo()~".PERIODOSCONTABLES where ")
+sql.add("    Vehiculo = '"~Val(vh:1)~"' ")
+recorrer sql
+if (Fbn()['FechaInicio'] <= Val(fv:1))
+else
+Acd(fv:1, Fbn()['FechaInicio'])
+endif
+proximo
+
+
+Acn(ck:1, 0)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(sql(" Select A.NrUnicoAsiento From "~Dbo()~".ASIENTOSCON A,ASIENTOSCON1 A1 Where A.NrUnicoAsiento=A1.NrUnicoAsiento and A.Modelo = '"~ItemLista(&modelos, &k)~"' AND A1.Alias1 = '"~&moneda~"' AND A.Estado = 'E' AND (A.NrAsiento Is Null OR A.NrAsiento = '' OR A.NrAsiento = ' ') AND (A.FechaValor > '"~IdxDate(Val(fo:2))~"' OR A.FechaValor =  '"~IdxDate(Val(fo:1))~"') AND A.Vehiculo = '"~&vehiculo~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Message(&vehiculo~' - Modelo: '~ItemLista(&modelos, &k))
+let(&modelocontable, ItemLista(&modelos, &k))
+sql.generarasientoop(&modelocontable, '', '', '', 810, Val(fv:1), &vehiculo, null, null, null, null, null, '', null, null, null, null, null, null, FSys(), dialogo.fecha1)
+sql.exec
+endif
+endif
+proximo
+proximo
+endif
+proximo
+

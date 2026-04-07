@@ -1,0 +1,387 @@
+creardialogo
+especie1:'Cupon';;;;;;NoVacio(dialogo.especie1) y EsTerminal(dialogo.especie1, especie) y DesciendeDeEspecie(dialogo.especie1, 'TITULO');'Debe Ingresar un Cupon';NO;
+entero1:'NrCupon';;;;NO;;;;;;BuscarCampo('Especies', 'Cupon', 'Codigo', dialogo.especie1)
+fecha2:'F.Posicion';;;;;;dialogo.fecha2 <> 0 y dialogo.fecha2 <= FSys();'Debe Ingresar la Fecha de Posicion del Corte';NO;;BuscarCampo('Especies', 'FechaProximoCorte', 'Codigo', dialogo.especie1)
+fecha1:'F.Pago';;;;;;dialogo.fecha1 <> 0 y dialogo.fecha1 <= FSys();'Debe Ingresar una Fecha';NO;;BuscarCampo('Especies', 'FechaPagoCupon', 'Codigo', dialogo.especie1)
+especie2:'Moneda';;;;;;NoVacio(dialogo.especie2) y DesciendeDeEspecie(dialogo.especie2, 'MONEDA');'Debe Ingresar una Moneda';NO;
+precio1:'Precio';;;;;;dialogo.precio1 >= 0;'El Precio del Cupon debe ser Positivo';NO;
+precio5:'Arancel CV';8;1;;;;dialogo.precio5 >= 0;'El Arancel de CV debe ser Positivo';NO;
+precio2:'Imp. Gan.';;;;;;dialogo.precio2 >= 0;'El Impuesto a las Ganancias debe ser Positivo';NO;
+precio7:'Tipo Cambio';;;;;not Eqstr(dialogo.especie2, Var('MONEEXTR'));Eqstr(dialogo.especie2, Var('MONEEXTR')) o (dialogo.precio7 <= dialogo.precio8 * (1 + Var('RPRECIO2') / 100) y dialogo.precio7 >= dialogo.precio8 * (1 - Var('RPRECIO2') / 100));'Tipo de Cambio Fuera de Rango: '~FStr(dialogo.precio8 * (1 - Var('RPRECIO2') / 100), 1, 7)~' y '~FStr(dialogo.precio8 * (1 + Var('RPRECIO2') / 100), 1, 7);NO;iif (Eqstr(dialogo.especie2, Var('MONEEXTR')), 1, dialogo.precio7);iif (Eqstr(dialogo.especie2, Var('MONEEXTR')), 1, dialogo.precio7)
+precio8:'Cotizacion';;;;NO;NO;;;;;iif (Eqstr(sql(" Select Modo from "~Dbo()~".MODOESPECIES where Especie1='"~dialogo.especie2~"' and Especie2='"~Var('MONEEXTR')~"' "), 'INV'), CotizacionC(Var('MONEEXTR'), null, null, null, FSys(), 1, SI, 'ARP') / CotizacionC(dialogo.especie2, null, null, null, FSys(), 1, SI, 'ARP')), CotizacionC(dialogo.especie2, null, null, null, FSys(), 1, SI, 'ARP') / CotizacionC(Var('MONEEXTR'), null, null, null, FSys(), 1, SI, 'ARP'))
+vehiculo1:'Vehiculo';;;;NO;NO;;;;
+cuenta1:'C.Efectivo';9;1;;NO;NO;(Vacio(dialogo.cuenta1) o Incluido(dialogo.especie2, BuscarCampo('CUENTAS', 'Especies', 'Codigo', dialogo.cuenta1)));'Debe Existir una Cuenta de Efectivo';NO;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (not Eqstr(BuscarCampo('Especies', 'EsCupon', 'Codigo', dialogo.especie1), 'SI'))
+Cancelar()('La Especie '~dialogo.especie1~' No es un Cupon')
+endif
+
+
+Acn(q10, dialogo.precio2)
+
+
+sql.add("Select * FROM "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".OPERACIONESBITS B ")
+sql.add("where T.Especie= '"~dialogo.especie1~"' ")
+sql.add("and T.NrTrans  = B.NrOperacion ")
+sql.add("and B.NrBit=7 and B.Valor='0'  ")
+
+Acn(z1, 0)
+
+
+recorrer sql
+Acn(z1, 1)
+Dfa()
+proximo
+
+if (Val(z1) > 0)
+Cancelar()('La Especie '~dialogo.especie1~' tiene Vouchers Pendientes de Confirmacion o Transacciones en No Operativos')
+endif
+
+
+Acn(z13, 1)
+
+sql.add("Select * FROM "~Dbo()~".OPERACIONES ")
+sql.add("where Especie='"~dialogo.especie1~"' ")
+sql.add("and Cupon1 ='"~FStr(dialogo.entero1, 0, 0)~"' ")
+sql.add("and FechaOp='"~IdxDate(dialogo.fecha2)~"' ")
+sql.add("and TipoOp='CUPON' ")
+sql.add("and (MB4='0' or MB4='2' or (MB4='3' and TipoCambio3=3)) ")
+sql.add("and (NrOperacion2 IS NULL or NrOperacion2='') ")
+
+Act(z2, 'PCUPON')
+
+SetFilaActual(9)
+
+recorrer sql
+
+Message('Procesando Operacion '~Fbn()['NrOperacion']~' ...')
+
+if (Fbn()['Cantidad'] <> 0)
+Act(a:fac, Fbn()['Cliente1'])
+Act(b:fac, iif (Eqstr(Fbn()['MB4'], '0'), 'SPOT', iif (Eqstr(Fbn()['MB2'], '0'), 'REPO SPOT', iif (Eqstr(Fbn()['MB2'], '1'), 'REPO', 'SALDO'))))
+Act(c:fac, Fbn()['Vehiculo1'])
+Acn(d:fac, Fbn()['Cantidad'] * Val(z13))
+Act(e:fac, Fbn()['NrOperacion'])
+Acn(f:fac, ((Val(d:fac) * dialogo.precio1) / 100) - dialogo.precio5)
+Acn(g:fac, Fbn()['MB3'])
+Acn(h:fac, Fbn()['TipoCambio3'])
+else
+Dfa()
+endif
+proximo
+
+
+Acn(x2, Fac())
+
+Act(a1, dialogo.especie1)
+Acn(b1, dialogo.entero1)
+Acd(c1, dialogo.fecha1)
+Act(d1, dialogo.especie2)
+Acn(e1, dialogo.precio1)
+Acn(i1, dialogo.precio5)
+Act(k1, dialogo.cuenta1)
+Acn(l1, dialogo.precio7)
+Acn(ii1, dialogo.precio5)
+Acd(m1, dialogo.fecha2)
+
+creardialogo
+especie1:'Cupon';;;;NO;;;;;Val(a1);
+entero1:'NrCupon';;;;NO;;;;;Val(b1);
+fecha1:'F.Pago';;;;NO;;;;;Val(c1);
+especie2:'Moneda';;;;NO;;;;;Val(d1);
+precio1:'% Amort.';;;;NO;;;;;Val(e1);
+precio2:'Imp. Gast';;;;NO;NO;;;;Val(q10);
+listbox;'Arial,8,N';460;300
+'Cliente';a10..a: Fac();NO;;;;60;string
+'Concepto';b10..b: Fac();NO;;;;60;string
+'Vehiculo';c10..c: Fac();NO;;;;60;string
+'Cantidad';d10..d: Fac();NO;;;;80;numero;'###,###,###.##'
+'Nro.Op.';e10..e: Fac();NO;;;;60;string
+'Importe';f10..f: Fac();NO;;;;80;numero;'###,###,###.##'
+'Tipo';g10..g: Fac();NO;;;;35;combo;'Cobro|Pago'
+finlistbox
+
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+if (Val(x2) >= 10)
+recorrer&i 10, Fac()
+Act(aa1, FStr(Val(g:&i), 0, 0))
+
+Message('Generando Operacion de Liquidacion Cupon '~Val(c:&i)~' ')
+
+Act(z3, getnumerador(BuscarCampo('VEHICULOS', 'Alias1', 'Codigo', Val(c:&i))))
+
+if (Eqstr(Val(z3), ' '))
+Cancelar()('Cancelado. Falta el Numerador de '~Val(c:&i))
+endif
+
+Act(z4, iif (Eqstr(Val(b:&i), 'SPOT'), '2', iif (Eqstr(Val(b:&i), 'SALDO'), '1', '0')))
+
+sql.add(" INSERT INTO "~Dbo()~".OPERACIONES ")
+sql.add(" (TipoOp, MB3, NrOperacion, ContraEspecie, Cliente1, ")
+sql.add(" Cantidad,FechaOp, FechaPago, ")
+sql.add(" FechaCargaSys, FechaCarga, ")
+sql.add(" Vehiculo1,Cupon1, ")
+sql.add(" ImporteImp, ")
+sql.add(" Precio1, ")
+sql.add(" OperacionRef,MB4,Especie,")
+sql.add(" TotalAux3,TotalNetoCli1,")
+sql.add(" Cuenta1,TipoCambio,TipoCambio3,RB3) ")
+sql.add(" Values")
+sql.add(" ('CUPLIQ','"~Val(aa1)~"', '"~Val(z3)~"', '"~dialogo.especie2~"', '"~Val(a:&i)~"', ")
+sql.add(" "~FStr(Val(d:&i), 0, 4)~",'"~IdxDate(FSys())~"', '"~IdxDate(dialogo.fecha1)~"', ")
+sql.add(" '"~IdxDate(FSys())~"', '"~IdxDate(FSys())~"',")
+sql.add(" '"~Val(c:&i)~"','"~FStr(dialogo.entero1, 0, 0)~"',")
+sql.add(" "~FStr(dialogo.precio2, 0, 7)~", ")
+sql.add(" "~FStr(dialogo.precio1, 0, 7)~", ")
+sql.add(" '"~Val(e:&i)~"','"~Val(z4)~"','"~dialogo.especie1~"',")
+sql.add(" "~FStr(Val(i1), 0, 7)~","~FStr(Val(f:&i), 0, 7)~", ")
+sql.add(" '"~Val(k1)~"',"~FStr(Val(l1), 0, 7)~","~FStr(Val(h:&i), 0, 0)~",'1') ")
+sql.new
+
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set NrOperacion2 ='"~Val(z3)~"' Where NrOperacion='"~Val(e:&i)~"' ")
+sql.new
+sql.exec
+
+if (Val(h:&i) = 3 o Eqstr(Val(z4), '2'))
+Message('Ingresando Instancias Operacion '~Val(az3)~' ...')
+
+sql.add("SELECT NrInstancia FROM "~Dbo()~".INSTANCIAS Where Tabla='"~Val(az4)~"' ")
+sql.add("ORDER BY NrInstancia ")
+
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+sql.add("(NrOperacion,NrBit,Valor) ")
+sql.add(" Values ")
+sql.add("('"~Val(az3)~"',"~FStr(Fbn()['NrInstancia'], 3, 0)~",")
+if (Incluido(Fbn()['NrInstancia'], Val(az5)))
+sql.add("'1')")
+else
+sql.add("'0')")
+endif
+sql.new
+sql.exec
+proximo
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set ")
+sql.add("Observaciones=Observaciones+'"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~"' ")
+sql.add("Where NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+else
+Message('Ingresando Instancias Operacion '~Val(z3)~' ...')
+
+Acn(i1, 50)
+
+sql.add("SELECT * FROM "~Dbo()~".INSTANCIAS ")
+sql.add(" Where Tabla = 'OPERACIONES' ")
+sql.add(" ORDER BY NrInstancia ")
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ( ")
+sql.add(" NrOperacion, NrBit, Valor ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(z3)~"', ")
+sql.add(" "~FStr(Fbn()['NrInstancia'], 2, 0)~", ")
+sql.add(" '"~iif (Val(i1) = Fbn()['NrInstancia'], '1', '0')~"' ")
+sql.add(" ) ")
+sql.new
+sql.exec
+proximo
+
+
+endif
+
+
+sql.actualizarmovimientos2(Val(z3), SI, NO, NO, SI)
+sql.exec
+
+proximo
+endif
+
+Acn(i1, Val(ii1))
+
+Message('*-- Reverso Posiciones Futuras ')
+sql.add("INSERT INTO "~Dbo()~".MOVPOSEJE ")
+sql.add("(FechaMov,Cliente,Vehiculo,NrSaldo,Especie, ")
+sql.add("FechaEj,Cantidad,Precio,TipoNegocio,NrOperacion,Tipo) ")
+sql.add(" SELECT '"~IdxDate(Val(c1))~"' FechaMov,Cliente,Vehiculo,")
+sql.add(" NrSaldo,Especie,FechaEj,-Cantidad,Precio,TipoNegocio,NrOperacion,Tipo  ")
+sql.add(" FROM "~Dbo()~".MOVPOSEJE Where ")
+sql.add(" Especie = '"~dialogo.especie1~"' ")
+sql.add(" and FechaMov='"~IdxDate(Val(m1))~"' ")
+sql.new
+
+
+
+Message('*-- Reverso Movimientos Pendientes ')
+sql.add("INSERT INTO "~Dbo()~".MOVPENDIENTES ")
+sql.add(" (NrOperacion,FechaMov,Cliente,Especie,")
+sql.add(" Cantidad,Leyenda,Bits,NrSaldo,")
+sql.add(" NrGrupo,FechaEje,NrGrupo2,NrMov,NrInstan) ")
+sql.add(" SELECT NrOperacion,'"~IdxDate(Val(c1))~"' FechaMov,Cliente,Especie, ")
+sql.add(" -Cantidad,'Liq. Cupon',Bits,NrSaldo, ")
+sql.add(" NrGrupo,FechaEje,NrGrupo2,NrMov,NrInstan FROM "~Dbo()~".MOVPENDIENTES ")
+sql.add(" Where ")
+sql.add(" Especie = '"~dialogo.especie1~"' ")
+sql.add(" and FechaMov='"~IdxDate(Val(m1))~"' and NrSaldo>3 ")
+sql.new
+
+
+sql.add("Select * FROM "~Dbo()~".OPERACIONES ")
+sql.add("where Especie='"~dialogo.especie1~"' ")
+sql.add("and Cupon1 ='"~FStr(dialogo.entero1, 0, 0)~"' ")
+sql.add("and FechaOp='"~IdxDate(Val(m1))~"' ")
+sql.add("and TipoOp='CUPON' ")
+sql.add("and (MB4='3' and TipoCambio3=10) ")
+sql.add("and NrOperacion2 IS NULL ")
+
+Act(z2, 'PCUPON')
+
+SetFilaActual(9)
+
+recorrer sql
+
+Message('Procesando Saldos 10 Operacion '~Fbn()['NrOperacion']~' ...')
+
+if (Fbn()['Cantidad'] <> 0)
+Act(a:fac, Fbn()['Cliente1'])
+Act(b:fac, iif (Eqstr(Fbn()['MB4'], '0'), 'SPOT', iif (Eqstr(Fbn()['MB2'], '0'), 'REPO SPOT', iif (Eqstr(Fbn()['MB2'], '1'), 'REPO', 'SALDO'))))
+Act(c:fac, Fbn()['Vehiculo1'])
+Acn(d:fac, Fbn()['Cantidad'] * Val(z13))
+Act(e:fac, Fbn()['NrOperacion'])
+Acn(f:fac, ((Val(d:fac) * Val(e1)) / 100) - Val(i1))
+Acn(h:fac, Fbn()['TipoCambio3'])
+else
+Dfa()
+endif
+
+proximo
+
+Acn(x2, Fac())
+
+if (Val(x2) >= 10)
+recorrer&i 10, Fac()
+Act(aa1, FStr(Val(g:&i), 0, 0))
+
+Message('Generando Operacion de Liquidacion Cupon '~Val(c:&i)~' ')
+
+Act(z3, getnumerador(BuscarCampo('VEHICULOS', 'Alias1', 'Codigo', Val(c:&i))))
+
+if (Eqstr(Val(z3), ' '))
+Cancelar()('Cancelado. Falta el Numerador de '~Val(c:&i))
+endif
+
+Act(z4, iif (Eqstr(Val(b:&i), 'SPOT'), '2', iif (Eqstr(Val(b:&i), 'SALDO'), '1', '0')))
+
+sql.add(" INSERT INTO "~Dbo()~".OPERACIONES ")
+sql.add(" (TipoOp, MB3, NrOperacion, ContraEspecie, Cliente1, ")
+sql.add(" Cantidad,FechaOp, FechaPago, ")
+sql.add(" FechaCargaSys, FechaCarga, ")
+sql.add(" Vehiculo1,Cupon1, ")
+sql.add(" ImporteImp, ")
+sql.add(" Precio1, ")
+sql.add(" OperacionRef,MB4,Especie,")
+sql.add(" TotalAux3,TotalNetoCli1,")
+sql.add(" Cuenta1,TipoCambio,TipoCambio3,RB3) ")
+sql.add(" Values")
+sql.add(" ('CUPLIQ','"~Val(aa1)~"', '"~Val(z3)~"', '"~dialogo.especie2~"', '"~Val(a:&i)~"', ")
+sql.add(" "~FStr(Val(d:&i), 0, 4)~",'"~IdxDate(FSys())~"', '"~IdxDate(dialogo.fecha1)~"', ")
+sql.add(" '"~IdxDate(FSys())~"', '"~IdxDate(FSys())~"',")
+sql.add(" '"~Val(c:&i)~"','"~FStr(dialogo.entero1, 0, 0)~"',")
+sql.add(" "~FStr(dialogo.precio2, 0, 7)~", ")
+sql.add(" "~FStr(dialogo.precio1, 0, 7)~", ")
+sql.add(" '"~Val(e:&i)~"','"~Val(z4)~"','"~dialogo.especie1~"',")
+sql.add(" "~FStr(Val(i1), 0, 7)~","~FStr(Val(f:&i), 0, 7)~", ")
+sql.add(" '"~Val(k1)~"',"~FStr(Val(l1), 0, 7)~","~FStr(Val(h:&i), 0, 0)~",'1') ")
+sql.new
+
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set NrOperacion2 ='"~Val(z3)~"' Where NrOperacion='"~Val(e:&i)~"' ")
+sql.new
+sql.exec
+
+if (Val(h:&i) = 3 o Eqstr(Val(z4), '2'))
+Message('Ingresando Instancias Operacion '~Val(az3)~' ...')
+
+sql.add("SELECT NrInstancia FROM "~Dbo()~".INSTANCIAS Where Tabla='"~Val(az4)~"' ")
+sql.add("ORDER BY NrInstancia ")
+
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+sql.add("(NrOperacion,NrBit,Valor) ")
+sql.add(" Values ")
+sql.add("('"~Val(az3)~"',"~FStr(Fbn()['NrInstancia'], 3, 0)~",")
+if (Incluido(Fbn()['NrInstancia'], Val(az5)))
+sql.add("'1')")
+else
+sql.add("'0')")
+endif
+sql.new
+sql.exec
+proximo
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set ")
+sql.add("Observaciones=Observaciones+'"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~"' ")
+sql.add("Where NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+else
+Message('Ingresando Instancias Operacion '~Val(z3)~' ...')
+
+Acn(i1, 50)
+
+sql.add("SELECT * FROM "~Dbo()~".INSTANCIAS ")
+sql.add(" Where Tabla = 'OPERACIONES' ")
+sql.add(" ORDER BY NrInstancia ")
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ( ")
+sql.add(" NrOperacion, NrBit, Valor ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(z3)~"', ")
+sql.add(" "~FStr(Fbn()['NrInstancia'], 2, 0)~", ")
+sql.add(" '"~iif (Val(i1) = Fbn()['NrInstancia'], '1', '0')~"' ")
+sql.add(" ) ")
+sql.new
+sql.exec
+proximo
+
+
+endif
+
+
+sql.actualizarmovimientos2(Val(z3), SI, NO, NO, SI)
+sql.exec
+
+proximo
+endif
+
+Message(' Deshabilitando la Especie Cupon ...')
+sql.add("Update "~Dbo()~".ESPECIES ")
+sql.add("Set ")
+sql.add("  Status ='DES' ")
+sql.add("where  Codigo = '"~dialogo.especie1~"' ")
+sql.new
+sql.exec
+
+

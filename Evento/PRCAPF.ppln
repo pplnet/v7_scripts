@@ -1,0 +1,120 @@
+creardialogo
+nroperacion1: 'NrOperacion';;;;;;Eqstr(BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', nroperacion1), 'MMCPM') y Eqstr(BuscarCampo('OPERACIONES', 'CB7', 'NrOperacion', nroperacion1), '0') y Eqstr(BuscarCampo('OPERACIONES', 'RB10', 'NrOperacion', nroperacion1), '0');'Debe ingresar una operacion MMCPM precancelable que no haya sido precancelada';NO;;;;;;"TipoOp = 'MMCPM' AND CB7 = 0 AND RB10 = 0"
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+sql.add(" SELECT 1 FROM "~Dbo()~".MOVEJECUTADOS ")
+sql.add(" WHERE FechaMov = '"~IdxDate(BuscarCampo('OPERACIONES', 'FechaVto', 'NrOperacion', dialogo.nroperacion1))~"' AND NrSaldo = 1 ")
+recorrer sql
+Cancelar()('La operacion que seleccionó tiene liquidado el vto, Anule la liquidación e intente de nuevo')
+proximo
+
+sql.add(" SELECT FechaOp, Plazo 'Plazo Ori', FechaVto, Cantidad, Precio1 'Tasa Int', RB8 'U.Tiempo', ImpGastos1 'Tasa Ret', Precio3, RB6 ")
+sql.add(" FROM "~Dbo()~".OPERACIONES ")
+sql.add(" WHERE NrOperacion = '"~dialogo.nroperacion1~"' ")
+recorrer sql
+Acd(a1, Fbn('FechaOp'))
+Acn(b1, Fbn('Plazo Ori'))
+Acd(c1, Fbn('FechaVto'))
+Acn(d1, Fbn('Cantidad'))
+Acn(e1, Fbn('Tasa Int'))
+Acn(f1, iif (Fbn('U.Tiempo') = 0, 360, 365))
+Acn(h1, Fbn('Tasa Ret'))
+Acn(m1, Fbn('Precio3'))
+let(&penalidadoriginal, Fbn('Precio3'))
+let(&redondea, Fbn('RB6'))
+sql.add(" SELECT Cantidad3 'Interes Ori', Cantidad4 'Retencion Ori' ")
+sql.add(" FROM "~Dbo()~".CUOTAS ")
+sql.add(" WHERE NrOperacion = '"~dialogo.nroperacion1~"' ")
+recorrer sql
+Acn(g1, Fbn('Interes Ori'))
+Acn(i1, Fbn('Retencion Ori'))
+proximo
+proximo
+
+crearlistbox;'Arial,8,';'Precancelacion Plazo Fijo '~dialogo.nroperacion1
+'Fecha Op';a1;NO;SI;;80;fecha
+'Plazo Ori';b1;NO;SI;;60;numero;'##'
+'Fecha Vto';c1;NO;SI;;80;fecha
+'Cantidad';d1;NO;SI;;100;numero;'###,###,###.##'
+'Tasa Int';e1;NO;SI;;100;numero;'##.########'
+'U.Tiempo';f1;NO;SI;;60;numero;'###'
+'Interes Ori';g1;NO;SI;;100;numero;'##,###,###.##'
+'Tasa Ret';h1;NO;SI;;100;numero;'##.########'
+'Retencion Ori';i1;NO;SI;;100;numero;'##,###,###.##'
+'Nuevo Plazo';j1;SI;Val(j:flb) > 0 y Val(j:flb) <= Val(b:flb);'El nuevo plazo debe ser mayor a 0 y menor o igual al plazo original';80;numero;'########';exe('COLGRILLA');Val(k:flb) - Val(a:flb);NO;NO;"11";;;SI
+'Nuevo Vto';k1;SI;Val(k:flb) > Val(a:flb) y Val(k:flb) <= Val(c:flb) y EsHabil(Val(k:flb), 'ARG');'El nuevo vencimiento debe ser mayor a la fecha Op, menor o igual a la fecha Vto original y ser un día habil';80;fecha;exe('COLGRILLA');Val(a:flb) + Val(j:flb);NO;NO;"10";;;SI
+'Nuevo Interes';l1;NO;SI;;100;numero;'##,###,###.##';;iif (&redondea = 0, Round((Val(d:flb) * Val(e:flb) * Val(j:flb)) / (Val(f:flb) * 100)), (Val(d:flb) * Val(e:flb) * Val(j:flb)) / (Val(f:flb) * 100))
+'Tasa Penalidad';m1;SI;SI;;100;numero;'##.########';exe('COLGRILLA')
+'Penalidad';n1;NO;SI;;100;numero;'##,###,###.##';;(Val(d:flb) * Val(m:flb) * Val(j:flb)) / (Val(f:flb) * 100)
+'Nueva Retencion';o1;SI;Val(o:flb) >= 0;'La Nueva Retencion no puede ser negativa';100;numero;'##,###,###.##';;iif (&redondea = 0, Round(((Val(l:flb) - Val(n:flb)) * Val(h:flb) / 100)), ((Val(l:flb) - Val(n:flb)) * Val(h:flb) / 100))
+finlistbox
+
+if (not ok)
+Cancelar()('Evento cancelado')
+endif
+
+sql.add(" SELECT NrBit FROM "~Dbo()~".OPERACIONESBITS ")
+sql.add(" WHERE NrOperacion = '"~dialogo.nroperacion1~"' AND Valor = '1' ")
+recorrer sql
+let(&instanciaprecan, Fbn('NrBit'))
+proximo
+
+sql.add(" UPDATE "~Dbo()~".OPERACIONES ")
+sql.add(" SET Plazo = "~FStr(Val(j1), 0, 0)~", ")
+sql.add(" FechaVto = '"~IdxDate(Val(k1))~"', ")
+sql.add(" Precio3 = "~FStr(Val(m1), 2, 8)~", ")
+sql.add(" Precio4 = "~FStr(&penalidadoriginal, 2, 8)~", ")
+sql.add(" TotalAux1 = "~FStr(Val(n1), 8, 2)~", ")
+sql.add(" CB7 = '1', ")
+sql.add(" FechaPrecan = '"~IdxDate(FSys())~"', ")
+sql.add(" Lotes = "~FStr(&instanciaprecan, 0, 0)~" ")
+sql.add(" WHERE NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.new
+sql.exec
+
+sql.add(" SELECT ImpGastos2, Cliente1, TotalAux2 ")
+sql.add(" FROM "~Dbo()~".OPERACIONES ")
+sql.add(" WHERE NrOperacion = '"~dialogo.nroperacion1~"' ")
+recorrer sql
+let(&impgastos2, Fbn('ImpGastos2'))
+let(&cliente, Fbn('Cliente1'))
+let(&cantidad5, iif (not DesciendeDeCliente(&cliente, 'BANCOS') y Eqstr('ARG', BuscarCampo('Clientes', 'PaisDir', 'Codigo', &cliente)), Val(l1) * &impgastos2 / 100, 0))
+let(&totalaux2, Fbn('TotalAux2'))
+let(&total5, iif (not DesciendeDeCliente(&cliente, 'BANCOS') y Eqstr('ARG', BuscarCampo('Clientes', 'PaisDir', 'Codigo', &cliente)), Val(l1) * &totalaux2 / 100, 0))
+let(&cantidad6, iif (not DesciendeDeCliente(&cliente, 'BANCOS') y Eqstr('ARG', BuscarCampo('Clientes', 'PaisDir', 'Codigo', &cliente)), &cantidad5 + &total5, 0))
+let(&total3, Val(l1) - Val(o1))
+let(&total2, BuscarCampo('CUOTAS', 'Cantidad1', 'NrOperacion', dialogo.nroperacion1) + Val(l1))
+let(&total1, &total2 - Val(o1))
+proximo
+
+sql.add(" UPDATE "~Dbo()~".CUOTAS ")
+sql.add(" SET Cantidad3 = "~FStr(Val(l1), 8, 2)~", ")
+sql.add(" Cantidad4 = "~FStr(Val(o1), 8, 2)~", ")
+sql.add(" Cantidad7 = Cantidad5, ")
+sql.add(" Total6 = Total5, ")
+sql.add(" Cantidad8 = Cantidad6, ")
+sql.add(" Total4 = Total3, ")
+sql.add(" Total7 = Total2, ")
+sql.add(" Total8 = Total1, ")
+sql.add(" Cantidad5 = "~FStr(&cantidad5, 8, 2)~", ")
+sql.add(" Total5 = "~FStr(&total5, 8, 2)~", ")
+sql.add(" Cantidad6 = "~FStr(&cantidad6, 8, 2)~", ")
+sql.add(" Total3 = "~FStr(&total3, 8, 2)~", ")
+sql.add(" Total2 = "~FStr(&total2, 8, 2)~", ")
+sql.add(" Total1 = "~FStr(&total1, 8, 2)~", ")
+sql.add(" Fecha2 = '"~IdxDate(Val(k1))~"' ")
+sql.add(" WHERE NrOperacion = '"~dialogo.nroperacion1~"' AND NrCuota = 1 ")
+sql.new
+sql.exec
+
+sql.actualizarmovimientos3(dialogo.nroperacion1, SI, NO, NO, NO, SI)
+sql.new
+sql.exec
+
+ejecutarevento('INSBIT', string1 = 'OPERACIONES', entero1 = 11, nroperacion1 = dialogo.nroperacion1)
+
+Messagebox('Evento de Precancelacion de Plazo Fijo terminó correctamente')

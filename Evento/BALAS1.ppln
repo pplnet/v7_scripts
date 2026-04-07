@@ -1,0 +1,169 @@
+HojaVisible(NO)
+mostrarcuadrodemensajes
+creardialogo
+fecha1:'D.F.Gener.';;;;;;;;;FSys()
+fecha2:'H.F.Gener.';;;;;;;;;FSys()
+nrunicoasiento1:'NrAsiento';;;;;;;;;
+radio1:'Procesar|Nuevos|Enviados|Ambos|';;;;;;;;;2
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+Acn(fa:9, 1)
+Act(x:2, '1')
+
+
+recorrer&k 1, 3
+if (&k <> 2)
+sql.add(" SELECT A.NrUnicoAsiento, A1.DebitoCredito, A.Estado, SUM(A1.Cantidad"~FStr(&k, 0, 0)~") AS MONTO, 'DEB' FLAG  ")
+sql.add(" FROM "~Dbo()~".ASIENTOSCON A, "~Dbo()~".ASIENTOSCON1 A1  ")
+sql.add(" Where A.NrUnicoAsiento = A1.NrUnicoAsiento ")
+if (Vacio(dialogo.nrunicoasiento1))
+sql.add("   and A.Fecha1 >= "~IdxDate2(dialogo.fecha1))
+sql.add("   and A.Fecha1 <= "~IdxDate2(dialogo.fecha2))
+sql.add("   and A.Sector = 'NB' ")
+sql.add("   and A1.DebitoCredito = 'DEB' ")
+if (dialogo.radio1 = 0)
+sql.add(" AND (A.Estado IS NULL OR A.Estado = '' OR A.Estado = ' ' OR A.Estado = 'COT' OR A.Estado = 'NC') ")
+endif
+if (dialogo.radio1 = 1)
+sql.add(" AND (A.Estado = 'E' OR A.Estado = 'COE' OR A.Estado = 'NCE') ")
+endif
+else
+sql.add("   and A.NrUnicoAsiento = '"~dialogo.nrunicoasiento1~"' ")
+sql.add("   and A1.DebitoCredito = 'DEB' ")
+endif
+sql.add(" group by A.NrUnicoAsiento, A1.DebitoCredito, A.Estado  ")
+
+sql.add(" UNION ")
+
+sql.add(" SELECT A.NrUnicoAsiento, A1.DebitoCredito, A.Estado, SUM(A1.Cantidad"~FStr(&k, 0, 0)~") AS MONTO, 'CRE' FLAG  ")
+sql.add(" FROM "~Dbo()~".ASIENTOSCON A, "~Dbo()~".ASIENTOSCON1 A1  ")
+sql.add(" Where A.NrUnicoAsiento = A1.NrUnicoAsiento ")
+if (Vacio(dialogo.nrunicoasiento1))
+sql.add("   and A.Fecha1 >= "~IdxDate2(dialogo.fecha1))
+sql.add("   and A.Fecha1 <= "~IdxDate2(dialogo.fecha2))
+sql.add("   and A.Sector = 'NB' ")
+sql.add("   and A1.DebitoCredito = 'CRE' ")
+if (dialogo.radio1 = 0)
+sql.add(" AND (A.Estado IS NULL OR A.Estado = '' OR A.Estado = ' ' OR A.Estado = 'COT' OR A.Estado = 'NC') ")
+endif
+if (dialogo.radio1 = 1)
+sql.add(" AND (A.Estado = 'E' OR A.Estado = 'COE' OR A.Estado = 'NCE') ")
+endif
+else
+sql.add("   and A.NrUnicoAsiento = '"~dialogo.nrunicoasiento1~"' ")
+sql.add("   and A1.DebitoCredito = 'CRE' ")
+endif
+sql.add(" group by A.NrUnicoAsiento, A1.DebitoCredito, A.Estado   ")
+sql.add(" order by A.NrUnicoAsiento ")
+
+Act(x:1, '')
+Acn(fi:1, 1)
+recorrer sql
+if (Eqstr(Val(x:1), Fbn()['NrUnicoAsiento']) y NoVacio(Val(x:1)))
+if (Eqstr('DEB', Fbn()['FLAG']))
+Acn(s:Val(fi:1), Round2(Fbn()['MONTO'], 2))
+else
+Acn(r:Val(fi:1), Round2(Fbn()['MONTO'], 2))
+endif
+Acn(aa:Val(fi:1), (Val(r:Val(fi:1)) * 100) - (Val(s:Val(fi:1)) * 100))
+Acn(xx:99, Var('BALANCE') * 100)
+if (Abs(Val(aa:Val(fi:1))) <= Val(xx:99))
+if (Val(aa:Val(fi:1)) > 0)
+sql.add(" Select Cantidad"~FStr(&k, 0, 0)~", Alias3, NrUnicoAsiento, DebitoCredito ")
+sql.add(" FROM "~Dbo()~".ASIENTOSCON1 A1 ")
+sql.add(" WHERE A1.NrUnicoAsiento = '"~Val(x:1)~"' ")
+sql.add(" Order By DebitoCredito Desc ")
+recorrer sql
+if (Trunc(Fbn()['Cantidad'~FStr(&k, 0, 0)~''], 0) <> Fbn()['Cantidad'~FStr(&k, 0, 0)~''])
+Act(t:Val(fi:1), Fbn()['Alias3'])
+if (sql(" Select 1 from "~Dbo()~".ASIENTOSCON where NrUnicoAsiento= '"~Val(x:1)~"' and UDN is Not Null ") = 1)
+sql.add(" UPDATE "~Dbo()~".ASIENTOSCON SET Sector=UDN WHERE NrUnicoAsiento= '"~Val(x:1)~"' ")
+sql.new
+sql.exec
+sql.add(" UPDATE "~Dbo()~".ASIENTOSCON SET UDN=Null WHERE NrUnicoAsiento= '"~Val(x:1)~"' ")
+sql.new
+sql.exec
+else
+sql.add(" UPDATE "~Dbo()~".ASIENTOSCON SET Sector=Null WHERE NrUnicoAsiento= '"~Val(x:1)~"' ")
+sql.new
+sql.exec
+endif
+
+sql.add(" UPDATE "~Dbo()~".ASIENTOSCON1 ")
+if (Eqstr(Fbn('DebitoCredito'), 'DEB'))
+sql.add(" SET Cantidad"~FStr(&k, 0, 0)~" = Cantidad"~FStr(&k, 0, 0)~" + "~FStr(Abs(Val(aa:Val(fi:1)) / 100), 0, 2)~" ")
+else
+sql.add(" SET Cantidad"~FStr(&k, 0, 0)~" = Cantidad"~FStr(&k, 0, 0)~" - "~FStr(Abs(Val(aa:Val(fi:1)) / 100), 0, 2)~" ")
+endif
+sql.add(" WHERE NrUnicoAsiento= '"~Val(x:1)~"' ")
+sql.add(" AND Alias3 = '"~Val(t:Val(fi:1))~"' ")
+sql.new
+sql.exec
+if (not Incluido(Fbn('NrUnicoAsiento'), Val(x:4)))
+Act(x:4, Val(x:4)~Fbn('NrUnicoAsiento')~'|')
+endif
+Message('Asiento1 '~Fbn('NrUnicoAsiento')~' actualizado.')
+break
+endif
+proximo
+else
+if (Val(aa:Val(fi:1)) < 0)
+sql.add(" Select Cantidad"~FStr(&k, 0, 0)~", Alias3, NrUnicoAsiento, DebitoCredito ")
+sql.add(" FROM "~Dbo()~".ASIENTOSCON1 A1 ")
+sql.add(" WHERE A1.NrUnicoAsiento = '"~Val(x:1)~"' ")
+sql.add(" Order By DebitoCredito ")
+recorrer sql
+if (Trunc(Fbn()['Cantidad'~FStr(&k, 0, 0)~''], 0) <> Fbn()['Cantidad'~FStr(&k, 0, 0)~''])
+Act(t:Val(fi:1), Fbn()['Alias3'])
+if (sql(" Select 1 from "~Dbo()~".ASIENTOSCON where NrUnicoAsiento= '"~Val(x:1)~"' and UDN is Not Null ") = 1)
+sql.add(" UPDATE "~Dbo()~".ASIENTOSCON SET Sector=UDN WHERE NrUnicoAsiento= '"~Val(x:1)~"' ")
+sql.new
+sql.exec
+sql.add(" UPDATE "~Dbo()~".ASIENTOSCON SET UDN=Null WHERE NrUnicoAsiento= '"~Val(x:1)~"' ")
+sql.new
+sql.exec
+else
+sql.add(" UPDATE "~Dbo()~".ASIENTOSCON SET Sector=Null WHERE NrUnicoAsiento= '"~Val(x:1)~"' ")
+sql.new
+sql.exec
+endif
+
+sql.add(" UPDATE "~Dbo()~".ASIENTOSCON1 ")
+if (Eqstr(Fbn('DebitoCredito'), 'CRE'))
+sql.add(" SET Cantidad"~FStr(&k, 0, 0)~" = Cantidad"~FStr(&k, 0, 0)~" + "~FStr(Abs(Val(aa:Val(fi:1)) / 100), 0, 2)~" ")
+else
+sql.add(" SET Cantidad"~FStr(&k, 0, 0)~" = Cantidad"~FStr(&k, 0, 0)~" - "~FStr(Abs(Val(aa:Val(fi:1)) / 100), 0, 2)~" ")
+endif
+sql.add(" WHERE NrUnicoAsiento= '"~Val(x:1)~"' ")
+sql.add(" AND Alias3  = '"~Val(t:Val(fi:1))~"' ")
+sql.new
+sql.exec
+if (not Incluido(Fbn('NrUnicoAsiento'), Val(x:4)))
+Act(x:4, Val(x:4)~Fbn('NrUnicoAsiento')~'|')
+endif
+Message('Asiento2 '~Fbn('NrUnicoAsiento')~' actualizado.')
+break
+endif
+proximo
+else
+endif
+endif
+else
+if (not Incluido(Fbn('NrUnicoAsiento'), Val(x:5)))
+Act(x:5, Val(x:5)~Fbn('NrUnicoAsiento')~'|')
+endif
+endif
+endif
+Act(x:1, Fbn()['NrUnicoAsiento'])
+Scn(fi:1, 1)
+if (Eqstr('DEB', Fbn()['FLAG']))
+Acn(s:Val(fi:1), Round2(Fbn()['MONTO'], 2))
+else
+Acn(r:Val(fi:1), Round2(Fbn()['MONTO'], 2))
+endif
+proximo
+endif
+proximo

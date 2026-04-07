@@ -1,0 +1,280 @@
+if (Vacio(UsrVehiculos(UsuarioActivo())))
+Act(ls:1, SQLSet(" Select Codigo from "~Dbo()~".VEHICULOS where Status = 'HAB' "))
+else
+Act(ls:1, UsrVehiculos(UsuarioActivo()))
+endif
+
+mostrarcuadrodemensajes
+creardialogo
+fecha1: 'Fecha';1;;;;;;;;FSys()
+radio1: 'Filtra Book|SI|NO';2;;;;;;;;1;
+lista1: 'Vehiculos';3;;;;dialogo.radio1 = 1;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), Val(ls: 1), SQLSet(" Select U.Vehiculo From "~Dbo()~".USRVEHICULO U, "~Dbo()~".VEHICULOS V Where V.Codigo = U.Vehiculo AND U.Codigo = '"~UsuarioActivo()~"' AND V.Status = 'HAB' "));;
+vehiculo1: 'Vehiculo';3;;;;dialogo.radio1 = 0;dialogo.radio1 = 1 o NoVacio(dialogo.vehiculo1);'Vehiculo Invalido';NO;;;;;;;
+lista2: 'Books';4;;;;dialogo.radio1 = 0;;;;;;SQLSet(" Select Codigo From "~Dbo()~".BOOKS Where Vehiculo = '"~dialogo.vehiculo1~"' ");;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (dialogo.radio1 = 1)
+if (Vacio(dialogo.lista1))
+let(&lista1, Val(ls:1))
+else
+let(&lista1, dialogo.lista1)
+endif
+else
+let(&lista1, dialogo.vehiculo1~'|')
+if (NoVacio(dialogo.lista2))
+let(&books, dialogo.lista2)
+else
+let(&books, SQLSet(" Select Codigo From "~Dbo()~".BOOKS Where Vehiculo = '"~dialogo.vehiculo1~"' "))
+endif
+endif
+
+linkearhoja('POSICI', 1, fecha1 = dialogo.fecha1, lista1 = &lista1, radio1 = 1, radio2 = 0, radio3 = 1, check1 = 1, radio4 = 0)
+
+let(&radio2, 0)
+recorrer&i linkh(1, zz:1), linkh(1, zz:2)
+if (NoVacio(linkh(1, d:&i)))
+if (dialogo.radio1 = 1 o (dialogo.radio1 = 0 y Incluido(linkh(1, d:&i), &books)))
+let(&book, linkh(1, d:&i))
+let(&tcartera, linkh(1, x:&i))
+if (sql("Select 1 from "~Dbo()~".RENTABILIDAD Where Fecha ='"~IdxDate(dialogo.fecha1)~"'  AND Vehiculo = '"~&vehiculo~"' AND Book='"~&book~"' ") = 1)
+sql.add("UPDATE "~Dbo()~".RENTABILIDAD  ")
+if (&radio2 = 0)
+sql.add("Set ValorCarteraML = "~FStr(&tcartera, 1, 2)~" ,")
+else
+sql.add("Set ValorCarteraME = "~FStr(&tcartera, 1, 2)~" ,")
+endif
+sql.add("FechaCarga = "~SQLAhora()~", FechaCargaSys = '"~IdxDate(FSys())~"'  ")
+sql.add("Where Fecha ='"~IdxDate(dialogo.fecha1)~"'  AND Vehiculo = '"~&vehiculo~"' AND Book='"~&book~"'  ")
+sql.new
+sql.exec
+else
+if (&radio2 = 0)
+sql.add("INSERT INTO "~Dbo()~".RENTABILIDAD (Fecha,Vehiculo,Book,ValorCarteraML,FechaCarga,FechaCargaSys) VALUES")
+sql.add("('"~IdxDate(dialogo.fecha1)~"','"~&vehiculo~"','"~&book~"',"~FStr(&tcartera, 1, 2)~","~SQLAhora()~",'"~IdxDate(FSys())~"')")
+sql.new
+sql.exec
+else
+sql.add("INSERT INTO  RENTABILIDAD (Fecha,Vehiculo,Book,ValorCarteraME,FechaCarga,FechaCargaSys) VALUES")
+sql.add("('"~IdxDate(dialogo.fecha1)~"','"~&vehiculo~"','"~&book~"',"~FStr(&tcartera, 1, 2)~","~SQLAhora()~",'"~IdxDate(FSys())~"')")
+sql.new
+sql.exec
+endif
+endif
+
+
+
+
+
+
+
+let(&fechatc, dialogo.fecha1)
+let(&monedalocal, Var('MONELOCA'))
+let(&monedaextr, Var('MONEEXTR'))
+let(&dolbillete, Var('DOLBILLETE'))
+let(&vehiculosdolbillete, Var('VEHDOLBI'))
+let(&cotdoldivisa, CotizacionBNA(&monedaextr, &fechatc, 1, NO, NO))
+let(&cotdolbillete, CotizacionBNA(&dolbillete, &fechatc, 1, NO, NO))
+
+let(&vehiculotc, &vehiculo)
+if (Incluido(&vehiculotc, &vehiculosdolbillete))
+let(&cotvehiculo, &cotdolbillete)
+else
+let(&cotvehiculo, &cotdoldivisa)
+endif
+
+
+
+let(&dayml, 0)
+let(&dayme, 0)
+
+
+
+sql.add(" Select Especie,Sum(VRMEDAY+RRMEDAY+CRMEDAY+INMEDAY) as 'Resultado' from "~Dbo()~".RESULTADOS2 Where Fecha ='"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND Vehiculo='"~&vehiculo~"' AND Book='"~&book~"' and NrSaldo=1 ")
+sql.add(" Group by Especie ")
+recorrer sql
+let(&espbonind, Fbn('Especie'))
+let(&fechabonind1, dialogo.fecha1)
+let(&fechabonind2, dialogo.fecha1)
+let(&monto, 0)
+let(&indiceesp, BuscarCampo('ESPECIES', 'Indice', 'Codigo', &espbonind))
+let(&tipoindice, BuscarCampo('ESPECIES', 'TipoIndice', 'Codigo', &indiceesp))
+if (NoVacio(&indiceesp) y Eqstr(&tipoindice, 'CAP'))
+sql.add("Select ABS(Cantidad1) as 'Nominales',Cambio3,Precio1,Precio2 from "~Dbo()~".TRANSACCIONES2 ")
+sql.add(" Where TipoTr2='CUPON' AND Cantidad4=3 AND Fecha1 >='"~IdxDate(&fechabonind1)~"' AND ")
+sql.add(" Fecha1 <='"~IdxDate(&fechabonind2)~"'AND Vehiculo1='"~&vehiculo~"' ")
+sql.add(" AND Book1='"~&book~"' AND Especie='"~&espbonind~"' ")
+recorrer sql
+Dfa()
+let(&dif, Fbn('Cambio3') - 1)
+let(&poramort, Fbn('Precio1') / 100)
+let(&porrenta, Fbn('Precio2') / 100)
+let(&montoini, Fbn('Nominales') * &dif)
+let(&montoamort, &montoini * &poramort)
+let(&montorenta, &montoini * &porrenta)
+let(&monto, &montoamort + &montorenta)
+proximo
+endif
+
+
+
+
+
+let(&cotiza, BuscarCampo('ESPECIES', 'Cotiza', 'Codigo', Fbn('Especie')))
+let(&monedatc1, &cotiza)
+if (Eqstr(&cotiza, &monedalocal))
+let(&dayml, &dayml + Fbn('Resultado') + &monto)
+let(&monedatc2, &monedaextr)
+if (Incluido(&monedatc1, &monedatc2))
+let(&tc, 1)
+else
+if (Eqstr(&monedatc1, &monedalocal))
+let(&tc, &cotvehiculo)
+else
+let(&tc, 1 / &cotvehiculo)
+endif
+endif
+
+
+let(&dayme, &dayme + ((Fbn('Resultado') + &monto) * &tc))
+else
+let(&dayme, &dayme + Fbn('Resultado') + &monto)
+let(&monedatc2, &monedalocal)
+if (Incluido(&monedatc1, &monedatc2))
+let(&tc, 1)
+else
+if (Eqstr(&monedatc1, &monedalocal))
+let(&tc, &cotvehiculo)
+else
+let(&tc, 1 / &cotvehiculo)
+endif
+endif
+
+
+let(&dayml, &dayml + ((Fbn('Resultado') + &monto) * &tc))
+endif
+proximo
+
+
+sql.add(" Select Especie,Sum(Monto) as 'Resultado' from "~Dbo()~".MOVDEVENGADOS Where Fecha ='"~IdxDate(dialogo.fecha1)~"' and NrSaldo=140 and TipoDevengado='INTLEN' ")
+sql.add(" AND Vehiculo='"~&vehiculo~"' AND Book='"~&book~"' and Especie IN ('"~&monedalocal~"','"~&monedaextr~"') ")
+sql.add(" Group By Especie")
+recorrer sql
+if (Eqstr(Fbn('Especie'), &monedalocal))
+let(&monedatc1, &monedaextr)
+let(&dayml, &dayml + Fbn('Resultado'))
+let(&monedatc2, &monedalocal)
+if (Incluido(&monedatc1, &monedatc2))
+let(&tc, 1)
+else
+if (Eqstr(&monedatc1, &monedalocal))
+let(&tc, &cotvehiculo)
+else
+let(&tc, 1 / &cotvehiculo)
+endif
+endif
+
+
+let(&dayme, &dayme + (Fbn('Resultado') * &tc))
+else
+let(&monedatc1, &monedalocal)
+let(&dayme, &dayme + Fbn('Resultado'))
+let(&monedatc2, &monedaextr)
+if (Incluido(&monedatc1, &monedatc2))
+let(&tc, 1)
+else
+if (Eqstr(&monedatc1, &monedalocal))
+let(&tc, &cotvehiculo)
+else
+let(&tc, 1 / &cotvehiculo)
+endif
+endif
+
+
+let(&dayml, &dayml + (Fbn('Resultado') * &tc))
+endif
+proximo
+
+let(&dc, sql("Select Sum(DC) from "~Dbo()~".DCMM Where Vehiculo='"~&vehiculo~"' and Book='"~&book~"' and Fecha='"~IdxDate(dialogo.fecha1)~"' "))
+let(&dayml, &dayml + &dc)
+
+let(&ayer, Habiles(dialogo.fecha1, -1, 'ARG', SI))
+let(&vcartmlayer, Query(" Select ValorCarteraML from "~Dbo()~".RENTABILIDAD Where Fecha ='"~IdxDate(&ayer)~"'  AND Vehiculo = '"~&vehiculo~"' AND Book='"~&book~"' "))
+
+if (Round(&vcartmlayer, 0) = 0)
+let(&rentabilidad, 0)
+else
+let(&rentabilidad, &dayml / &vcartmlayer)
+endif
+
+
+sql.add("UPDATE "~Dbo()~".RENTABILIDAD  ")
+sql.add("Set DayML = "~FStr(&dayml, 0, 2)~" ,DayME = "~FStr(&dayme, 0, 2)~" ,Rentabilidad="~FStr(&rentabilidad, 0, 8)~", ")
+sql.add("FechaCarga = "~SQLAhora()~", FechaCargaSys = '"~IdxDate(FSys())~"'  ")
+sql.add("Where Fecha ='"~IdxDate(dialogo.fecha1)~"'  AND Vehiculo = '"~&vehiculo~"' AND Book='"~&book~"'  ")
+sql.new
+sql.exec
+
+
+
+endif
+else
+if (dialogo.radio1 = 1 o (dialogo.radio1 = 0 y Eqstr(linkh(1, a:&i), dialogo.vehiculo1)))
+let(&vehiculo, linkh(1, a:&i))
+endif
+endif
+proximo
+
+linkearhoja('POSICI', 2, fecha1 = dialogo.fecha1, lista1 = &lista1, radio1 = 1, radio2 = 1, radio3 = 1, check1 = 1, radio4 = 0)
+
+let(&radio2, 1)
+recorrer&i linkh(2, zz:1), linkh(2, zz:2)
+if (NoVacio(linkh(2, d:&i)))
+if (dialogo.radio1 = 1 o (dialogo.radio1 = 0 y Incluido(linkh(2, d:&i), &books)))
+let(&book, linkh(2, d:&i))
+let(&tcartera, linkh(2, x:&i))
+if (sql("Select 1 from "~Dbo()~".RENTABILIDAD Where Fecha ='"~IdxDate(dialogo.fecha1)~"'  AND Vehiculo = '"~&vehiculo~"' AND Book='"~&book~"' ") = 1)
+sql.add("UPDATE "~Dbo()~".RENTABILIDAD  ")
+if (&radio2 = 0)
+sql.add("Set ValorCarteraML = "~FStr(&tcartera, 1, 2)~" ,")
+else
+sql.add("Set ValorCarteraME = "~FStr(&tcartera, 1, 2)~" ,")
+endif
+sql.add("FechaCarga = "~SQLAhora()~", FechaCargaSys = '"~IdxDate(FSys())~"'  ")
+sql.add("Where Fecha ='"~IdxDate(dialogo.fecha1)~"'  AND Vehiculo = '"~&vehiculo~"' AND Book='"~&book~"'  ")
+sql.new
+sql.exec
+else
+if (&radio2 = 0)
+sql.add("INSERT INTO "~Dbo()~".RENTABILIDAD (Fecha,Vehiculo,Book,ValorCarteraML,FechaCarga,FechaCargaSys) VALUES")
+sql.add("('"~IdxDate(dialogo.fecha1)~"','"~&vehiculo~"','"~&book~"',"~FStr(&tcartera, 1, 2)~","~SQLAhora()~",'"~IdxDate(FSys())~"')")
+sql.new
+sql.exec
+else
+sql.add("INSERT INTO  RENTABILIDAD (Fecha,Vehiculo,Book,ValorCarteraME,FechaCarga,FechaCargaSys) VALUES")
+sql.add("('"~IdxDate(dialogo.fecha1)~"','"~&vehiculo~"','"~&book~"',"~FStr(&tcartera, 1, 2)~","~SQLAhora()~",'"~IdxDate(FSys())~"')")
+sql.new
+sql.exec
+endif
+endif
+
+
+
+
+
+
+
+endif
+else
+if (dialogo.radio1 = 1 o (dialogo.radio1 = 0 y Eqstr(linkh(2, a:&i), dialogo.vehiculo1)))
+let(&vehiculo, linkh(2, a:&i))
+endif
+endif
+proximo
+
+
+

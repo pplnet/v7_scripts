@@ -1,0 +1,595 @@
+mostrarcuadrodemensajes
+creardialogo
+radio1: 'Factura|Alta|Modif.';1;1;;;;dialogo.radio1 >= 0;'Debe Elegir Alta o Modificacion';NO;-1;
+nroperacion1: 'Operacion';3;1;;;;;;;;;;;;" TipoOp IN ("~pipe2comillas(Var('OPEIMPUEST'))~") ";
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+Acn(bd:8, 0)
+
+if (dialogo.radio1 = 0)
+Act( to :1, BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', dialogo.nroperacion1))
+if (Eqstr(Val( to :1), 'MMONM'))
+if (BuscarCampo('OPERACIONES', 'MB3', 'NrOperacion', dialogo.nroperacion1) <= 0)
+Cancelar()(" La Obligacion Negociable no es una Emision Propia ")
+endif
+else
+if (Eqstr(Val( to :1), 'MMSELN'))
+if (BuscarCampo('OPERACIONES', 'MB3', 'NrOperacion', dialogo.nroperacion1) = 1)
+Cancelar()(" Al Seller Notes Colocacion no se le asignan Impuestos")
+endif
+endif
+endif
+Acn(bd:1, 0)
+Act(nr:1, dialogo.nroperacion1)
+sql.add(" Select M.Cantidad, M.Leyenda, M.FechaMov, M.Cliente, M.Especie, M.EnteCustodia, ")
+sql.add(" C.CUIT, M.NrMov, M.Cuenta ")
+sql.add(" From "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".OPERACIONES O, "~Dbo()~".CLIENTES C, "~Dbo()~".OPERACIONESBITS B ")
+sql.add(" Where O.NrOperacion = M.NrOperacion ")
+sql.add(" AND M.Cliente = C.Codigo ")
+sql.add(" AND O.NrOperacion = B.NrOperacion ")
+sql.add(" AND B.NrBit >= 19 ")
+sql.add(" AND B.Valor = '1' ")
+sql.add(" AND O.NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.add(" AND M.Especie IN ("~pipe2comillas(Descendientes('ESPECIES', 'MONEDA'))~") ")
+sql.add(" AND (M.NrMov < 8000 OR M.NrMov > 9000) ")
+sql.add(" AND (M.NrMov < 7000 OR M.NrMov > 7100) ")
+sql.add(" AND (M.FechaMov > O.FechaOp OR M.NrMov > 1) ")
+sql.add(" AND M.NrMov IN (Select M1.NrMov From "~Dbo()~".MOVPENDIENTES M1 ")
+sql.add("                 Where M1.NrOperacion = O.NrOperacion ")
+sql.add("                 AND M.NrMov Not IN (Select I.Plazo4 From "~Dbo()~".IMPUESTOS I ")
+sql.add("      	                          Where I.NrOperacion = O.NrOperacion ")
+sql.add("                                     AND (Check2 = 0 OR Check2 Is Null OR Check2 = '' OR Check2 = ' ') ")
+sql.add("                                     AND (Check3 = 0 OR Check3 Is Null OR Check3 = '' OR Check3 = ' '))) ")
+sql.add(" AND M.FechaMov = (Select Min(M2.FechaMov) From "~Dbo()~".MOVPENDIENTES M2 ")
+sql.add("                   Where M2.NrOperacion = O.NrOperacion ")
+sql.add("                   AND (M2.FechaMov > O.FechaOp OR M2.NrMov > 1) ")
+sql.add("                   AND (M2.NrMov < 8000 OR M2.NrMov > 9000) ")
+sql.add("                   AND (M2.NrMov < 7000 OR M2.NrMov > 7100) ")
+sql.add("                   AND M2.NrMov Not IN (Select I1.Plazo4 From "~Dbo()~".IMPUESTOS I1 ")
+sql.add("                                        Where I1.NrOperacion = O.NrOperacion ")
+sql.add("                                        AND (Check2 = 0 OR Check2 Is Null OR Check2 = '' OR Check2 = ' ') ")
+sql.add("                                        AND (Check3 = 0 OR Check3 Is Null OR Check3 = '' OR Check3 = ' '))) ")
+recorrer sql
+Acd(a:fac, Fbn('FechaMov'))
+Act(b:fac, Fbn('Leyenda'))
+Act(c:fac, Fbn('Especie'))
+Acn(d:fac, Fbn('Cantidad'))
+Act(e:fac, Fbn('Cliente'))
+Act(f:fac, Fbn('EnteCustodia'))
+Act(g:fac, Fbn('CUIT'))
+Act(h:fac, Fbn('Cuenta'))
+Acn(v:fac, Fbn('NrMov'))
+Acn(bd:1, 1)
+proximo
+if (Val(bd:1) = 1)
+crearlistbox;'Arial,8,B';'Alta de Factura Operacion '~dialogo.nroperacion1~' - Seleccione los Conceptos para aplicarles los Impuestos'
+'Aplica';z:1..z:fac;SI;((Val(y:flb) = 1 y Val(z:flb) = 1) o Val(y:flb) = 0);'Si el Concepto Es Exento, debe Aplicarse el Impuesto';45;check;RGB(2, 255, 255);iif (Val(y:flb) = 1, 1, Val(z:flb));
+'FechaVto';a:1..a:fac;NO;;;70;fecha
+'Concepto';b:1..b:fac;NO;;;150;string
+'Moneda';c:1..c:fac;NO;;;50;string
+'Cantidad';d:1..d:fac;NO;;;100;numero;'###,###,###,###.##'
+'Proveedor';e:1..e:fac;NO;;;70;string
+'Vehiculo';f:1..f:fac;NO;;;100;string
+'CUIT';g:1..g:fac;NO;;;100;string
+finlistbox
+if (not ok)
+Cancelar()
+endif
+else
+Cancelar()(" La Op. "~dialogo.nroperacion1~" No Tiene Mov. Ptes. de Liquidacion sin Impuestos Aplicados O No Esta Autorizada ")
+endif
+else
+Acn(bd:1, 0)
+Acn(fi:6, 0)
+sql.add(" Select Distinct NrSisExterno Factura From "~Dbo()~".IMPUESTOS ")
+sql.add(" Where NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.add(" AND (Check2 = 0 OR Check2 Is Null OR Check2 = '' OR Check2 = ' ') ")
+sql.add(" AND (Check3 = 0 OR Check3 Is Null OR Check3 = '' OR Check3 = ' ') ")
+recorrer sql
+Dfa()
+Scn(bd:1, 1)
+Act(nf:Val(bd:1), Fbn('Factura'))
+Act(nx:Val(bd:1), dialogo.nroperacion1)
+proximo
+if (Val(bd:1) = 0)
+Cancelar()(" La Operacion "~dialogo.nroperacion1~" No Tiene Factura Asignada - Elija Alta de Factura ")
+endif
+if (Val(bd:1) > 1)
+crearlistbox;'Arial,8,B';'Seleccione La Factura a Modificar'
+'OK';w:1..w:Val(bd:1);;sum(w:1..w:Val(bd:1)) = 1;'Debe Eligir Una Factura';45;check;
+'Factura';nf:1..nf:Val(bd:1);NO;;;150;string
+'Operacion';nx:1..nx:Val(bd:1);NO;;;150;string
+finlistbox
+if (not ok)
+Cancelar()
+endif
+endif
+Act(nr:1, dialogo.nroperacion1)
+recorrer&k 1, Val(bd:1)
+if (Val(w:&k) = 1)
+Act(nf:1, Val(nf:&k))
+break
+endif
+proximo
+Acn(bd:7, 0)
+sql.add(" Select M.NrOperacion ")
+sql.add(" From "~Dbo()~".MOVEJECUTADOS M, "~Dbo()~".IMPUESTOS I ")
+sql.add(" Where I.NrOperacion = M.NrOperacion ")
+sql.add(" AND I.NrOperacion = '"~Val(nr:1)~"' ")
+sql.add(" AND I.NrSisExterno = '"~Val(nf:1)~"' ")
+sql.add(" AND M.NrMov = I.Plazo4 ")
+recorrer sql
+Dfa()
+Acn(bd:7, 1)
+proximo
+if (Val(bd:7) = 1)
+Cancelar()('La Factura '~Val(nf:1)~' Tiene Movimientos Liquidados -  Anule la Liquidacion Previamente')
+endif
+sql.add(" Select M.Cantidad, M.Leyenda, M.FechaMov, M.Cliente, M.Especie, M.EnteCustodia, ")
+sql.add(" C.CUIT, 1 Estado, M.NrMov, M.Cuenta, I.Fecha1 FechaFac, I.Cantidad2 TotalFac, I.String21 CAI, I.String24 CBarra ")
+sql.add(" From "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".IMPUESTOS I, "~Dbo()~".CLIENTES C ")
+sql.add(" Where I.NrOperacion = M.NrOperacion ")
+sql.add(" AND M.Cliente = C.Codigo ")
+sql.add(" AND I.NrOperacion = '"~Val(nr:1)~"' ")
+sql.add(" AND I.NrSisExterno = '"~Val(nf:1)~"' ")
+sql.add(" AND M.NrMov = I.Plazo4 ")
+sql.add(" AND (I.Check3 = 0 OR I.Check3 Is Null OR I.Check3 = '' OR I.Check3 = ' ') ")
+sql.add(" AND (M.NrMov < 8000 OR M.NrMov > 9000) ")
+sql.add(" AND (M.NrMov < 7000 OR M.NrMov > 7100) ")
+
+sql.add(" UNION ")
+
+sql.add(" Select M.Cantidad, M.Leyenda, M.FechaMov, M.Cliente, M.Especie, M.EnteCustodia, ")
+sql.add(" C.CUIT, 0 Estado, M.NrMov, M.Cuenta, M.FechaMov FechaFac, 0 TotalFac, '' CAI, '' CBarra ")
+sql.add(" From "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".OPERACIONES O, "~Dbo()~".CLIENTES C ")
+sql.add(" Where O.NrOperacion = M.NrOperacion ")
+sql.add(" AND M.Cliente = C.Codigo ")
+sql.add(" AND M.NrOperacion = '"~Val(nr:1)~"' ")
+sql.add(" AND M.NrMov Not IN (Select Plazo4 From "~Dbo()~".IMPUESTOS I ")
+sql.add("                     Where I.NrOperacion = M.NrOperacion ")
+sql.add("                     AND (I.Check2 = 0 OR I.Check2 Is Null OR I.Check2 = '' OR I.Check2 = ' ') ")
+sql.add("                     AND (I.Check3 = 0 OR I.Check3 Is Null OR I.Check3 = '' OR I.Check3 = ' ')) ")
+sql.add(" AND M.FechaMov = (Select Max(Fecha2) From "~Dbo()~".IMPUESTOS I ")
+sql.add("                   Where I.NrOperacion = M.NrOperacion ")
+sql.add("                   AND (I.Check2 = 0 OR I.Check2 Is Null OR I.Check2 = '' OR I.Check2 = ' ') ")
+sql.add("                   AND (I.Check3 = 0 OR I.Check3 Is Null OR I.Check3 = '' OR I.Check3 = ' ') ")
+sql.add("                   AND I.NrSisExterno = '"~Val(nf:1)~"') ")
+sql.add(" AND (M.FechaMov > O.FechaOp OR M.NrMov > 1) ")
+sql.add(" AND (M.NrMov < 8000 OR M.NrMov > 9000) ")
+sql.add(" AND (M.NrMov < 7000 OR M.NrMov > 7100) ")
+sql.add(" Order By Estado Desc ")
+recorrer sql
+Acd(a:fac, Fbn('FechaMov'))
+Act(b:fac, Fbn('Leyenda'))
+Act(c:fac, Fbn('Especie'))
+Acn(d:fac, Fbn('Cantidad'))
+Act(e:fac, Fbn('Cliente'))
+Act(f:fac, Fbn('EnteCustodia'))
+Act(g:fac, Fbn('CUIT'))
+Act(h:fac, Fbn('Cuenta'))
+Acn(r:fac, Fbn('Estado'))
+Acn(v:fac, Fbn('NrMov'))
+if (Fbn('Estado') = 1)
+Acd(fx:1, Fbn('FechaFac'))
+Acn(mn:1, Fbn('TotalFac'))
+Act(ca:1, Fbn('CAI'))
+Act(cb:1, Fbn('CBarra'))
+Acd(fc:1, Fecha(Copy(Val(cb:1), 38, 2)~'/'~Copy(Val(cb:1), 36, 2)~'/'~Copy(Val(cb:1), 32, 4)))
+endif
+Acn(bd:1, 1)
+proximo
+crearlistbox;'Arial,8,B';'Modificacion de Factura '~Val(nf:1)~' - Seleccione los Conceptos para aplicarles los Impuestos'
+'Aplica';z:1..z:fac;SI;sum(z:1..z:fac) > 0 y ((Val(y:flb) = 1 y Val(z:flb) = 1) o Val(y:flb) = 0);iif (sum(z:1..z:fac) = 0, 'Debe Elegir Al Menos un Concepto a Incluir en La Factura', 'Si el Concepto Es Exento, debe Aplicarse el Impuesto');45;check;RGB(2, 255, 255);iif (Val(y:flb) = 1, 1, Val(z:flb));
+'Aplicado';r:1..r:fac;NO;;;55;check;
+'FechaVto';a:1..a:fac;NO;;;70;fecha
+'Concepto';b:1..b:fac;NO;;;150;string
+'Moneda';c:1..c:fac;NO;;;50;string
+'Cantidad';d:1..d:fac;NO;;;100;numero;'###,###,###,###.##'
+'Proveedor';e:1..e:fac;NO;;;70;string
+'Vehiculo';f:1..f:fac;NO;;;100;string
+'CUIT';g:1..g:fac;NO;;;100;string
+finlistbox
+if (not ok)
+Cancelar()
+endif
+endif
+Acn(bd:1, 0)
+Acn(bd:3, 0)
+Acn(fi:3, 0)
+Acn(bd:6, 0)
+recorrer&k 1, Fac()
+Scn(bd:3, 1)
+if (Val(z:&k) = 1)
+Scn(bd:1, 1)
+if (DesciendeDeCliente(Val(e:&k), 'BANCOS'))
+Acn(bd:2, 1)
+else
+Acn(bd:2, 0)
+endif
+if (Val(bd:1) = 1)
+if (dialogo.radio1 = 0)
+if (Val(bd:2) = 1)
+Acn(ce:2, sql(" Select Max(Convert(int, SubString(NrSisExterno, 1, 4))) From "~Dbo()~".IMPUESTOS Where NrOperacion = '"~dialogo.nroperacion1~"' AND (Check2 = 0 OR Check2 Is Null OR Check2 = '' OR Check2 = ' ')  "))
+Scn(ce:2, 1)
+Act(ce:1, Pad0(FStr(Val(ce:2), 0, 0), 4))
+Act(tf:1, 'X')
+Act(fa:1, Val(nr:1))
+endif
+Act(lw:1, Var('TIPOFACVAL'))
+recorrer&i 1, 10000000
+if (Val(bd:2) = 0)
+crearlistbox;'Arial,8,B';'Ingreso de Datos de la Factura Legal - NO BANCOS'
+'Centro Emisor';ce:1..ce:1;;Longitud(Val(ce:flb)) = 4;'Centro Emisor Invalido -  Debe ser de 4 Caracteres';85;string;;RGB(2, 255, 255)
+'Tipo Factura';tf:1..tf:1;;;;75;combo;Var('TIPOFACVAL')
+'Nro.Factura';fa:1..fa:1;;Longitud(Val(fa:flb)) = 8;'Nro. de Factura Invalido - Debe ser de 8 Caracteres';70;string
+'F.Factura';fx:1..fx:1;;Val(fx:flb) <= FSys() y Anio(Val(fx:flb)) > 2000;'Fecha de Factura Invalida';60;fecha;RGB(2, 255, 255)
+'Monto Factura';mn:1..mn:1;;Val(mn:flb) > 0;'Monto Factura Invalido';85;numero;'###,###,###,###.##';RGB(2, 255, 255);
+'Codigo Barra';cb:1..cb:1;;Longitud(Val(cb:flb)) = 40 o Eqstr(ItemLista(Val(lw:1), Num(Val(tf:1)) + 1), 'X');'Codigo de Barra Invalido';250;string;50;RGB(2, 255, 255)
+'C.A.I.';ca:1..ca:1;NO;Longitud(Val(ca:flb)) = 14 o Eqstr(ItemLista(Val(lw:1), Num(Val(tf:1)) + 1), 'X');'C.A.I. Invalido';100;string;;;Copy(Val(cb:flb), 18, 14);
+'F.Vto.C.A.I.';fc:1..fc:1;NO;Anio(Val(fc:flb)) > 2000 o Eqstr(ItemLista(Val(lw:1), Num(Val(tf:1)) + 1), 'X');'Vto. del CAI Invalido';65;fecha;;fecha(Copy(Val(cb:flb), 38, 2)~'/'~Copy(Val(cb:flb), 36, 2)~'/'~Copy(Val(cb:flb), 32, 4));
+finlistbox
+else
+crearlistbox;'Arial,8,B';'Ingreso de Datos de la Factura Legal - BANCOS'
+'Nr.Correlativo';ce:1..ce:1;;Longitud(Val(ce:flb)) = 4;'Centro Emisor Invalido -  Debe ser de 4 Caracteres';85;string;;RGB(2, 255, 255)
+'Caracter Fijo';tf:1..tf:1;NO;SI;;75;string
+'Operacion';fa:1..fa:1;NO;SI;;65;string
+'F.Factura';fx:1..fx:1;;Val(fx:flb) <= FSys() y Anio(Val(fx:flb)) > 2000;'Fecha de Factura Invalida';60;fecha;RGB(2, 255, 255)
+'Monto Factura';mn:1..mn:1;;Val(mn:flb) > 0;'Monto Factura Invalido';85;numero;'###,###,###,###.##';RGB(2, 255, 255);
+'Codigo Barra';cb:1..cb:1;;Vacio(Val(cb:flb)) o Longitud(Val(cb:flb)) = 40;'Codigo de Barra Invalido';250;string;50;RGB(2, 255, 255)
+'C.A.I.';ca:1..ca:1;NO;;;100;string;150;;iif (NoVacio(Val(cb:flb)), Copy(Val(cb:flb), 18, 14));
+'F.Vto.C.A.I.';fc:1..fc:1;NO;Vacio(Val(cb:flb)) o Anio(Val(fc:flb)) > 2000;'Vto. del CAI Invalido';65;fecha;;iif (NoVacio(Val(cb:flb)), Fecha(Copy(Val(cb:flb), 38, 2)~'/'~Copy(Val(cb:flb), 36, 2)~'/'~Copy(Val(cb:flb), 32, 4)));
+finlistbox
+endif
+if (not ok)
+Cancelar()
+endif
+if (Val(bd:2) = 1)
+Act(fl:1, Val(ce:1)~Val(tf:1)~Val(fa:1))
+else
+Act(lw:1, Var('TIPOFACVAL'))
+Act(tf:2, ItemLista(Val(lw:1), Num(Val(tf:1)) + 1))
+Act(fl:1, Val(ce:1)~Val(tf:2)~Val(fa:1))
+endif
+if (dialogo.radio1 = 0 o not Eqstr(Val(ce:1), Copy(Val(nf:1), 1, 4)) o not Eqstr(Val(tf:2), Copy(Val(nf:1), 5, 1)) o not Eqstr(Val(fa:1), Copy(Val(nf:1), 6, 8)))
+if (sql(" Select 1 From "~Dbo()~".IMPUESTOS Where NrSisExterno = '"~Val(fl:1)~"' AND Cliente1 = '"~Val(e:&k)~"' ") = 1)
+Messagebox(" Nro. Factura Legal "~Val(fl:1)~" Ya Existente para el Proveedor "~Val(e:&k))
+else
+break
+endif
+else
+break
+endif
+proximo
+
+
+else
+if (Val(bd:1) = 1)
+Act(ce:1, Copy(Val(nf:1), 1, 4))
+if (Val(bd:2) = 1)
+Act(tf:1, Copy(Val(nf:1), 5, 1))
+endif
+Act(fa:1, Copy(Val(nf:1), 6, 8))
+Act(lw:1, Var('TIPOFACVAL'))
+recorrer&i 1, 10000000
+if (Val(bd:2) = 0)
+crearlistbox;'Arial,8,B';'Ingreso de Datos de la Factura Legal - NO BANCOS'
+'Centro Emisor';ce:1..ce:1;;Longitud(Val(ce:flb)) = 4;'Centro Emisor Invalido -  Debe ser de 4 Caracteres';85;string;;RGB(2, 255, 255)
+'Tipo Factura';tf:1..tf:1;;;;75;combo;Var('TIPOFACVAL')
+'Nro.Factura';fa:1..fa:1;;Longitud(Val(fa:flb)) = 8;'Nro. de Factura Invalido - Debe ser de 8 Caracteres';70;string
+'F.Factura';fx:1..fx:1;;Val(fx:flb) <= FSys() y Anio(Val(fx:flb)) > 2000;'Fecha de Factura Invalida';60;fecha;RGB(2, 255, 255)
+'Monto Factura';mn:1..mn:1;;Val(mn:flb) > 0;'Monto Factura Invalido';85;numero;'###,###,###,###.##';RGB(2, 255, 255);
+'Codigo Barra';cb:1..cb:1;;Longitud(Val(cb:flb)) = 40 o Eqstr(ItemLista(Val(lw:1), Num(Val(tf:1)) + 1), 'X');'Codigo de Barra Invalido';250;string;50;RGB(2, 255, 255)
+'C.A.I.';ca:1..ca:1;NO;Longitud(Val(ca:flb)) = 14 o Eqstr(ItemLista(Val(lw:1), Num(Val(tf:1)) + 1), 'X');'C.A.I. Invalido';100;string;;;Copy(Val(cb:flb), 18, 14);
+'F.Vto.C.A.I.';fc:1..fc:1;NO;Anio(Val(fc:flb)) > 2000 o Eqstr(ItemLista(Val(lw:1), Num(Val(tf:1)) + 1), 'X');'Vto. del CAI Invalido';65;fecha;;fecha(Copy(Val(cb:flb), 38, 2)~'/'~Copy(Val(cb:flb), 36, 2)~'/'~Copy(Val(cb:flb), 32, 4));
+finlistbox
+else
+crearlistbox;'Arial,8,B';'Ingreso de Datos de la Factura Legal - BANCOS'
+'Nr.Correlativo';ce:1..ce:1;;Longitud(Val(ce:flb)) = 4;'Centro Emisor Invalido -  Debe ser de 4 Caracteres';85;string;;RGB(2, 255, 255)
+'Caracter Fijo';tf:1..tf:1;NO;SI;;75;string
+'Operacion';fa:1..fa:1;NO;SI;;65;string
+'F.Factura';fx:1..fx:1;;Val(fx:flb) <= FSys() y Anio(Val(fx:flb)) > 2000;'Fecha de Factura Invalida';60;fecha;RGB(2, 255, 255)
+'Monto Factura';mn:1..mn:1;;Val(mn:flb) > 0;'Monto Factura Invalido';85;numero;'###,###,###,###.##';RGB(2, 255, 255);
+'Codigo Barra';cb:1..cb:1;;Vacio(Val(cb:flb)) o Longitud(Val(cb:flb)) = 40;'Codigo de Barra Invalido';250;string;50;RGB(2, 255, 255)
+'C.A.I.';ca:1..ca:1;NO;;;100;string;150;;iif (NoVacio(Val(cb:flb)), Copy(Val(cb:flb), 18, 14));
+'F.Vto.C.A.I.';fc:1..fc:1;NO;Vacio(Val(cb:flb)) o Anio(Val(fc:flb)) > 2000;'Vto. del CAI Invalido';65;fecha;;iif (NoVacio(Val(cb:flb)), Fecha(Copy(Val(cb:flb), 38, 2)~'/'~Copy(Val(cb:flb), 36, 2)~'/'~Copy(Val(cb:flb), 32, 4)));
+finlistbox
+endif
+if (not ok)
+Cancelar()
+endif
+if (Val(bd:2) = 1)
+Act(fl:1, Val(ce:1)~Val(tf:1)~Val(fa:1))
+else
+Act(lw:1, Var('TIPOFACVAL'))
+Act(tf:2, ItemLista(Val(lw:1), Num(Val(tf:1)) + 1))
+Act(fl:1, Val(ce:1)~Val(tf:2)~Val(fa:1))
+endif
+if (dialogo.radio1 = 0 o not Eqstr(Val(ce:1), Copy(Val(nf:1), 1, 4)) o not Eqstr(Val(tf:2), Copy(Val(nf:1), 5, 1)) o not Eqstr(Val(fa:1), Copy(Val(nf:1), 6, 8)))
+if (sql(" Select 1 From "~Dbo()~".IMPUESTOS Where NrSisExterno = '"~Val(fl:1)~"' AND Cliente1 = '"~Val(e:&k)~"' ") = 1)
+Messagebox(" Nro. Factura Legal "~Val(fl:1)~" Ya Existente para el Proveedor "~Val(e:&k))
+else
+break
+endif
+else
+break
+endif
+proximo
+
+
+endif
+endif
+endif
+Acn(fi:1, 0)
+sql.add(" Select RP.TipoRetencion, RP.Indicador, R.PorcentajeRetencion ")
+sql.add(" From "~Dbo()~".RETENCIONESPROV RP, "~Dbo()~".RETENCIONES R ")
+sql.add(" Where RP.TipoRetencion = R.TipoRetencion ")
+sql.add(" AND RP.Indicador = R.Indicador ")
+sql.add(" AND RP.Cliente = '"~Val(e:&k)~"' ")
+sql.add(" AND RP.Vehiculo = '"~Val(f:&k)~"' ")
+recorrer sql
+Dfa()
+Scn(fi:1, 1)
+Act(tr:Val(fi:1), Fbn('TipoRetencion'))
+Act(id:Val(fi:1), Fbn('Indicador'))
+Acn(pr:Val(fi:1), Fbn('PorcentajeRetencion'))
+Acn(x:Val(fi:1), 1)
+sql.add(" Select Indicador From "~Dbo()~".RETENCIONES ")
+sql.add(" Where TipoRetencion = '"~Fbn('TipoRetencion')~"' ")
+recorrer sql
+Dfa()
+Act(li:Val(fi:1), Val(li:Val(fi:1))~Fbn('Indicador')~'|')
+proximo
+proximo
+if (Val(fi:1) > 0)
+crearlistbox;'Arial,8,B';'Aplicacion de RETENCIONES al Concepto '~Val(b:&k)
+'TipoRet';tr:1..tr:Val(fi:1);NO;;;150;string
+'Indicador';id:1..id:Val(fi:1);;Incluido(Val(id:flb), Val(li:flb));" Indicador No Habilitado para el Tipo de Retencion ";60;tabla;'RETENCIONES';'Indicador';'Indicador;DescripcionIndicador';" TipoRetencion = '"~Val(tr:flb)~"' ";RGB(2, 255, 255)
+'Porcentaje';pr:1..pr:Val(fi:1);NO;;;100;numero;'###.########';;sql(" Select PorcentajeRetencion From "~Dbo()~".RETENCIONES Where TipoRetencion = '"~Val(tr:flb)~"' AND Indicador = '"~Val(id:flb)~"' ");
+'Aplica';x:1..x:Val(fi:1);SI;;;45;check;RGB(2, 255, 255)
+finlistbox
+if (not ok)
+Cancelar()
+endif
+Acn(bd:4, 0)
+Scn(bd:6, 1)
+if (Val(bd:6) = 1 y dialogo.radio1 = 1)
+sql.add(" Update "~Dbo()~".IMPUESTOS ")
+sql.add(" Set Check3 = '1' ")
+sql.add(" Where NrSisExterno = '"~Val(nf:1)~"' ")
+sql.new
+sql.exec
+endif
+recorrer&j 1, Val(fi:1)
+if (Val(x:&j) = 1)
+Scn(bd:4, 1)
+Act(st:Val(bd:4), Val(tr:&j)~'|'~Val(id:&j))
+endif
+proximo
+if (Val(bd:4) > 0)
+Acn(mx:1, sql(" Select Max(NrCuota) From "~Dbo()~".IMPUESTOS Where NrOperacion = '"~Val(nr:1)~"' ") + 1)
+sql.add(" Insert Into "~Dbo()~".IMPUESTOS ")
+sql.add(" (NrOperacion, NrCuota, Plazo4, ")
+recorrer&j 1, Val(bd:4)
+sql.add(" String"~FStr(&j, 0, 0)~", ")
+proximo
+sql.add(" Cliente1, NrSisExterno, Vehiculo1, Especie1, ")
+sql.add(" Cantidad1, Fecha1, Fecha2, ")
+sql.add(" Fecha3, Check1, Fecha4, ")
+sql.add(" String21, String22, String23, Cuenta1, String24) ")
+sql.add(" Values ")
+sql.add(" ('"~Val(nr:1)~"', "~FStr(Val(mx:1), 0, 0)~", "~FStr(Val(v:&k), 0, 0)~", ")
+recorrer&j 1, Val(bd:4)
+sql.add(" '"~Val(st:&j)~"', ")
+proximo
+sql.add(" '"~Val(e:&k)~"', '"~Val(fl:1)~"', '"~Val(f:&k)~"', '"~Val(c:&k)~"', ")
+sql.add(" "~FStr(Val(d:&k), 0, 2)~", '"~IdxDate(Val(fx:1))~"', '"~IdxDate(Val(a:&k))~"', ")
+sql.add(" '"~IdxDate(FSys())~"', "~FStr(Val(y:&k), 0, 0)~", '"~IdxDate(Val(fc:1))~"', ")
+sql.add(" '"~Val(ca:1)~"', '"~Val(b:&k)~"', '"~UsuarioActivo()~"', '"~Val(h:&k)~"', '"~Val(cb:1)~"') ")
+sql.new
+sql.exec
+Acn(bd:8, 1)
+Messagebox('Retenciones Aplicadas al Concepto '~Val(b:&k))
+endif
+else
+Messagebox('El Proveedor '~Val(e:&k)~' No Tiene Retenciones con el Vehiculo '~Val(f:&k))
+endif
+Scn(fi:3, 1)
+Acd(aa:Val(fi:3), Val(a:&k))
+Act(bb:Val(fi:3), Val(b:&k))
+Act(cc:Val(fi:3), Val(c:&k))
+Acn(dd:Val(fi:3), Val(d:&k))
+Act(ee:Val(fi:3), Val(e:&k))
+Act(ff:Val(fi:3), Val(f:&k))
+Act(hh:Val(fi:3), Val(h:&k))
+Acn(vv:Val(fi:3), Val(v:&k))
+Acn(yy:Val(fi:3), Val(y:&k))
+if (Val(y:&k) = 1)
+Act(ix:Val(fi:3), 'Exento')
+endif
+endif
+if (Val(bd:3) = Fac() y Val(bd:1) > 0)
+crearlistbox;'Arial,8,B';'Aplicacion de IVA y Percepcion'
+'Concepto';bb:1..bb:Val(fi:3);NO;SI;;150;string
+'Moneda';cc:1..cc:Val(fi:3);NO;SI;;50;string
+'Cantidad';dd:1..dd:Val(fi:3);NO;SI;;100;numero;'###,###,###,###.##'
+'Indicador';ix:1..ix:Val(fi:3);Val(yy:flb) = 0;NoVacio(Val(ix:flb));'Indicador Invalido';60;tabla;'INDICADORIVAPER';'Codigo';'Codigo;Descripcion';;RGB(2, 255, 255)
+finlistbox
+if (not ok)
+Cancelar()
+endif
+Acn(fi:2, 0)
+Acn(tt:2, 0)
+Acn(tt:3, 0)
+recorrer&j 1, Val(fi:3)
+if (Val(yy:&j) = 1)
+Scn(fi:2, 1)
+Act(wa:Val(fi:2), Val(bb:&j))
+Act(wb:Val(fi:2), Val(cc:&j))
+Act(wc:Val(fi:2), FStr(Val(dd:&j), 0, 2))
+Act(wg:Val(fi:2), Val(cc:&j))
+Act(wh:Val(fi:2), FStr(0, 0, 2))
+Act(wd:Val(fi:2), Val(ix:&j))
+Scn(fi:2, 1)
+Act(wa:Val(fi:2), 'Total Concepto')
+Act(wb:Val(fi:2), Val(cc:&j))
+Act(wc:Val(fi:2), FStr(Val(dd:&j), 0, 2))
+Act(wg:Val(fi:2), Val(cc:&j))
+Act(wh:Val(fi:2), FStr(0, 0, 2))
+Scn(tt:3, Round(Val(dd:&j), 2))
+Scn(fi:2, 1)
+else
+Acn(tt:1, 0)
+Acn(bd:5, 0)
+sql.add(" Select D.TipoImpuesto, D.Porcentaje, T.Descripcion ")
+sql.add(" From "~Dbo()~".DETALLEIVAPER D, "~Dbo()~".TIPOSIMPUESTO T ")
+sql.add(" Where D.Codigo = '"~Val(ix:&j)~"' ")
+sql.add(" AND D.TipoImpuesto = T.Codigo ")
+recorrer sql
+Dfa()
+Scn(bd:5, 1)
+Scn(fi:2, 1)
+if (Val(bd:5) = 1)
+Act(wa:Val(fi:2), Val(bb:&j))
+endif
+Act(wb:Val(fi:2), Val(cc:&j))
+Act(wc:Val(fi:2), FStr(Val(dd:&j), 0, 2))
+Act(wd:Val(fi:2), Val(ix:&j))
+Act(we:Val(fi:2), Fbn('TipoImpuesto'))
+Act(wf:Val(fi:2), Fbn('Descripcion'))
+Act(wg:Val(fi:2), FStr(Fbn('Porcentaje'), 0, 2))
+Act(wh:Val(fi:2), FStr(Val(dd:&j) * Fbn('Porcentaje') / 100, 0, 2))
+Scn(tt:1, Val(dd:&j) * Fbn('Porcentaje') / 100)
+Acn(zx:Val(fi:2), 1)
+proximo
+Scn(fi:2, 1)
+Act(wa:Val(fi:2), 'Total Concepto')
+Act(wb:Val(fi:2), Val(cc:&j))
+Act(wc:Val(fi:2), FStr(Val(dd:&j), 0, 2))
+Act(wg:Val(fi:2), Val(cc:&j))
+Act(wh:Val(fi:2), FStr(Val(tt:1), 0, 2))
+Acn(zy:Val(fi:2), 1)
+Scn(tt:2, Round(Val(tt:1), 2))
+Scn(tt:3, Round(Val(dd:&j), 2))
+Scn(fi:2, 1)
+endif
+proximo
+Acn(zy:Val(fi:2) - 1, 0)
+Scn(fi:2, 2)
+Act(wa:Val(fi:2), 'Total Factura')
+Act(wb:Val(fi:2), Val(cc:&j))
+Act(wc:Val(fi:2), FStr(Val(tt:3), 0, 2))
+Act(wg:Val(fi:2), Val(cc:&j))
+Act(wh:Val(fi:2), FStr(Val(tt:2), 0, 2))
+Act(wi:Val(fi:2), FStr(Val(tt:2) + Val(tt:3), 0, 2))
+Act(wj:Val(fi:2), FStr(Val(mn:1), 0, 2))
+crearlistbox;'Arial,8,B';'Detalle Calculos de IVA y Percepcion'
+'Concepto';wa:1..wa:Val(fi:2);NO;SI;;150;string;;;
+'Mon.';wb:1..wb:Val(fi:2);NO;SI;;30;string
+'Cantidad';wc:1..wc:Val(fi:2);NO;SI;;85;string;
+'Indicador';wd:1..wd:Val(fi:2);NO;SI;;60;string
+'TipoImpuesto';we:1..we:Val(fi:2);NO;SI;;85;string
+'Descripcion';wf:1..wf:Val(fi:2);NO;SI;;150;string
+'%';wg:1..wg:Val(fi:2);NO;SI;;40;string
+'Total Impuestos';wh:1..wh:Val(fi:2);NO;SI;;90;string
+'Total Factura';wi:1..wi:Val(fi:2);NO;SI;;80;string;
+'Monto Ingresado';wj:1..wj:Val(fi:2);SI;Num(Val(wi:flb)) = Num(Val(wj:flb)) o Num(Val(wj:flb)) = 0;'Total Factura No Coincide con Monto Ingresado para Control';100;string
+finlistbox
+if (not ok)
+Cancelar()
+endif
+Acn(mn:1, Num(Val(wj:Val(fi:2))))
+Acn(fi:5, 1)
+if (dialogo.radio1 = 1)
+sql.add(" Update "~Dbo()~".IMPUESTOS ")
+sql.add(" Set Check3 = '1' ")
+sql.add(" Where NrSisExterno = '"~Val(nf:1)~"' ")
+sql.new
+sql.exec
+endif
+recorrer&j 1, Val(fi:3)
+Acn(ta:1, 0)
+recorrer&i Val(fi:5), Val(fi:2)
+if (Val(zx:&i) = 1)
+Scn(ta:1, 1)
+Act(te:Val(ta:1), Val(we:&i))
+Acn(tg:Val(ta:1), Num(Val(wg:&i)))
+Acn(th:Val(ta:1), Num(Val(wh:&i)))
+endif
+if (Val(zy:&i) = 1)
+Acn(fi:5, &i + 1)
+break
+endif
+proximo
+if (sql(" Select 1 From "~Dbo()~".IMPUESTOS Where NrOperacion = '"~Val(nr:1)~"' AND Plazo4 = "~Val(vv:&j)~" AND (Check2 = 0 OR Check2 Is Null OR Check2 = '' OR Check2 = ' ') AND (Check3 = 0 OR Check3 Is Null OR Check3 = '' OR Check3 = ' ') ") = 1)
+sql.add(" Update "~Dbo()~".IMPUESTOS ")
+sql.add(" Set ")
+if (Val(yy:&j) = 0)
+recorrer&i 1, Val(ta:1)
+sql.add(" String"~FStr(&i + 10, 0, 0)~" = '"~Val(te:&i)~"', ")
+sql.add(" Precio"~FStr(&i, 0, 0)~" = "~FStr(Val(tg:&i), 0, 2)~", ")
+sql.add(" Total"~FStr(&i, 0, 0)~" = "~FStr(Val(th:&i), 0, 2)~", ")
+proximo
+else
+recorrer&i 1, 10
+sql.add(" String"~FStr(&i + 10, 0, 0)~" = '', ")
+sql.add(" Precio"~FStr(&i, 0, 0)~" = 0, ")
+sql.add(" Total"~FStr(&i, 0, 0)~" = 0, ")
+proximo
+sql.add(" Check1 = 1, ")
+endif
+sql.add(" Sucursal = '"~Val(ix:&j)~"', ")
+sql.add(" String23 = '"~UsuarioActivo()~"', ")
+sql.add(" String24 = '"~Val(cb:1)~"', ")
+sql.add(" Fecha4 = '"~IdxDate(Val(fc:1))~"', ")
+sql.add(" Cantidad2 = "~FStr(Val(mn:1), 0, 2)~" ")
+sql.add(" Where NrOperacion = '"~Val(nr:1)~"' ")
+sql.add(" AND Plazo4 = "~Val(vv:&j)~" ")
+sql.new
+Acn(bd:8, 1)
+else
+Acn(mx:1, sql(" Select Max(NrCuota) From "~Dbo()~".IMPUESTOS Where NrOperacion = '"~Val(nr:1)~"' ") + 1)
+sql.add(" Insert Into "~Dbo()~".IMPUESTOS ")
+sql.add(" (NrOperacion, NrCuota, Plazo4, ")
+sql.add(" Sucursal, NrSisExterno, Cliente1, ")
+sql.add(" Vehiculo1, Especie1, Cantidad1, ")
+sql.add(" Fecha1, Fecha2, Fecha3, ")
+if (Val(yy:&j) = 0)
+recorrer&i 1, Val(ta:1)
+sql.add(" String"~FStr(&i + 10, 0, 0)~", ")
+sql.add(" Precio"~FStr(&i, 0, 0)~", ")
+sql.add(" Total"~FStr(&i, 0, 0)~", ")
+proximo
+endif
+sql.add(" Check1, String22, String23, Cuenta1, ")
+sql.add(" String21, Cantidad2, Fecha4, String24) ")
+sql.add(" Values ")
+sql.add(" ('"~Val(nr:1)~"', "~FStr(Val(mx:1), 0, 0)~", "~FStr(Val(vv:&j), 0, 0)~", ")
+sql.add(" '"~Val(ix:&j)~"', '"~Val(fl:1)~"', '"~Val(ee:&j)~"', ")
+sql.add(" '"~Val(ff:&j)~"', '"~Val(cc:&j)~"', "~FStr(Val(dd:&j), 0, 2)~", ")
+sql.add(" '"~IdxDate(Val(fx:1))~"', '"~IdxDate(Val(aa:&j))~"', '"~IdxDate(FSys())~"', ")
+if (Val(yy:&j) = 0)
+recorrer&i 1, Val(ta:1)
+sql.add(" '"~Val(te:&i)~"', ")
+sql.add(" "~FStr(Val(tg:&i), 0, 2)~", ")
+sql.add(" "~FStr(Val(th:&i), 0, 2)~", ")
+proximo
+endif
+sql.add(" "~FStr(Val(yy:&j), 0, 0)~", '"~Val(bb:&j)~"', '"~UsuarioActivo()~"', '"~Val(hh:&j)~"', ")
+sql.add(" '"~Val(ca:1)~"', "~FStr(Val(mn:1), 0, 2)~", '"~IdxDate(Val(fc:1))~"', '"~Val(cb:1)~"') ")
+sql.new
+Acn(bd:8, 1)
+endif
+sql.exec
+proximo
+endif
+proximo
+sql.actualizarmovimientos3(dialogo.nroperacion1, SI, NO, NO, NO, NO)
+sql.exec
+if (Val(bd:8) = 1)
+linkearhoja('ASIIMP', 1, nroperacion1 = dialogo.nroperacion1, string1 = Val(fl:1))
+endif

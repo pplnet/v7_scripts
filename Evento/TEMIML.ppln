@@ -1,0 +1,54 @@
+modoreproceso(condialogo)
+creardialogo
+fecha1:"Fecha";;;;;;NoVacio(dialogo.fecha1);'Debe Ingresar la Fecha';NO;FSys()
+vehiculo1:"Vehiculo";;;;;;;;;;;;;;iif (NoVacio(UsrVehiculos(UsuarioActivo())), " Codigo in (Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"') ")
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (not Vacio(dialogo.vehiculo1))
+if (not Incluido(dialogo.vehiculo1, UsrVehiculos(UsuarioActivo())) y not Vacio(UsrVehiculos(UsuarioActivo())))
+Cancelar()('El Operador no esta habilitado para operar con el Vehiculo ')
+endif
+endif
+
+Act(zz6, SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"'"))
+
+
+Acd(z10, FinDeMes(FSys() - 35, NO, 'ARG'))
+
+sql.add("SELECT O.Vehiculo1,O.Cliente1,O.Especie,SUM(O.TotalIntereses) As Interes ")
+sql.add("from "~Dbo()~".OPERACIONES O")
+sql.add("where O.TipoOp='TEMIND' and O.FechaOp<'"~IdxDate(dialogo.fecha1)~"'and ")
+sql.add(" (NrOperacion2 IS NULL Or NrOperacion2='') ")
+if (NoVacio(dialogo.vehiculo1))
+sql.add(" and O.Vehiculo1='"~dialogo.vehiculo1~"' ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" and O.Vehiculo1 IN ("~pipe2comillas(Val(zz6))~") ")
+endif
+endif
+sql.add(" AND NOT EXISTS ")
+sql.add(" (SELECT * ")
+sql.add("from "~Dbo()~".OPERACIONES B")
+sql.add("where B.TipoOp='TEMINM' and B.FechaOp='"~IdxDate(dialogo.fecha1)~"' and ")
+sql.add("B.Vehiculo1=O.Vehiculo1 and B.Cliente1=O.Cliente1 and B.Especie=O.Especie) ")
+sql.add("Group By O.Vehiculo1,O.Cliente1,O.Especie ")
+sql.add("Order By O.Vehiculo1,O.Cliente1,O.Especie ")
+
+Acn(ab1, 0)
+
+recorrer sql
+Message('Procesando Vehiculo: '~Fbn()['Vehiculo1']~' ContraParte '~Fbn()['Cliente1']~' Especie:'~Fbn()['Especie']~' ...')
+
+ejecutarevento('TEMINM', fecha1 = dialogo.fecha1, vehiculo1 = Fbn()['Vehiculo1'], cliente1 = Fbn()['Cliente1'], especie1 = Fbn()['Especie'], precio1 = Val(a1))
+
+Scn(ab1, 1)
+proximo
+
+if (Val(ab1) = 0)
+Messagebox('No Existen Operaciones Vinculadas para la fecha ...')
+endif
+

@@ -1,0 +1,93 @@
+creardialogo
+nroperacion1: 'Nr.Operacion';1;1;;NO;NO;Vacio(dialogo.nroperacion1) o (Incluido(BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', dialogo.nroperacion1), 'FXCF|FXVF') y Eqstr(BuscarCampo('OPERACIONES', 'Mercado', 'NrOperacion', dialogo.nroperacion1), 'ROFEX') y BuscarCampo('OPERACIONES', 'CB7', 'NrOperacion', dialogo.nroperacion1) = 1);'Operacion Invalida';NO;;;;;;" TipoOp in ('FXCF','FXVF') and Mercado='ROFEX' and CB7=1 "
+check1: 'Procesa';1;2;;SI;SI;;;;1;
+findialogo
+if (not ok)
+Cancelar()
+endif
+if (dialogo.check1 = 0)
+HojaVisible(SI)
+endif
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+
+SetFilaActual(1)
+Act(a:fac, 'NrOp')
+Act(b:fac, 'TipoOp')
+Act(c:fac, 'Boleto')
+Act(d:fac, 'Mercado')
+Act(e:fac, 'CB7')
+Act(f:fac, '# MTM')
+Act(g:fac, '# OpROFEX')
+Act(h:fac, 'Boleta OpR')
+Act(k:fac, 'Control')
+SetFont(a:fac..z:fac, 2)
+
+sql.add("Select O.* ")
+sql.add("From "~Dbo()~".OPERACIONES O, "~Dbo()~".OPERACIONESBITS B ")
+sql.add("Where O.Mercado = 'ROFEX' ")
+sql.add("  AND O.TipoOp  IN ('FXCF','FXVF') ")
+sql.add("  AND O.CB7     = 1 ")
+if (NoVacio(dialogo.nroperacion1))
+sql.add(" and O.NrOperacion = '"~dialogo.nroperacion1~"' ")
+endif
+sql.add("   and O.NrOperacion = B.NrOperacion ")
+sql.add("   and B.NrBit       in (10) ")
+sql.add("   and B.Valor       = '1' ")
+sql.add(" Order By O.NrOperacion ")
+recorrer sql
+Act(a:fac, Fbn('NrOperacion'))
+Act(b:fac, Fbn('TipoOp'))
+Act(c:fac, Fbn('NrBoleto'))
+Act(d:fac, Fbn('Mercado'))
+Act(e:fac, Fbn('CB7'))
+Acn(f:fac, sql("Select Count(*) from "~Dbo()~".MTMDIARIO where NrOperacion = '"~Val(a:fac)~"' "))
+if (Val(f:fac) > 0)
+Act(k:fac, 'Error')
+endif
+Acn(g:fac, sql("Select Count(*) from "~Dbo()~".OPROFEX where NrOperacion = '"~Val(a:fac)~"' "))
+if (Val(g:fac) <= 0)
+Act(k:fac, 'Error')
+endif
+if (Val(g:fac) > 1)
+Act(k:fac, 'Error')
+endif
+if (Val(g:fac) = 1)
+Act(h:fac, sql("Select Boleta from "~Dbo()~".OPROFEX where NrOperacion = '"~Val(a:fac)~"' "))
+endif
+if (not Eqstr(Pad0(Val(h:fac), 8), Val(c:fac)))
+Act(i:fac, 'Difr')
+Act(k:fac, 'Error')
+else
+Act(i:fac, 'OK')
+endif
+if (NoVacio(Val(k:fac)))
+Scn(x:1, 1)
+Act(k:fac, 'Anula')
+if (dialogo.check1 = 1)
+Scn(x:2, 1)
+sql.add(" Delete "~Dbo()~".OPERACIONES ")
+sql.add("  Where NrOperacion = '"~Val(a:fac)~"' ")
+sql.new
+
+sql.add(" Update "~Dbo()~".OPROFEX ")
+sql.add("    Set Procesado = '0', NrOperacion = Null, Warning = Null ")
+sql.add("  Where Boleta = '"~Val(h:fac)~"' ")
+sql.new
+sql.exec
+endif
+endif
+
+proximo
+SetFont(a:2..k:fac, 1)
+
+if (Val(x:2) = 0)
+Messagebox('El evento finalizo correctamente. No se anulo ninguna operacion')
+endif
+if (Val(x:2) = 1)
+Messagebox('El evento finalizo correctamente. Se anulo 1 operacion')
+endif
+if (Val(x:2) > 1)
+Messagebox('El evento finalizo correctamente. Se anularon '~PYC(Val(x:2), 1, 0)~' operaciones')
+endif
+

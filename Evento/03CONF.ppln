@@ -1,0 +1,852 @@
+HojaVisible(NO)
+mostrarcuadrodemensajes
+creardialogo
+radio1:'Tipo de Accion|Cobros|Pagos|Ambos';;;;;;;;;2
+mercado1:'Mercado';
+especie1:'Especie';
+vehiculo1: 'Vehiculo';;;;;;NoVacio(dialogo.vehiculo1);'Debe ingresar un Vehiculo';NO;Var('VEHICULODE');
+radio2:'Confirmar:|Solo Fecha Liq.|Hasta Fecha Liq.';;;;;;;;;0
+fecha1:'Fecha Liq.';;;;;;dialogo.fecha1 > 0 y dialogo.fecha1 <= FSys();'Fecha incorrecta';NO;Habiles(FSys(), 0, 'ARG');
+cliente1:'Cliente';
+nrtrans1:'Voucher';;;;;;;;;;;
+check1:'Batch';1;;;NO;NO;;;;0;
+check2:'Fallas?';9;;;;;;;;0;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Act(y1, Fecha(FSys(), 'YYYY.MM.DD'))
+
+if (NoVacio(dialogo.especie1))
+Act(zz1, " '")
+sql.add("Select * from "~Dbo()~".ESPECIES")
+recorrer sql
+if (DesciendeDeEspecie(Fbn()['Codigo'], dialogo.especie1))
+Act(zz1, Val(zz1)~Fbn()['Codigo']~"','")
+endif
+proximo
+Act(zz1, Val(zz1)~"' ")
+SetFilaActual(0)
+endif
+
+Message('Generando datos de confirmacion')
+sql.add("Select T.Mercado1, T.TipoTr2, T.Cliente1, T.CB5, T.NrOperacionRef1, T.NrTrans, T.Especie, T.Cantidad1, B.NrBit, ")
+sql.add("       T.Fecha2, T.Cuenta1, T.Cuenta2, T.Especie1, T.Cantidad2, T.Cupon1, T.CB6, T.CB7, T.CB8, T.NrOperacionRef2, T.CB3 ")
+sql.add("from "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".OPERACIONESBITS B ")
+sql.add("where T.NrTrans = B.NrOperacion")
+sql.add("and T.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+sql.add("and (T.CB9 = '0' or T.CB9 is NULL) ")
+sql.add("AND T.Mercado1 <> '"~Var('MERCOCT')~"' ")
+sql.add("AND T.Mercado1 not in("~pipe2comillas(Var('MERCAACMC'))~") ")
+sql.add("AND IsNull(T.Ley4,'') Not In ("~pipe2comillas(Var('RUECPC1'))~")  ")
+
+sql.add("and ")
+sql.add("( ")
+sql.add("  ( ")
+if (dialogo.radio2 = 0)
+sql.add("    T.Fecha2 = '"~IdxDate(dialogo.fecha1)~"' ")
+else
+sql.add("    T.Fecha2 <= '"~IdxDate(dialogo.fecha1)~"' ")
+endif
+sql.add("    and (T.CB3 = '0' or T.CB3 is NULL) ")
+sql.add("  )  ")
+sql.add("  or ")
+sql.add("  (  ")
+sql.add("    T.Fecha2 < '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add("    and T.CB3 = '1' ")
+sql.add("    and Not T.NrTrans in (Select I.NrOperacion from "~Dbo()~".INSTANCIASOP I where I.NrInstancia = 30 and Convert(Char,I.Fecha,102) = '"~Val(y1)~"') ")
+sql.add("  )  ")
+sql.add(")    ")
+if (NoVacio(dialogo.mercado1))
+sql.add("and T.Mercado1 = '"~dialogo.mercado1~"' ")
+endif
+if (NoVacio(dialogo.especie1))
+sql.add("and (T.Especie =  '"~dialogo.especie1~"' or T.Especie In ("~Val(zz1)~") )")
+endif
+if (NoVacio(dialogo.cliente1))
+sql.add("and T.Cliente1 = '"~dialogo.cliente1~"' ")
+endif
+if (dialogo.radio1 = 0)
+sql.add("and B.NrBit = 3 ")
+endif
+if (dialogo.radio1 = 1)
+sql.add("and B.NrBit = 6 ")
+endif
+if (dialogo.radio1 = 2)
+sql.add("and (B.NrBit = 6 or B.NrBit = 3)")
+endif
+if (NoVacio(dialogo.nrtrans1))
+sql.add("AND T.NrTrans = '"~dialogo.nrtrans1~"'          ")
+endif
+
+sql.add("and B.Valor = '1' ")
+sql.add("Order By 1, 7, 3   ")
+Watch(sql.batch())
+Message('Procesando datos')
+recorrer sql;;SI
+Message('Generando detalle '~Fbn()['NrTrans'])
+Act(aa:fac, Fbn()['NrTrans'])
+Act(ab:fac, Fbn()['TipoTr2'])
+Act(ac:fac, Fbn()['Mercado1'])
+Act(ad:fac, Fbn()['Cliente1'])
+Act(ae:fac, Fbn()['Especie'])
+Acn(af:fac, Fbn()['Cantidad1'])
+Act(ag:fac, Fbn()['Cuenta1'])
+Act(ah:fac, Fbn()['Cuenta2'])
+Act(ai:fac, Fbn()['Especie1'])
+Acn(aj:fac, Fbn()['Cantidad2'])
+Act(ak:fac, sql("Select Concepto from "~Dbo()~".MOVEJECUTADOS   where NrOperacion = '"~Val(aa:fac)~"'      and Especie = '"~Val(ae:fac)~"'"))
+Act(al:fac, Fbn()['Cupon1'])
+Act(ap:fac, Fbn()['NrOperacionRef2'])
+Act(aq:fac, Fbn()['CB3'])
+
+Act(a:fac, Fbn()['Cliente1'])
+Act(b:fac, Fbn()['Mercado1'])
+Act(c:fac, sql("Select Concepto from "~Dbo()~".MOVEJECUTADOS   where NrOperacion = '"~Val(aa:fac)~"'      and Especie = '"~Val(ae:fac)~"'"))
+Act(h:fac, ' ')
+
+if (dialogo.check1 = 1)
+Acn(l:fac, 1)
+else
+Acn(l:fac, 0)
+endif
+
+if (Eqstr(Fbn()['TipoTr2'], 'MATCH'))
+Act(d:fac, 'Matcheo')
+Act(e:fac, Fbn()['Especie']~'/'~Fbn()['Especie1'])
+Acn(f:fac, -Fbn()['Cantidad1'])
+Acn(g:fac, -Fbn()['Cantidad2'])
+Act(h:fac, ' ')
+else
+if (Incluido(Fbn()['TipoTr2'], 'DEP|RET'))
+Act(e:fac, Fbn()['Especie'])
+if (Eqstr(Fbn()['TipoTr2'], 'DEP'))
+Act(d:fac, 'Cobro')
+if (DesciendeDeEspecie(Fbn()['Especie'], 'TITULO'))
+Acn(f:fac, Fbn()['Cantidad1'])
+Acn(g:fac, 0)
+else
+Acn(f:fac, 0)
+Acn(g:fac, Fbn()['Cantidad1'])
+endif
+else
+Act(d:fac, 'Pago')
+if (DesciendeDeEspecie(Fbn()['Especie'], 'TITULO'))
+Acn(f:fac, -Fbn()['Cantidad1'])
+Acn(g:fac, 0)
+else
+Acn(f:fac, 0)
+Acn(g:fac, -Fbn()['Cantidad1'])
+endif
+endif
+if (Fbn()['CB6'] + Fbn()['CB7'] + Fbn()['CB8'] > 1)
+Act(h:fac, 'Error')
+else
+if (Fbn()['CB6'] = 1)
+Act(h:fac, 'DVP')
+endif
+if (Fbn()['CB6'] = 1)
+Act(h:fac, 'RVP')
+endif
+if (Fbn()['CB6'] = 1)
+Act(h:fac, 'Conf')
+endif
+endif
+else
+Act(d:fac, 'Error')
+endif
+endif
+Act(i:fac, Fbn()['NrTrans'])
+Act(j:fac, Fbn()['Fecha2'])
+if (Fbn()['NrBit'] = 3)
+Act(k:fac, 'Cobro')
+endif
+if (Fbn()['NrBit'] = 6)
+Act(k:fac, 'Pago')
+endif
+
+proximo
+
+ACO(1, 9)
+ACO(2, 4)
+ACO(3, 3)
+ACO(4, 7)
+ACO(5, 9)
+ACO(6, 12)
+ACO(7, 12)
+ACO(8, 4)
+ACO(9, 7)
+ACO(10, 9)
+FormatoCeldas(f:1..g:fac, exe('F2'))
+
+if (Fac() > 0)
+
+Acn(cp:1, RGB(132, 197, 202))
+Acn(cp:2, RGB(250, 142, 131))
+
+if (dialogo.check1 = 0)
+crearlistbox;'Arial,8,';'Confirmacion de '~iif (dialogo.radio1 = 0, 'COBROS', iif (dialogo.radio1 = 1, 'PAGOS ', iif (dialogo.radio1 = 2, 'COBROS Y PAGOS')))
+'OK';l:1..l:fac;SI;;;40;check;;
+'Cliente ';a:1..a:fac;NO;;;70;string;;
+'Mercado ';b:1..b:fac;NO;;;70;string;;
+'Concepto';c:1..c:fac;NO;;;60;string;;
+'Accion  ';d:1..d:fac;NO;;;60;string;;
+'Especie ';e:1..e:fac;NO;;;60;string;;
+'Titulos ';f:1..f:fac;NO;;;100;numero;'###,###,###,###.##';
+'Moneda  ';g:1..g:fac;NO;;;100;numero;'###,###,###,###.##';
+'      ';h:1..h:fac;NO;;;60;string;;
+'Voucher ';i:1..i:fac;NO;;;60;string;;
+'Fecha  ';j:1..j:fac;NO;;;60;string;;
+'Accion ';k:1..k:fac;NO;;;60;string;;
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+endif
+Message('Procesando datos...')
+recorrer&j 1, Fac()
+Message('Eliminando instancias anteriores')
+if (Val(l:&j) = 1)
+sql.add("Delete from "~Dbo()~".INSTANCIASOP ")
+sql.add("Where NrOperacion = '"~Val(i:&j)~"' ")
+if (dialogo.radio1 = 0)
+sql.add("and NrInstancia = 3 ")
+endif
+if (dialogo.radio1 = 1)
+sql.add("and NrInstancia = 6 ")
+endif
+if (dialogo.radio1 = 2)
+sql.add("and NrInstancia = 6 or NrInstancia = 3")
+endif
+
+sql.new
+Message('Actualizacion instancias '~Val(i:&j))
+sql.add("Insert into "~Dbo()~".INSTANCIASOP (")
+sql.add("NrOperacion, ")
+sql.add("NrInstancia, ")
+sql.add("Usuario, ")
+sql.add("Mensaje, ")
+sql.add("Fecha ")
+sql.add(") Values (")
+sql.add("'"~Val(i:&j)~"', ")
+if (Eqstr(Val(k:&j), 'Cobro'))
+sql.add("3, ")
+else
+sql.add("6, ")
+endif
+sql.add("'"~UsuarioActivo()~"', ")
+sql.add("'Confirmacion de Voucher', ")
+sql.add(""~SQLFechaStr(Fecha(FSys())~' '~Hora(Ahora()))~"")
+sql.add(")")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".TRANSACCIONES2 ")
+sql.add("SET CB9 = '1', Fecha3 = '"~IdxDate(FSys())~"'")
+sql.add("Where NrTrans = '"~Val(i:&j)~"' ")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("SET Valor = '0' ")
+sql.add("where NrOperacion = '"~Val(i:&j)~"' ")
+if (dialogo.radio1 = 0)
+sql.add("and NrBit = 3 ")
+endif
+if (dialogo.radio1 = 1)
+sql.add("and NrBit = 6 ")
+endif
+if (dialogo.radio1 = 2)
+sql.add("and (NrBit = 6 or NrBit = 3)")
+endif
+
+sql.new
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("SET Valor = '1' ")
+sql.add("where NrOperacion = '"~Val(i:&j)~"' ")
+sql.add("and NrBit = 70 ")
+sql.new
+sql.exec
+
+if (Incluido(Val(ab:&j), 'MATCH|DEP|RET'))
+Message('Desafectando limites')
+ejecutarevento('DESPRF', nrtrans1 = Val(i:&j), fecha1 = FSys(), fecha2 = dialogo.fecha1)
+endif
+
+
+if (Incluido(Val(b:&j), Var('MERCTITULO')) y Eqstr(Val(aq:&j), '1'))
+Message('Actualizacion falla')
+sql.add(" DELETE FROM "~Dbo()~".MOVEJECUTADOS ")
+sql.add(" WHERE NrOperacion = '"~Val(i:&j)~"' AND Transaccion = 'Falla' ")
+endif
+
+if (Incluido(BuscarCampo('TRANSACCIONES2', 'TipoTr2', 'NrTrans', Val(ap:&j)), 'DTP|RTP'))
+Message('Actualizando transaccion '~Val(ap:&j))
+sql.add("UPDATE "~Dbo()~".TRANSACCIONES2                                ")
+sql.add("SET    RB2='1',Fecha5='"~IdxDate(dialogo.fecha1)~"',         ")
+sql.add("       Cupon2='"~FStr(NrCupon2(Val(ae:&j), dialogo.fecha1), 0, 0)~"', ")
+sql.add("       CB9 = '1',CB10='0'                                    ")
+sql.add("WHERE  NrTrans= '"~Val(ap:&j)~"'                             ")
+sql.new
+sql.exec
+Message('Actualizando movimientos')
+sql.actualizarmovimientost2(Val(ap:&j), SI, NO, NO, SI, 0, 4)
+sql.exec
+Message('Fin actualizacion de movimientos')
+
+Act(az3, Val(ap:&j))
+Act(az4, 'TRANSACCIONES2')
+Acn(az5, 70)
+Acn(az6, 1)
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+sql.add("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+sql.new
+
+if (sql(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+ejecutarevento('INSBIT', entero1 = Val(az5), nroperacion1 = Val(az3))
+endif
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+endif
+endif
+proximo
+else
+if (dialogo.check1 = 0)
+if (dialogo.radio1 = 0)
+Messagebox('No hay Cobros para Confirmar.')
+endif
+if (dialogo.radio1 = 1)
+Messagebox('No hay Pagos para Confirmar.')
+endif
+if (dialogo.radio1 = 2)
+Messagebox('No hay Pagos ni Cobros para Confirmar.')
+endif
+endif
+Cancelar()
+endif
+
+if (dialogo.check2 = 1)
+Message('Generando datos de fallas')
+SetFilaActual(0)
+sql.add("Select T.Mercado1, T.TipoTr2, T.Cliente1, T.CB5, T.NrOperacionRef1, ")
+sql.add("       B.NrBit, T.NrTrans, T.Especie, T.Cantidad1, T.Fecha2, ")
+sql.add("       T.Cuenta1, T.Cuenta2, T.Especie1, T.Cantidad2, T.Cupon1, ")
+sql.add("       T.CB6, T.CB7, T.CB8, T.NrOperacionRef2 , T.RB7, ")
+sql.add("       T.RB2, ")
+sql.add("       T.ConceptoFail ")
+sql.add("  from "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".OPERACIONESBITS B ")
+sql.add(" where T.NrTrans = B.NrOperacion")
+sql.add("   and T.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+sql.add("   and (T.CB9 = '0' or T.CB9 is NULL) ")
+sql.add("   AND T.Mercado1 <> '"~Var('MERCOCT')~"' ")
+sql.add("   AND T.Mercado1 not in("~pipe2comillas(Var('MERCAACMC'))~") ")
+sql.add("   AND isNull(T.Ley4,'') Not In ("~pipe2comillas(Var('RUECPC1'))~")  ")
+sql.add("   and ( ")
+sql.add("         ( ")
+if (dialogo.radio2 = 0)
+sql.add("       T.Fecha2  = '"~IdxDate(dialogo.fecha1)~"' ")
+else
+sql.add("       T.Fecha2 <= '"~IdxDate(dialogo.fecha1)~"' ")
+endif
+sql.add("          and (T.CB3 = '0' or T.CB3 is NULL) ")
+sql.add("         ) ")
+sql.add("         or ")
+sql.add("         ( ")
+sql.add("          T.Fecha2 < '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add("          and T.CB3 = '1' ")
+sql.add("          and Not T.NrTrans in (Select NrOperacion from "~Dbo()~".INSTANCIASOP where NrInstancia = 30 and Convert(Char,Fecha,102) = '"~Val(y1)~"') ")
+sql.add("         ) ")
+sql.add("       ) ")
+if (NoVacio(dialogo.mercado1))
+sql.add(" and T.Mercado1 = '"~dialogo.mercado1~"' ")
+endif
+if (NoVacio(dialogo.especie1))
+sql.add(" and (T.Especie = '"~dialogo.especie1~"' or T.Especie In ("~Val(zz1)~") ) ")
+endif
+if (NoVacio(dialogo.cliente1))
+sql.add(" and T.Cliente1 = '"~dialogo.cliente1~"' ")
+endif
+if (dialogo.radio1 = 0)
+sql.add(" and B.NrBit = 3 ")
+endif
+if (dialogo.radio1 = 1)
+sql.add(" and B.NrBit = 6 ")
+endif
+if (dialogo.radio1 = 2)
+sql.add(" and (B.NrBit = 6 or B.NrBit = 3)")
+endif
+if (NoVacio(dialogo.nrtrans1))
+sql.add("AND T.NrTrans = '"~dialogo.nrtrans1~"'          ")
+endif
+sql.add("     and B.Valor = '1'")
+sql.add("   Order By 1, 7, 3")
+
+recorrer sql;;SI
+Message('Generando detalle de fallas '~Fbn()['NrTrans'])
+Act(ca:fac, Fbn()['NrTrans'])
+Act(cb:fac, Fbn()['TipoTr2'])
+Act(cc:fac, Fbn()['Mercado1'])
+Act(cd:fac, Fbn()['Cliente1'])
+Act(ce:fac, Fbn()['Especie'])
+Acn(cf:fac, Fbn()['Cantidad1'])
+Act(cg:fac, Fbn()['Cuenta1'])
+Act(ch:fac, Fbn()['Cuenta2'])
+Act(ci:fac, Fbn()['Especie1'])
+Acn(cj:fac, Fbn()['Cantidad2'])
+Act(ck:fac, sql("Select Concepto from "~Dbo()~".MOVEJECUTADOS   where NrOperacion = '"~Val(ca:fac)~"'      and Especie = '"~Val(ce:fac)~"'"))
+Act(cl:fac, Fbn()['Cupon1'])
+
+Act(cm:fac, Fbn()['NrOperacionRef1'])
+Act(cn:fac, Fbn()['NrOperacionRef2'])
+Act(co:fac, Fbn('ConceptoFail'))
+
+Act(ba:fac, Fbn()['Cliente1'])
+Act(bb:fac, Fbn()['Mercado1'])
+Act(bc:fac, sql("Select Concepto from "~Dbo()~".MOVEJECUTADOS   where NrOperacion = '"~Val(ca:fac)~"'      and Especie = '"~Val(ce:fac)~"'"))
+Act(bh:fac, ' ')
+if (Eqstr(Fbn()['TipoTr2'], 'MATCH'))
+Act(bd:fac, 'Matcheo')
+Act(be:fac, Fbn()['Especie']~'/'~Fbn()['Especie1'])
+Acn(bf:fac, -Fbn()['Cantidad1'])
+Acn(bg:fac, -Fbn()['Cantidad2'])
+Act(bh:fac, ' ')
+else
+if (Incluido(Fbn()['TipoTr2'], 'DEP|RET'))
+Act(be:fac, Fbn()['Especie'])
+if (Eqstr(Fbn()['TipoTr2'], 'DEP'))
+Act(bd:fac, 'Cobro')
+Acn(bp:fac, Fbn()['Cantidad1'])
+if (DesciendeDeEspecie(Fbn()['Especie'], 'TITULO'))
+Acn(bf:fac, Fbn()['Cantidad1'])
+Acn(bg:fac, 0)
+else
+Acn(bf:fac, 0)
+Acn(bg:fac, Fbn()['Cantidad1'])
+endif
+Acn(bp:fac, Fbn()['Cantidad1'])
+else
+Act(bd:fac, 'Pago')
+if (DesciendeDeEspecie(Fbn()['Especie'], 'TITULO'))
+Acn(bf:fac, -Fbn()['Cantidad1'])
+Acn(bg:fac, 0)
+else
+Acn(bf:fac, 0)
+Acn(bg:fac, -Fbn()['Cantidad1'])
+endif
+Acn(bp:fac, -Fbn()['Cantidad1'])
+endif
+if (Fbn()['CB6'] + Fbn()['CB7'] + Fbn()['CB8'] > 1)
+Act(bh:fac, 'Error')
+else
+if (Fbn()['CB6'] = 1)
+Act(bh:fac, 'DVP')
+endif
+if (Fbn()['CB6'] = 1)
+Act(bh:fac, 'RVP')
+endif
+if (Fbn()['CB6'] = 1)
+Act(bh:fac, 'Conf')
+endif
+endif
+Acn(bm:fac, Fbn()['CB6'])
+Acn(bn:fac, Fbn()['CB7'])
+Acn(bo:fac, Fbn()['CB8'])
+else
+Act(bd:fac, 'Error')
+endif
+endif
+Act(bi:fac, Fbn()['NrTrans'])
+Act(bj:fac, Fbn()['Fecha2'])
+Act(bk:fac, Fbn()['Especie'])
+Act(bl:fac, Fbn()['Cupon1'])
+Act(bq:fac, Fbn()['Cuenta1'])
+Act(br:fac, Fbn()['Cuenta2'])
+Act(bs:fac, Fbn()['NrOperacionRef2'])
+if (Fbn()['NrBit'] = 3)
+Act(bt:fac, 'Cobro')
+endif
+if (Fbn()['NrBit'] = 6)
+Act(bt:fac, 'Pago')
+endif
+if (dialogo.check1 = 1)
+Acn(bv:fac, 1)
+else
+Acn(bv:fac, 0)
+endif
+
+if (Eqstr(Fbn()['RB7'], '1'))
+Acn(bw:fac, 15)
+else
+Acn(bw:fac, 1)
+endif
+
+Act(bz:fac, Fbn()['RB2'])
+proximo
+
+ACO(53, 9)
+ACO(54, 4)
+ACO(55, 3)
+ACO(56, 7)
+ACO(57, 9)
+ACO(58, 12)
+ACO(59, 12)
+ACO(60, 4)
+ACO(61, 7)
+ACO(62, 9)
+FormatoCeldas(bf:1..bg:fac, exe('F2'))
+
+if (Fac() > 0)
+if (dialogo.check1 = 0)
+crearlistbox;'Arial,8,';'Generacion de Fallas '
+'OK';bv:1..bv:fac;SI;;;40;check;Val(cp:1)
+'Cliente ';ba:1..ba:fac;NO;;;70;string;;
+'Mercado ';bb:1..bb:fac;NO;;;70;string;;
+'Concepto';bc:1..bc:fac;NO;;;30;string;;
+'        ';bd:1..bd:fac;NO;;;60;string;;
+'Especie ';be:1..be:fac;NO;;;60;string;;
+'Titulos ';bf:1..bf:fac;NO;;;100;numero;'###,###,###,###.##'
+'Moneda  ';bg:1..bg:fac;NO;;;100;numero;'###,###,###,###.##'
+'      ';bh:1..bh:fac;NO;;;60;string;;
+'Voucher ';bi:1..bi:fac;NO;;;60;string;;
+'Fecha  ';bj:1..bj:fac;NO;;;60;string;;
+'Accion ';bt:1..bt:fac;NO;;;60;string;;
+'Concepto Fail';co:1..co:fac;SI;NoVacio(Val(co:flb)) o Val(bv:flb) = 0;'Debe ingresar un concepto de Fail (linea '~FStr(flb, 1, 0)~')';60;tabla;'CONCEPTOSFAILS';'Codigo';'Codigo;Descripcion';;Val(cp:1);
+finlistbox
+if (not ok)
+Cancelar()
+endif
+endif
+
+recorrer&j 1, Fac()
+if (Val(bv:&j) = 1)
+Act(cv:&j, 'OK')
+if (Eqstr(Val(cv:&j), 'OK'))
+if (not Incluido(Val(bb:&j), Var('MERCTITULO')))
+
+Message('Generacion de Transporte Voucher '~Val(i:&j)~'.')
+Act(bu:&j, getnumerador(13))
+Message('Actualiza Voucher '~Val(bi:&j))
+
+if (Incluido(BuscarCampo('TRANSACCIONES2', 'TipoTr2', 'NrTrans', Val(bs:&j)), 'DTP|RTP'))
+Message('Actualizando movimientos')
+sql.add("DELETE from "~Dbo()~".MOVEJECUTADOS ")
+sql.add("where NrOperacion = '"~Val(bs:&j)~"'")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".MOVPENDIENTES ")
+sql.add("where NrOperacion =  '"~Val(bs:&j)~"' ")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".TRANSACCIONES2       ")
+sql.add("SET CB10 = '1'                      ")
+sql.add("where NrTrans =  '"~Val(bs:&j)~"'   ")
+sql.new
+endif
+Message('Actualizando instancias')
+sql.add("Delete from "~Dbo()~".INSTANCIASOP ")
+sql.add("Where NrOperacion = '"~Val(bi:&j)~"' ")
+if (dialogo.radio1 = 0)
+sql.add("and NrInstancia = 3 ")
+endif
+if (dialogo.radio1 = 1)
+sql.add("and NrInstancia = 6 ")
+endif
+if (dialogo.radio1 = 2)
+sql.add("and (NrInstancia = 6 or NrInstancia = 3)")
+endif
+sql.new
+
+sql.add("Insert into "~Dbo()~".INSTANCIASOP (")
+sql.add("NrOperacion, ")
+sql.add("NrInstancia, ")
+sql.add("Usuario, ")
+sql.add("Mensaje, ")
+sql.add("Fecha ")
+sql.add(") Values (")
+sql.add("'"~Val(bi:&j)~"', ")
+if (Eqstr(Val(bt:&j), 'Cobro'))
+sql.add("3, ")
+else
+sql.add("6, ")
+endif
+sql.add("'"~UsuarioActivo()~"', ")
+sql.add("'Generacion de Falla', ")
+sql.add(""~SQLFechaStr(Fecha(FSys())~' '~Hora(Ahora()))~"")
+sql.add(")")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".TRANSACCIONES2 ")
+sql.add("   SET Fecha3 = '"~IdxDate(FSys())~"', ")
+sql.add("       FechaTransp = '"~IdxDate(FSys())~"', ")
+sql.add("       NrTransRef1 = '"~Val(bu:&j)~"', ")
+sql.add("       CB3 = '1'")
+sql.add(" Where NrTrans = '"~Val(bi:&j)~"' ")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("   SET Valor = '0' ")
+sql.add(" where NrOperacion = '"~Val(bi:&j)~"' ")
+if (Eqstr(Val(bt:&j), 'Cobro'))
+sql.add("and NrBit = 3 ")
+else
+sql.add("and NrBit = 6 ")
+endif
+sql.new
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("   SET Valor       = '1' ")
+sql.add(" where NrOperacion = '"~Val(bi:&j)~"' ")
+sql.add("   and NrBit       = 8 ")
+sql.new
+
+Message('Genera Transporte '~Val(bu:&j))
+sql.add("Insert into "~Dbo()~".TRANSACCIONES2 (")
+
+sql.add(" TipoTr2, ")
+sql.add(" Especie, ")
+sql.add(" Fecha1, ")
+sql.add(" Fecha2, ")
+sql.add(" Cliente1, ")
+
+sql.add(" Cantidad1, ")
+sql.add(" Vehiculo1, ")
+sql.add(" Mercado1, ")
+sql.add(" Observaciones, ")
+sql.add(" NrTransRef1, ")
+
+sql.add(" CB6, ")
+sql.add(" CB7, ")
+sql.add(" CB8, ")
+sql.add(" Cupon1, ")
+sql.add(" Cuenta1, ")
+
+sql.add(" Cuenta2, ")
+sql.add(" NrTrans, ")
+sql.add(" RB2,     ")
+
+sql.add(" NrOperacionRef1, ")
+sql.add(" NrOperacionRef2,  ")
+sql.add(" ConceptoFail, ")
+
+sql.add(" FechaCarga, FechaCargaSys, UsrInput ")
+
+sql.add(") Values (")
+
+sql.add(" 'TRANSP', ")
+sql.add(" '"~Val(bk:&j)~"', ")
+sql.add(" '"~IdxDate(FSys())~"', ")
+sql.add(" '"~IdxDate(FSys())~"', ")
+sql.add(" '"~Val(ba:&j)~"', ")
+sql.add(" "~FStr(Val(bp:&j), 1, 2)~", ")
+sql.add(" '"~dialogo.vehiculo1~"', ")
+sql.add(" '"~Val(bb:&j)~"', ")
+sql.add(" '"~'Transporte '~Val(bi:&j)~"', ")
+sql.add(" '"~Val(bi:&j)~"', ")
+sql.add(" '"~FStr(Val(bm:&j), 1, 0)~"', ")
+sql.add(" '"~FStr(Val(bn:&j), 1, 0)~"', ")
+sql.add(" '"~FStr(Val(bo:&j), 1, 0)~"', ")
+sql.add(" '"~Val(bl:&j)~"', ")
+sql.add(" '"~Val(bq:&j)~"', ")
+sql.add(" '"~Val(br:&j)~"', ")
+sql.add(" '"~Val(bu:&j)~"', ")
+sql.add(" '"~Val(bz:&j)~"', ")
+sql.add(" '"~Val(cm:&j)~"', ")
+sql.add(" '"~Val(cn:&j)~"', ")
+sql.add("  '"~Val(co:&j)~"', ")
+sql.add(" "~SQLAhora()~", "~IdxDate2(FSys())~", '"~UsuarioActivo()~"' ")
+sql.add(")")
+sql.new
+Message('Actualizando instancias...')
+sql.add("Insert into "~Dbo()~".OPERACIONESBITS ")
+sql.add("(NrBit, NrOperacion, Valor) ")
+sql.add("Select NrInstancia, '"~Val(bu:&j)~"', '0'")
+sql.add("  from "~Dbo()~".INSTANCIAS ")
+sql.add(" where Tabla = 'TRANSACCIONES2'")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("   SET Valor       = '1' ")
+sql.add(" Where NrBit       = 5 ")
+sql.add("   and NrOperacion = '"~Val(bu:&j)~"' ")
+sql.new
+
+Message('Genera Movimientos Transporte '~Val(au:&j))
+sql.add("Insert into "~Dbo()~".MOVPENDIENTES ( ")
+sql.add(" FechaMov, ")
+sql.add(" Cliente, ")
+sql.add(" Especie, ")
+sql.add(" EnteCustodia, ")
+sql.add(" Cantidad, ")
+
+sql.add(" Leyenda, ")
+sql.add(" NrSaldo, ")
+sql.add(" NrMov, ")
+sql.add(" NrGrupo, ")
+sql.add(" Bits, ")
+
+sql.add(" Status, ")
+sql.add(" Cupon, ")
+sql.add(" Mercado, ")
+sql.add(" Concepto, ")
+sql.add(" Cuenta, ")
+
+sql.add("NrOperacion ")
+
+sql.add(" ) Values ( ")
+sql.add(" '"~IdxDate(FSys())~"', ")
+sql.add(" '"~Val(ba:&j)~"', ")
+sql.add(" '"~Val(bk:&j)~"', ")
+sql.add(" '"~dialogo.vehiculo1~"', ")
+sql.add(" "~FStr(-Val(bp:&j), 1, 2)~", ")
+
+sql.add(" '"~'Transporte '~Val(bi:&j)~"', ")
+sql.add(" "~FStr(1, 1, 0)~", ")
+sql.add(" "~FStr(1, 1, 0)~", ")
+sql.add(" "~FStr(Val(bw:&j), 1, 0)~", ")
+sql.add(" 'MV', ")
+
+if (Val(bo:&j) = 1)
+sql.add("'CONF', ")
+else
+if (Val(bm:&j) = 1)
+sql.add("'DVP', ")
+else
+if (Val(bn:&j) = 1)
+sql.add("'RVP', ")
+else
+sql.add("'', ")
+endif
+endif
+endif
+sql.add(" '"~Val(bl:&j)~"', ")
+sql.add(" '"~Val(bb:&j)~"', ")
+sql.add(" '"~Val(bc:&j)~"', ")
+sql.add(" '"~Val(bq:&j)~"', ")
+
+sql.add(" '"~Val(bu:&j)~"' ")
+sql.add(")")
+sql.new
+
+Message('Anula Movimientos Voucher '~Val(bi:&j))
+sql.add("INSERT INTO "~Dbo()~".MOVEJECUTADOS ( ")
+sql.add("NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+sql.add("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+sql.add("Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+sql.add("NrMov, NrLiq, Status, NrInstan, FechaEje, ")
+sql.add("UsuarioEje, Cuenta, Transaccion, Cantidad, Cupon")
+sql.add(") ")
+sql.add("select ")
+sql.add(" '"~Val(bu:&j)~"', FechaMov, Cliente, Especie, CallPut, ")
+sql.add(" FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+sql.add(" '"~'Transporte '~Val(bi:&j)~"', Bits, NrGrupo, Concepto, NrGrupo2, ")
+sql.add(" NrMov, NrLiq, Status, -1, '"~IdxDate(FSys())~"', ")
+sql.add(" '"~UsuarioActivo()~"', Cuenta, Transaccion, -Cantidad, Cupon")
+sql.add("  from "~Dbo()~".MOVEJECUTADOS ")
+sql.add(" where NrOperacion = '"~Val(bi:&j)~"' ")
+sql.new
+
+sql.add("INSERT INTO "~Dbo()~".MOVEJECUTADOS ( ")
+sql.add(" NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+sql.add(" FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+sql.add(" Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+sql.add(" NrMov, NrLiq, Status, NrInstan, FechaEje, ")
+sql.add(" UsuarioEje, Cuenta, Transaccion, Cantidad, Cupon")
+sql.add(") ")
+sql.add("select ")
+sql.add("'"~Val(bu:&j)~"', FechaMov, Cliente, Especie, CallPut, ")
+sql.add("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+sql.add("'"~'Transporte '~Val(bi:&j)~"', Bits, NrGrupo, Concepto, NrGrupo2, ")
+sql.add("NrMov, NrLiq, Status, -1, '"~IdxDate(FSys())~"', ")
+sql.add("'"~UsuarioActivo()~"', Cuenta, Transaccion, -Cantidad, Cupon")
+sql.add("  from "~Dbo()~".MOVEJECUTADOS ")
+sql.add(" where NrOperacion <> '"~Val(bi:&j)~"' ")
+sql.add("   and NrTrans2 = '"~Val(bi:&j)~"' ")
+sql.new
+else
+Message('Falla Voucher '~Val(i:&j)~'.')
+sql.add("Insert into "~Dbo()~".INSTANCIASOP ( ")
+sql.add("       NrOperacion, NrInstancia, Usuario, Mensaje, Fecha ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(bi:&j)~"', ")
+sql.add(" 30, ")
+sql.add(" '"~UsuarioActivo()~"', ")
+sql.add(" 'Generacion de Falla', ")
+sql.add(" "~SQLFechaStr(Fecha(FSys())~' '~Hora(Ahora()))~"")
+sql.add(" ) ")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".TRANSACCIONES2 ")
+sql.add("   SET CB3     = '1', ")
+sql.add("       Fecha3  = '"~IdxDate(FSys())~"', ")
+sql.add("       ConceptoFail = '"~Val(co:&j)~"' ")
+sql.add(" Where NrTrans = '"~Val(bi:&j)~"' ")
+sql.new
+
+Message('Desafectando saldo')
+sql.add("INSERT INTO "~Dbo()~".MOVEJECUTADOS ")
+sql.add("(NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+sql.add("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+sql.add("Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+sql.add("NrMov, NrLiq, Status, NrInstan, FechaEje, ")
+sql.add("UsuarioEje, Cuenta, Transaccion, Cantidad, Cupon")
+sql.add(") ")
+sql.add("select ")
+sql.add(" '"~Val(bi:&j)~"', FechaMov, Cliente, Especie, CallPut, ")
+sql.add(" FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+sql.add(" '"~'Falla Match'~Val(bi:&j)~"', Bits, NrGrupo, Concepto, NrGrupo2, ")
+sql.add(" NrMov, NrLiq, Status, -1, '"~IdxDate(FSys())~"', ")
+sql.add(" '"~UsuarioActivo()~"', Cuenta, 'Falla', -Cantidad, Cupon")
+sql.add("  from "~Dbo()~".MOVEJECUTADOS ")
+sql.add(" where NrOperacion = '"~Val(bi:&j)~"' ")
+sql.new
+endif
+
+if (Eqstr(Val(bd:&j), 'Cobro'))
+sql.add("Insert into "~Dbo()~".MOVLIMITES (")
+sql.add("FechaMov, Cliente, Limite,")
+sql.add("Especie, FechaLim, Monto,")
+sql.add("NrOperacion, Descripcion, Usuario,")
+sql.add("Bits, Vehiculo")
+sql.add(") values (")
+sql.add("'"~IdxDate(FSys())~"', '"~Val(ba:&j)~"', 'SETTLEMENT',")
+
+sql.add("'"~Val(bk:&j)~"', '"~IdxDate(FSys())~"', "~FStr(Val(bp:&j) * CotizacionC(Val(bk:&j), null, null, null, FSys(), 1, SI, 'USD'), 0, 2)~",")
+if (Incluido(Val(bp:&j), Var('MERCTITULO')))
+sql.add("'"~Val(bi:&j)~"', 'Falla', '',")
+else
+sql.add("'"~Val(bu:&j)~"', 'Falla', '',")
+endif
+sql.add("'P', '"~dialogo.vehiculo1~"')")
+sql.new
+endif
+
+
+sql.exec
+else
+if (dialogo.check1 = 0)
+Messagebox('No se puede fallar el Voucher '~Val(i:&j)~'.')
+endif
+endif
+endif
+proximo
+else
+if (dialogo.check1 = 0)
+Messagebox('No hay Fallas para generar.')
+endif
+endif
+endif
+

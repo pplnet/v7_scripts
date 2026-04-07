@@ -1,0 +1,422 @@
+29mostrarcuadrodemensajes
+creardialogo
+fecha1: 'Fecha';1;1;;;;;;;FSys()
+vehiculo1: 'Vehiculo';2;;;NO;;;;;Var('VEHICON')
+listatabla1: 'Operaciones';1;2;;;;;;;;;;;;;'NrOperacion';'NrOperacion;Cliente1;FechaOp;Especie;FechaVto';'OPERACIONES'
+check1: 'Contab.Procesada';3;1;;NO;NO;
+radio1: 'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos';4;1;;NO;NO;;;;4;
+findialogo
+
+if (not ok)
+raise('Evento Cancelado')
+endif
+
+
+Message('--- Asientos de Egreso de Titulos ---')
+
+Act(me:1, Var('MONEEXTR'))
+Act(ml:1, Var('MONELOCA'))
+Acn(na:1, Var('ASINUM'))
+Acn(sl:2, Var('SALDOPOCON'))
+Act(vc:1, dialogo.vehiculo1)
+Acd(fe:1, Habiles(dialogo.fecha1, -Var('FVALORCONT'), 'ARG'))
+Act(cm:1, Var('CLIENTEMAE'))
+Acd(fv:1, dialogo.fecha1)
+
+let(&tipoasiento, Var('TIPASIEGTI'))
+let(&saldodeldia, 0)
+let(&saldodeoperaciones, 0)
+let(&cantidadposcombinaciones, 0)
+
+let(&bookpartidas, '')
+sql.add(" Select Books From "~Dbo()~".MODELOSNEGOCIO ")
+sql.add(" Where ValuaCarteraPartida = 'SI' ")
+
+
+
+recorrer sql
+let(&bookpartidas, &bookpartidas~Fbn('Books'))
+proximo
+
+sql.add("Select E.MonedaEmision, P.Vehiculo Vehiculo1, 'TIC' TipoOp, E.Tipo TipoEspecie, P.Book Book1, ")
+sql.add("P.Estrategia CuentaCustodia, '' Concepto, P.Especie, Sum(P.CantidadFin) Cantidad ")
+sql.add("from "~Dbo()~".POSICIONES P ")
+sql.add("   JOIN "~Dbo()~".ESPECIES E ON P.Especie = E.Codigo ")
+sql.add("   JOIN "~Dbo()~".CUENTAS C ON P.Estrategia = C.Codigo ")
+sql.add("where P.Book Not IN ("~pipe2comillas(&bookpartidas)~") ")
+sql.add("AND (C.CB2 Is Null OR C.CB2 = '' OR C.CB2 =' ' OR C.CB2='NO') ")
+sql.add("AND P.NrSaldo = "~FStr(Val(sl:2), 0, 0)~" ")
+sql.add("AND P.Fecha IN (Select Max(Fecha) From "~Dbo()~".POSICIONES P1 ")
+sql.add("      Where P1.Especie = P.Especie ")
+sql.add("      AND P1.Vehiculo = P.Vehiculo ")
+sql.add("      AND P1.Cliente = P.Cliente ")
+sql.add("      AND P1.NrSaldo = P.NrSaldo ")
+sql.add("      AND P1.Book = P.Book ")
+sql.add("      AND (P1.Cupon = P.Cupon OR ((P1.Cupon Is Null OR P1.Cupon = '' OR P1.Cupon = ' ') AND (P.Cupon Is Null OR P.Cupon = '' OR P.Cupon = ' ' ))) ")
+sql.add("      AND (P1.Sector = P.Sector OR ((P1.Sector Is Null OR P1.Sector = '' OR P1.Sector =' ') AND (P.Sector Is Null OR P.Sector = '' OR P.Sector = ' ' ))) ")
+sql.add("      AND (P1.CallPut = P.CallPut OR ((P1.CallPut Is Null OR P1.CallPut = '' OR P1.CallPut = ' ') AND (P.CallPut Is Null OR P.CallPut = '' OR P.CallPut = ' ' ))) ")
+sql.add("      AND (P1.FechaEj = P.FechaEj OR ((P1.FechaEj  Is Null OR P1.FechaEj = '' OR P1.FechaEj = ' ') AND (P.FechaEj IS Null OR P.FechaEj = '' OR P.FechaEj = ' ' ))) ")
+sql.add("      AND (P1.PrecioEj = P.PrecioEj OR ((P1.PrecioEj Is Null OR P1.PrecioEj = '' OR P1.PrecioEj =' ') AND (P.PrecioEj Is Null OR P.PrecioEj = '' OR P.PrecioEj = ' ' ))) ")
+sql.add("      AND (P1.Estrategia = P.Estrategia OR ((P1.Estrategia Is Null OR P1.Estrategia = '' OR P1.Estrategia = ' ') AND (P.Estrategia Is Null OR P.Estrategia = '' OR P.Estrategia = ' ' ))) ")
+sql.add("      AND P1.Fecha <= '"~IdxDate(dialogo.fecha1)~"') ")
+sql.add("Group by P.Especie, P.Book, E.MonedaEmision, P.Vehiculo, E.Tipo, P.Book, P.Estrategia ")
+sql.add("Order by P.Especie, P.Book ")
+
+Watch(sql.batch)
+
+recorrer sql
+let(&tipoop, Fbn('TipoOp'))
+let(&posicion, Fbn('Cantidad'))
+let(&vehiculo, Fbn('Vehiculo1'))
+
+if (Vacio(&especieanterior) y Vacio(&bookanterior))
+let(&especieanterior, Fbn('especie'))
+let(&cuentacustodiaanterior, Fbn('CuentaCustodia'))
+let(&bookanterior, Fbn('Book1'))
+let(&monedaemisionanterior, Fbn('MonedaEmision'))
+let(&tipoespecieanterior, Fbn('tipoEspecie'))
+let(&sumaposiciones, 0)
+else
+let(&especieanterior, &especieactual)
+let(&cuentacustodiaanterior, &cuentacustodiaactual)
+let(&bookanterior, &bookactual)
+let(&monedaemisionanterior, &monedaemisionactual)
+let(&tipoespecieanterior, &tipoespecieactual)
+endif
+
+let(&especieactual, Fbn('especie'))
+let(&cuentacustodiaactual, Fbn('CuentaCustodia'))
+let(&bookactual, Fbn('Book1'))
+let(&monedaemisionactual, Fbn('MonedaEmision'))
+let(&tipoespecieactual, Fbn('tipoEspecie'))
+
+if (Eqstr(&especieanterior, &especieactual))
+let(&posicion, Fbn('Cantidad'))
+
+
+let(&precioniif, CotizacionNIIF(&especieactual, dialogo.fecha1, &bookactual))
+if (Vacio(&precioniif))
+let(&precioniif, 0)
+else
+let(&precioniif, &precioniif.preciocotizaciondeterminada)
+endif
+if (&precioniif = 0)
+let(&precioniif, Cotizacion(&especieactual, null, null, null, dialogo.fecha1, 1) * CotizacionC(BuscarCampo('ESPECIES', 'Cotiza', 'Codigo', &especieactual), null, null, null, dialogo.fecha1, 25, SI, 'ARP'))
+endif
+let(&precio, &precioniif)
+let(&posicionvaluada, &posicion * &precio)
+
+let(&sumaposiciones, &sumaposiciones + &posicionvaluada)
+
+let(&nominales, &nominales + &posicion)
+else
+let(&sumacantopvaluada, 0)
+sql.add("SELECT O.Cantidad, O.Precio4 Precio, E.Cotiza from "~Dbo()~".OPERACIONES O")
+sql.add("JOIN "~Dbo()~".ESPECIES E ON O.Especie = E.Codigo ")
+sql.add("JOIN "~Dbo()~".CUENTAS C ON C.Codigo = O.Cuenta1 ")
+sql.add("WHERE O.TipoOp in ('TIPO','TIPP') ")
+sql.add("AND O.FechaOp <= '"~IdxDate(dialogo.fecha1)~"'")
+sql.add("AND O.FechaVto > '"~IdxDate(dialogo.fecha1)~"'")
+sql.add("AND E.Codigo = '"~&especieanterior~"' ")
+sql.add("AND (C.CB2 Is Null OR C.CB2 = '' OR C.CB2 =' ' OR C.CB2='NO') ")
+recorrer sql
+let(&cantidadoperacion, Fbn('Cantidad'))
+
+let(&precioniif, CotizacionNIIF(&especieanterior, dialogo.fecha1, &bookanterior))
+if (Vacio(&precioniif))
+let(&precioniif, 0)
+else
+let(&precioniif, &precioniif.preciocotizaciondeterminada)
+endif
+let(&precio, &precioniif)
+
+let(&cantidadopvaluada, &cantidadoperacion * &precio)
+if (not Eqstr(Fbn('Cotiza'), Var('MONELOCA')))
+Act(mn:99, Fbn('Cotiza'))
+let(&cantidadopvaluada, &cantidadopvaluada * EvalFormula('TCCONTABLE'))
+endif
+let(&sumacantopvaluada, &sumacantopvaluada + &cantidadopvaluada)
+let(&nominales, &nominales + &cantidadoperacion)
+
+proximo
+let(&sumaposiciones, &sumaposiciones - &sumacantopvaluada)
+
+if (&sumaposiciones < 0)
+let(&issuer, BuscarCampo('ESPECIES', 'issuer', 'Codigo', &especieanterior))
+let(&cotiza, BuscarCampo('ESPECIES', 'Cotiza', 'Codigo', &especieanterior))
+sql.add(" SELECT '"~&especieanterior~"' Especie, '"~&monedaemisionanterior~"' MonedaEmision, ")
+sql.add(" '"~&vehiculo~"' Vehiculo1, 'TIC' TipoOp, '"~&bookanterior~"' Book1, '"~&tipoespecieanterior~"' TipoEspecie, ")
+sql.add(" Codigo CodAsi, '"~&cuentacustodiaanterior~"' CuentaCustodia, '' Concepto, '"~&vehiculo~"' Cliente, ")
+sql.add(" '"~&issuer~"' Issuer, "~FStr(&nominales, 0, 0)~" Cantidad, '"~&cotiza~"' Cotiza  ")
+sql.add(" From "~Dbo()~".MODELOSASIENTO ")
+sql.add(" Where TipoAsiento IN ("~pipe2comillas(&tipoasiento)~") ")
+sql.add(" AND '|'+rtrim(Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+sql.add(" AND Habilitado = 'SI' ")
+recorrer sql
+let(&codasi, Fbn('CodAsi'))
+Act(bk:1, &bookanterior)
+
+Acn(ck:1, 0)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(sql(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where Modelo = '"~&codasi~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~&vehiculo~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Message('Modelo: '~&codasi)
+sql.generarasientoop(&codasi, '', '', '', Val(na:1), Val(fv:1), &vehiculo, null, null, null, null, null, &tipoop, null, null, null, null, null, null, FSys(), dialogo.fecha1)
+sql.exec
+let(&cantidadposcombinaciones, &cantidadposcombinaciones + 1)
+Act(za:&cantidadposcombinaciones, &especieanterior)
+endif
+proximo
+endif
+let(&sumaposiciones, 0)
+
+let(&posicion, Fbn('Cantidad'))
+let(&precioniif, CotizacionNIIF(&especieactual, dialogo.fecha1, &bookactual))
+if (Vacio(&precioniif))
+let(&precioniif, 0)
+else
+let(&precioniif, &precioniif.preciocotizaciondeterminada)
+endif
+if (&precioniif = 0)
+let(&precioniif, Cotizacion(&especieactual, null, null, null, dialogo.fecha1, 1) * CotizacionC(BuscarCampo('ESPECIES', 'Cotiza', 'Codigo', &especieactual), null, null, null, dialogo.fecha1, 25, SI, 'ARP'))
+endif
+let(&precio, &precioniif)
+
+let(&posicionvaluada, &posicion * &precio)
+
+let(&sumaposiciones, &sumaposiciones + &posicionvaluada)
+
+let(&nominales, &nominales + &posicion)
+endif
+proximo
+
+if (&sumaposiciones <> 0)
+let(&sumacantopvaluada, 0)
+
+sql.add("SELECT O.Cantidad, O.Precio4, E.Cotiza  from "~Dbo()~".OPERACIONES O")
+sql.add("JOIN "~Dbo()~".ESPECIES E ON O.Especie = E.Codigo ")
+sql.add("JOIN "~Dbo()~".CUENTAS C ON C.Codigo = O.Cuenta1 ")
+sql.add("WHERE O.TipoOp in ('TIPO','TIPP') ")
+sql.add("AND O.FechaOp <= '"~IdxDate(dialogo.fecha1)~"'")
+sql.add("AND O.FechaVto > '"~IdxDate(dialogo.fecha1)~"'")
+sql.add("AND E.Codigo = '"~&especieactual~"' ")
+sql.add("AND (C.CB2 Is Null OR C.CB2 = '' OR C.CB2 =' ' OR C.CB2='NO') ")
+recorrer sql
+let(&cantidadoperacion, Fbn('Cantidad'))
+let(&precioniif, CotizacionNIIF(&especieactual, dialogo.fecha1, &bookactual))
+if (Vacio(&precioniif))
+let(&precioniif, 0)
+else
+let(&precioniif, &precioniif.preciocotizaciondeterminada)
+endif
+let(&precio, &precioniif)
+
+let(&cantidadopvaluada, &cantidadoperacion * &precio)
+if (not Eqstr(Fbn('Cotiza'), Var('MONELOCA')))
+Act(mn:99, Fbn('Cotiza'))
+let(&cantidadopvaluada, &cantidadopvaluada * EvalFormula('TCCONTABLE'))
+endif
+let(&sumacantopvaluada, &sumacantopvaluada + &cantidadopvaluada)
+let(&nominales, &nominales + &cantidadoperacion)
+proximo
+let(&sumaposiciones, &sumaposiciones - &sumacantopvaluada)
+endif
+if (&sumaposiciones < 0)
+let(&especie, &especieactual)
+let(&issuer, BuscarCampo('ESPECIES', 'issuer', 'Codigo', &especieactual))
+let(&cotiza, BuscarCampo('ESPECIES', 'Cotiza', 'Codigo', &especieactual))
+sql.add(" SELECT '"~&especieactual~"' Especie, '"~&monedaemisionactual~"' MonedaEmision, ")
+sql.add(" '"~&vehiculo~"' Vehiculo1, 'TIC' TipoOp, '"~&bookactual~"' Book1, '"~&tipoespecie~"' TipoEspecie, ")
+sql.add(" Codigo CodAsi, '"~&cuentacustodiaactual~"' CuentaCustodia, '' Concepto, '"~&vehiculo~"' Cliente, ")
+sql.add(" '"~&issuer~"' Issuer , "~FStr(&nominales, 0, 0)~" Cantidad, '"~&cotiza~"' Cotiza ")
+sql.add(" From "~Dbo()~".MODELOSASIENTO ")
+sql.add(" Where TipoAsiento IN ("~pipe2comillas(&tipoasiento)~") ")
+sql.add(" AND '|'+rtrim(Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+sql.add(" AND Habilitado = 'SI' ")
+recorrer sql
+let(&codasi, Fbn('CodAsi'))
+Act(bk:1, &bookactual)
+Acn(ck:1, 0)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(sql(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where Modelo = '"~&codasi~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~&vehiculo~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Message('Modelo: '~&codasi)
+sql.generarasientoop(&codasi, '', '', '', Val(na:1), Val(fv:1), &vehiculo, null, null, null, null, null, &tipoop, null, null, null, null, null, null, FSys(), dialogo.fecha1)
+sql.exec
+let(&cantidadposcombinaciones, &cantidadposcombinaciones + 1)
+Act(za:&cantidadposcombinaciones, &especieactual)
+endif
+proximo
+endif
+
+let(&especieactualop, '')
+let(&bookactualop, '')
+let(&especieanteriorop, '')
+let(&bookanteriorop, '')
+let(&sumacantopvaluada, 0)
+let(&nominales, 0)
+
+sql.add("SELECT Cantidad, E.Tipo, E.Issuer, E.Cotiza, O.Cuenta2 CuentaCustodia, O.Vehiculo1, O.Especie, O.Book1, E.MonedaEmision, O.Precio4 Precio, O.ContraEspecie ")
+sql.add("from "~Dbo()~".OPERACIONES O")
+sql.add("JOIN "~Dbo()~".ESPECIES E ON O.Especie = E.Codigo ")
+sql.add("JOIN "~Dbo()~".CUENTAS C ON C.Codigo = O.Cuenta1 ")
+sql.add("WHERE O.TipoOp in ('TIPO','TIPP') ")
+sql.add("AND O.FechaOp <= '"~IdxDate(dialogo.fecha1)~"'")
+sql.add("AND O.FechaVto > '"~IdxDate(dialogo.fecha1)~"' ")
+recorrer&i 1, &cantidadposcombinaciones
+let(&especieactual, Val(za:&i))
+if (&i = 1)
+sql.add(" AND NOT ( ")
+endif
+sql.add("E.Codigo = '"~&especieactual~"' ")
+if (&i <> &cantidadposcombinaciones)
+sql.add(" OR ")
+endif
+if (&i = &cantidadposcombinaciones)
+sql.add(")")
+endif
+proximo
+sql.add("AND (C.CB2 Is Null OR C.CB2 = '' OR C.CB2 =' ' OR C.CB2='NO') ")
+recorrer sql
+if (Vacio(&especieactualop))
+let(&especieactualop, Fbn('Especie'))
+let(&bookactualop, Fbn('Book1'))
+let(&especieanteriorop, Fbn('Especie'))
+let(&bookanteriorop, Fbn('Book1'))
+let(&sumaposiciones, 0)
+let(&nominales, 0)
+else
+let(&especieanteriorop, &especieactualop)
+let(&bookanteriorop, &bookactualop)
+let(&especieactualop, Fbn('Especie'))
+let(&bookactualop, Fbn('Book1'))
+endif
+if (Eqstr(&especieactualop, &especieanteriorop))
+let(&cantidadoperacion, Fbn('Cantidad'))
+let(&precioniif, CotizacionNIIF(&especieactualop, dialogo.fecha1, &bookactualop))
+if (Vacio(&precioniif))
+let(&precioniif, 0)
+else
+let(&precioniif, &precioniif.preciocotizaciondeterminada)
+endif
+let(&precio, &precioniif)
+
+let(&cantidadopvaluada, &cantidadoperacion * &precio)
+if (not Eqstr(Fbn('Cotiza'), Var('MONELOCA')))
+Act(mn:99, Fbn('Cotiza'))
+let(&cantidadopvaluada, &cantidadopvaluada * EvalFormula('TCCONTABLE'))
+endif
+let(&sumaposiciones, &sumaposiciones + &cantidadopvaluada)
+let(&nominales, &nominales + &cantidadoperacion)
+
+let(&issuer, Fbn('Issuer'))
+let(&cotiza, Fbn('Cotiza'))
+let(&vehiculo, Fbn('Vehiculo1'))
+let(&tipoespecie, Fbn('Tipo'))
+let(&cuentacustodia, Fbn('CuentaCustodia'))
+let(&monedaemision, Fbn('MonedaEmision'))
+let(&cantidadoperacion, Fbn('Cantidad'))
+else
+sql.add(" SELECT '"~&especieanteriorop~"' Especie, '"~&monedaemision~"' MonedaEmision, ")
+sql.add(" '"~&vehiculo~"' Vehiculo1, 'TIC' TipoOp, '"~&bookanteriorop~"' Book1, '"~&tipoespecie~"' TipoEspecie, ")
+sql.add(" Codigo CodAsi, '"~&cuentacustodia~"' CuentaCustodia, '' Concepto, '"~&vehiculo~"' Cliente, ")
+sql.add(" '"~&issuer~"' Issuer , "~FStr(&nominales, 0, 0)~" Cantidad, '"~&cotiza~"' Cotiza ")
+sql.add(" From "~Dbo()~".MODELOSASIENTO ")
+sql.add(" Where TipoAsiento IN ("~pipe2comillas(&tipoasiento)~") ")
+sql.add(" AND '|'+rtrim(Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+sql.add(" AND Habilitado = 'SI' ")
+recorrer sql
+let(&codasi, Fbn('CodAsi'))
+Act(bk:1, &bookanteriorop)
+Acn(ck:1, 0)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(sql(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where Modelo = '"~&codasi~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~&vehiculo~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Message('Modelo: '~&codasi)
+sql.generarasientoop(&codasi, '', '', '', Val(na:1), Val(fv:1), &vehiculo, null, null, null, null, null, &tipoop, null, null, null, null, null, null, FSys(), dialogo.fecha1)
+sql.exec
+endif
+proximo
+let(&sumaposiciones, 0)
+let(&nominales, 0)
+let(&sumacantopvaluada, 0)
+
+let(&cantidadoperacion, Fbn('Cantidad'))
+let(&precio, Fbn('Precio'))
+
+let(&cantidadopvaluada, &cantidadoperacion * &precio)
+if (not Eqstr(Fbn('Cotiza'), Var('MONELOCA')))
+Act(mn:99, Fbn('Cotiza'))
+let(&cantidadopvaluada, &cantidadopvaluada * EvalFormula('TCCONTABLE'))
+endif
+let(&sumaposiciones, &sumaposiciones + &cantidadopvaluada)
+let(&nominales, &nominales + &cantidadoperacion)
+
+let(&issuer, Fbn('Issuer'))
+let(&cotiza, Fbn('Cotiza'))
+let(&vehiculo, Fbn('Vehiculo1'))
+let(&tipoespecie, Fbn('Tipo'))
+let(&cuentacustodia, Fbn('CuentaCustodia'))
+let(&monedaemision, Fbn('MonedaEmision'))
+let(&cantidadoperacion, Fbn('Cantidad'))
+
+endif
+proximo
+
+if (&sumaposiciones > 0)
+sql.add(" SELECT '"~&especieactualop~"' Especie, '"~&monedaemisionactual~"' MonedaEmision, ")
+sql.add(" '"~&vehiculo~"' Vehiculo1, 'TIC' TipoOp, '"~&bookactualop~"' Book1, '"~&tipoespecie~"' TipoEspecie, ")
+sql.add(" Codigo CodAsi, '"~&cuentacustodia~"' CuentaCustodia, '' Concepto, '"~&vehiculo~"' Cliente, ")
+sql.add(" '"~&issuer~"' Issuer , "~FStr(&nominales, 0, 0)~" Cantidad, '"~&cotiza~"' Cotiza ")
+sql.add(" From "~Dbo()~".MODELOSASIENTO ")
+sql.add(" Where TipoAsiento IN ("~pipe2comillas(&tipoasiento)~") ")
+sql.add(" AND '|'+rtrim(Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+sql.add(" AND Habilitado = 'SI' ")
+recorrer sql
+let(&codasi, Fbn('CodAsi'))
+Act(bk:1, &bookactualop)
+Acn(ck:1, 0)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(sql(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where Modelo = '"~&codasi~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~&vehiculo~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Message('Modelo: '~&codasi)
+sql.generarasientoop(&codasi, '', '', '', Val(na:1), Val(fv:1), &vehiculo, null, null, null, null, null, &tipoop, null, null, null, null, null, null, FSys(), dialogo.fecha1)
+sql.exec
+endif
+proximo
+endif
+
+Message('--- Reversa asientos de Egreso de Titulos ---')
+Acd(fv:2, Habiles(dialogo.fecha1, -1, 'ARG'))
+
+sql.add(" Select FechaValor, NrUnicoAsiento ")
+sql.add(" From "~Dbo()~".ASIENTOSCON A ")
+sql.add(" JOIN "~Dbo()~".MODELOSASIENTO MA ON A.Modelo = MA.Codigo ")
+sql.add(" Where MA.TipoAsiento IN ("~pipe2comillas(&tipoasiento)~") ")
+sql.add(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+sql.add(" AND MA.Habilitado = 'SI' ")
+sql.add(" AND (A.Estado ='E') AND (A.NrAsiento is NULL OR A.NrAsiento = '') ")
+sql.add(" AND A.FechaValor = '"~IdxDate(Val(fv:2))~"' ")
+Watch(sql.batch)
+
+recorrer sql
+Act(as:1, Fbn('NrUnicoAsiento'))
+ejecutarevento('CONT46', fecha1 = dialogo.fecha1, nrunicoasiento1 = Val(as:1), fecha2 = dialogo.fecha1, radio1 = 0)
+proximo
+

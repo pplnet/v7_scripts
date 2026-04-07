@@ -1,0 +1,101 @@
+mostrarcuadrodemensajes
+creardialogo
+fecha1:'Fecha';1;;;;;;;;FSys()
+vehiculo1: 'Vehiculo';;;;;;;;;;Var('VEHICULODE')
+radio1: 'Func.|Autom|Manual';;;;;NO;;;;1;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+Message('--- Asientos de Interes Devengado diario ICL ---')
+Act(ta:1, Var('TIPASDEV'))
+Act(ml:1, Var('MONELOCA'))
+
+
+sql.add("SELECT *,Especie ContraEspecie, '#Op:' + NrOperacion + ',' + rtrim(TipoOp) + ',' + rtrim(Especie) Leyenda ")
+sql.add(" From (select M.NrOperacion,  M.Vehiculo, Sum(M.Monto) TotalNetoCli1, ")
+sql.add(" MA.Codigo CodAsi, O.TipoOp, M.Especie, M.Book, O.TipoCONU  ")
+sql.add("FROM "~Dbo()~".MOVDEVENGADOS M, "~Dbo()~".MODELOSASIENTO MA, "~Dbo()~".OPERACIONES O ")
+sql.add("WHERE M.TipoDevengado in ('INTICL') ")
+sql.add("AND O.NrOperacion = M.NrOperacion ")
+sql.add("AND M.FechaEj = "~IdxDate2(dialogo.fecha1)~" ")
+sql.add("AND M.Vehiculo = '"~dialogo.vehiculo1~"' ")
+sql.add("AND MA.TipoAsiento in("~pipe2comillas(Val(ta:1))~") ")
+sql.add("AND MA.Vehiculo = '"~dialogo.vehiculo1~"' ")
+sql.add(" Group by M.NrOperacion,M.Vehiculo,Codigo,O.TipoOp,M.Especie, M.Book, O.TipoCONU ")
+sql.add(" ) Aux ")
+
+Watch(sql.batch)
+Acn(xx:2, 0)
+Acn(xx:1, 0)
+recorrer sql
+Acd(fv:1, dialogo.fecha1)
+Acd(fd:1, dialogo.fecha1)
+Act(vh:1, Fbn('Vehiculo'))
+Act(vk:1, Fbn('Book'))
+Act( to :1, Fbn('CodAsi'))
+Act(ti:1, Fbn('TipoOp'))
+Act(nr:1, Fbn('NrOperacion'))
+Act(nr:2, '')
+Acn(co:1, CotizacionC(Fbn('Especie'), null, null, null, dialogo.fecha1, 25, SI, Var('MONELOCA')))
+
+if (Val(xx:2) = 0)
+if (Val(xx:1) = 0)
+if (NoVacio(sql("Select NrUnicoAsiento from "~Dbo()~".ASIENTOSCON A, "~Dbo()~".MODELOSASIENTO M Where M.Codigo = A.Modelo AND M.TipoAsiento in ("~pipe2comillas(Val(ta:1))~") AND A.Fecha1="~IdxDate2(Val(fd:1))~" and A.NrLote<>0")))
+if (dialogo.radio1 = 1)
+Messagebox('Tiene asientos enviados.')
+else
+Message('Tiene asientos enviados.')
+endif
+Acn(xx:2, 1)
+else
+if (NoVacio(sql("Select NrUnicoAsiento from "~Dbo()~".ASIENTOSCON A, "~Dbo()~".MODELOSASIENTO M Where M.Codigo = A.Modelo AND M.TipoAsiento in ("~pipe2comillas(Val(ta:1))~") AND A.Fecha1="~IdxDate2(Val(fd:1))~" /*AND A.Book = '"~Val(vk:1)~"'*/ and (A.NrLote=0 OR A.NrLote = NULL)")))
+if (dialogo.radio1 = 1)
+if (Messagebox('Ya existen asientos de '~BuscarCampo('TIPOSASIENTO', 'Descripcion', 'Codigo', Val(ta:1))~' para esa fecha, desea eliminarlos?', 1, 2) = 6)
+Message('Borrando Asientos Previos')
+sql.add("Delete "~Dbo()~".ASIENTOSCON1 Where NrUnicoAsiento IN ")
+sql.add("(Select A.NrUnicoAsiento From "~Dbo()~".ASIENTOSCON A, "~Dbo()~".MODELOSASIENTO M Where A.Modelo = M.Codigo AND A.Fecha1="~IdxDate2(Val(fd:1))~" AND M.TipoAsiento in ("~pipe2comillas(Val(ta:1))~") /*AND A.Book = '"~Val(vk:1)~"'*/)")
+sql.new
+sql.exec
+sql.add("Delete "~Dbo()~".ASIENTOSCON Where NrUnicoAsiento IN ")
+sql.add("(Select A.NrUnicoAsiento From "~Dbo()~".ASIENTOSCON A, "~Dbo()~".MODELOSASIENTO M Where A.Modelo = M.Codigo AND A.Fecha1="~IdxDate2(Val(fd:1))~" AND M.TipoAsiento in ("~pipe2comillas(Val(ta:1))~") /*AND A.Book = '"~Val(vk:1)~"'*/)")
+sql.new
+sql.exec
+Message(Val(nr:1)~' - Modelo: '~Val( to :1))
+sql.generarasientoop(Val( to :1), Val(nr:1), '', '', Var('ASINUM'), Val(fv:1), Val(vh:1), null, Val(vk:1), null, null, null, Val(ti:1), null, Val(nr:2), null, null, null, null, FSys(), Val(fd:1))
+sql.exec
+else
+Acn(xx:2, 1)
+endif
+else
+Message('Borrando Asientos Previos')
+sql.add("Delete "~Dbo()~".ASIENTOSCON1 Where NrUnicoAsiento IN ")
+sql.add("(Select A.NrUnicoAsiento From "~Dbo()~".ASIENTOSCON A, "~Dbo()~".MODELOSASIENTO M Where A.Modelo = M.Codigo AND A.Fecha1="~IdxDate2(Val(fd:1))~" AND M.TipoAsiento in ("~pipe2comillas(Val(ta:1))~") /*AND A.Book = '"~Val(vk:1)~"'*/)")
+sql.new
+sql.exec
+sql.add("Delete "~Dbo()~".ASIENTOSCON Where NrUnicoAsiento IN ")
+sql.add("(Select A.NrUnicoAsiento From "~Dbo()~".ASIENTOSCON A, "~Dbo()~".MODELOSASIENTO M Where A.Modelo = M.Codigo AND A.Fecha1="~IdxDate2(Val(fd:1))~" AND M.TipoAsiento in ("~pipe2comillas(Val(ta:1))~") /*AND A.Book = '"~Val(vk:1)~"*/)")
+sql.new
+sql.exec
+Message(Val(nr:1)~' - Modelo: '~Val( to :1))
+sql.generarasientoop(Val( to :1), Val(nr:1), '', '', Var('ASINUM'), Val(fv:1), Val(vh:1), null, Val(vk:1), null, null, null, Val(ti:1), null, Val(nr:2), null, null, null, null, FSys(), Val(fd:1))
+sql.exec
+endif
+else
+Message(Val(nr:1)~' - Modelo: '~Val( to :1))
+sql.generarasientoop(Val( to :1), Val(nr:1), '', '', Var('ASINUM'), Val(fv:1), Val(vh:1), null, Val(vk:1), null, null, null, Val(ti:1), null, Val(nr:2), null, null, null, null, FSys(), Val(fd:1))
+sql.exec
+endif
+Acn(xx:1, 1)
+endif
+else
+Message(Val(nr:1)~' - Modelo: '~Val( to :1))
+sql.generarasientoop(Val( to :1), Val(nr:1), '', '', Var('ASINUM'), Val(fv:1), Val(vh:1), null, Val(vk:1), null, null, null, Val(ti:1), null, Val(nr:2), null, null, null, null, FSys(), Val(fd:1))
+sql.exec
+endif
+endif
+
+
+proximo
+

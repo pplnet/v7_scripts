@@ -1,0 +1,106 @@
+mostrarcuadrodemensajes
+creardialogo
+fecha1:'Fecha:';;;;;;dialogo.fecha1 <= FSys() y EsHabil(dialogo.fecha1, 'ARG');'Fecha Invalida';NO;FSys()
+vehiculo1:'Vehiculo:';;;;NO;;NoVacio(dialogo.vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+findialogo
+if (not ok)
+Cancelar()
+endif
+Acn(bd:1, 0)
+
+SetFilaActual(0)
+if (sql(" Select 1 From "~Dbo()~".FLAGSOCT Where Fecha = '"~IdxDate(dialogo.fecha1)~"' AND Registro = 'CIED' ") <> 1)
+Cancelar()('El Cierre del Dia No Ha Sido Procesado')
+endif
+
+Act(me:1, Var('MERCOCT'))
+Act(ct:2, CuentaCliente(dialogo.vehiculo1, 'ARP', '', Val(me:1)))
+Acn(ps:1, 0)
+Acn(ml:1, 0)
+Acn(ml:2, 0)
+
+sql.add(" Select NrTrans, Cantidad1, Cliente1, NrTransRef1, Cantidad2 ")
+sql.add(" From "~Dbo()~".TRANSACCIONES2 T1 ")
+sql.add(" Where T1.Fecha1 = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND T1.TipoTr2 = 'LIQOCT' ")
+sql.add(" AND T1.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+sql.add(" AND T1.Cambio1 = 0 ")
+sql.add(" Order By NrTrans ")
+recorrer sql
+Acn(bd:1, 1)
+Act(a:fac, Fbn('NrTrans'))
+Act(b:fac, Fbn('Cliente1'))
+Acn(c:fac, Fbn('Cantidad1'))
+Acn(d:fac, Fbn('Cantidad2'))
+Scn(ml:1, Fbn('Cantidad1'))
+Scn(ml:2, Fbn('Cantidad2'))
+Act(ls:1, Val(ls:1)~'|'~Fbn('NrTrans'))
+Act(nv:fac, Fbn('NrTransRef1'))
+if (Fbn('Cantidad1') <> Fbn('Cantidad2'))
+Act(tr:fac, sql(" Select NrTrans From "~Dbo()~".TRANSACCIONES2 Where TipoTr2 = 'TRANSP' AND NrTransRef1 = '"~Val(nv:fac)~"' "))
+if (sql(" Select 1 From "~Dbo()~".MOVPENDIENTES Where NrOperacion = '"~Val(tr:fac)~"' AND NrSaldo = 1 ") <> 1)
+Cancelar()('El Voucher de Transporte '~Val(tr:fac)~' ya esta liquidado')
+endif
+endif
+proximo
+
+Acn(fi:1, Fac())
+Ifa()
+Act(a:fac, 'MULTILATERAL')
+Acn(c:fac, Val(ml:1))
+Acn(d:fac, Val(ml:2))
+
+if (Val(bd:1) = 1)
+crearlistbox;'Arial,8,';'Anulacion de Cierre Diario OCT del dia '~dialogo.fecha1
+'Transaccion';a:1..a:fac;NO;;;90;string;;RGB(450, 200, 250);
+'Agente';b:1..b:fac;NO;;;70;string;;RGB(450, 200, 250);
+'Cantidad Liquidada';c:1..c:fac;NO;;;120;numero;'###,###,###,###.##';RGB(450, 200, 250);
+'Cantidad Confirmada';d:1..d:fac;NO;;;120;numero;'###,###,###,###.##';RGB(450, 200, 250);
+finlistbox
+if (not ok)
+Cancelar()
+endif
+else
+sql.add(" Delete "~Dbo()~".FLAGSOCT ")
+sql.add(" Where Fecha = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND Registro = 'CIED' ")
+sql.new
+sql.exec
+Cancelar()('El Cierre Diario OCT No Tuvo Liquidaciones')
+endif
+
+recorrer&k 1, Val(fi:1)
+sql.add(" Select CB3, CB9 From "~Dbo()~".TRANSACCIONES2 Where NrTrans = '"~Val(nv:&k)~"' ")
+recorrer sql
+Dfa()
+Acn(cb:3, Fbn('CB3'))
+Acn(cb:9, Fbn('CB9'))
+proximo
+if (Val(cb:3) = 1)
+Message('Anulando Falla del Voucher '~Val(nv:&k))
+ejecutarevento('ANUFAL', nrtrans1 = Val(nv:&k), radio1 = 0)
+endif
+if (Val(cb:9) = 1)
+Message('Anulando Confirmacion del Voucher '~Val(nv:&k))
+ejecutarevento('XNOCON', nrtrans1 = Val(nv:&k))
+sql.add(" Update "~Dbo()~".TRANSACCIONES2 ")
+sql.add(" Set Cantidad4 = 0 ")
+sql.add(" Where NrTrans = '"~Val(nv:&k)~"' ")
+sql.new
+endif
+sql.add(" Update "~Dbo()~".TRANSACCIONES2 ")
+sql.add(" Set Cantidad2 = 0, ")
+sql.add(" NrTransRef1 = Null ")
+sql.add(" Where NrTrans = '"~Val(a:&k)~"' ")
+sql.new
+sql.exec
+proximo
+
+ejecutarevento('ALIQAU', fecha1 = dialogo.fecha1)
+
+sql.add(" Delete "~Dbo()~".FLAGSOCT ")
+sql.add(" Where Fecha = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND Registro = 'CIED' ")
+sql.new
+sql.exec
+

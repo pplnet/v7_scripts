@@ -1,0 +1,407 @@
+modoreproceso(sindialogo)
+creardialogo
+nroperacion1: 'Operacion';;;;;;;;;;
+fecha1:'Fecha';;;;;;;;;FSys()
+nroperacion2: 'NrCarta';;;;;NO;
+check1:'del evento';;;;;NO;
+radio1:'Tipo|Clasico|Intermed.';;;;;NO;;;;0;;;
+directorio1: 'Path carta';;;;;;NoVacio(dialogo.directorio1);'Debe ingresar un path';NO;Var('PATHCARTA')
+string1: 'File carta';;;;;;NoVacio(dialogo.string1);'Debe ingresar un documento';NO;Var('FILECARTA2')
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (existedirectorio(dialogo.directorio1))
+if (Eqstr(Copy(dialogo.directorio1, Longitud(dialogo.directorio1), 1), '\'))
+if (not existearchivo(dialogo.directorio1~dialogo.string1))
+Cancelar()('1.El Archivo '~dialogo.string1~' no existe en el directorio: '~dialogo.directorio1)
+endif
+else
+if (not existearchivo(dialogo.directorio1~'\'~dialogo.string1))
+Cancelar()('2.El Archivo '~dialogo.string1~' no existe en el directorio: '~dialogo.directorio1)
+endif
+endif
+else
+Cancelar()('El directorio '~dialogo.directorio1~' no existe')
+endif
+
+
+let(&pf, '')
+if (Eqstr(Copy(dialogo.directorio1, Longitud(dialogo.directorio1), 1), '\'))
+let(&pf, dialogo.directorio1~dialogo.string1)
+else
+let(&pf, dialogo.directorio1~'\'~dialogo.string1)
+endif
+
+
+Act(cn1, pipe2comillas(Var('CTANOCAR')))
+
+sql.add("Select * from "~Dbo()~".OPERACIONES")
+sql.add(" WHERE NrOperacion = '"~dialogo.nroperacion1~"'")
+
+recorrer sql
+
+Dfa()
+SetFilaActual(6)
+
+let(&fecha_larga, FStr(Dia(dialogo.fecha1), 1, 0)~' de '~Val(aa:mes(dialogo.fecha1))~' de '~FStr(Anio(dialogo.fecha1), 4, 0))
+
+let(&razon_social, BuscarCampo('CLIENTES', 'RazonSocial', 'Codigo', Fbn()['Cliente1']))
+let(&direccion, Copy(BuscarCampo('CLIENTES', 'Direccion', 'Codigo', Fbn()['Cliente1']), 1, 30)~' '~Copy(BuscarCampo('CLIENTES', 'Localidad', 'Codigo', Fbn()['Cliente1']), 1, 18)~' ('~BuscarCampo('CLIENTES', 'CodigoPostal', 'Codigo', Fbn()['Cliente1'])~')')
+
+let(&ref, 'REF: Nuestro Nro. Operacion '~Fbn()['NrOperacion']~' / '~dialogo.nroperacion2)
+
+SetFont(a:fac..e:fac + 11, 1)
+SetFilaActual(Fac() + 13)
+
+SetFont(a:fac..e:fac + 3, 1)
+
+SetFilaActual(Fac() + 5)
+Acn(y3, Fac())
+Act(a:fac, 'Tipo de Operacion:')
+let(&nombre_tipoop, BuscarCampo('TIPOSOPERACION', 'Nombre', 'Codigo', Fbn()['TipoOp']))
+Ifa()
+Acn(z1, sql("Select Fecha2 from "~Dbo()~".TRANSACCIONES2 where NrOperacionRef1 = '"~dialogo.nroperacion1~"' and NrOperacionRef2 = '"~dialogo.nroperacion2~"' "))
+Act(a:fac, 'Momento de Liq.:')
+if (Val(z1) = Fbn()['FechaOp'])
+Act(b:fac, 'Origen')
+else
+Act(b:fac, 'Vencimiento')
+endif
+let(&momento, Val(b:fac))
+
+let(&nombre_especie, BuscarCampo('ESPECIES', 'Nombre', 'Codigo', Fbn()['Especie']))
+
+let(&monto, PYC(Fbn()['Cantidad'], 1, 2))
+
+let(&fecha_op2, Fbn()['FechaOp2'])
+
+let(&fecha_vto, Fbn()['FechaVto'])
+
+let(&plazo, FStr(Fbn()['Plazo'], 1, 0))
+
+let(&tipo_tasa, Fbn()['TipoTasa'])
+
+let(&tasa, FStr(Fbn()['Precio1'], 1, 7))
+SetFont(a:Val(y3)..a:fac, 2)
+SetFont(b:Val(y3)..b:fac, 1)
+
+SetFilaActual(Fac() + 2)
+Act(a:fac + 1, 'A tal efecto, informamos los movimientos que se realizaran por la liquidacion de la misma:')
+SetFont(a:fac..a:fac + 1, 1)
+
+SetFilaActual(Fac() + 2)
+sql.add("Select DISTINCT T.* from "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".OPERACIONESBITS B, "~Dbo()~".MOVEJECUTADOS M  ")
+sql.add("where T.NrTrans = B.NrOperacion AND T.NrTrans=M.NrTrans2 ")
+sql.add("and T.NrOperacionRef1 = '"~dialogo.nroperacion1~"' ")
+sql.add("and M.Cuenta Not In ("~Val(cn1)~") ")
+if (dialogo.check1 = 1)
+else
+endif
+sql.add("and B.Valor ='1' ")
+sql.add("order by TipoTr2")
+
+Act(ab1, '')
+Act(ab11, '')
+
+let(&concepto, '')
+let(&especie, '')
+let(&valor_nominal, '')
+let(&fecha_valor, '')
+let(&forma_liquidacion, '')
+let(&concepto2, '')
+let(&especie2, '')
+let(&valor_nominal2, '')
+let(&fecha_valor2, '')
+let(&forma_liquidacion2, '')
+
+recorrer sql
+
+if (Vacio(Val(ab1)))
+Act(ab1, Fbn()['Observaciones'])
+else
+if (Vacio(Val(ab11)))
+Act(ab11, Fbn()['Observaciones'])
+endif
+endif
+
+Act(ab2, '')
+
+if (Eqstr(Fbn()['TipoTr2'], 'DEP'))
+if (Val(x1) = 0)
+Ifa()
+Act(a:fac, 'A nuestro favor:')
+SetFont(a:fac, 1)
+Ifa()
+Act(a:fac, 'Concepto')
+Act(b:fac, 'Especie')
+Act(c:fac, 'Valor Nominal')
+Act(d:fac, 'Fecha Valor')
+Act(e:fac, 'Forma de Liquidacion')
+AlinearCeldas(a:fac..e:fac, 'C')
+AgregarMarco(a:fac..e:fac, 2, 2)
+SetFont(a:fac..e:fac, 1)
+
+Ifa()
+Acn(x1, 1)
+endif
+
+Act(j:fac, Fbn()['NrTrans'])
+Act(k:fac, Fbn()['Cuenta1'])
+Act(l:fac, Fbn()['Cuenta2'])
+
+sql.add(" SELECT * FROM "~Dbo()~".CUENTAS WHERE Codigo='"~Val(l:fac)~"' ")
+recorrer sql
+Dfa()
+Act(al1, Fbn()['Alias1'])
+Act(al2, Fbn()['Alias2'])
+Act(al4, Fbn()['Alias4'])
+Act(nu1, Fbn()['Numero'])
+Act(co1, Fbn()['Comitente'])
+Act(cl1, Fbn()['Cliente'])
+Act(ch1, Fbn()['ABA']~'/'~Fbn()['CHIPS'])
+proximo
+
+if (Eqstr(&especie, ''))
+let(&especie, Copy(BuscarCampo('ESPECIES', 'Nombre', 'Codigo', Fbn()['Especie']), 1, 15))
+let(&valor_nominal, PYC(Fbn()['Cantidad1'], 1, 2))
+let(&fecha_valor, Fbn()['Fecha2'])
+else
+let(&especie, &especie~Chr(13)~Copy(BuscarCampo('ESPECIES', 'Nombre', 'Codigo', Fbn()['Especie']), 1, 15))
+let(&valor_nominal, &valor_nominal~Chr(13)~PYC(Fbn()['Cantidad1'], 1, 2))
+let(&fecha_valor, &fecha_valor~Chr(13)~Fbn()['Fecha2'])
+endif
+Act(b:fac, Copy(BuscarCampo('ESPECIES', 'Nombre', 'Codigo', Fbn()['Especie']), 1, 15))
+Acn(c:fac, Fbn()['Cantidad1'])
+Act(d:fac, Fbn()['Fecha2'])
+sql.add("Select NrOperacion, Leyenda, Cuenta, Transaccion from "~Dbo()~".MOVEJECUTADOS ")
+sql.add("where NrTrans2 = '"~Val(j:fac)~"' ")
+sql.add("Union ")
+sql.add("Select NrOperacion, Leyenda, Cuenta, Transaccion from "~Dbo()~".MOVPENDIENTES ")
+sql.add("where NrTrans2 = '"~Val(j:fac)~"' ")
+
+recorrer sql
+Dfa()
+if (Eqstr(Fbn()['NrOperacion'], Val(j:fac)))
+Act(m:fac, Fbn()['Cuenta'])
+Act(n:fac, Fbn()['Transaccion'])
+else
+Act(a:fac, Fbn()['Leyenda'])
+SetFont(a:fac, 5)
+if (Eqstr(&concepto, ''))
+let(&concepto, Fbn()['Leyenda'])
+else
+let(&concepto, &concepto~Chr(13)~Fbn()['Leyenda'])
+endif
+endif
+proximo
+
+Acn(y1, Fac())
+
+if (Incluido(Val(n:fac), 'COMP'))
+Act(ab2, 'COMP')
+Act(e:fac, Val(al1))
+Ifa()
+Act(e:fac, Val(al2))
+if (Eqstr(&forma_liquidacion, ''))
+let(&forma_liquidacion, Val(al1)~Chr(13)~Val(al2))
+else
+let(&forma_liquidacion, &forma_liquidacion~Chr(13)~Val(al1)~Chr(13)~Val(al2))
+endif
+endif
+
+if (Eqstr(Val(n:fac), 'CREDIT'))
+Act(e:fac, 'Credito en Cuenta Nr. '~Val(nu1))
+if (Eqstr(&forma_liquidacion, ''))
+let(&forma_liquidacion, 'Credito en Cuenta Nr. '~Val(nu1))
+else
+let(&forma_liquidacion, &forma_liquidacion~Chr(13)~'Credito en Cuenta Nr. '~Val(nu1))
+endif
+if (dialogo.radio1 = 1)
+Act(e:fac + 1, 'Banco:'~Val(co1))
+Act(e:fac + 2, 'Sucursal:'~Val(al1))
+Act(e:fac + 3, 'Beneficiario:'~Val(cl1))
+Act(e:fac + 4, 'Swift (ABA,CHIPS):'~Val(ch1))
+SetFilaActual(Fac() + 4)
+let(&forma_liquidacion, &forma_liquidacion~Chr(13)~'Banco:'~Val(co1)~Chr(13)~'Sucursal:'~Val(al1)~Chr(13)~'Beneficiario:'~Val(cl1)~Chr(13)~'Swift (ABA,CHIPS):'~Val(ch1))
+endif
+endif
+
+if (Eqstr(Val(n:fac), 'TRANSF'))
+Act(e:fac, 'Transferencia a Cuenta Nr. '~BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(l:fac)))
+Ifa()
+Act(e:fac, 'del '~BuscarCampo('CLIENTES', 'RazonSocial', 'Codigo', BuscarCampo('CUENTAS', 'Comitente', 'Codigo', Val(l:Val(y1))))~'.')
+Ifa()
+Act(e:fac, BuscarCampo('CUENTAS', 'Alias4', 'Codigo', Val(l:fac - 2)))
+let(&forma_liquidacion, 'Transferencia a Cuenta Nr. '~Val(nu1)~Chr(13)~'del '~BuscarCampo('CLIENTES', 'RazonSocial', 'Codigo', Val(co1))~'.'~Chr(13)~Val(al4))
+endif
+
+if (Eqstr(Val(n:fac), 'CHEQUE'))
+Act(e:fac, 'Emision de Cheque a nuestro favor.')
+let(&forma_liquidacion, 'Emision de Cheque a nuestro favor.')
+endif
+
+AlinearCeldas(b:Val(y1)..b:fac, 'C')
+AlinearCeldas(d:Val(y1)..d:fac, 'C')
+AgregarMarco(a:Val(y1)..e:fac, 1, 2)
+SetFont(b:Val(y1)..e:fac, 1)
+
+SetFont(j:Val(y1)..p:fac, 3)
+endif
+if (Eqstr(Fbn()['TipoTr2'], 'RET'))
+if (Val(x2) = 0)
+Ifa()
+Act(a:fac, 'A su favor:')
+SetFont(a:fac, 1)
+Ifa()
+Act(a:fac, 'Concepto')
+Act(b:fac, 'Especie')
+Act(c:fac, 'Valor Nominal')
+Act(d:fac, 'Fecha Valor')
+Act(e:fac, 'Forma de Liquidacion')
+AlinearCeldas(a:fac..e:fac, 'C')
+AgregarMarco(a:fac..e:fac, 2, 2)
+SetFont(a:fac..e:fac, 1)
+Ifa()
+Acn(x2, 1)
+endif
+Act(j:fac, Fbn()['NrTrans'])
+Act(k:fac, Fbn()['Cuenta1'])
+Act(l:fac, Fbn()['Cuenta2'])
+
+sql.add(" SELECT * FROM "~Dbo()~".CUENTAS WHERE Codigo='"~Val(l:fac)~"' ")
+recorrer sql
+Dfa()
+Act(al1, Fbn()['Alias1'])
+Act(al2, Fbn()['Alias2'])
+Act(al4, Fbn()['Alias4'])
+Act(nu1, Fbn()['Numero'])
+Act(co1, Fbn()['Comitente'])
+Act(cl1, Fbn()['Cliente'])
+Act(ch1, Fbn()['ABA']~'/'~Fbn()['CHIPS'])
+proximo
+
+Act(b:fac, Copy(BuscarCampo('ESPECIES', 'Nombre', 'Codigo', Fbn()['Especie']), 1, 15))
+Acn(c:fac, Fbn()['Cantidad1'])
+Act(d:fac, Fbn()['Fecha2'])
+if (Eqstr(&especie2, ''))
+let(&especie2, Copy(BuscarCampo('ESPECIES', 'Nombre', 'Codigo', Fbn()['Especie']), 1, 15))
+let(&valor_nominal2, PYC(Fbn()['Cantidad1'], 1, 2))
+let(&fecha_valor2, Fbn()['Fecha2'])
+else
+let(&especie2, &especie2~Chr(13)~Copy(BuscarCampo('ESPECIES', 'Nombre', 'Codigo', Fbn()['Especie']), 1, 15))
+let(&valor_nominal2, &valor_nominal2~Chr(13)~PYC(Fbn()['Cantidad1'], 1, 2))
+let(&fecha_valor2, &fecha_valor2~Chr(13)~Fbn()['Fecha2'])
+endif
+
+sql.add("Select NrOperacion, Leyenda, Cuenta, Transaccion from "~Dbo()~".MOVEJECUTADOS ")
+sql.add("where NrTrans2 = '"~Val(j:fac)~"'  AND Cuenta Not In ("~Val(cn1)~")  ")
+sql.add("Union ")
+sql.add("Select NrOperacion, Leyenda, Cuenta, Transaccion from "~Dbo()~".MOVPENDIENTES ")
+sql.add("where NrTrans2 = '"~Val(j:fac)~"'  AND Cuenta Not In ("~Val(cn1)~")  ")
+
+recorrer sql
+Dfa()
+if (Eqstr(Fbn()['NrOperacion'], Val(j:fac)))
+Act(m:fac, Fbn()['Cuenta'])
+Act(n:fac, Fbn()['Transaccion'])
+else
+Act(a:fac, Fbn()['Leyenda'])
+SetFont(a:fac, 5)
+if (Eqstr(&concepto2, ''))
+let(&concepto2, Fbn()['Leyenda'])
+else
+let(&concepto2, &concepto2~Chr(13)~Fbn()['Leyenda'])
+endif
+endif
+proximo
+
+Acn(y2, Fac())
+
+if (Incluido(Val(n:fac), 'COMP'))
+Act(ab2, 'COMP')
+Act(e:fac, Val(al1))
+Ifa()
+Act(e:fac, Val(al2))
+if (Eqstr(&forma_liquidacion2, ''))
+let(&forma_liquidacion2, Val(al1)~Chr(13)~Val(al2))
+else
+let(&forma_liquidacion2, &forma_liquidacion2~Chr(13)~Val(al1)~Chr(13)~Val(al2))
+endif
+endif
+
+sql.add(" SELECT * FROM "~Dbo()~".CUENTAS WHERE Codigo='"~Val(m:fac)~"' ")
+recorrer sql
+Dfa()
+Act(al1, Fbn()['Alias1'])
+Act(al2, Fbn()['Alias2'])
+Act(al4, Fbn()['Alias4'])
+Act(nu1, Fbn()['Numero'])
+Act(co1, Fbn()['Comitente'])
+Act(cl1, Fbn()['Cliente'])
+Act(ch1, Fbn()['ABA']~'/'~Fbn()['CHIPS'])
+proximo
+
+
+if (Eqstr(Val(n:fac), 'DEBITO'))
+Act(e:fac, 'Debito en Cuenta Nr. '~Val(nu1))
+if (dialogo.radio1 = 1)
+Act(e:fac + 1, 'Banco:'~Val(co1))
+Act(e:fac + 2, 'Sucursal:'~Val(al1))
+Act(e:fac + 3, 'Beneficiario:'~Val(cl1))
+Act(e:fac + 4, 'Swift (ABA,CHIPS):'~Val(ch1))
+SetFilaActual(Fac() + 4)
+let(&forma_liquidacion2, &forma_liquidacion2~Chr(13)~'Banco:'~Val(co1)~Chr(13)~'Sucursal:'~Val(al1)~Chr(13)~'Beneficiario:'~Val(cl1)~Chr(13)~'Swift (ABA,CHIPS):'~Val(ch1))
+endif
+endif
+
+if (Eqstr(Val(n:fac), 'TRANSF'))
+Act(e:fac, 'Transferencia a Cuenta Nr. '~BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(k:fac)))
+Ifa()
+Act(e:fac, 'del '~BuscarCampo('CUENTAS', 'Nombre', 'Codigo', Val(k:Val(y2)))~'.')
+Ifa()
+Act(e:fac, BuscarCampo('CUENTAS', 'Alias4', 'Codigo', Val(k:fac - 2)))
+let(&forma_liquidacion2, 'Transferencia a Cuenta Nr. '~BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(k:fac))~Chr(13)~'del '~BuscarCampo('CUENTAS', 'Nombre', 'Codigo', Val(k:Val(y2)))~'.'~Chr(13)~BuscarCampo('CUENTAS', 'Alias4', 'Codigo', Val(k:fac - 2)))
+endif
+if (Eqstr(Val(n:fac), 'EMI_CH'))
+Act(e:fac, 'Emision de Cheque a su favor.')
+let(&forma_liquidacion2, 'Emision de Cheque a su favor.')
+endif
+AlinearCeldas(b:Val(y2)..b:fac, 'C')
+AlinearCeldas(d:Val(y2)..d:fac, 'C')
+AgregarMarco(a:Val(y2)..e:fac, 1, 2)
+SetFont(b:Val(y2)..e:fac, 1)
+SetFont(j:Val(y2)..p:fac, 3)
+endif
+proximo
+Ifa()
+
+if (NoVacio(Val(ab1)) o NoVacio(Val(ab11))) y Eqstr(Val(ab2), 'COMP')
+Ifa()
+Act(a:fac, Val(ab1))
+SetFont(a:fac..a:fac, 4)
+Ifa()
+Act(a:fac, Val(ab11))
+SetFont(a:fac..a:fac, 4)
+Ifa()
+else
+sql.add("Select * from "~Dbo()~".LEYENDAS ")
+sql.add("where Vehiculo = '"~Fbn()['Vehiculo1']~"' ")
+sql.add("and TipoOp = '"~Fbn()['TipoOp']~"' ")
+sql.add("order by Cliente DESC")
+recorrer sql
+ABT(a:fac..e:fac + 3, leerleyenda(Fbn()['Cliente'], Fbn()['TipoOp'], Fbn()['Vehiculo']), 1)
+SetFilaActual(Fac() + 4)
+proximo
+endif
+
+Ifa()
+Act(a:fac, 'Sin otro particular saludamos muy atentamente.')
+SetFont(a:fac, 1)
+proximo
+
+emitircartavisible(&pf, Copy(directorio.string1, 1, Longitud(directorio.string1) - 5)~'_'~dialogo.nroperacion1, fecha_larga = &fecha_larga, razon_social = &razon_social, direccion = &direccion, ref = &ref, nombre_tipoop = &nombre_tipoop, momento = &momento, nombre_especie = &nombre_especie, monto = &monto, fecha_op2 = &fecha_op2, fecha_vto = &fecha_vto, plazo = &plazo, tipo_tasa = &tipo_tasa, tasa = &tasa, concepto = &concepto, especie = &especie, valor_nominal = &valor_nominal, fecha_valor = &fecha_valor, forma_liquidacion = &forma_liquidacion, concepto2 = &concepto2, especie2 = &especie2, valor_nominal2 = &valor_nominal2, fecha_valor2 = &fecha_valor2, forma_liquidacion2 = &forma_liquidacion2)
+
+

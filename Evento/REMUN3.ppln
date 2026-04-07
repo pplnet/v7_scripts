@@ -1,0 +1,165 @@
+creardialogo
+fecha1: 'Fecha';1;1;;;;NoVacio(dialogo.fecha1);'Debe ingresar una fecha';NO;FSys()
+cuenta1: 'Cuenta';;;;;;;;;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (NoVacio(dialogo.cuenta1))
+let(&cuenta, dialogo.cuenta1)
+let(&nrcuenta, BuscarCampo('Cuentas', 'Numero', 'Codigo', &cuenta))
+let(&banco, BuscarCampo('Clientes', 'Alias3', 'Codigo', BuscarCampo('Cuentas', 'Comitente', 'Codigo', &cuenta)))
+if (Query("SELECT 1 FROM "~Dbo()~".SALDOSBANCARIOS WHERE Estado = 'REC' AND Banco = '"~&banco~"' AND NrCuenta = '"~&nrcuenta~"' AND FechaSaldo < '"~IdxDate(dialogo.fecha1)~"' ") > 0)
+Cancelar()('Hay Saldos pendientes por procesar.')
+endif
+else
+if (Query("SELECT 1 FROM "~Dbo()~".SALDOSBANCARIOS WHERE Estado = 'REC' AND FechaSaldo < '"~IdxDate(dialogo.fecha1)~"' ") > 0)
+Cancelar()('Hay Saldos pendientes por procesar.')
+endif
+endif
+
+let(&fechalimite, Habiles(dialogo.fecha1, 1, 'ARG', SI))
+
+recorrer&i dialogo.fecha1, &fechalimite - 1
+sql.add("SELECT FechaSaldo, SaldoConPromedio, NrCuenta, Banco, SaldoContable + Ajuste as SaldoContable")
+sql.add("FROM "~Dbo()~".SALDOSBANCARIOS")
+sql.add("WHERE FechaSaldo = '"~IdxDate(&i)~"'")
+sql.add("AND Estado = 'REC'")
+sql.add("AND SignoInicial = 'C'")
+if (NoVacio(dialogo.cuenta1))
+sql.add("AND Banco = '"~&banco~"' AND NrCuenta = '"~&nrcuenta~"'")
+endif
+recorrer sql
+if (Vacio(dialogo.cuenta1))
+let(&comitente, BuscarCampo('Clientes', 'Codigo', 'Alias3', Fbn()['Banco']))
+let(&numero, Fbn()['NrCuenta'])
+sql.add("SELECT Codigo")
+sql.add("FROM "~Dbo()~".CUENTAS")
+sql.add("WHERE Numero = '"~&numero~"' AND Comitente = '"~&comitente~"'")
+recorrer sql
+let(&cuenta, Fbn()['Codigo'])
+proximo
+endif
+
+let(&saldopromedio, Fbn()['SaldoConPromedio'])
+let(&saldocontable, Fbn()['SaldoContable'])
+
+let(&fechasaldo, Fbn()['FechaSaldo'])
+
+sql.add("SELECT FechaOp, FechaOp2, FechaVto, Plazo, Vehiculo1, Cliente1, Especie, Precio1, RB8, NrOperacion, TotalIntereses, Cuenta1, ")
+sql.add(" Cantidad, CB2, TotalNetoCli2 ")
+sql.add("FROM "~Dbo()~".OPERACIONES")
+sql.add("WHERE TipoOp = 'MMRPAC' AND ")
+sql.add("FechaOp <= '"~IdxDate(Fbn()['FechaSaldo'])~"' AND FechaVto >= '"~IdxDate(Fbn()['FechaSaldo'])~"' ")
+sql.add("AND Cuenta1 = '"~&cuenta~"' ")
+recorrer sql
+if (Fbn('CB2') = 1)
+let(&saldominimo, Fbn()['TotalNetoCli2'])
+else
+let(&saldominimo, Fbn()['Cantidad'])
+endif
+let(&operacionmmrpac, Fbn()['NrOperacion'])
+if (&fechasaldo = FinDeMes(dialogo.fecha1, SI, 'ARG') y &saldominimo > &saldopromedio)
+sql.add("DELETE FROM "~Dbo()~".OPERACIONES")
+sql.add("WHERE TipoOp = 'MMCCR' AND OperacionRef = '"~&operacionmmrpac~"'")
+sql.new
+sql.exec
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES")
+sql.add(" SET TotalIntereses = 0, ")
+sql.add(" TotalNetoCli1 = "~&saldopromedio~"")
+sql.add("WHERE NrOperacion = '"~&operacionmmrpac~"'")
+sql.new
+sql.exec
+
+sql.add("DELETE FROM "~Dbo()~".CUOTAS")
+sql.add("WHERE NrOperacion = '"~&operacionmmrpac~"'")
+sql.new
+sql.exec
+
+else
+let(&fechaop, &i)
+let(&fechaop2, &i)
+let(&plazo, 1)
+let(&fechavto, &i + &plazo)
+let(&vehiculo1, Fbn()['Vehiculo1'])
+let(&cliente1, Fbn()['Cliente1'])
+let(&especie, Fbn()['Especie'])
+let(&precio1, Fbn()['Precio1'])
+let(&rb8, Fbn()['RB8'])
+let(&operacionref, Fbn()['NrOperacion'])
+let(&cuenta1, Fbn()['Cuenta1'])
+let(&totalintereses, &saldopromedio * &precio1 * &plazo / iif (&rb8 = 0, 36000, 36500))
+let(&numerador, BuscarCampo('VEHICULOS', 'Alias1', 'Codigo', &vehiculo1))
+let(&nroperacion, getnumerador(Num(&numerador)))
+
+let(&totalinteresesmmrpac, Fbn()['TotalIntereses'] + &totalintereses)
+
+sql.add("Insert Into "~Dbo()~".OPERACIONES ( ")
+sql.add("TipoOp,     Operador,      FechaOp,         FechaOp2,")
+sql.add("FechaVto,   Plazo,         Vehiculo1,       Cliente1,")
+sql.add("Especie,    Precio1,       UsrInput,        NrOperacion,")
+sql.add("FechaEj,    Cantidad,      TotalIntereses,  Cuenta1,")
+sql.add("FechaCarga, FechaCargaSys, TablaFeriados1,  CB1,")
+sql.add("OperacionRef, TotalNetoCli1 ")
+sql.add("   ) VALUES (")
+sql.add(" 'MMCCR',                       '"~UsuarioActivo()~"',          '"~IdxDate(&fechaop)~"',     '"~IdxDate(&fechaop2)~"', ")
+sql.add(" '"~IdxDate(&fechavto)~"',      '1',                          '"~&vehiculo1~"',            '"~&cliente1~"',")
+sql.add(" '"~&especie~"',                "~FStr(&precio1, 0, 8)~",       '"~UsuarioActivo()~"',         '"~&nroperacion~"',         ")
+sql.add(" '"~IdxDate(dialogo.fecha1)~"', "~FStr(&saldopromedio, 0, 2)~", "~FStr(&totalintereses, 0, 2)~", '"~&cuenta1~"',")
+sql.add(" "~SQLAhora()~",                  '"~IdxDate(FSys())~"',          'ARG',                       '1',")
+sql.add(" '"~&operacionref~"',           "~FStr(&saldocontable, 0, 2)~" ")
+sql.add("   )")
+sql.new
+sql.exec
+
+sql.actualizarmovimientos3(&nroperacion, NO, NO, NO, NO, SI)
+sql.new
+sql.exec
+
+ejecutarevento('INSBIT', string1 = 'OPERACIONES', entero1 = 50, nroperacion1 = &nroperacion)
+
+let(&nrcuota, 0)
+sql.add("SELECT Max(NrCuota) as NrCuota")
+sql.add("FROM "~Dbo()~".CUOTAS")
+sql.add("WHERE NrOperacion = '"~&operacionref~"'")
+recorrer sql
+let(&nrcuota, Fbn()['NrCuota'])
+proximo
+sql.add("Insert Into "~Dbo()~".CUOTAS (NrOperacion, Fecha1, Cantidad1, Cantidad2, Total1, NrCuota) ")
+sql.add("VALUES")
+sql.add(" ('"~&operacionref~"','"~IdxDate(&fechaop)~"',"~FStr(&saldocontable, 0, 2)~","~FStr(&saldopromedio, 0, 2)~","~FStr(&totalintereses, 0, 2)~","~FStr(&nrcuota + 1, 0, 0)~") ")
+sql.new
+sql.exec
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES")
+sql.add("SET TotalIntereses = "~FStr(&totalinteresesmmrpac, 0, 2)~"")
+if (&fechasaldo = FinDeMes(dialogo.fecha1, SI, 'ARG'))
+sql.add(",CB1 = 1")
+sql.add(", TotalNetoCli1 = "~&saldopromedio~"")
+endif
+sql.add("WHERE NrOperacion = '"~&operacionref~"'")
+sql.new
+sql.exec
+
+if (&fechasaldo = FinDeMes(dialogo.fecha1, SI, 'ARG'))
+sql.actualizarmovimientos3(&operacionref, SI, NO, NO, NO, SI)
+sql.new
+sql.exec
+endif
+endif
+proximo
+sql.add("UPDATE SALDOSBANCARIOS")
+sql.add("SET Estado = 'PRO'")
+sql.add("WHERE FechaSaldo = '"~IdxDate(&i)~"' AND Estado = 'REC'")
+sql.add("AND SignoInicial = 'C'")
+if (NoVacio(dialogo.cuenta1))
+sql.add("AND Banco = '"~&banco~"' AND NrCuenta = '"~&nrcuenta~"'")
+endif
+sql.new
+sql.exec
+proximo
+proximo
+

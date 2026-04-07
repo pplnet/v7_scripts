@@ -1,0 +1,71 @@
+mostrarcuadrodemensajes
+creardialogo
+fecha1: 'Fecha';1;1;;;;;;;FSys()
+vehiculo1: 'Vehiculo';2;;;NO;;;;;Var('VEHICON')
+listatabla1: 'Operaciones';1;2;;;;;;;;;;;;;'NrOperacion';'NrOperacion;Cliente1;FechaOp;Especie;FechaVto';'OPERACIONES'
+check1: 'Contab.Procesada';3;1;;NO;NO;
+radio1: 'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos';4;1;;NO;NO;;;;4;
+findialogo
+
+if (not ok)
+raise('Evento Cancelado')
+endif
+
+Act(vc:1, dialogo.vehiculo1)
+Acn(na:1, Var('ASINUM'))
+
+Acd(fe:1, Habiles(dialogo.fecha1, -Var('FVALORCONT'), 'ARG'))
+if (dialogo.radio1 = 2 o dialogo.radio1 = 4)
+Message('--- Asientos MTM ---')
+Act(ta:1, Var('TIPASMTMDI')~'|'~Var('TIPASRFMD'))
+sql.add(" Select Sum(MTM) as MTM, TipoOp, Fecha, Vehiculo1,TotalBrutoCli1, ")
+sql.add(" CodAsi, Mercado4, Especie, NrOperacion as NrOperacion, 'FIX de ROFEX' as Leyenda, MonedaLiq, Cliente1, Cliente1 Cliente, RB10,MonLiqFut from ( ")
+sql.add(" SELECT O.NrOperacion, O.TipoOp, MO.Fecha Fecha, O.Vehiculo1, MA.Codigo CodAsi, C.Jerarquia, O.Mercado4,TotalBrutoCli1, ")
+sql.add(" C.PaisDir, O.Cuenta4 as Cuenta1, CASE WHEN O.TasaEspecie='' OR O.ContraEspecie=O.TasaEspecie THEN MO.MTM ELSE MO.MTMEspecie END MTM,  O.ContraEspecie as ContraEspecie, O.Especie, O.FechaOp ")
+sql.add(" ,CASE O.TasaEspecie WHEN '' THEN O.ContraEspecie ELSE O.TasaEspecie END MonedaLiq, O.Cliente1, O.RB10,CASE WHEN O.RB10 = 0 Then O.Especie ELSE O.ContraEspecie END MonLiqFut ")
+sql.add(" FROM "~Dbo()~".OPERACIONES O ")
+sql.add("       INNER JOIN "~Dbo()~".MODELOSASIENTO MA ON O.TipoOp = MA.TipoOp ")
+sql.add("       INNER JOIN "~Dbo()~".CLIENTES C ON C.Codigo  = O.Cliente1 ")
+sql.add("       INNER JOIN "~Dbo()~".MTMDIARIO MO ON MO.NrOperacion=O.NrOperacion ")
+sql.add("       INNER JOIN "~Dbo()~".OPERACIONESBITS B ON O.NrOperacion = B.NrOperacion ")
+sql.add(" WHERE MA.TipoAsiento IN ("~pipe2comillas(Val(ta:1))~") AND O.TipoOp in ('FXCF','FXVF') ")
+sql.add(" AND B.Valor = 1 AND B.NrBit Not IN (1, 30, 31) ")
+sql.add(" AND MO.Fecha = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND MO.Fecha >= '"~IdxDate(Val(fe:1))~"' ")
+sql.add(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+sql.add(" AND MA.Habilitado = 'SI') a ")
+sql.add("Group by TipoOp,Fecha,Vehiculo1,CodAsi, Mercado4, Especie, NrOperacion, MonedaLiq,Cliente1, RB10,MonLiqFut,TotalBrutoCli1 ")
+Watch(sql.batch())
+recorrer sql
+if (EvalFormula('ESBACS'))
+let(&mercneg, '')
+else
+let(&mercneg, EvalFormula('MERCNEGO'))
+endif
+Acd(fv:1, Fbn('Fecha'))
+Acd(fd:1, dialogo.fecha1)
+Act(vh:1, Fbn('Vehiculo1'))
+Act( to :1, Fbn('CodAsi'))
+Act(ti:1, Fbn('TipoOp'))
+Acn(re:1, Fbn('MTM'))
+Acn(ck:1, 0)
+let(&esndf, iif (Fbn('RB10') = 1, SI, NO))
+let(&signomtm, 1)
+if (not EvalFormula('ESCP') y EvalFormula('ESNDFMER'))
+let(&signomtm, (-1))
+endif
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(sql(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrOperacion = '"~Fbn('NrOperacion')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+let(&codasi, Fbn('CodAsi'))
+if (Val(ck:1) = 0)
+Message(Fbn('NrOperacion')~' - Modelo: '~Fbn('CodAsi'))
+sql.generarasientoop(&codasi, Fbn('NrOperacion'), '', '', Val(na:1), Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoOp'), null, null, null, null, null, null, FSys(), dialogo.fecha1)
+sql.exec
+endif
+proximo
+endif
+

@@ -1,0 +1,134 @@
+mostrarcuadrodemensajes
+HojaVisible(NO)
+creardialogo
+directorio1:'Directorio';;;;;;;;;;;;
+fecha1:'F.Valor';;;;;;;;;;;;
+check1:'Filtra Asiento';;;;;;;;;;;;
+check2:'Filtra Oper.';;;;;;;;;;;;
+check3:'Filtra FValor.';;;;;;;;;;;;
+nrunicoasiento1: 'Nr Asiento';;;;;;;;;;;;
+nroperacion1:'Operacion';;;;;;;;;;;;
+lista1:'Vehiculo';;;;;;;;;;;;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (Eqstr(Var('INTASIENTO'), 'SI'))
+Cancelar()('Se esta ejecutando el proceso contable con SAP...Por favor intente en unos minutos')
+if (Eqstr(Var('GENASIENTO'), 'SI'))
+Cancelar()('Ya esta siendo ejecutado el proceso contable...Por favor intente en unos minutos')
+endif
+endif
+
+if (Eqstr(Copy(dialogo.directorio1, Longitud(dialogo.directorio1), 1), '\'))
+let(&directorio, dialogo.directorio1)
+else
+let(&directorio, dialogo.directorio1~'\')
+endif
+
+if (existedirectorio(&directorio))
+Act(fe:1, Var('FILEINTCON')~Pad0(FStr(Dia(FSys()), 0, 0), 2)~Pad0(FStr(Mes(FSys()), 0, 0), 2)~FStr(Anio(FSys()), 0, 0))
+
+else
+Cancelar()('El directorio '~&directorio~' no existe')
+endif
+
+
+Act(ar:1, &directorio~Val(fe:1)~'.csv')
+
+if (existearchivo(Val(ar:1)))
+recorrer&i 1, 9000
+Act(ar:1, &directorio~Val(fe:1)~'_'~FStr(&i, 10, 0)~'.csv')
+if (not existearchivo(Val(ar:1)))
+break
+endif
+proximo
+endif
+
+sql.add(" Update "~Dbo()~".VARIABLES Set Valor='SI' Where Codigo='INTASIENTO' ")
+sql.new
+sql.exec
+
+sql.add("SELECT A1.NrUnicoAsiento, A1.Alias4, A1.Cuenta, A.FechaValor, A1.Cantidad1, A1.Especie1, ")
+sql.add("A1.Cantidad2, A1.Especie2, A1.Detalle, A1.DebitoCredito, A1.Alias6, ")
+sql.add(" A1.Alias1, A1.Alias2, A1.Valor1, A1.Valor2, A.Modelo, A1.Book,A.Estado, A1.Alias3 ")
+sql.add("FROM "~Dbo()~".ASIENTOSCON A, "~Dbo()~".ASIENTOSCON1 A1")
+sql.add("WHERE A.NrUnicoAsiento=A1.NrUnicoAsiento and (A.Estado IS Null OR A.Estado = '' OR A.Estado = ' ' OR A.Estado = 'COT' OR A.Estado = 'REV') ")
+sql.add(" AND (A.Sector Is Null OR A.Sector = '' OR A.Sector = ' ') ")
+if (dialogo.check3 = 1)
+sql.add(" AND A.FechaValor = '"~IdxDate(dialogo.fecha1)~"'")
+endif
+if (NoVacio(dialogo.lista1))
+sql.add("AND A.Vehiculo in ("~pipe2comillas(dialogo.lista1)~") ")
+endif
+if (dialogo.check1 = 1)
+sql.add("AND A.NrUnicoAsiento = '"~dialogo.nrunicoasiento1~"' ")
+endif
+if (dialogo.check2 = 1)
+sql.add("AND A.NrOperacion = '"~dialogo.nroperacion1~"' ")
+endif
+
+abrirascii(Val(ar:1), 0, NO, 1)
+
+recorrer sql
+Act(vl:1, Fbn()['NrUnicoAsiento'])
+Act(vl:2, Pad0(Fbn()['Alias4'], 5))
+Act(vl:3, 'FPA')
+Act(vl:4, Fbn()['Cuenta'])
+if (Incluido(BuscarCampo('MODELOSASIENTO', 'TipoOp', 'Codigo', Fbn()['Modelo']), 'TRANSF|MMRPAC|MMCPM'))
+Act(vl:5, '')
+else
+Act(vl:5, Fbn()['Alias3'])
+endif
+Act(vl:6, BuscarCampo('BOOKS', 'Alias1', 'Codigo', Fbn()['Book']))
+Act(vl:7, '')
+Act(vl:8, '')
+Act(vl:9, '')
+Act(vl:10, Fecha(Fbn()['FechaValor'], 'dd-mm-yyyy'))
+Act(vl:11, FStr(Fbn()['Valor1'], 0, 3))
+Act(vl:12, BuscarCampo('ESPECIES', 'Alias10', 'Codigo', Fbn()['Alias1']))
+Act(vl:13, FStr(Fbn()['Valor2'], 0, 3))
+Act(vl:14, BuscarCampo('ESPECIES', 'Alias10', 'Codigo', Fbn()['Valor2']))
+Act(vl:15, Copy(Fbn()['Alias6'], 1, 30))
+Act(vl:16, Copy(Fbn()['Detalle'], 1, 254))
+Act(vl:17, Pad0(Fbn()['Alias4'], 5))
+Act(vl:18, 'N')
+if (Eqstr(Fbn()['Alias1'], 'ARP'))
+Act(vl:19, '1')
+else
+Act(vl:19, FStr(Fbn()['Valor2'], 0, 8))
+endif
+Act(vl:20, '1')
+Act(vl:21, 'GRAL_FPA')
+if (Eqstr(Fbn()['DebitoCredito'], 'DEB'))
+Act(vl:22, 'D')
+else
+Act(vl:22, 'H')
+endif
+Act(vl:23, '0')
+
+Act(ln:1, Val(vl:1)~';'~Val(vl:2)~';'~Val(vl:3)~';'~Val(vl:4)~';'~Val(vl:5)~';'~Val(vl:6)~';'~Val(vl:7)~';'~Val(vl:8)~';'~Val(vl:9)~';'~Val(vl:10)~';'~Val(vl:11)~';'~Val(vl:12)~';'~Val(vl:13)~';'~Val(vl:14)~';'~Val(vl:15)~';'~Val(vl:16)~';'~Val(vl:17)~';'~Val(vl:18)~';'~Val(vl:19)~';'~Val(vl:20)~';'~Val(vl:21)~';'~Val(vl:22)~';'~Val(vl:23))
+escribirascii(Val(ln:1))
+
+sql.add(" Update "~Dbo()~".ASIENTOSCON ")
+if (Eqstr(Fbn('Estado'), 'COT'))
+sql.add(" Set Estado = 'COE', ")
+else
+if (Eqstr(Fbn('Estado'), 'REV'))
+sql.add(" Set Estado = 'REE', ")
+else
+sql.add(" Set Estado = 'E', ")
+endif
+endif
+sql.add(" Fecha2 = "~SQLAhora()~" ")
+sql.add(" Where NrUnicoAsiento = '"~Val(vl:1)~"' ")
+sql.new
+proximo
+
+cerrarascii
+
+sql.add(" Update "~Dbo()~".VARIABLES Set Valor='NO' Where Codigo='INTASIENTO' ")
+sql.new
+sql.exec

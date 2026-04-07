@@ -1,0 +1,269 @@
+creardialogo
+nroperacion1:"Operacion";1;1;;;;Incluido(BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', dialogo.nroperacion1), 'DSEO');'El TipoOp ingresado debe ser DSEO ';NO;;;;;;" TipoOp IN ('DSEO') and (CB8 is Null or CB8='0')  ";
+fecha1:"F Real Ej.";;;;NO;;;;;FSys()
+precio2:"Precio_Ref";;;;;;(dialogo.radio2 = 0 y dialogo.precio2 > dialogo.precio3) o (dialogo.radio2 = 1 y dialogo.precio2 < dialogo.precio3);'Con este Precio de Referencia la Operacion no se va a Ejercer';;
+fecha3:"F Settlement";;;;dialogo.radio1 = 1;;EsHabil(dialogo.fecha3, 'ARG') y dialogo.fecha3 >= FSys();'La Fecha de Settlement es Incorrecta';NO;;iif (dialogo.radio1 = 0, BuscarCampo('Operaciones', 'FechaPago', 'NrOperacion', dialogo.nroperacion1), Habiles(FSys(), (BuscarCampo('Especies', 'PlazoLiq', 'Codigo', dialogo.especie1) div 24), 'ARG', SI))
+fecha4:"Fecha Fin Opcion";2;2;;NO;;;;;;BuscarCampo('Operaciones', 'FechaEj', 'NrOperacion', dialogo.nroperacion1)
+precio3:"Precio Ej";;;;NO;;;;;;BuscarCampo('Operaciones', 'PrecioEj', 'NrOperacion', dialogo.nroperacion1)
+radio1:"Opcion|Europea|Americana";;;;NO;;;;;;BuscarCampo('Operaciones', 'TipoOpcion', 'NrOperacion', dialogo.nroperacion1)
+radio2:"Tipo|Call|Put";;;;NO;;;;;;BuscarCampo('Operaciones', 'MB1', 'NrOperacion', dialogo.nroperacion1)
+especie1:"Especie";;;;NO;;;;;;BuscarCampo('Operaciones', 'Especie', 'NrOperacion', dialogo.nroperacion1)
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+Act(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', dialogo.nroperacion1))
+
+sql.add("SELECT U.Vehiculo FROM "~Dbo()~".USRVEHICULO U,"~Dbo()~".VEHICULOS V ")
+sql.add("WHERE  U.Codigo='"~UsuarioActivo()~"' and U.Vehiculo=V.Codigo ")
+sql.add("       and (Status='HAB' or Status Is Null or Status='')")
+
+recorrer sql
+Dfa()
+Act(vh2, Fbn()['Vehiculo']~'|'~Val(vh2))
+proximo
+if (not Incluido(Val(vh1), Val(vh2)) y NoVacio(Val(vh2)))
+Cancelar()('Usuario no Habilitado para Trabajar con el Vehiculo ')
+endif
+
+
+if (not Incluido(BuscarCampo('Operaciones', 'TipoOp', 'NrOperacion', dialogo.nroperacion1), 'DSEO|'))
+Cancelar()('La operacion '~dialogo.nroperacion1~' No es un Call o Put de Securities')
+endif
+
+Acn(x1, sql("Select NrBit FROM "~Dbo()~".OPERACIONESBITS  Where NrOperacion='"~dialogo.nroperacion1~"' AND Valor='1'"))
+
+if (Val(x1) <> 20 y Val(x1) <> 50)
+Cancelar()('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~sql("Select Nombre FROM "~Dbo()~".INSTANCIAS  Where NrInstancia="~FStr(Val(x1), 0, 0)~" AND Tabla='OPERACIONES'"))
+endif
+
+if (ok)
+Acn(x1, 0)
+
+sql.add("Select * from "~Dbo()~".OPERACIONES ")
+sql.add("where NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.add("and (CB8 is Null or CB8='0') ")
+sql.add("and ((TipoOpcion='0' and FechaEj='"~IdxDate(dialogo.fecha1)~"') ")
+sql.add(" or (TipoOpcion='1' and FechaEj>='"~IdxDate(dialogo.fecha1)~"'  ")
+sql.add(" and FechaOp2<='"~IdxDate(dialogo.fecha1)~"')) ")
+
+recorrer sql
+if (not EsHabil(dialogo.fecha3, Fbn()['TablaFeriados1']))
+Messagebox('La Fecha de Settlement NO ES Dia Habil en la Tabla de Feriados '~Fbn()['TablaFeriados1'])
+break
+endif
+
+Acn(x1, 1)
+
+if (dialogo.radio2 = 0 y dialogo.precio2 > dialogo.precio3) o (dialogo.radio2 = 1 y dialogo.precio2 < dialogo.precio3)
+
+if (Eqstr(Fbn()['MB3'], '0') y Eqstr(Fbn()['MB1'], '0')) o (Eqstr(Fbn()['MB3'], '1') y Eqstr(Fbn()['MB1'], '1'))
+Act(z1, 'SECS')
+else
+Act(z1, 'SEVS')
+endif
+
+Message('Calculando Resultados .... ')
+
+
+Acn(z7, iif (Eqstr(BuscarCampo('ESPECIES', 'InteresesC', 'Codigo', Fbn()['Especie']), 'CLE'), ValorTeorico(Fbn()['Especie']), 1))
+
+if (Fbn()['MB1'] = 0)
+Acn(z2, (dialogo.precio2 - Fbn()['PrecioEj']) * Fbn()['Cantidad'] * Val(z7))
+else
+Acn(z2, (Fbn()['PrecioEj'] - dialogo.precio2) * Fbn()['Cantidad'] * Val(z7))
+endif
+
+if (Eqstr(Fbn()['MB3'], '1'))
+Acn(z2, -Val(z2))
+endif
+
+if (Fbn()['RB10'] = 1)
+Act(z3, getnumerador(BuscarCampo('VEHICULOS', 'Alias1', 'Codigo', Fbn()['Vehiculo1'])))
+
+Message('Calculando los Plazos .... ')
+
+Acn(z4, (dialogo.fecha3 - FSys()))
+Acn(z5, (dialogo.fecha3 - FSys()))
+
+Acn(a1, Val(z4))
+Acn(a2, Val(z5))
+
+Acn(z4, (dialogo.fecha3 - FSys()) * 24)
+Acn(z5, (dialogo.fecha3 - FSys()) * 24)
+
+Acd(z14, dialogo.fecha3)
+Acd(z15, dialogo.fecha3)
+
+
+Acn(z9, CotizacionC(Fbn()['Especie'], null, null, null, FSys(), 1, SI, 'ARP') / CotizacionC(Fbn()['ContraEspecie'], null, null, null, FSys(), 1, SI, 'ARP'))
+
+Acn(z6, 1)
+if (Fbn()['CB6'] = 0)
+Acn(z9, CotizacionC(Fbn()['ContraEspecie'], null, null, null, FSys(), 1, SI, 'ARP') / CotizacionC(Fbn()['Especie'], null, null, null, FSys(), 1, SI, 'ARP'))
+endif
+
+Acn(z8, iif (Eqstr(BuscarCampo('ESPECIES', 'InteresesC', 'Codigo', Fbn()['Especie']), 'CLE'), (1 - Fbn()['PrecioEj']) * 36000 / (FechaMaduracion(Fbn()['Especie']) - Val(z14)), 0))
+
+
+Act(z10, 'OTC')
+Acn(z11, 1)
+Acn(z12, 3)
+
+Act(z13, BuscarCampo('Especies', 'PaisOrigen', 'Codigo', Fbn()['ContraEspecie']))
+
+Acn(z16, iif (BuscarCampo('ESPECIES', 'FechaCambioTasa', 'Codigo', Fbn()['Especie']) > Fbn()['FechaUltCupon'] y BuscarCampo('ESPECIES', 'FechaCambioTasa', 'Codigo', Fbn()['Especie']) <= Val(z14), ((BuscarCampo('ESPECIES', 'TasaIntVigente', 'Codigo', Fbn()['Especie']) * iif (EspecieDiasAnio(Fbn()['Especie']) = 0 y EspecieDiasMes(Fbn()['Especie']) = 0, Dif360(Fbn()['FechaUltCupon'], BuscarCampo('ESPECIES', 'FechaCambioTasa', 'Codigo', Fbn()['Especie']) - 1, 4), DifDias(Fbn()['FechaUltCupon'], BuscarCampo('ESPECIES', 'FechaCambioTasa', 'Codigo', Fbn()['Especie']) - 1, 'USA', NO))) + (BuscarCampo('ESPECIES', 'TasaIntAnterior', 'Codigo', Fbn()['Especie']) * (iif (EspecieDiasAnio(Fbn()['Especie']) = 0 y EspecieDiasMes(Fbn()['Especie']) = 0, Dif360(BuscarCampo('ESPECIES', 'FechaCambioTasa', 'Codigo', Fbn()['Especie']) - 1, Val(z14), 4), DifDias(BuscarCampo('ESPECIES', 'FechaCambioTasa', 'Codigo', Fbn()['Especie']) - 1, Val(z14), 'USA', NO))))) / (iif (EspecieDiasAnio(Fbn()['Especie']) = 0 y EspecieDiasMes(Fbn()['Especie']) = 0, Dif360(Fbn()['FechaUltCupon'], Val(z14), 4), DifDias(Fbn()['FechaUltCupon'], Val(z14), 'USA', NO))), BuscarCampo('ESPECIES', 'TasaIntVigente', 'Codigo', Fbn()['Especie'])) * 100)
+
+
+Acn(z18, iif (Eqstr(BuscarCampo('ESPECIES', 'InteresesC', 'Codigo', Fbn()['Especie']), 'CLE'), ValorTeorico(Fbn()['Especie']) * Fbn()['Cantidad'] * Val(z16) / DiasA(EspecieDiasAnio(Fbn()['Especie']), FSys()) / 100 * iif (EspecieDiasAnio(Fbn()['Especie']) = 0 y EspecieDiasMes(Fbn()['Especie']) = 0, Dif360(Fbn()['FechaUltCupon'], Val(z14), 4), DifDias(Fbn()['FechaUltCupon'], Val(z14), 'USA', NO)), 0))
+
+Acn(z19, Fbn()['TotalAux1'] + Val(z18))
+
+
+Acn(z20, 0)
+
+if (Eqstr(BuscarCampo('ESPECIES', 'InteresesC', 'Codigo', Fbn()['Especie']), 'CLE'))
+Acn(z20, (Fbn()['TotalAux1'] + Val(z18)) / Fbn()['Cantidad'])
+endif
+
+Message('Generando Operacion .... ')
+sql.add("INSERT INTO "~Dbo()~".OPERACIONES ")
+sql.add("(TipoOp, Book1,NrOperacion, ")
+sql.add(" FechaOp2,FechaOp,Vehiculo1,")
+sql.add(" Especie,Plazo,RB5,")
+sql.add(" FechaVto,ContraEspecie,Plazo2,")
+sql.add(" RB6,FechaPago,Cliente1,")
+sql.add(" Cantidad,Precio1,TotalBrutoCli1,")
+sql.add(" TotalIntereses,TotalNetoCli1,FormaLiquidacion1,Cartera,")
+sql.add(" Operador,Observac2,TablaFeriados1,")
+sql.add(" TablaFeriados2,Precio4,TipoCambio,")
+sql.add(" Mercado,Cupon1,TasaInteresesCupon,FechaUltCupon, ")
+sql.add(" UsrInput, FechaCarga,Spread,RB3,OperacionRef,FechaCargaSys,Cuenta1,Cuenta2) ")
+sql.add(" Values ")
+sql.add("('"~Val(z1)~"', '"~Fbn()['Book1']~"','"~Val(z3)~"', ")
+sql.add(" '"~IdxDate(FSys())~"', '"~IdxDate(FSys())~"','"~Fbn()['Vehiculo1']~"', ")
+sql.add(" '"~Fbn()['Especie']~"', "~FStr(Val(z4), 2, 0)~", '"~FStr(Val(a1), 2, 0)~"', ")
+sql.add(" '"~IdxDate(Val(z14))~"', '"~Fbn()['ContraEspecie']~"', "~FStr(Val(z5), 2, 0)~",")
+sql.add(" '"~FStr(Val(a2), 2, 0)~"', '"~IdxDate(Val(z15))~"','"~Fbn()['Cliente1']~"',")
+sql.add(" "~FStr(Fbn()['Cantidad'], 0, 4)~","~FStr(Fbn()['PrecioEj'], 0, 7)~","~FStr(Fbn()['TotalAux1'], 0, 2)~", ")
+sql.add(" "~FStr(Val(z18), 0, 2)~","~FStr(Val(z19), 0, 2)~", '"~FStr(Val(z11), 1, 0)~"', '"~FStr(Val(z12), 1, 0)~"',")
+sql.add(" '"~Fbn()['Operador']~"', '"~Fbn()['Observac2']~"', '"~Fbn()['TablaFeriados1']~"', ")
+sql.add(" '"~Val(z13)~"', "~FStr(Val(z9), 0, 7)~", "~FStr(Val(z8), 0, 7)~", ")
+sql.add(" '"~Val(z10)~"','"~FStr(Fbn()['Cupon1'], 0, 0)~"', "~FStr(Val(z16), 0, 7)~", '"~IdxDate(Fbn()['FechaUltCupon'])~"', ")
+sql.add(" '"~Fbn()['UsrInput']~"', '"~IdxDate(FSys())~"', "~FStr(Val(z20), 0, 7)~",'"~Fbn()['RB3']~"','"~dialogo.nroperacion1~"','"~IdxDate(FSys())~"','"~Fbn()['Cuenta1']~"','"~Fbn()['Cuenta2']~"' )")
+sql.new
+sql.exec
+
+Message('Ingresando Instancias Operacion '~Val(az3)~' ...')
+
+sql.add("SELECT NrInstancia FROM "~Dbo()~".INSTANCIAS Where Tabla='"~Val(az4)~"' ")
+sql.add("ORDER BY NrInstancia ")
+
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+sql.add("(NrOperacion,NrBit,Valor) ")
+sql.add(" Values ")
+sql.add("('"~Val(az3)~"',"~FStr(Fbn()['NrInstancia'], 3, 0)~",")
+if (Incluido(Fbn()['NrInstancia'], Val(az5)))
+sql.add("'1')")
+else
+sql.add("'0')")
+endif
+sql.new
+sql.exec
+proximo
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set ")
+sql.add("Observaciones=Observaciones+'"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~"' ")
+sql.add("Where NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+
+sql.actualizarmovimientos2(Val(z3), SI, NO, NO, SI)
+sql.exec
+else
+ejecutarevento('IMOVPE', nroperacion1 = dialogo.nroperacion1, fecha1 = dialogo.fecha3, cliente1 = Fbn()['Cliente1'], especie1 = Fbn()['ContraEspecie'], vehiculo1 = Fbn()['Vehiculo1'], entero1 = 1, precio1 = -Val(z2), string = 'Resultado Ejercicio Net', entero2 = 9, entero3 = 0, string1 = '')
+endif
+
+
+Message('Actualizando la Opcion .... ')
+
+sql.add("Update "~Dbo()~".OPERACIONES ")
+sql.add("Set CB8 = '1', OperacionRef = '"~Val(z3)~"', ")
+sql.add("FechaVto2 = '"~IdxDate(dialogo.fecha1)~"', ")
+sql.add("FechaPago = '"~IdxDate(dialogo.fecha3)~"', ")
+sql.add("Precio4   = "~FStr(Val(z2), 0, 2)~", ")
+sql.add("Precio2   = "~FStr(dialogo.precio2, 0, 7)~"  ")
+sql.add("where NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.new
+sql.exec
+
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+sql.add("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+sql.new
+
+if (sql(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+ejecutarevento('INSBIT', entero1 = Val(az5), nroperacion1 = Val(az3))
+endif
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+else
+Message('Actualizando la Opcion .... ')
+
+sql.add("Update "~Dbo()~".OPERACIONES ")
+sql.add("Set CB8 = '1',  ")
+sql.add("FechaVto2 = '"~IdxDate(dialogo.fecha1)~"', ")
+sql.add("Precio4   = "~FStr(0, 0, 2)~", ")
+sql.add("Precio2   = "~FStr(dialogo.precio2, 0, 7)~"  ")
+sql.add("where NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.new
+sql.exec
+
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+sql.add("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+sql.new
+
+if (sql(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+ejecutarevento('INSBIT', entero1 = Val(az5), nroperacion1 = Val(az3))
+endif
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+endif
+
+proximo
+
+if (Val(x1) = 0)
+Cancelar()('La operacion N# '~dialogo.nroperacion1~' No puede ser Ejercida')
+endif
+endif

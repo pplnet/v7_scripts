@@ -1,0 +1,328 @@
+creardialogo
+fecha1:'Fecha';;;;;;EsHabil(dialogo.fecha1, 'ARG') y dialogo.fecha1 = Habiles(Var('CIEPAR'), 1, 'ARG');'Fecha Invalida';NO;Habiles(Var('CIEPAR'), 1, 'ARG');
+fecha2:'Cierre de Mes';1;1;;NO;NO;;;;;FinDeMes(dialogo.fecha1, SI, 'ARG')
+fecha3:'Fecha Partida';;;;NO;NO;;;;;FinDeMes(dialogo.fecha1, SI)
+radio1:'Valuacion|Cupon|TIR';;;;;NO;;;;1
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (dialogo.fecha1 = Fecha(Var('CIEPAR')))
+Cancelar()('Ya fue realido el cierre del día para la fecha '~dialogo.fecha1)
+endif
+
+let(&opsnoasignadaspartidas, 0)
+sql.add(" SELECT O.Cartera,O.FechaOp,O.Vehiculo1,O.Especie,M.Cantidad, ")
+sql.add("        O.Precio1,O.FechaVto,O.TipoOp,O.NrOperacion, M.NrSaldo, M.Book, O.Cliente1 ")
+sql.add(" FROM   "~Dbo()~".OPERACIONES O,"~Dbo()~".MOVPOSEJE M  ")
+sql.add(" WHERE  O.NrOperacion = M.NrOperacion ")
+sql.add("   and  M.FechaMov  >='"~IdxDate(dialogo.fecha1 - Var('DIASPAR'))~"' and M.FechaMov  <='"~IdxDate(dialogo.fecha1)~"' and M.FechaMov  >='"~IdxDate(Fecha(Var('FEINIPART')))~"'  ")
+sql.add("   and  M.NrSaldo    = '101' ")
+sql.add("   and  O.TipoOp    = 'TIC' ")
+if (NoVacio(&book))
+sql.add("   and  M.Book    = '"~&book~"' ")
+else
+sql.add("   and M.Book IN ("~pipe2comillas(Val(bk:1))~") ")
+endif
+sql.add("   and  (O.NrPartida Is Null OR O.NrPartida = '' OR O.NrPartida = ' ' ) ")
+sql.add(" UNION ALL ")
+sql.add(" SELECT T.RB4 Cartera,T.Fecha1 FechaOp,T.Vehiculo1,T.Especie, ")
+sql.add(" M.Cantidad,T.Precio1, T.Fecha1 FechaVto,T.TipoTr2 TipoOp, ")
+sql.add(" T.NrTrans NrOperacion, M.NrSaldo, M.Book, T.Cliente1 ")
+sql.add(" FROM   "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".MOVPOSEJE M ")
+sql.add(" WHERE  T.NrTrans = M.NrOperacion ")
+sql.add("   and  M.FechaMov  >='"~IdxDate(dialogo.fecha1 - Var('DIASPAR'))~"' and M.FechaMov  <='"~IdxDate(dialogo.fecha1)~"' and M.FechaMov  >='"~IdxDate(Fecha(Var('FEINIPART')))~"'  ")
+sql.add("   and  M.NrSaldo     = '101' ")
+sql.add("   and  T.TipoTr2  IN ('DTP','TRPOS') ")
+if (NoVacio(&book))
+sql.add("   and  M.Book    = '"~&book~"' ")
+else
+sql.add("   and M.Book IN ("~pipe2comillas(Val(bk:1))~") ")
+endif
+sql.add("   and  (T.NrPartida Is Null OR T.NrPartida = '' OR T.NrPartida = ' ' ) ")
+sql.add(" ORDER BY 9,1,2,4 ")
+
+recorrer sql
+let(&opsnoasignadaspartidas, &opsnoasignadaspartidas + 1)
+proximo
+if (&opsnoasignadaspartidas > 0)
+Cancelar()('Quedan operaciones sin Asignar')
+endif
+
+
+
+sql.add(" Select O.NrOperacion, E.TiposTasas, O.Especie, O.TipoCambio, O.FechaVto, E.DiasAnio, O.Cantidad, O.Precio1, O.TotalNetoCli1, ")
+sql.add(" E.TasaCER, O.FechaOp, O.FechaCargaSys ")
+sql.add(" From "~Dbo()~".OPERACIONES O, "~Dbo()~".ESPECIES E ")
+sql.add(" Where E.Codigo = O.Especie ")
+sql.add(" AND O.TipoOp IN ('PARTID') ")
+sql.add(" AND O.FechaOp <= '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND O.FechaCargaSys <= '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND O.TotalNetoCli1 > 0 ")
+sql.add(" AND O.FechaVto >= '"~IdxDate(Fecha(Var('FEINIPART')))~"' ")
+sql.add(" AND E.Fecha > '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" Order By O.Especie, O.NrOperacion ")
+recorrer sql
+if (not Eqstr(Fbn('Especie'), Val(es:1)))
+Act(aa:1, Fbn('Especie'))
+Acn(ts:1, 0)
+sql.add(" Select TiposTasas, DiasMes, DiasAnio, Fecha, TasaCER, MonedaEmision, TasaIntVigente, TasaMin, TasaMax, Spread ")
+sql.add(" From "~Dbo()~".ESPECIES ")
+sql.add(" Where Codigo = '"~Val(aa:1)~"' ")
+recorrer sql
+Dfa()
+Act(em:1, Fbn('MonedaEmision'))
+if (Eqstr(Fbn('TiposTasas'), 'FIJA') o Eqstr(Fbn('TasaCER'), 'FIJ'))
+Acn(ts:1, Fbn('TasaIntVigente'))
+else
+Acn(mi:1, Fbn('TasaMin'))
+Acn(mx:1, Fbn('TasaMax'))
+Acn(sp:1, Fbn('Spread'))
+sql.add(" Select T.Valor1 From "~Dbo()~".TASASDIA T ")
+sql.add(" Where TipoTasa = '"~Fbn('TiposTasas')~"' ")
+sql.add(" AND Especie = '"~Fbn('MonedaEmision')~"' ")
+sql.add(" AND Fecha = (Select Max(Fecha) From "~Dbo()~".TASASDIA T1 ")
+sql.add("              Where T.TipoTasa = T1.TipoTasa ")
+sql.add("              AND T1.Fecha <= '"~IdxDate(dialogo.fecha1)~"') ")
+recorrer sql
+Dfa()
+if (Val(mi:1) > Fbn('Valor1'))
+Acn(ts:1, Val(mi:1))
+else
+if (Val(mx:1) < Fbn('Valor1'))
+Acn(ts:1, Val(mx:1))
+else
+Acn(ts:1, Fbn('Valor1'))
+endif
+endif
+Scn(ts:1, Val(sp:1))
+proximo
+endif
+proximo
+
+endif
+Act(es:1, Fbn('Especie'))
+Act(tt:1, Fbn('TiposTasas'))
+Act(ce:1, Fbn('TasaCER'))
+Acn(tr:1, Fbn('TipoCambio'))
+if (dialogo.fecha1 = Fbn('FechaCargaSys'))
+Acn(pr:1, Fbn('Precio1'))
+if (Eqstr(Fbn('TiposTasas'), 'FIJA') o Eqstr(Fbn('TasaCER'), 'FIJ'))
+Acn(pr:2, Fbn('TipoCambio'))
+else
+Act(aa:1, Fbn('Especie'))
+Acn(pr:2, tirespecie(Fbn('Especie'), dialogo.fecha1, Val(ts:1), Fbn('Precio1')))
+endif
+Acn(pr:2, Fbn('TipoCambio'))
+Acn(nc:1, 0)
+Acd(fe:2, Fbn('FechaOp'))
+else
+sql.add(" Select C.Precio4, C.NrCuota, C.Precio4 TIRDA, C.Precio2, C.Cantidad3 From "~Dbo()~".CUOTAS C ")
+sql.add(" Where C.NrOperacion = '"~Fbn('NrOperacion')~"' ")
+sql.add(" AND C.Fecha2 = '"~IdxDate(dialogo.fecha1)~"' ")
+recorrer sql
+Acn(pr:1, Fbn('Precio2'))
+if (Eqstr(Val(tt:1), 'FIJA') o Eqstr(Val(ce:1), 'FIJ'))
+Acn(pr:2, Val(tr:1))
+else
+Acn(pr:2, tirespecie(Val(es:1), dialogo.fecha1, Val(ts:1), Fbn('Precio2')))
+endif
+Acn(ca:3, Fbn('Cantidad3'))
+Acn(nc:1, Fbn('NrCuota'))
+proximo
+Acn(pr:2, Val(tr:1))
+Acd(fe:2, dialogo.fecha1)
+endif
+Acd(fe:3, dialogo.fecha1)
+if (Eqstr(Fbn('DiasAnio'), 'REA'))
+Acn(da:1, DiasAnio2(Fbn('Especie'), Fecha('01/01/'~FStr(Anio(Fbn('FechaOp')), 0, 0)), Fecha('31/12/'~FStr(Anio(Fbn('FechaOp')), 0, 0))))
+else
+Acn(da:1, Fbn('DiasAnio'))
+endif
+Acn(ca:1, Fbn('TotalNetoCli1'))
+Act(nu:1, Fbn('NrOperacion'))
+Acn(ca:3, 0)
+Acn(ed:1, (1 + Val(pr:2) / 100) ^ (1 / Val(da:1)) - 1)
+recorrer&k Val(fe:2), Val(fe:3)
+if (EsHabil(&k, 'ARG') o &k = Val(fe:2))
+Acd(fi:1, &k)
+Acd(ff:1, Habiles(&k, 1, 'ARG', SI))
+Acn(pl:1, Val(ff:1) - Val(fi:1))
+if (&k = Val(fe:2))
+Acn(pi:1, Val(pr:1))
+else
+Acn(pi:1, Val(pf:1))
+endif
+Acn(pf:1, (Val(pi:1)) * (1 + Val(ed:1)) ^ Val(pl:1))
+Acn(pd:1, Val(pf:1) - Val(pi:1))
+Acn(dv:1, Val(ca:1) * Val(pd:1))
+sql.add(" Select Max(NrCuota) NrCuota From "~Dbo()~".CUOTAS Where NrOperacion = '"~Val(nu:1)~"' ")
+recorrer sql
+Dfa()
+Acn(nc:1, Fbn('NrCuota') + 1)
+sql.add(" Select Cantidad3 From "~Dbo()~".CUOTAS Where NrOperacion = '"~Val(nu:1)~"' AND NrCuota = "~FStr(Fbn('NrCuota'), 0, 0)~" ")
+recorrer sql
+Dfa()
+Acn(ca:3, Fbn('Cantidad3'))
+proximo
+proximo
+Scn(nc:1, 1)
+Scn(ca:3, Val(dv:1))
+sql.add(" Insert Into "~Dbo()~".CUOTAS ")
+sql.add(" (NrOperacion, NrCuota, Fecha1, ")
+sql.add(" Fecha2, Cantidad2, Precio1, ")
+sql.add(" Precio2, Precio3, Cantidad1, ")
+sql.add(" Precio4, Cantidad3, Cantidad4) ")
+sql.add(" Values ")
+sql.add(" ('"~Val(nu:1)~"', "~FStr(Val(nc:1), 0, 0)~", '"~IdxDate(Val(fi:1))~"', ")
+sql.add(" '"~IdxDate(Val(ff:1))~"', "~FStr(Val(pl:1), 0, 0)~", "~FStr(Val(pi:1), 0, 15)~", ")
+sql.add(" "~FStr(Val(pf:1), 0, 15)~", "~FStr(Val(pd:1), 0, 15)~", "~FStr(Val(dv:1), 0, 2)~", ")
+sql.add(" "~FStr(Val(pr:2), 0, 8)~", "~FStr(Val(ca:3), 0, 2)~", "~FStr(Val(ca:1), 0, 2)~") ")
+sql.new
+sql.exec
+endif
+proximo
+
+
+proximo
+
+sql.add(" Update "~Dbo()~".VARIABLES ")
+sql.add(" Set Valor = '"~Fecha(dialogo.fecha1)~"' ")
+sql.add(" Where Codigo = 'CIEPAR' ")
+sql.new
+sql.exec
+
+if (NO)
+
+Acd(au1, PriDeMes(dialogo.fecha1, NO, 'ARG'))
+
+sql.add(" SELECT Distinct OP.Especie ")
+sql.add(" FROM  "~Dbo()~".OPERACIONES OP")
+sql.add(" WHERE OP.TipoOp in ('PARTID') ")
+sql.add("       and OP.FechaOp <= '"~IdxDate(dialogo.fecha1)~"'  ")
+sql.add("       and ( OP.TotalNetoCli1 > 0 or ")
+sql.add("      '"~IdxDate(Val(au1))~"' <= (SELECT Max(P.FechaDesde) FROM "~Dbo()~".PARTIDAS P WHERE P.NrPartida=OP.NrOperacion AND TipoAct='VENTA') )  ")
+sql.add(" ORDER BY OP.Especie ")
+Acn(zz1, 0)
+recorrer sql
+Acn(zz1, 1)
+proximo
+
+if (Val(zz1) = 0)
+Cancelar()('No hay Especies que tengan partidas en las fechas solicitadas')
+endif
+
+linkearhoja('INVRES', 1, fecha1 = dialogo.fecha1, radio1 = dialogo.radio1, check1 = 1, radio2 = 0)
+
+SetFilaActual(1)
+
+
+recorrer&i 1, 100
+
+Act(h:fac, linkh(1, ai:&i))
+Act(i:fac, linkh(1, aj:&i))
+Acn(j:fac, linkh(1, ak:&i))
+Acn(n:fac, linkh(1, al:&i))
+
+if (Vacio(Val(h:fac)))
+break
+endif
+
+sql.add("UPDATE "~Dbo()~".PARTIDAS Set Cantidad1="~FStr(Val(j:fac), 0, 8)~" ")
+sql.add("Where NrOperacion='"~Val(h:fac)~"' and NrPartida='"~Val(i:fac)~"' ")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set ")
+sql.add("TipoCambio3=TipoCambio3 + "~FStr(Val(n:fac), 0, 2)~" ")
+sql.add("Where NrOperacion='"~Val(i:fac)~"' ")
+sql.new
+sql.exec
+proximo
+
+recorrer&i 1, 100
+Act(a:fac, linkh(1, aa:&i))
+Acn(b:fac, linkh(1, ab:&i))
+Act(c:fac, linkh(1, ac:&i))
+Acn(e:fac, linkh(1, ae:&i))
+Acn(f:fac, linkh(1, af:&i))
+Acn(g:fac, linkh(1, ag:&i))
+
+if (Vacio(Val(a:fac)))
+break
+endif
+
+Acd(pm1, PriDeMes(dialogo.fecha1, SI, 'ARG'))
+
+sql.add("SELECT Sum(Cantidad1) CFund FROM "~Dbo()~".PARTIDAS Where ")
+sql.add("NrPartida='"~Val(a:fac)~"' and TipoAct<>'COMPRA' and ")
+sql.add("FechaDesde Between '"~IdxDate(Val(pm1))~"' and '"~IdxDate(dialogo.fecha1)~"' ")
+
+recorrer sql
+Dfa()
+Acn(g:fac, Val(g:fac) - Fbn()['CFund'])
+proximo
+
+Acn(m:fac, linkh(1, am:&i))
+
+Acn(k:fac, Val(e:fac))
+Acn(l:fac, Val(f:fac))
+
+
+Acn(vc1, 0)
+Acn(vc2, 0)
+Acn(vc2, 0)
+
+sql.add("SELECT Precio3 as Clean, Precio4 as Dirty,NrCuota FROM "~Dbo()~".CUOTAS Where NrOperacion='"~Val(a:fac)~"' and Fecha1='"~IdxDate(dialogo.fecha1)~"' ")
+
+recorrer sql
+Acn(vc1, Fbn()['Clean'])
+Acn(vc2, Fbn()['Dirty'])
+Acn(vc2, Fbn()['NrCuota'] - 1)
+proximo
+
+if (Val(vc1) <> 0)
+Acn(vc4, sql("SELECT Cantidad2 FROM "~Dbo()~".CUOTAS Where NrOperacion='"~Val(a:fac)~"' and NrCuota="~FStr(Val(vc2), 0, 0)~" "))
+Acn(vc5, sql("SELECT Cantidad3 FROM "~Dbo()~".CUOTAS Where NrOperacion='"~Val(a:fac)~"' and NrCuota="~FStr(Val(vc2), 0, 0)~" "))
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set Precio1="~FStr(Val(vc1), 0, 8)~",Precio3="~FStr(Val(vc2), 0, 8)~", ")
+sql.add("                               TotalAux2="~FStr(Val(vc4), 0, 2)~",TotalBrutoCli2=TotalBrutoCli2 - "~FStr(Val(vc5), 0, 8)~" ")
+sql.add("Where NrOperacion='"~Val(a:fac)~"' ")
+sql.new
+sql.exec
+endif
+
+sql.add(" DELETE "~Dbo()~".CUOTAS Where NrOperacion='"~Val(a:fac)~"' and Fecha1='"~IdxDate(dialogo.fecha1)~"'   ")
+sql.new
+sql.exec
+
+Acn(u1, sql("SELECT Max(NrCuota) FROM "~Dbo()~".CUOTAS Where NrOperacion='"~Val(a:fac)~"'") + 1)
+
+if (Val(b:fac) <> 0)
+Scn(f:fac, Val(b:fac))
+
+Acn(e:fac, Val(f:fac))
+if (Eqstr(BuscarCampo('ESPECIES', 'InteresesC', 'Codigo', Val(c:fac)), 'CLE'))
+Acn(e:fac, precioaresidual(Val(c:fac), Val(f:fac), dialogo.fecha1))
+endif
+endif
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set Precio1="~FStr(Val(e:fac), 0, 8)~",Precio3="~FStr(Val(f:fac), 0, 8)~",  ")
+sql.add("                               TotalAux2="~FStr(Val(g:fac), 0, 2)~", ")
+sql.add("                               TotalBrutoCli2=TotalBrutoCli2+"~FStr(Val(m:fac), 0, 2)~" ")
+sql.add("Where NrOperacion='"~Val(a:fac)~"' ")
+sql.new
+
+sql.add("INSERT INTO "~Dbo()~".CUOTAS ")
+sql.add(" (NrOperacion,Cantidad1,Fecha1,NrCuota,  ")
+sql.add("  Precio1,Precio2,Cantidad2,")
+sql.add("  Precio3,Precio4,Cantidad3,Check1) Values ")
+sql.add(" ('"~Val(a:fac)~"',"~FStr(Val(b:fac), 0, 8)~",'"~IdxDate(dialogo.fecha1)~"',"~FStr(Val(u1), 0, 0)~", ")
+sql.add(" "~FStr(Val(e:fac), 0, 8)~","~FStr(Val(f:fac), 0, 8)~","~FStr(Val(g:fac), 0, 2)~",")
+sql.add(" "~FStr(Val(k:fac), 0, 8)~","~FStr(Val(l:fac), 0, 8)~","~FStr(Val(m:fac), 0, 2)~",'1') ")
+sql.new
+sql.exec
+proximo
+
+endif

@@ -1,0 +1,104 @@
+#definehorarios
+modoreproceso(sindialogo)
+mostrarcuadrodemensajes
+creardialogo
+vehiculo1:"Vehiculo";1;1;;;;NoVacio(dialogo.vehiculo1);'Debe Ingresar el Vehiculo';NO;Var('VEHICULODE')
+entero1:"Trimestre";2;1;;dialogo.radio2 = 0;dialogo.radio2 = 0;dialogo.entero1 >= 1 y dialogo.entero1 <= 4;'Nro. de Trimestre Incorrecto';NO;trunc2(Mes(FSys()) / 3.1) + 1
+entero4:"Mes";2;1;;dialogo.radio2 = 1;dialogo.radio2 = 1;dialogo.entero4 >= 1 y dialogo.entero4 <= 12;'Nro. de Mes Incorrecto';NO;Mes(FSys());;;;'##'
+entero2:"Año";2;2;;;;dialogo.entero2 > 0;'Anio Incorrecto';NO;Anio(FSys());;;;'####'
+fecha1:"F.Desde";3;1;;NO;;dialogo.fecha1 <= FSys() y dialogo.fecha1 <> 0;"Fecha Desde Incorrecta";NO;iif (dialogo.radio2 = 0, PriDeMes(Fecha('01/'~Pad0(FStr(iif (dialogo.entero1 = 1, 1, iif (dialogo.entero1 = 2, 4, iif (dialogo.entero1 = 3, 7, 10))), 0, 0), 2)~'/'~FStr(dialogo.entero2, 4, 0)), SI), PriDeMes(Fecha('01/'~Pad0(FStr(dialogo.entero4, 0, 0), 2)~'/'~FStr(dialogo.entero2, 4, 0)), SI));iif (dialogo.radio2 = 0, PriDeMes(Fecha('01/'~Pad0(FStr(iif (dialogo.entero1 = 1, 1, iif (dialogo.entero1 = 2, 4, iif (dialogo.entero1 = 3, 7, 10))), 0, 0), 2)~'/'~FStr(dialogo.entero2, 4, 0)), SI), PriDeMes(Fecha('01/'~Pad0(FStr(dialogo.entero4, 0, 0), 2)~'/'~FStr(dialogo.entero2, 4, 0)), SI))
+fecha2:"F.Hasta";;;;NO;;dialogo.fecha2 <= Habiles(FSys(), 1) y dialogo.fecha2 >= dialogo.fecha1;"Fecha Hasta Incorrecta";NO;;iif (dialogo.radio2 = 0, iif (dialogo.entero1 <> trunc2(dialogo.entero4 / 3.1) + 1, FinDeMes(Fecha('01/'~Pad0(FStr(dialogo.entero1 * 3, 0, 0), 2)~'/'~FStr(dialogo.entero2, 4, 0)), SI), iif (FSys() = FinDeMes(FSys()), FinDeMes(FSys(), SI), FSys())), iif (Mes(FSys()) <> dialogo.entero4 o Anio(FSys()) <> dialogo.entero2, FinDeMes(dialogo.fecha1, SI), FSys()))
+cliente1:"Cliente";;;;;;;;;;;;
+radio1:"Tipo|Ultimo_DIA|Per_COMPLETO|";;;;;;;;;1
+check3:"PrimerCorrida";;;;NO;NO;;;;dialogo.radio1;dialogo.radio1;
+entero3:"Saldos/Hoja";;;;;;;;;500;;;;;
+radio2:"Tipo|Trimestral|Mensual|";;;;NO;;;;;1
+radio3:"Clientes|Sud|Pata|Todos|";;;;NO;NO;;;;2
+findialogo
+if (not ok)
+Cancelar()
+endif
+
+
+
+sql.add("UPDATE "~Dbo()~".VARIABLES SET Valor=0 WHERE Codigo='CONTWKSCOM' ")
+sql.new
+sql.exec
+
+
+Act(v9, Var('MONELOCA'))
+Act(v10, Var('MONEEXTR'))
+
+Act(v11, Hora(Ahora()))
+
+
+Act(x:1, Var('SALNOCOM'))
+
+sql.add("SELECT Distinct S.Cliente FROM "~Dbo()~".SALDOSDIA S WITH (NOLOCK),")
+sql.add("                 "~Dbo()~".CLIENTES CL WITH (NOLOCK), "~Dbo()~".ESPECIES E  WITH (NOLOCK)       ")
+sql.add("WHERE S.Cliente = CL.Codigo AND                                  ")
+sql.add("      (S.NrSaldo > 201 OR S.NrSaldo = 101) AND                   ")
+sql.add("      S.NrSaldo not in ("~pipe2comillas(Val(x:1))~") AND                   ")
+sql.add("      S.EnteCustodia = '"~dialogo.vehiculo1~"' AND               ")
+if (NoVacio(dialogo.cliente1))
+sql.add("      S.Cliente = '"~dialogo.cliente1~"' AND                  ")
+endif
+if (dialogo.radio3 = 0)
+sql.add("      (CL.Valor10<>1 OR CL.Valor10 Is Null)  AND ")
+endif
+if (dialogo.radio3 = 1)
+sql.add("      CL.Valor10=1 AND ")
+endif
+sql.add("      S.Especie =  E.Codigo  AND                                 ")
+sql.add("      (E.Valor8 =0 or E.Valor8 is null)   AND                    ")
+sql.add("      S.Fecha <= '"~IdxDate(dialogo.fecha2)~"' AND               ")
+sql.add("      S.Fecha=(SELECT MAX(Fecha)                                 ")
+sql.add("               FROM "~Dbo()~".SALDOSDIA S1    WITH (NOLOCK) ")
+sql.add("               WHERE S1.Cliente = S.Cliente AND                  ")
+sql.add("                     S1.Especie = S.Especie AND                  ")
+sql.add("                     S1.EnteCustodia = S.EnteCustodia AND        ")
+sql.add("                     S1.Mercado = S.Mercado AND                  ")
+sql.add("                     S1.NrSaldo = S.NrSaldo AND                  ")
+sql.add("                     S1.Cuenta = S.Cuenta AND                    ")
+sql.add("                     S1.Fecha <= '"~IdxDate(dialogo.fecha2)~"')  ")
+sql.add("ORDER BY S.Cliente                                               ")
+
+Acn(w1, Fac())
+Act(z3, '')
+Act(z4, '')
+Acn(z5, 0)
+
+Acn(cc1, 0)
+Act(cc2, '')
+Act(cc3, '')
+Acn(cc4, 0)
+
+Watch(sql.batch())
+
+recorrer sql
+Scn(cc1, 1)
+
+if (Val(cc1) = 1)
+Act(cc2, Fbn()['Cliente'])
+endif
+
+if (Val(cc1) >= dialogo.entero3)
+Act(cc3, Fbn()['Cliente'])
+ejecutarevento('COMSA1', vehiculo1 = dialogo.vehiculo1, entero1 = dialogo.entero1, entero2 = dialogo.entero2, fecha1 = dialogo.fecha1, fecha2 = dialogo.fecha2, cliente1 = dialogo.cliente1, check1 = 0, check2 = 1, check3 = dialogo.check3, cliente2 = Val(cc2), cliente3 = Val(cc3), entero4 = dialogo.entero4, radio2 = dialogo.radio2, radio3 = dialogo.radio3)
+
+Acn(cc1, 0)
+Act(cc2, '')
+Act(cc3, '')
+else
+Act(cc3, Fbn()['Cliente'])
+endif
+proximo
+
+if (NoVacio(Val(cc3)))
+Message('Ejecuta evento COMSA1 (2). Cl1='~dialogo.cliente1~' - Cl2='~Val(cc:2)~' - Cl3='~Val(cc:3))
+ejecutarevento('COMSA1', vehiculo1 = dialogo.vehiculo1, entero1 = dialogo.entero1, entero2 = dialogo.entero2, fecha1 = dialogo.fecha1, fecha2 = dialogo.fecha2, cliente1 = dialogo.cliente1, check1 = 0, check2 = 1, check3 = dialogo.check3, cliente2 = Val(cc2), cliente3 = Val(cc3), entero4 = dialogo.entero4, radio2 = dialogo.radio2, radio3 = dialogo.radio3)
+endif
+
+
+Messagebox('Se han generado '~Var('CONTWKSCOM')~' archivos con los listados del dia '~IdxDate(FSys()))
+

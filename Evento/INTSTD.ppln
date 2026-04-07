@@ -1,0 +1,605 @@
+mostrarcuadrodemensajes
+creardialogo
+radio1:'Proceso|Default|Excel';;;;;;;;;;;;
+string1:'Archivo';;;;;;;;;;;;;
+directorio2:'Path Pend.';;;;;;;;;;;;;
+directorio3:'Path Proc.';;;;;;;;;;;;;
+nrunicoasiento1: 'Nr Asiento';;;;;;;;;;;;;
+nroperacion1:'Operacion';;;;;;;;;;;;;
+tipoop1:'Tipo de Op.';;;;;;;;;;;;;
+fecha3:'F.Valor Desde';;;;;;;;;;;;;
+fecha4:'F.Valor Hasta';;;;;;;;;;;;;
+lista1:'Vehiculo';;;;;;;;;;;;;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (Vacio(dialogo.nrunicoasiento1) y dialogo.radio1 = 0)
+Acn(mg:1, Messagebox('No ingreso NrAsiento, Confirma?', 1, 1))
+if (Val(mg:1) = 2)
+Cancelar()
+endif
+endif
+
+if (Eqstr(Var('INTASIENTO'), 'SI'))
+Cancelar()('Se esta ejecutando el proceso contable con SAP...Por favor intente en unos minutos')
+else
+if (Eqstr(Var('GENASIENTO'), 'SI'))
+Cancelar()('Ya esta siendo ejecutado el proceso contable...Por favor intente en unos minutos')
+endif
+endif
+
+sql.add(" Update "~Dbo()~".VARIABLES Set Valor='SI' Where Codigo='INTASIENTO' ")
+sql.new
+sql.exec
+
+if (NoVacio(dialogo.lista1))
+Act(zz:6, dialogo.lista1)
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+Act(zz:6, SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+endif
+endif
+
+Acn(co:1, 0)
+Act(ml:2, Var('MONELOCA'))
+Act(cl:66, Var('CLDOCNOSAP'))
+Act(vh:1, Var('VEHIEXTRAN'))
+Acd(fi:1, Fecha(Var('FEVAINI')))
+
+Act(nl:1, FStr(exe('NRLOTE') + 1, 0, 0))
+Act(fe:1, FStr(Anio(FSys()), 0, 0)~Pad0(FStr(Mes(FSys()), 0, 0), 2)~Pad0(FStr(Dia(FSys()), 0, 0), 2))
+
+sql.add(" Select A.NrUnicoAsiento, A.FechaGeneracion, A.Vehiculo, A.FechaValor, A.Modelo, A.Libro, A.NrOperacion, A.Estado, ")
+sql.add(" A1.Alias6, A1.DebitoCredito, A1.Cuenta, A1.Valor1, A1.Cantidad1, A1.Cantidad2, A1.Cantidad3, A1.CentroCosto, A1.Alias2,  A1.Alias3, A1.Alias5, A1.Alias7 Especie, A1.Alias8, ")
+sql.add(" A1.Alias9, A1.Alias10, A.Fecha1 FechaEjecucion, A1.Valor3, M.ClaseDocumento, M.TipoOp, A.NrAsiento ")
+sql.add(" from "~Dbo()~".ASIENTOSCON A, "~Dbo()~".ASIENTOSCON1 A1, "~Dbo()~".MODELOSASIENTO M ")
+sql.add(" Where A.NrUnicoAsiento = A1.NrUnicoAsiento ")
+sql.add(" AND A.Modelo = M.Codigo ")
+sql.add(" AND M.Codigo IN ("~pipe2comillas(Var('MODCONINT'))~") ")
+
+if (dialogo.radio1 = 0)
+sql.add(" AND (A.Estado IS Null OR A.Estado = '' OR A.Estado = ' ' OR A.Estado = 'COT' OR A.Estado = 'REV') ")
+sql.add(" AND (A.Sector Is Null OR A.Sector = '' OR A.Sector = ' ') ")
+if (NoVacio(dialogo.nrunicoasiento1))
+sql.add(" AND A.NrUnicoAsiento = '"~dialogo.nrunicoasiento1~"' ")
+endif
+if (NoVacio(dialogo.nroperacion1))
+sql.add(" AND A.NrOperacion = '"~dialogo.nroperacion1~"' ")
+endif
+if (Vacio(dialogo.nrunicoasiento1) y Vacio(dialogo.nroperacion1))
+if (dialogo.fecha3 > 0)
+sql.add("and A.FechaValor between '"~IdxDate(dialogo.fecha3)~"' and '"~IdxDate(dialogo.fecha4)~"'  ")
+endif
+if (NoVacio(Val(zz:6)))
+sql.add("and A.Vehiculo in ("~pipe2comillas(Val(zz:6))~") ")
+endif
+if (NoVacio(dialogo.tipoop1))
+sql.add("and M.TipoOp in ('"~dialogo.tipoop1~"') ")
+endif
+endif
+else
+Message('Importando asientos por excel...')
+
+
+Act(vr:1, dialogo.directorio2~dialogo.string1)
+
+let(&directorio, dialogo.directorio2)
+let(&archivo, dialogo.string1)
+
+if (existedirectorio(&directorio))
+if (Eqstr(Copy(&directorio, Longitud(&directorio), 1), '\'))
+if (not existearchivo(&directorio~&archivo))
+Cancelar()('1.El Archivo '~&archivo~' no existe en el directorio: '~&directorio)
+endif
+else
+if (not existearchivo(&directorio~'\'~&archivo))
+Cancelar()('2.El Archivo '~&archivo~' no existe en el directorio: '~&directorio)
+endif
+endif
+else
+Cancelar()('El directorio '~&directorio~' no existe')
+endif
+
+
+importarxls(a:1..a:10000, as:1..as:10000, Val(vr:1))
+
+if (not ok)
+Cancelar()('No se pudo abrir el archivo '~dialogo.string1~' (Verifique que el archivo no este abierto)')
+endif
+
+sql.add(" AND A.NrUnicoAsiento in ( ")
+recorrer&i 1, 10000
+if (NoVacio(Val(as:&i)) y not Eqstr(Val(as:&i), '') y not Eqstr(Val(as:&i), ' '))
+if (EsNumero(Val(as:&i)))
+endif
+sql.add(" '"~Val(as:&i)~"', ")
+Act(at:&i, 'Asiento no encontrado!')
+endif
+proximo
+sql.add(" 'FIN' )")
+
+
+endif
+
+sql.add(" AND A.FechaValor >= '"~IdxDate(Val(fi:1))~"' ")
+sql.add(" Order by 1, 2, A1.Alias3 Desc ")
+
+Message('Buscando asientos...')
+recorrer sql
+Acn(er:1, 0)
+Act(es:9, 'Asiento no procesado')
+if (dialogo.radio1 = 1)
+if (Eqstr(Fbn('Estado'), 'E'))
+Act(es:9, 'Asiento ya enviado')
+Acn(er:1, 1)
+endif
+if (Eqstr(Fbn('Estado'), 'COE'))
+Act(es:9, 'Contrasiento ya enviado')
+Acn(er:1, 1)
+endif
+if (Eqstr(Fbn('Estado'), 'REE'))
+Act(es:9, 'Reversa ya enviado')
+Acn(er:1, 1)
+endif
+if (Incluido(Fbn('Estado'), 'COT|REV'))
+if (sql(" Select 1 from "~Dbo()~".ASIENTOSCON Where NrUnicoAsiento = '"~Fbn('NrAsiento')~"' and Estado = 'E' ") <> 1)
+Act(es:9, 'El asiento '~Fbn('NrAsiento')~' no fue enviado.')
+Acn(er:1, 1)
+endif
+endif
+endif
+if (not Incluido(Fbn('ClaseDocumento'), Val(cl:66)) o Incluido(Fbn('Vehiculo'), Val(vh:1))) y Val(er:1) = 0
+if (Val(co:1) = 0)
+abrirascii(Var('PATHINTCON')~Var('FILEINTCON')~'-'~Val(fe:1)~'-'~Val(nl:1)~'.TEM', 0)
+endif
+Scn(co:1, 1)
+if (Vacio(Val(na:1)) o not Eqstr(Val(na:1), Fbn('NrUnicoAsiento')))
+Acn(ca:1, sql("Select Count(NrUnicoAsiento) FROM "~Dbo()~".ASIENTOSCON1 where NrUnicoAsiento = '"~Fbn('NrUnicoAsiento')~"' "))
+Acn(po:1, 0)
+Act(li:1, 'EDI_DC40_U')
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 16))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~'68')
+Act(li:1, Val(li:1)~'2')
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('FIDCCP02', 30))
+Act(li:1, Val(li:1)~Pad('', 30))
+Act(li:1, Val(li:1)~Pad('FIDCC2', 30))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 6))
+Act(li:1, Val(li:1)~Pad('', 6))
+Act(li:1, Val(li:1)~Pad('FILE', 10))
+Act(li:1, Val(li:1)~'LS')
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('FPA', 10))
+Act(li:1, Val(li:1)~Pad('', 21))
+Act(li:1, Val(li:1)~Pad('', 70))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~'LS')
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad(Var('AMBDESTSAP'), 10))
+Act(li:1, Val(li:1)~Pad('', 21))
+Act(li:1, Val(li:1)~Pad('', 70))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 6))
+Act(li:1, Val(li:1)~Pad('', 14))
+Act(li:1, Val(li:1)~Pad('', 14))
+Act(li:1, Val(li:1)~Pad('', 14))
+Act(li:1, Val(li:1)~Pad('', 70))
+Act(li:1, Val(li:1)~Pad('', 20))
+
+escribirascii(Val(li:1))
+Act(li:1, Pad('E2FIKPF006', 30))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 16))
+Act(li:1, Val(li:1)~Pad0(FStr(Val(co:1), 0, 0), 6))
+Act(li:1, Val(li:1)~'000000')
+Act(li:1, Val(li:1)~'01')
+Act(li:1, Val(li:1)~Pad(Copy(BuscarCampo('CLIENTES', 'Alias5', 'Codigo', Fbn('Vehiculo')), 1, 6), 6))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~FStr(Anio(Fbn('FechaGeneracion')), 0, 0))
+Act(cd:1, BuscarCampo('MODELOSASIENTO', 'ClaseDocumento', 'Codigo', Fbn('Modelo')))
+Act(ci:1, BuscarCampo('CLASESDOCUMENTO', 'ClaseInversa', 'Codigo', Val(cd:1)))
+Act(cf:1, BuscarCampo('CLASESDOCUMENTO', 'ClaseInversaFE', 'Codigo', Val(cd:1)))
+Act(li:1, Val(li:1)~Pad(Copy(iif (not Incluido(Fbn('Estado'), 'COT|REV'), Val(cd:1), iif (Incluido(Fbn('Vehiculo'), Var('VEHFACELE')), iif (Vacio(Val(cf:1)), Val(ci:1), Val(cf:1)), Val(ci:1))), 1, 2), 2))
+Act(li:1, Val(li:1)~FStr(Anio(Fbn('FechaValor')), 0, 0)~Pad0(FStr(Mes(Fbn('FechaValor')), 0, 0), 2)~Pad0(FStr(Dia(Fbn('FechaValor')), 0, 0), 2))
+Act(li:1, Val(li:1)~FStr(Anio(Fbn('FechaValor')), 0, 0)~Pad0(FStr(Mes(Fbn('FechaValor')), 0, 0), 2)~Pad0(FStr(Dia(Fbn('FechaValor')), 0, 0), 2))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~FStr(Anio(Fbn('FechaGeneracion')), 0, 0)~Pad0(FStr(Mes(Fbn('FechaGeneracion')), 0, 0), 2)~Pad0(FStr(Dia(Fbn('FechaGeneracion')), 0, 0), 2))
+Act(li:1, Val(li:1)~Pad('', 12))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 16))
+Act(li:1, Val(li:1)~Pad('', 16))
+Act(cm:1, BuscarCampo('ESPECIES', 'Alias10', 'Codigo', Fbn('Alias6')))
+Act(li:1, Val(li:1)~Pad(Fbn('NrOperacion'), 25))
+Act(li:1, Val(li:1)~Pad(Val(cm:1), 5))
+Act(li:1, Val(li:1)~Pad('', 11))
+Act(li:1, Val(li:1)~Pad('RFBU', 4))
+Act(li:1, Val(li:1)~Pad('BKPF', 5))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(ml:1, BuscarCampo('VEHICULOS', 'Alias4', 'Codigo', Fbn('Vehiculo')))
+Act(li:1, Val(li:1)~Pad(BuscarCampo('ESPECIES', 'Alias10', 'Codigo', Val(ml:1)), 5))
+Act(li:1, Val(li:1)~Pad('USD', 5))
+Act(li:1, Val(li:1)~Pad(BuscarCampo('ESPECIES', 'Alias10', 'Codigo', Val(ml:1)), 5))
+Act(li:1, Val(li:1)~Pad('', 11))
+Act(li:1, Val(li:1)~Pad('', 11))
+Act(li:1, Val(li:1)~'1')
+Act(li:1, Val(li:1)~iif (Eqstr(Val(ml:1), Var('MONEFUERTE')), '2', '1'))
+Act(li:1, Val(li:1)~'3')
+Act(li:1, Val(li:1)~'3')
+Act(li:1, Val(li:1)~'30')
+Act(li:1, Val(li:1)~'40')
+Act(li:1, Val(li:1)~Pad('FIDC', 4))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 12))
+Act(li:1, Val(li:1)~Pad('', 12))
+Act(li:1, Val(li:1)~Pad('', 12))
+Act(li:1, Val(li:1)~Pad('', 1))
+if (Incluido(Fbn('Libro'), 'AR') y not Incluido(Fbn('Vehiculo'), Var('VEHIEXTRAN')))
+Act(li:1, Val(li:1)~Pad(BuscarCampo('VEHICULOS', 'Alias2', 'Codigo', Fbn('Vehiculo')), 4))
+else
+Act(li:1, Val(li:1)~Pad('', 4))
+endif
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 5))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 50))
+Act(li:1, Val(li:1)~Pad('', 20))
+Act(li:1, Val(li:1)~Pad('', 20))
+Act(li:1, Val(li:1)~Pad('', 35))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 4))
+
+escribirascii(Val(li:1))
+Scn(co:1, 1)
+sql.add("Update "~Dbo()~".ASIENTOSCON set Estado = ")
+if (Vacio(Fbn('Estado')))
+sql.add(" 'E' ")
+Act(es:9, 'Asiento Enviado!')
+else
+if (Eqstr(Fbn('Estado'), 'COT'))
+sql.add(" 'COE' ")
+Act(es:9, 'Contrasiento Enviado!')
+else
+sql.add(" 'REE' ")
+Act(es:9, 'Reversa Enviada!')
+endif
+endif
+sql.add(", Fecha2 = "~SQLAhora()~", ")
+sql.add(" NrLote = '"~Val(nl:1)~"' ")
+sql.add(" where NrUnicoAsiento = '"~Fbn('NrUnicoAsiento')~"' ")
+sql.new
+sql.exec
+endif
+Scn(po:1, 1)
+Act(li:1, Pad('E2FISEG005', 30))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 16))
+Act(li:1, Val(li:1)~Pad0(FStr(Val(co:1), 0, 0), 6))
+Act(li:1, Val(li:1)~'000001')
+Act(li:1, Val(li:1)~'02')
+Act(li:1, Val(li:1)~Pad0(FStr(Val(po:1), 0, 0), 3))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(cc:1, Copy(BuscarCampo('CONTABILIDAD', 'Tipo', 'Codigo', Fbn('Cuenta')), 1, 1))
+Act(li:1, Val(li:1)~iif (Eqstr(Val(cc:1), 'S'), iif (Eqstr(Fbn('DebitoCredito'), 'DEB'), '40', '50'), iif (Eqstr(Val(cc:1), 'D'), iif (Eqstr(Fbn('DebitoCredito'), 'DEB'), '01', '11'), iif (Eqstr(Fbn('DebitoCredito'), 'DEB'), '21', '31'))))
+Act(li:1, Val(li:1)~Pad(Val(cc:1), 1))
+Act(li:1, Val(li:1)~iif (Eqstr(Fbn('DebitoCredito'), 'DEB'), 'S', 'H'))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 4))
+if (not Incluido(Fbn('Vehiculo'), Var('VEHIEXTRAN')))
+Act(li:1, Val(li:1)~Pad(sql("Select Codigo From "~Dbo()~".DETALLEIVAPER where TipoImpuesto = 'IVA' and Porcentaje = "~FStr(Fbn('Valor3'), 0, 2)~" "), 2))
+else
+Act(li:1, Val(li:1)~Pad('', 2))
+endif
+Act(li:1, Val(li:1)~Pad(FStr(Round(Fbn('Cantidad2'), 2), 0, 2), 15))
+Act(li:1, Val(li:1)~Pad(FStr(Round(Fbn('Cantidad3'), 2), 0, 2), 15))
+Act(li:1, Val(li:1)~Pad(FStr(Round(Fbn('Cantidad1'), 2), 0, 2), 15))
+Act(li:1, Val(li:1)~Pad(FStr(Round(Fbn('Valor1'), 2), 0, 2), 15))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad(BuscarCampo('ESPECIES', 'Alias10', 'Codigo', BuscarCampo('VEHICULOS', 'Alias4', 'Codigo', Fbn('Vehiculo'))), 5))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad(Fbn('NrOperacion'), 18))
+if (Eqstr(Fbn('Libro'), 'AR'))
+Act(de:1, Fbn('Alias10'))
+else
+Act(de:1, Fbn('Modelo')~Fbn('Alias3')~BuscarCampo('MODELOSASIENTO', 'Descripcion', 'Codigo', Fbn('Modelo')))
+endif
+Act(li:1, Val(li:1)~Pad(Val(de:1), 50))
+Act(vh:2, Fbn('Alias2'))
+if (Eqstr(Val(cc:1), 'S') y Eqstr(Fbn('Libro'), 'GL'))
+Act(li:1, Val(li:1)~Pad(iif (Eqstr(Var('CLASEOPVIN'), BuscarCampo('TIPOSOPERACION', 'ClaseOperacion', 'Codigo', Fbn('TipoOp'))), Copy(BuscarCampo('CLIENTES', 'Alias4', 'Codigo', Val(vh:2)), 1, 6), ''), 6))
+else
+Act(li:1, Val(li:1)~Pad('', 6))
+endif
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('RFBU', 4))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(cs:1, BuscarCampo('CLIENTES', 'Alias5', 'Codigo', Fbn('Vehiculo')))
+Act(z:1, BuscarCampo('CONTABILIDAD', 'Alias', 'Codigo', Fbn('Cuenta')))
+if (Eqstr(Val(z:1), 'RS'))
+Act(cc:2, BuscarCampo('CLIENTES', 'CentroCosto', 'Codigo', Fbn('Vehiculo')))
+Act(li:1, Val(li:1)~Pad(Val(cs:1)~Val(cc:2), 10))
+else
+Act(li:1, Val(li:1)~Pad('', 10))
+endif
+Act(li:1, Val(li:1)~Pad('', 12))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 6))
+Act(li:1, Val(li:1)~Pad('', 12))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad0(Fbn('Cuenta'), 10))
+Act(li:1, Val(li:1)~Pad('', 6))
+Act(li:1, Val(li:1)~Pad('', 18))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 5))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 20))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(cs:1, BuscarCampo('CLIENTES', 'Alias5', 'Codigo', Fbn('Vehiculo')))
+Act(li:1, Val(li:1)~Pad(Val(cs:1)~Var('CENBENEF'), 10))
+Act(li:1, Val(li:1)~Pad('', 6))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 13))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 14))
+Act(li:1, Val(li:1)~Pad('', 12))
+Act(li:1, Val(li:1)~Pad('', 12))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 16))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad(Fbn('NrUnicoAsiento'), 12))
+Act(li:1, Val(li:1)~Pad(Fbn('Especie'), 12))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 20))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 6))
+Act(li:1, Val(li:1)~Pad('', 12))
+Act(li:1, Val(li:1)~Pad('', 11))
+Act(li:1, Val(li:1)~Pad('', 11))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 50))
+Act(li:1, Val(li:1)~Pad('', 1))
+
+escribirascii(Val(li:1))
+if (Incluido(Val(cc:1), 'D|K') y Incluido(Fbn('Libro'), 'AP|AR'))
+Scn(co:1, 1)
+Act(li:1, Pad('E2FINBU006', 30))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 16))
+Act(li:1, Val(li:1)~Pad0(FStr(Val(co:1), 0, 0), 6))
+Act(li:1, Val(li:1)~'000002')
+Act(li:1, Val(li:1)~'03')
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 15))
+if (Eqstr(Fbn('Libro'), 'AR'))
+Act(cl:1, Copy(BuscarCampo('CLIENTES', 'Alias1', 'Codigo', Fbn('Alias2')), 1, 10))
+Act(li:1, Val(li:1)~iif (EsNumero(Val(cl:1)), Pad0(Val(cl:1), 10), Pad(Val(cl:1), 10)))
+else
+Act(li:1, Val(li:1)~Pad('', 10))
+endif
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~FStr(Anio(Fbn('FechaValor')), 0, 0)~Pad0(FStr(Mes(Fbn('FechaValor')), 0, 0), 2)~Pad0(FStr(Dia(Fbn('FechaValor')), 0, 0), 2))
+Act(li:1, Val(li:1)~Pad('Z000', 4))
+Act(li:1, Val(li:1)~Pad('', 5))
+Act(li:1, Val(li:1)~Pad('', 5))
+Act(li:1, Val(li:1)~Pad('', 5))
+Act(li:1, Val(li:1)~Pad('', 7))
+Act(li:1, Val(li:1)~Pad('', 7))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad(Fbn('Alias8'), 1))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad(Fbn('Alias9'), 5))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 3))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 8))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 15))
+if (Eqstr(Fbn('Libro'), 'AP'))
+Act(cl:2, Copy(BuscarCampo('CLIENTES', 'Alias2', 'Codigo', Fbn('Alias2')), 1, 10))
+Act(li:1, Val(li:1)~iif (EsNumero(Val(cl:2)), Pad0(Val(cl:2), 10), Pad(Val(cl:2), 10)))
+else
+Act(li:1, Val(li:1)~Pad('', 10))
+endif
+Act(li:1, Val(li:1)~Pad('', 11))
+Act(li:1, Val(li:1)~Pad('', 27))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 30))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 5))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 4))
+Act(li:1, Val(li:1)~Pad('', 15))
+Act(li:1, Val(li:1)~Pad('', 1))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 2))
+Act(li:1, Val(li:1)~Pad('', 5))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 10))
+Act(li:1, Val(li:1)~Pad('', 50))
+
+escribirascii(Val(li:1))
+endif
+endif
+if (Vacio(Val(na:1)) o not Eqstr(Val(na:1), Fbn('NrUnicoAsiento')))
+if (dialogo.radio1 = 1)
+recorrer&i 1, 10000
+if (Eqstr(Val(as:&i), Fbn('NrUnicoAsiento')))
+Act(at:&i, Val(es:9))
+endif
+proximo
+endif
+endif
+Message('Asiento: '~Fbn('NrUnicoAsiento')~' -> '~Val(es:9))
+Act(na:1, Fbn('NrUnicoAsiento'))
+proximo
+
+if (Val(co:1) > 0)
+Message('Generando archivo '~Var('FILEINTCON')~'...')
+cerrarascii
+
+sql.add(" Update "~Dbo()~".VARIABLES ")
+sql.add(" Set Valor = '"~Val(nl:1)~"' ")
+sql.add(" where Codigo = 'NRLOTE' ")
+sql.new
+sql.exec
+
+winexec('CMD.EXE /C REN '~Var('PATHINTCON')~'*.TEM *.TXT', 0)
+esperar(3)
+endif
+
+if (dialogo.radio1 = 1)
+Message('Exportando excel con resultados...')
+
+let(&directorio, dialogo.directorio3)
+if (existedirectorio(&directorio))
+if (Eqstr(Copy(&directorio, Longitud(&directorio), 1), '\'))
+if (not existearchivo(&directorio~&archivo))
+Cancelar()('1.El Archivo '~&archivo~' no existe en el directorio: '~&directorio)
+endif
+else
+if (not existearchivo(&directorio~'\'~&archivo))
+Cancelar()('2.El Archivo '~&archivo~' no existe en el directorio: '~&directorio)
+endif
+endif
+else
+Cancelar()('El directorio '~&directorio~' no existe')
+endif
+
+
+
+Acd(vr:2, FSys())
+
+Act(vr:3, Copy(Val(vr:2), 1, 2)~Copy(Val(vr:2), 4, 2)~Copy(Val(vr:2), 9, 2))
+
+Act(vr:4, Copy(dialogo.string1, 1, Longitud(dialogo.string1) - 4))
+
+Act(vr:5, dialogo.directorio3~Val(vr:4)~Val(vr:3)~'.xls')
+
+if (existearchivo(Val(vr:5)))
+recorrer&k 66, 90
+Act(vr:5, dialogo.directorio3~Val(vr:4)~Val(vr:3)~Chr(&k)~'.xls')
+if (not existearchivo(Val(vr:5)))
+break
+endif
+proximo
+endif
+
+
+if (existearchivo(Val(vr:5)))
+recorrer&k 1, 100
+Act(vr:5, dialogo.directorio3~Val(vr:4)~Val(vr:3)~"Z"~FStr(&k, 0, 0)~'.xls')
+if (not existearchivo(Val(vr:5)))
+break
+endif
+proximo
+endif
+
+
+exportarxls(as:1..at:10000, a:1..b:10000, Val(vr:5))
+
+if (not ok)
+Messagebox('No se pudo guardar el archivo '~Val(vr:5)~'. ')
+endif
+
+
+endif
+
+sql.add(" Update "~Dbo()~".VARIABLES Set Valor='NO' Where Codigo='INTASIENTO' ")
+sql.new
+sql.exec

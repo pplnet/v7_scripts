@@ -1,0 +1,222 @@
+HojaVisible(SI)
+creardialogo
+fecha1:'Fecha';;;;;;NoVacio(dialogo.fecha1);'Debe Ingresar una Fecha';NO;FSys()
+especie1:'Especie';;;;;;;;;
+vehiculo1:'Vehiculo';;;;;;;;;
+lista2:'TipoOp';;;;;;;;;;;SQLSet("Select Codigo from "~Dbo()~".TIPOSOPERACION Where Codigo in ('SEI','SED') ")
+nroperacion1:'NrOperacion';;;;;;;;;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (not Vacio(dialogo.vehiculo1))
+if (not Incluido(dialogo.vehiculo1, UsrVehiculos(UsuarioActivo())) y not Vacio(UsrVehiculos(UsuarioActivo())))
+Cancelar()('El Operador no esta habilitado para operar con el Vehiculo ')
+endif
+endif
+
+Act(zz6, SQLSet("Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo = '"~UsuarioActivo()~"'"))
+
+
+if (NoVacio(dialogo.nroperacion1))
+
+Act(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', dialogo.nroperacion1))
+
+sql.add("SELECT U.Vehiculo FROM "~Dbo()~".USRVEHICULO U,"~Dbo()~".VEHICULOS V ")
+sql.add("WHERE  U.Codigo='"~UsuarioActivo()~"' and U.Vehiculo=V.Codigo ")
+sql.add("       and (Status='HAB' or Status Is Null or Status='')")
+
+recorrer sql
+Dfa()
+Act(vh2, Fbn()['Vehiculo']~'|'~Val(vh2))
+proximo
+if (not Incluido(Val(vh1), Val(vh2)) y NoVacio(Val(vh2)))
+Cancelar()('Usuario no Habilitado para Trabajar con el Vehiculo ')
+endif
+
+endif
+
+Act(a1, 'Listado de Movimientos Generados para Interfase Contable')
+Act(a2, 'Operaciones de incremento y decremento de cartera')
+
+SetFilaActual(Fac() + 4)
+
+if (NoVacio(dialogo.vehiculo1))
+Act(a:fac, 'Vehiculo: '~dialogo.vehiculo1)
+else
+Act(a:fac, 'Vehiculo: Todos')
+endif
+
+if (NoVacio(dialogo.especie1))
+Act(a:fac + 1, 'Especie: '~dialogo.especie1)
+else
+Act(a:fac + 1, 'Especie: Todas')
+endif
+
+SetFilaActual(Fac() + 2)
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+Act(a:fac, 'Especie')
+Act(b:fac, 'Vehiculo')
+Act(c:fac, 'TipoOp')
+Act(d:fac, 'NrOperacion')
+Act(e:fac, 'Cantidad')
+Act(f:fac, 'Cotiz.')
+Act(g:fac, 'Imp.Total')
+AgregarMarco(a:fac..g:fac, 1, 0, exe('COLOR'))
+
+SetFont(a1..g:fac, 1)
+Messagebox('Testeo Positivo ')
+sql.add("DELETE "~Dbo()~".MOVIMIENTOS where ")
+sql.add("NrOperacion IN ")
+sql.add("(Select  O.NrOperacion from "~Dbo()~".OPERACIONES O,"~Dbo()~".MOVIMIENTOS M , "~Dbo()~".OPERACIONESBITS B where ")
+sql.add("O.FechaOp= '"~IdxDate(dialogo.fecha1)~"' and O.TipoOp in ('SEI','SED') ")
+
+if (Vacio(dialogo.nroperacion1))
+if (NoVacio(dialogo.especie1))
+sql.add("and O.Especie = '"~dialogo.especie1~"' ")
+endif
+if (NoVacio(dialogo.vehiculo1))
+sql.add("and O.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" and Vehiculo IN ("~pipe2comillas(Val(zz6))~") ")
+endif
+endif
+if (NoVacio(dialogo.lista2))
+sql.add("and O.TipoOp In ("~pipe2comillas(dialogo.lista2)~") ")
+endif
+else
+sql.add("and O.NrOperacion='"~dialogo.nroperacion1~"' ")
+endif
+
+sql.add("and M.Tipo_Movimiento_Codigo='RET' ")
+sql.add("and M.Tipo_Operacion_Codigo=O.TipoOp ")
+sql.add("and M.NrOperacion=O.NrOperacion ")
+sql.add("and M.Movimiento_Numero=1) ")
+sql.new
+
+sql.add("DELETE "~Dbo()~".MOVIMIENTOS where ")
+sql.add("NrOperacion IN ")
+sql.add("(Select  O.NrOperacion from "~Dbo()~".OPERACIONES O,"~Dbo()~".MOVIMIENTOS M where ")
+sql.add("O.FechaOp= '"~IdxDate(dialogo.fecha1)~"' and O.TipoOp in ('SEI','SED')")
+
+if (Vacio(dialogo.nroperacion1))
+if (NoVacio(dialogo.especie1))
+sql.add("and O.Especie = '"~dialogo.especie1~"' ")
+endif
+if (NoVacio(dialogo.vehiculo1))
+sql.add("and O.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" and Vehiculo IN ("~pipe2comillas(Val(zz6))~") ")
+endif
+endif
+if (NoVacio(dialogo.lista2))
+sql.add("and O.TipoOp In ("~pipe2comillas(dialogo.lista2)~") ")
+endif
+else
+sql.add("and O.NrOperacion='"~dialogo.nroperacion1~"' ")
+endif
+sql.add("and M.Tipo_Movimiento_Codigo='DEP' ")
+sql.add("and M.Tipo_Operacion_Codigo=O.TipoOp ")
+sql.add("and M.NrOperacion=O.NrOperacion ")
+sql.add("and M.Movimiento_Numero=1) ")
+sql.new
+sql.exec
+
+sql.add("Select * ")
+sql.add("from "~Dbo()~".OPERACIONES where")
+sql.add("FechaOp= '"~IdxDate(dialogo.fecha1)~"' and TipoOp in ('SEI','SED')")
+sql.add(" and NrOperacion in (select NrOperacion from OPERACIONESBITS where (NrBit = 20 and Valor = '1') or (NrBit = 50 and Valor = '1')) ")
+
+if (Vacio(dialogo.nroperacion1))
+if (NoVacio(dialogo.especie1))
+sql.add("and Especie = '"~dialogo.especie1~"' ")
+endif
+if (NoVacio(dialogo.vehiculo1))
+sql.add("and O.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" and Vehiculo IN ("~pipe2comillas(Val(zz6))~") ")
+endif
+endif
+if (NoVacio(dialogo.lista2))
+sql.add("and TipoOp In ("~pipe2comillas(dialogo.lista2)~") ")
+endif
+else
+sql.add("and NrOperacion='"~dialogo.nroperacion1~"' ")
+endif
+sql.add("order by Especie,Vehiculo1,TipoOp,NrOperacion")
+
+Acn(z1, 0)
+
+recorrer sql
+
+if (not Incluido(Fbn()['Vehiculo1'], Var('VLIQUIDAA')))
+Message('Procesando '~Fbn()['Especie']~' '~Fbn()['Vehiculo1']~' '~Fbn()['TipoOp']~' '~Fbn()['NrOperacion']~' ...')
+
+if (not Eqstr(Val(aa1), Fbn()['Especie']~' '~Fbn()['Vehiculo1']~' '~Fbn()['TipoOp']))
+Act(aa1, Fbn()['Especie']~' '~Fbn()['Vehiculo1']~' '~Fbn()['TipoOp'])
+Act(a:fac, Fbn()['Especie'])
+Act(b:fac, Fbn()['Vehiculo1'])
+Act(c:fac, Fbn()['TipoOp'])
+SetFont(a:fac..c:fac, 1)
+endif
+
+Act(d:fac, Fbn()['NrOperacion'])
+Acn(e:fac, Fbn()['Cantidad'])
+Act(f:fac, Fbn()['Precio1'])
+Act(g:fac, Fbn()['TotalNetoCli1'])
+
+SetFont(d:fac..g:fac, 2)
+
+Acn(z1, 1)
+Act(z2, Fbn()['TipoOp'])
+Acn(z3, Fbn()['Precio1'])
+Acn(z4, sql("Select User_Id('"~UsuarioActivo()~"')"))
+Act(z5, SQLAhora())
+Acn(z6, 1)
+Act(z7, 'Convert(varbinary(8),'~SQLAhora()~')')
+Act(z8, Fbn()['TipoOp']~' '~Fbn()['Especie'])
+
+Act(z9, 'DEP')
+
+if (Eqstr(Fbn()['TipoOp'], 'SED'))
+Act(z9, 'RET')
+endif
+
+sql.add("Insert into "~Dbo()~".MOVIMIENTOS (")
+sql.add("Tipo_Operacion_Codigo, Tipo_Movimiento_Codigo, NrOperacion, ")
+sql.add("Compania_Codigo_FPA, Entidad_Codigo, Moneda_Codigo, ")
+sql.add("Movimiento_Fecha, Movimiento_Monto, Tipo_de_Cambio, ")
+sql.add("Estado, Add_Uid, Add_Date, ")
+sql.add("Update_Uid, Update_Date, Movimiento_Numero, Concepto")
+sql.add(") Values (")
+sql.add(" '"~Val(z2)~"', '"~Val(z9)~"', '"~Fbn()['NrOperacion']~"', ")
+sql.add(" '"~Fbn('Vehiculo1')~"', '"~Fbn('Cliente1')~"', '"~Fbn('Especie')~"', ")
+sql.add(" '"~IdxDate(dialogo.fecha1)~"', "~FStr(Fbn('Cantidad'), 1, 2)~", "~FStr(Val(z3), 1, 6)~", ")
+sql.add(" 'Pendiente', "~Val(z4)~", "~Val(z5)~",  ")
+sql.add(" "~Val(z4)~", "~Val(z5)~", "~FStr(Val(z6), 1, 0)~", '"~Val(z8)~"' ")
+sql.add(")")
+sql.new
+sql.exec
+else
+Dfa()
+endif
+
+proximo
+
+if (Val(z1) = 0)
+Messagebox('No se encontraron Registros')
+endif
+
+Act(a:fac + 2, 'FIN DE LISTADO')
+SetFont(a:fac..a:fac, 1)
+FormatoCeldas(e1..e:fac, exe('F2'))
+LimitesVision(g:fac + 1)
+

@@ -1,0 +1,162 @@
+HojaVisible(SI)
+creardialogo
+fecha1:'Fecha';;;;;;dialogo.fecha1 <= FSys();'Fecha No debe ser superior a la Fecha del Sistema';NO;FSys()
+especie1:'Especie';;;;;;
+findialogo
+if (not ok)
+Cancelar()
+endif
+
+Acd(a1, FinDeMes(dialogo.fecha1, NO, 'ARG'))
+
+Acd(b1, FinDeMes(PriDeMes(dialogo.fecha1, SI) - 1, NO, 'ARG'))
+
+Acd(c1, Habiles(Val(b1), Var('DIASREVALU'), 'ARG', SI))
+
+Act(d2, 'SI')
+if (dialogo.fecha1 = Val(a1))
+Acd(d1, dialogo.fecha1)
+else
+if (dialogo.fecha1 >= Val(b1) y dialogo.fecha1 <= Val(c1))
+Acd(d1, Val(b1))
+else
+Act(d2, 'NO')
+endif
+endif
+
+if (Eqstr(Val(d2), 'NO'))
+Cancelar()('No es posible Resetear Posicion en esta Fecha: '~dialogo.fecha1)
+endif
+
+sql.add("SELECT R.*, ")
+sql.add("       C.Precio1 PrecioCotiz, E.Alias4, E.Tipo, E.Cotiza ")
+sql.add("FROM "~Dbo()~".POSICIONES R, "~Dbo()~".ESPECIES E, "~Dbo()~".COTIZACIONES C ")
+sql.add("WHERE R.TipoNegocio  = 'T' AND ")
+sql.add("      R.CantidadFin  <> 0 AND ")
+sql.add("      R.PrecioEj     IS NULL AND ")
+sql.add("      R.Especie      = E.Codigo AND ")
+sql.add("      R.Especie      = C.Codigo AND ")
+sql.add("      C.Fecha        = '"~IdxDate(Val(d1))~"' AND ")
+sql.add("      C.CallPut      = 'CON' AND ")
+sql.add("    ((R.PrecioReset  IS NULL) OR ")
+sql.add("     (R.PrecioReset  IS NOT NULL AND R.PrecioReset <> C.Precio1)) AND ")
+if (NoVacio(dialogo.especie1))
+sql.add("   R.Especie      = '"~dialogo.especie1~"' AND ")
+endif
+sql.add("      R.Fecha = (SELECT MAX(R1.Fecha) ")
+sql.add("                   FROM "~Dbo()~".POSICIONES R1 ")
+sql.add("                  WHERE R1.Vehiculo    = R.Vehiculo AND ")
+sql.add("                        R1.TipoNegocio = R.TipoNegocio AND ")
+sql.add("                        R1.Cliente     = R.Cliente AND ")
+sql.add("                        R1.Especie     = R.Especie AND ")
+sql.add("                        R1.Cupon       = R.Cupon AND ")
+sql.add("                        R1.PrecioEj   IS NULL AND ")
+sql.add("                        R1.NrSaldo     = R.NrSaldo AND ")
+sql.add("                        R1.Book        = R.Book AND ")
+sql.add("                        R1.Fecha      <= '"~IdxDate(Val(d1))~"') ")
+sql.add("ORDER BY R.Especie, R.Cupon, R.NrSaldo, R.Book ")
+
+recorrer sql
+if (Fbn()['Fecha'] = Val(d1))
+sql.add("UPDATE "~Dbo()~".POSICIONES ")
+sql.add("SET   PrecioReset = "~FStr(Fbn()['PrecioCotiz'], 0, 8)~" ")
+sql.add("WHERE Vehiculo    = '"~Fbn()['Vehiculo']~"' AND ")
+sql.add("      TipoNegocio = '"~Fbn()['TipoNegocio']~"' AND ")
+sql.add("      Cliente     = '"~Fbn()['Cliente']~"' AND ")
+sql.add("      Especie     = '"~Fbn()['Especie']~"' AND ")
+sql.add("      Cupon       = '"~Fbn()['Cupon']~"' AND ")
+if (NoVacio(Fbn()['FechaEj']))
+sql.add("   FechaEj     = "~IdxDate2(Fbn()['FechaEj'])~" AND ")
+endif
+if (NoVacio(Fbn()['PrecioEj']))
+sql.add("   PrecioEj    = "~Fbn()['PrecioEj']~" AND ")
+endif
+sql.add("      NrSaldo     = "~FStr(Fbn()['NrSaldo'], 0, 0)~" AND ")
+sql.add("      Book        = '"~Fbn()['Book']~"' AND ")
+sql.add("      Fecha       = '"~IdxDate(Val(d1))~"' AND ")
+sql.add("      IsNull(Unidad,'') = '"~Fbn()['Unidad']~"' AND ")
+sql.add("      IsNull(Centro,'') = '"~Fbn()['Centro']~"' AND ")
+sql.add("      IsNull(Sector,'') = '"~Fbn()['Sector']~"' AND ")
+sql.add("      IsNull(Sucursal,'') = '"~Fbn()['Sucursal']~"' AND ")
+sql.add("      IsNull(CallPut,'') = '"~Fbn()['CallPut']~"' AND ")
+sql.add("      IsNull(Estrategia,'') = '"~Fbn()['Estrategia']~"' AND ")
+sql.add("      IsNull(Cartera,'') = '"~Fbn()['Cartera']~"' AND ")
+sql.add("      IsNull(Trader,'') = '"~Fbn()['Trader']~"' AND ")
+sql.add("      IsNull(Responsable,'') = '"~Fbn()['Responsable']~"' AND ")
+sql.add("      IsNull(TipoPosicion,'') = '"~Fbn()['TipoPosicion']~"' AND ")
+sql.add("      IsNull(Producto,'') = '"~Fbn()['Producto']~"' AND ")
+sql.add("      IsNull(GrupoEspecie,'') = '"~Fbn()['GrupoEspecie']~"' AND ")
+sql.add("      IsNull(CarteraBCRA,'') = '"~Fbn()['CarteraBCRA']~"' ")
+sql.new
+sql.exec
+else
+sql.add("INSERT "~Dbo()~".POSICIONES ( ")
+sql.add("Fecha, Cliente, Vehiculo, Unidad, Centro, ")
+sql.add("Sector, Sucursal, NrSaldo, Especie, PrecioEj, ")
+sql.add("FechaEj, CallPut, Precio1, Precio2, ValorUSD, ")
+sql.add("ValorARP, Estrategia, Cartera, Book, Trader, ")
+sql.add("TipoNegocio, Cantidad1, Cantidad2, Cantidad3, Cantidad4, ")
+sql.add("Cantidad5, Precio3, Precio4, Precio5, CantidadIni, ")
+sql.add("PrecioIni, CantidadFin, PrecioFin, Cupon, Responsable, ")
+sql.add("TipoPosicion, Producto, GrupoEspecie, CarteraBCRA, ")
+sql.add("PrecioHist, PrecioReset) ")
+sql.add("Values ( ")
+sql.add("'"~IdxDate(Val(d1))~"', '"~Fbn()['Cliente']~"', '"~Fbn()['Vehiculo']~"', '"~Fbn()['Unidad']~"', '"~Fbn()['Centro']~"', ")
+sql.add("   '"~Fbn()['Sector']~"', '"~Fbn()['Sucursal']~"', "~FStr(Fbn()['NrSaldo'], 0, 0)~", '"~Fbn()['Especie']~"', ")
+if (Val(j:fac) = 0)
+sql.add("NULL, ")
+else
+sql.add(""~FStr(Fbn()['PrecioEj'], 15, 8)~", ")
+endif
+if (Vacio(Fbn()['FechaEj']))
+sql.add("NULL, ")
+else
+sql.add("'"~IdxDate(Fbn('FechaEj'))~"', ")
+endif
+sql.add("   '"~Fbn()['CallPut']~"', "~FStr(Fbn()['Precio1'], 0, 10)~", "~FStr(Fbn()['Precio2'], 0, 10)~", "~FStr(Fbn()['ValorUSD'], 0, 10)~", ")
+sql.add("   "~FStr(Fbn()['ValorARP'], 0, 10)~", '"~Fbn()['Estrategia']~"', '"~Fbn()['Cartera']~"', '"~Fbn()['Book']~"', '"~Fbn()['Trader']~"', ")
+sql.add("   '"~Fbn()['TipoNegocio']~"', "~FStr(Fbn()['Cantidad1'], 0, 10)~", "~FStr(Fbn()['Cantidad2'], 0, 10)~", "~FStr(Fbn()['Cantidad3'], 0, 10)~", "~FStr(Fbn()['Cantidad4'], 0, 10)~", ")
+sql.add("   "~FStr(Fbn()['Cantidad5'], 0, 10)~", "~FStr(Fbn()['Precio3'], 0, 10)~", "~FStr(Fbn()['Precio4'], 0, 10)~", "~FStr(Fbn()['Precio5'], 0, 10)~", "~FStr(Fbn()['CantidadIni'], 0, 10)~", ")
+sql.add("   "~FStr(Fbn()['PrecioIni'], 0, 10)~", "~FStr(Fbn()['CantidadFin'], 0, 10)~", "~FStr(Fbn()['PrecioFin'], 0, 10)~", '"~Fbn()['Cupon']~"', '"~Fbn()['Responsable']~"', ")
+sql.add("   '"~Fbn()['TipoPosicion']~"', '"~Fbn()['Producto']~"', '"~Fbn()['GrupoEspecie']~"', '"~Fbn()['CarteraBCRA']~"', ")
+sql.add("   "~FStr(Fbn()['PrecioHist'], 0, 10)~", "~FStr(Fbn()['PrecioCotiz'], 0, 10)~") ")
+sql.new
+sql.exec
+endif
+
+sql.add("EXEC "~Dbo()~".RecalculaPosiciones ")
+sql.add(IdxDate2(Val(d1))~", ")
+sql.add(" '"~Fbn()['Cliente']~"', ")
+sql.add(" '"~Fbn()['Vehiculo']~"', ")
+sql.add(" '"~Fbn()['Unidad']~"', ")
+sql.add(" '"~Fbn()['Centro']~"', ")
+sql.add(" '"~Fbn()['Sector']~"', ")
+sql.add(" '"~Fbn()['Sucursal']~"', ")
+sql.add(" "~FStr(Fbn()['NrSaldo'], 3, 0)~", ")
+sql.add(" '"~Fbn()['Especie']~"', ")
+if (Fbn()['PrecioEj'] = 0)
+sql.add(" NULL,")
+else
+sql.add(" "~FStr(Fbn()['PrecioEj'], 15, 8)~", ")
+endif
+if (Vacio(Fbn()['FechaEj']))
+sql.add(" NULL,")
+else
+sql.add(" "~IdxDate2(Fbn()['FechaEj'])~", ")
+endif
+sql.add(" '"~Fbn()['CallPut']~"', ")
+sql.add(" '"~Fbn()['Cupon']~"', ")
+sql.add(" '"~Fbn()['Estrategia']~"', ")
+sql.add(" '"~Fbn()['Cartera']~"', ")
+sql.add(" '"~Fbn()['Book']~"', ")
+sql.add(" '"~Fbn()['Trader']~"', ")
+sql.add(" '"~Fbn()['TipoNegocio']~"', ")
+sql.add(" '"~Fbn()['Responsable']~"', ")
+sql.add(" '"~Fbn()['TipoPosicion']~"', ")
+sql.add(" '"~Fbn()['Producto']~"', ")
+sql.add(" '"~Fbn()['GrupoEspecie']~"', ")
+sql.add(" '"~Fbn()['CarteraBCRA']~"' ")
+sql.new
+sql.exec
+proximo
+

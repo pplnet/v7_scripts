@@ -1,0 +1,376 @@
+Act(h:1, 'Ejecuta GENPAT')
+Acn(i:1, 1)
+Act(h:2, 'Procesa GENPAT')
+Acn(i:2, 1)
+if (Val(i:1) = 0)
+HojaVisible(SI)
+endif
+
+SetFilaActual(1)
+Act(a:fac, 'NrOper')
+Act(b:fac, 'TipoOp')
+Act(c:fac, 'CB5')
+Act(d:fac, 'FechaOp')
+Act(e:fac, 'NrOper3')
+Act(f:fac, 'NrOper4')
+
+sql.add("Select O.NrOperacion, TipoOp, CB5, FechaOp, NrOperacion3, NrOperacion4 ")
+sql.add("  from "~Dbo()~".OPERACIONES O, "~Dbo()~".OPERACIONESBITS B ")
+sql.add(" where O.NrOperacion=B.NrOperacion ")
+sql.add("   and B.NrBit = 72  ")
+sql.add("   and  Valor = '1' ")
+sql.add("   and O.TipoOp in ('TIPA','TIPP') ")
+sql.add("order by O.NrOperacion ")
+recorrer sql
+Act(a:fac, Fbn('NrOperacion'))
+Act(b:fac, Fbn('TipoOp'))
+Acn(c:fac, Fbn('CB5'))
+Acd(d:fac, Fbn('FechaOp'))
+Act(e:fac, Fbn('NrOperacion3'))
+Act(f:fac, Fbn('NrOperacion4'))
+if (Val(i:1) = 1)
+ejecutarevento('GENPAT', nroperacion1 = Fbn('NrOperacion'), check1 = Val(i:2))
+endif
+proximo
+
+
+if (NO)
+sql.add("Select NrOperacion,FechaCargaSys,MB1,Especie,Precio1,Especie,FechaVto,TotalBrutoCli1,TotalDerechos,Precio1,CB5,FechaOp,Cliente1,Cantidad,Corredor,FechaPago,")
+sql.add("PorComision,ContraEspecie,Cartera,Mercado,FormaLiquidacion1,TotalBrutoCli1,Mercado,Operador,TablaFeriados1,Observaciones,TasaInteresesCupon,FechaUltCupon,")
+sql.add("Vehiculo1,OpSIOPEL,CB5,CB7,Cupon1,TipoCambio,EsAforado,PorAforo,TotalCaucion,TipoOp,Cuenta1,Cuenta4,ContraEspecie,FechaAltaMAE,NroAltaMAE,CanPosTrad,CanPosInv1,CanPosInv2,CanPosOSoc,")
+sql.add("TotalBrutoCli2,TotalAux1,Precio2,FechaVto,FormaLiquidacion2,Mercado,FechaVto2,MB2,FechaUltCupon,Precio4,PorImpuesto,TotalGanancias,PorArancel,TotalRetenciones,Cartera,TipoCambio2,")
+sql.add("EsAforado,PorAforo,TotalGastos,Sucursal,PorArancel2, Cuenta2, Cuenta3, Mercado2, Mercado4, Book1, TotalAux9, TotalAux10 ")
+sql.add("from "~Dbo()~".OPERACIONES O where TipoOp in ('TIPA','TIPP') ")
+sql.add("and Exists (Select * from "~Dbo()~".OPERACIONESBITS B ")
+sql.add("where O.NrOperacion=B.NrOperacion and NrBit = 72  and  Valor = '1' ) ")
+sql.add("and Vehiculo1 = '"~Var('VEHICULODE')~"' and (CB5 <>1 or CB5 is NULL)")
+sql.add("order by NrOperacion ")
+recorrer sql
+Act(z1, Fecha(Fbn()['FechaCargaSys']))
+Act(z2, Hora(SQLAhora()))
+if (Fbn('MB1') = 0)
+Acn(p1, 0)
+else
+if (Fbn('MB1') = 1)
+Acn(p1, 72)
+else
+if (Fbn('MB1') = 2)
+Acn(p1, 24)
+else
+Acn(p1, 48)
+endif
+endif
+endif
+
+if (DesciendeDeEspecie(Fbn('Especie'), Var('IEP')))
+Acn(x1, 1 - Fbn('Precio1') * 36000 / (FechaMaduracion(Fbn('Especie')) - Fbn('FechaVto')))
+else
+Acn(x1, 0)
+endif
+
+Act(cm1, BuscarCampo('ESPECIES', 'CodMAEContado', 'Codigo', Fbn('Especie')))
+Act(vt1, BuscarCampo('ESPECIES', 'InteresesC', 'Codigo', Fbn('Especie')))
+
+Acn(mn1, Fbn()['TotalBrutoCli1'] + iif (Eqstr(Val(vt1), 'CLE'), Fbn()['TotalDerechos']))
+
+if (Incluido(BuscarCampo('ESPECIES', 'Alias4', 'Codigo', Fbn('Especie')), '1585'))
+Acn(mn1, Fbn()['TotalBrutoCli1'] + iif (Eqstr(Val(vt1), 'CLE'), (Fbn()['TotalDerechos'] * Fbn('Precio1'))))
+endif
+
+Acn(z11, iif (Eqstr(CotizaEn(Fbn()['Especie']), Fbn()['ContraEspecie']), 1, CotizacionC(Fbn()['ContraEspecie'], null, null, null, Fbn('FechaOp'), 1, SI, CotizaEn(Fbn()['Especie']))))
+
+Act(cl:1, sql("SELECT Controlante FROM "~Dbo()~".GRUPOSECONOMICOS WHERE Cliente= '"~Fbn('Cliente1')~"' "))
+Act(cl:2, iif (Vacio(Val(cl:1)), Fbn('Cliente1'), Val(cl:1)))
+
+Acn(tn:33, iif (Incluido(Fbn('ContraEspecie'), 'USD|USB'), Fbn('TotalBrutoCli2') + iif (Eqstr(Val(vt:1), 'CLE'), Fbn('TotalAux1'), 0), (Fbn('TotalBrutoCli2') + iif (Eqstr(Val(vt:1), 'CLE'), Fbn('TotalAux1'), 0)) * CotizacionC(Fbn('ContraEspecie'), null, null, null, Fbn('FechaOp'), 1, SI, 'USD')))
+
+Acn(tn:3, iif (Incluido(Fbn('ContraEspecie'), 'USD|USB'), Fbn('TotalBrutoCli1') + iif (Eqstr(Val(vt:1), 'CLE'), Fbn('TotalDerechos'), 0), (Fbn('TotalBrutoCli1') + iif (Eqstr(Val(vt:1), 'CLE'), Fbn('TotalDerechos'), 0)) * CotizacionC(Fbn('ContraEspecie'), null, null, null, Fbn('FechaOp'), 1, SI, 'USD')))
+
+sql.add("Insert Into "~Dbo()~".OPERACIONES ")
+sql.add("(FechaOp, Especie, Cliente1,    ")
+sql.add("Cantidad, Precio1, Corredor,    ")
+sql.add("Plazo, FechaVto, PorComision,   ")
+sql.add("ContraEspecie, Cartera,         ")
+sql.add("FormaLiquidacion1, FormaLiquidacion2,     ")
+sql.add("TipoCambio, TotalIntereses, TotalNetoCli1,")
+sql.add("TotalBrutoCli1, Mercado, Operador,        ")
+sql.add("TablaFeriados1, Observaciones, TotalComisiones,")
+sql.add("PaseCB, OperacionRef, TasaInteresesCupon,")
+sql.add("FechaUltCupon, Vehiculo1, OpSIOPEL, CB5, CB6, CB7,Cupon1,   ")
+sql.add("NrOperacion, TipoCambio2, EsAforado, PorAforo, TotalCaucion,")
+sql.add("TipoOp,EnteCus1, Cuenta1, Cuenta4, ")
+sql.add("TotalNetoCli3, TotalAux3, Plazo2,   ")
+if (Eqstr(Fbn('CB5'), '1'))
+sql.add(", FechaAltaMAE, NroAltaMAE, AceptaMAE, FechaEnvioMAE, ")
+endif
+sql.add("FechaCarga, FechaCargaSys,CanPosTrad,CanPosInv1,CanPosInv2,CanPosOSoc,Sucursal,TotalAux1,PorArancel2, Cuenta2, Cuenta3, Mercado2, Mercado4, Book1 ")
+sql.add(" ) VALUES ( ")
+sql.add(" '"~IdxDate(Fbn('FechaOp'))~"', '"~Fbn('Especie')~"', '"~Fbn('Cliente1')~"', ")
+sql.add(" "~FStr(Fbn('Cantidad'), 1, 2)~","~FStr(Fbn('Precio1'), 1, 8)~", '"~Fbn('Corredor')~"', ")
+sql.add(" "~Val(p1)~", '"~IdxDate(Fbn('FechaPago'))~"', "~FStr(Fbn('PorComision') / 2, 1, 2)~", ")
+sql.add(" '"~Fbn('ContraEspecie')~"', '"~Fbn('Cartera')~"',")
+if (Incluido(Fbn('Mercado'), 'CRYL|CE|EU|AC'))
+sql.add(" '0', '"~Fbn('FormaLiquidacion1')~"', ")
+else
+sql.add(" '"~Fbn('FormaLiquidacion1')~"', '0', ")
+endif
+sql.add(" "~Val(x1)~", "~FStr(Fbn('TotalDerechos'), 1, 2)~", "~FStr(Fbn('TotalAux9'), 1, 2)~", ")
+sql.add(" "~FStr(Fbn('TotalBrutoCli1'), 1, 2)~", '"~Fbn('Mercado')~"', '"~Fbn('Operador')~"', ")
+sql.add(" '"~Fbn('TablaFeriados1')~"', '"~Fbn('Observaciones')~"', "~FStr(Fbn('TotalBrutoCli1') * Fbn('PorComision') / 2000, 1, 2)~", ")
+sql.add(" '1', '"~Fbn('NrOperacion')~"', "~FStr(Fbn('TasaInteresesCupon'), 1, 8)~", ")
+sql.add(" '"~IdxDate(Fbn('FechaUltCupon'))~"', '"~Fbn('Vehiculo1')~"', '"~Fbn('OpSIOPEL')~"', '"~Fbn('CB5')~"', '0', '"~Fbn('CB7')~"','"~Fbn('Cupon1')~"', ")
+Act(y1, getnumerador(1))
+sql.add(" '"~Val(y1)~"',  "~FStr(Fbn('TipoCambio'), 1, 8)~", '"~Fbn()['EsAforado']~"', "~FStr(Fbn()['PorAforo'], 1, 2)~", "~FStr(Fbn('TotalCaucion'), 1, 2)~",")
+if (Eqstr(Fbn('TipoOp'), 'TIPA'))
+sql.add(" 'TIC',  ")
+else
+sql.add(" 'TIV',  ")
+endif
+sql.add(" '"~Val(cm1)~"', '"~Fbn('Cuenta1')~"', '"~Fbn('Cuenta4')~"',")
+sql.add(" "~FStr(Val(tn:3), 0, 2))
+Acn(tx:3, iif (not ((LimAsignado(Val(cl:2), 'VOLUMENCON', Var('MONEEXTR'), Fbn('Vehiculo1')) - (LimConsumido(Val(cl:2), 'VOLUMENCON', Var('MONEEXTR'), Fbn('FechaOp'), Fbn('Vehiculo1')) + Val(mn:3))) < 0), 0, (LimAsignado(Val(cl:2), 'VOLUMENCON', Var('MONEEXTR'), Fbn('Vehiculo1')) - (LimConsumido(Val(cl:2), 'VOLUMENCON', Var('MONEEXTR'), Fbn('FechaOp'), Fbn('Vehiculo1')) + Val(mn:3)))))
+sql.add(", "~FStr(Val(tx:3), 0, 2)~", ")
+sql.add(" "~FStr((Val(p1) div 24), 0, 0)~", ")
+if (Eqstr(Fbn('CB5'), '1'))
+sql.add(", '"~IdxDate(Fbn('FechaAltaMAE'))~"', '"~Fbn('NroAltaMAE')~"', 'SI', '"~IdxDate(Fbn('FechaAltaMAE'))~"', ")
+endif
+sql.add("'"~IdxDate(FSys())~" "~Copy(Val(z2), 1, 2)~":"~Copy(Val(z2), 4, 2)~":"~Copy(Val(z2), 7, 2)~"', ")
+sql.add("'"~IdxDate(FSys())~"', ")
+sql.add(" "~FStr(Fbn()['CanPosTrad'], 1, 2)~", "~FStr(Fbn()['CanPosInv1'], 1, 2)~", "~FStr(Fbn()['CanPosInv2'], 1, 2)~","~FStr(Fbn()['CanPosOSoc'], 1, 2)~", '"~Fbn('Sucursal')~"',"~FStr(Val(z11), 0, 7)~","~FStr(Fbn()['PorArancel2'], 1, 7)~", '"~Fbn('Cuenta2')~"', '"~Fbn('Cuenta3')~"', '"~Fbn('Mercado2')~"', '"~Fbn('Mercado4')~"', '"~Fbn('Book1')~"' ) ")
+sql.new
+sql.exec
+
+sql.actualizarmovimientos4(Val(y1), SI, SI, SI, SI, SI, SI)
+sql.exec
+
+sql.add(" INSERT INTO "~Dbo()~".EXCEPCIONES ( ")
+sql.add(" NrOperacion, Tipo, Fecha, Descripcion ) ")
+sql.add(" SELECT '"~Val(y1)~"', Tipo, Fecha, Descripcion ")
+sql.add(" FROM "~Dbo()~".EXCEPCIONES ")
+sql.add(" WHERE NrOperacion = '"~Fbn('NrOperacion')~"' ")
+sql.add(" AND (Descripcion LIKE '%Spot%' OR Descripcion Not Like '%Futuro%') ")
+sql.add(" AND Descripcion not LIKE '%Presettlement%' ")
+sql.new
+
+
+sql.add(" UPDATE "~Dbo()~".MOVLIMITES SET NrOperacion =  '"~Val(y1)~"' ")
+sql.add(" WHERE NrOperacion = '"~Fbn('NrOperacion')~"' ")
+sql.add(" AND   FechaLim = "~IdxDate2(Fbn('FechaOp'))~" ")
+sql.add(" AND   Limite   = 'SETTLEMENT' ")
+sql.new
+
+Act(mc:1, 'MAX'~Fbn('Mercado'))
+sql.add(" DELETE "~Dbo()~".MOVLIMITES  ")
+sql.add(" WHERE NrOperacion = '"~Fbn('NrOperacion')~"' ")
+sql.add(" AND   FechaLim = "~IdxDate2(Fbn('FechaPago'))~" ")
+sql.add(" AND   Limite   = '"~Val(mc:1)~"' ")
+sql.new
+
+sql.exec
+
+Act(z2, Hora(SQLAhora()))
+Acn(mn1, Fbn('TotalBrutoCli2') + iif (Eqstr(Val(vt1), 'CLE'), Fbn('TotalAux1')))
+
+if (Incluido(BuscarCampo('ESPECIES', 'Alias4', 'Codigo', Fbn('Especie')), '1585'))
+Acn(mn1, Fbn('TotalBrutoCli2') + iif (Eqstr(Val(vt1), 'CLE'), (Fbn('TotalAux1') * Fbn('Precio2'))))
+endif
+
+sql.add(" Insert Into "~Dbo()~".OPERACIONES ")
+sql.add(" ( FechaOp, Especie, Cliente1, ")
+sql.add(" Cantidad, Precio1, Corredor, ")
+sql.add(" Plazo, FechaVto, PorComision, ")
+sql.add(" ContraEspecie, FormaLiquidacion1,FormaLiquidacion2,TotalIntereses, ")
+sql.add(" TotalNetoCli1, TotalBrutoCli1, Mercado, ")
+sql.add(" Operador, TablaFeriados1, Observaciones, ")
+sql.add(" TotalComisiones, PaseCB, OperacionRef, ")
+sql.add(" FechaPago, FechaUltCupon, ")
+sql.add(" TasaInteresesCupon, PorImpuesto, TotalGanancias, ")
+sql.add(" PorArancel, TotalRetenciones, Cartera,")
+sql.add(" Vehiculo1, OpSIOPEL, CB5, CB6, CB7,Cupon1, ")
+sql.add(" NrOperacion, TipoCambio2, EsAforado, PorAforo, TotalCaucion, ")
+sql.add(" TipoOp, EnteCus1, Cuenta1, Cuenta4, ")
+sql.add(" TotalNetoCli3, TotalAux3, Plazo2, ")
+if (Eqstr(Fbn('CB5'), '1'))
+sql.add(", FechaAltaMAE, NroAltaMAE, AceptaMAE, FechaEnvioMAE, ")
+endif
+sql.add("FechaCarga, FechaCargaSys,CanPosTrad,CanPosInv1,CanPosInv2,CanPosOSoc,Sucursal,TotalAux1,PorArancel2, Cuenta2, Cuenta3, Mercado2, Mercado4, Book1 ")
+sql.add(") VALUES ( ")
+sql.add(" '"~IdxDate(Fbn('FechaOp'))~"', '"~Fbn('Especie')~"', '"~Fbn('Cliente1')~"', ")
+sql.add(" "~FStr(Fbn('Cantidad'), 1, 2)~", "~FStr(Fbn('Precio2'), 1, 8)~", '"~Fbn('Corredor')~"', ")
+sql.add(" "~FStr(DifDias(Fbn('FechaOp'), Fbn('FechaVto'), 'ARG', NO), 1, 0)~", '"~IdxDate(Fbn('FechaVto'))~"', "~FStr(Fbn('PorComision') / 2, 1, 7)~", ")
+sql.add(" '"~Fbn('ContraEspecie')~"', ")
+if (Incluido(Fbn('Mercado'), 'CRYL|CE|EU|AC'))
+sql.add(" '0' , '"~Fbn('FormaLiquidacion2')~"', ")
+else
+sql.add(" '"~Fbn('FormaLiquidacion2')~"', '0', ")
+endif
+sql.add(" "~FStr(Fbn('TotalAux1'), 1, 2)~", ")
+sql.add(" "~FStr(Fbn('TotalAux10'), 1, 2)~", "~FStr(Fbn('TotalBrutoCli2'), 1, 2)~", '"~Fbn('Mercado')~"', ")
+sql.add(" '"~Fbn('Operador')~"', '"~Fbn('TablaFeriados1')~"', '"~Fbn('Observaciones')~"', ")
+sql.add(" "~FStr(Fbn('TotalBrutoCli2') * Fbn('PorComision') / 2000, 1, 2)~", '1', '"~Fbn('NrOperacion')~"', ")
+sql.add(" '"~IdxDate(Fbn('FechaVto2'))~"', '"~IdxDate(Fbn('FechaUltCupon'))~"', ")
+sql.add(" "~FStr(Fbn('Precio4'), 1, 6)~", "~FStr(Fbn('PorImpuesto'), 1, 2)~", "~FStr(Fbn('TotalGanancias'), 1, 2)~", ")
+sql.add(" "~FStr(Fbn('PorArancel'), 1, 2)~", "~FStr(Fbn('TotalRetenciones'), 1, 2)~", '"~Fbn('Cartera')~"',")
+sql.add(" '"~Fbn('Vehiculo1')~"', '"~Fbn('OpSIOPEL')~"', '"~Fbn('CB5')~"', '0', '"~Fbn('CB7')~"','"~Fbn('Cupon1')~"', ")
+Act(y2, getnumerador(1))
+sql.add(" '"~Val(y2)~"', "~FStr(Fbn('TipoCambio2'), 1, 8)~", '"~Fbn('EsAforado')~"', "~FStr(Fbn('PorAforo'), 1, 2)~", "~FStr(Fbn('TotalGastos'), 1, 2)~",")
+if (Eqstr(Fbn('TipoOp'), 'TIPA'))
+sql.add(" 'TIFV',  ")
+else
+sql.add(" 'TIFC',  ")
+endif
+sql.add(" '"~Val(cm1)~"', '"~Fbn('Cuenta1')~"', '"~Fbn('Cuenta4')~"', ")
+sql.add(" "~FStr(Val(tn:33), 0, 2))
+Acn(tx:5, iif (not ((LimAsignado(Val(cl:2), 'VOLUMENCON', Var('MONEEXTR'), Fbn('Vehiculo1')) - (LimConsumido(Val(cl:2), 'VOLUMENCON', Var('MONEEXTR'), Fbn('FechaOp'), Fbn('Vehiculo1')) + Val(mn:3))) < 0), 0, (LimAsignado(Val(cl:2), 'VOLUMENCON', Var('MONEEXTR'), Fbn('Vehiculo1')) - (LimConsumido(Val(cl:2), 'VOLUMENCON', Var('MONEEXTR'), Fbn('FechaOp'), Fbn('Vehiculo1')) + Val(mn:3)))))
+sql.add(", "~FStr(Val(tx:5), 0, 2)~", ")
+sql.add(" "~FStr(DifDias(Fbn('FechaOp'), Fbn('FechaVto'), 'ARG', NO) * 24, 0, 0)~", ")
+if (Eqstr(Fbn('CB5'), '1'))
+sql.add(", '"~IdxDate(Fbn('FechaAltaMAE'))~"', '"~Fbn('NroBajaMAE')~"', 'SI', '"~IdxDate(Fbn('FechaAltaMAE'))~"', ")
+endif
+sql.add("'"~IdxDate(FSys())~" "~Copy(Val(z2), 1, 2)~":"~Copy(Val(z2), 4, 2)~":"~Copy(Val(z2), 7, 2)~"', ")
+sql.add("'"~IdxDate(FSys())~"', ")
+sql.add(" "~FStr(Fbn()['CanPosTrad'], 1, 2)~", "~FStr(Fbn()['CanPosInv1'], 1, 2)~", "~FStr(Fbn()['CanPosInv2'], 1, 2)~","~FStr(Fbn()['CanPosOSoc'], 1, 2)~", '"~Fbn('Sucursal')~"',"~FStr(Val(z11), 0, 7)~","~FStr(Fbn()['PorArancel2'], 1, 7)~", '"~Fbn('Cuenta2')~"', '"~Fbn('Cuenta3')~"', '"~Fbn('Mercado2')~"', '"~Fbn('Mercado4')~"', '"~Fbn('Book1')~"') ")
+sql.new
+
+if (Eqstr(Fbn('CB5'), '1'))
+sql.add("update "~Dbo()~".OPERACIONES set NroAltaMAE = 'OK  OK  ', NroBajaMAE = '' ")
+sql.add("where NrOperacion='"~Fbn('NrOperacion')~"'")
+sql.new
+else
+sql.add("update "~Dbo()~".OPERACIONES set NroAltaMAE = 'INI INI ' ")
+sql.add("where NrOperacion='"~Fbn('NrOperacion')~"' ")
+sql.new
+endif
+sql.exec
+
+sql.actualizarmovimientos4(Val(y2), SI, SI, SI, SI, SI, SI)
+sql.exec
+
+sql.add(" INSERT INTO "~Dbo()~".EXCEPCIONES ( ")
+sql.add(" NrOperacion, Tipo, Fecha, Descripcion ) ")
+sql.add(" SELECT '"~Val(y2)~"', Tipo, Fecha, Descripcion ")
+sql.add(" FROM "~Dbo()~".EXCEPCIONES ")
+sql.add(" WHERE NrOperacion = '"~Fbn('NrOperacion')~"' ")
+sql.add(" AND (Descripcion LIKE '%Futuro%' OR Descripcion Not Like '%Spot%' OR Descripcion like '%Presettlement%' ) ")
+sql.new
+
+sql.add(" UPDATE "~Dbo()~".MOVLIMITES SET NrOperacion =  '"~Val(y2)~"' ")
+sql.add(" WHERE NrOperacion = '"~Fbn('NrOperacion')~"' ")
+sql.add(" AND   FechaLim > "~IdxDate2(Fbn('FechaOp'))~" ")
+sql.add(" AND   Limite   = 'SETTLEMENT' ")
+sql.new
+Act(mc:1, 'MAX'~Fbn('Mercado'))
+sql.add(" DELETE "~Dbo()~".MOVLIMITES  ")
+sql.add(" WHERE NrOperacion = '"~Fbn('NrOperacion')~"' ")
+sql.add(" AND   FechaLim = "~IdxDate2(Fbn('FechaVto2'))~" ")
+sql.add(" AND   Limite   = '"~Val(mc:1)~"' ")
+sql.new
+
+sql.add(" UPDATE "~Dbo()~".MOVLIMITES SET NrOperacion =  '"~Val(y2)~"' ")
+sql.add(" WHERE NrOperacion = '"~Fbn('NrOperacion')~"' ")
+sql.add(" AND   Limite   = 'PRESETTLEM' ")
+sql.new
+sql.exec
+
+Act(az3, Fbn('NrOperacion'))
+Act(az4, 'OPERACIONES')
+Acn(az5, 73)
+Acn(az6, 72)
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+sql.add("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+sql.new
+
+if (sql(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+ejecutarevento('INSBIT', entero1 = Val(az5), nroperacion1 = Val(az3))
+endif
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+
+Act(az3, Val(y1))
+Act(az4, 'OPERACIONES')
+if (Eqstr(Fbn('CB5'), '1'))
+Act(az5, '71')
+ejecutarevento('ASIBOL', nroperacion1 = Val(y1))
+else
+Act(az5, '50')
+endif
+Message('Ingresando Instancias Operacion '~Val(az3)~' ...')
+
+sql.add("SELECT NrInstancia FROM "~Dbo()~".INSTANCIAS Where Tabla='"~Val(az4)~"' ")
+sql.add("ORDER BY NrInstancia ")
+
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+sql.add("(NrOperacion,NrBit,Valor) ")
+sql.add(" Values ")
+sql.add("('"~Val(az3)~"',"~FStr(Fbn()['NrInstancia'], 3, 0)~",")
+if (Incluido(Fbn()['NrInstancia'], Val(az5)))
+sql.add("'1')")
+else
+sql.add("'0')")
+endif
+sql.new
+sql.exec
+proximo
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set ")
+sql.add("Observaciones=Observaciones+'"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~"' ")
+sql.add("Where NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+
+Act(az3, Val(y2))
+Act(az4, 'OPERACIONES')
+if (Eqstr(Fbn('CB5'), '1'))
+Act(az5, '71')
+ejecutarevento('ASIBOL', nroperacion1 = Val(y2))
+else
+Act(az5, '50')
+endif
+Message('Ingresando Instancias Operacion '~Val(az3)~' ...')
+
+sql.add("SELECT NrInstancia FROM "~Dbo()~".INSTANCIAS Where Tabla='"~Val(az4)~"' ")
+sql.add("ORDER BY NrInstancia ")
+
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+sql.add("(NrOperacion,NrBit,Valor) ")
+sql.add(" Values ")
+sql.add("('"~Val(az3)~"',"~FStr(Fbn()['NrInstancia'], 3, 0)~",")
+if (Incluido(Fbn()['NrInstancia'], Val(az5)))
+sql.add("'1')")
+else
+sql.add("'0')")
+endif
+sql.new
+sql.exec
+proximo
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set ")
+sql.add("Observaciones=Observaciones+'"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~"' ")
+sql.add("Where NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+proximo
+endif
+

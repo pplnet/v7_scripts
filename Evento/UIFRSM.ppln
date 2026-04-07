@@ -1,0 +1,526 @@
+creardialogo
+fecha1:"Fecha Desde";1;1;;;;dialogo.fecha1 <> 0;'Debe Ingresar una Fecha Valida';NO;FSys();
+fecha2:"Fecha Hasta";;1;;;;dialogo.fecha2 <> 0 y dialogo.fecha2 >= dialogo.fecha1;'Debe Ingresar una Fecha Valida';NO;FSys();
+check1:'Todos';;1;;;;
+string1:'Path';;1;;NO;;;;;Var('PATHRSM');
+string2:'Archivo RSM';;1;;NO;;;;;Var('RSMNOMB');
+fecha3:'Control Fecha';1;2;;NO;NO;;;;Fecha('1910-01-01')
+cliente1:'Cliente';6;1;;;dialogo.check1 <> 1;
+findialogo
+
+
+if (not ok)
+Cancelar()
+endif
+
+Acd(fe2, dialogo.fecha3)
+
+if (not existedirectorio(dialogo.string1))
+Messagebox('No existe el path '~dialogo.string1~'. Debera crearlo.')
+Cancelar()
+endif
+
+Message(' - Borrando Archivos RSM - ')
+
+Act(xy1, dialogo.string1~dialogo.string2~'*.*')
+winexec('CMD.EXE /C DEL '~dialogo.string1~dialogo.string2~'*.*', 0)
+esperar(5)
+
+
+
+
+
+sql.add("Select 'A' as Tipo,FechaAlta, ")
+sql.add("CU.Codigo,NrDepositante Comitente,Estado,TipoCuenta,Cliente, C.CUIT, C.CatPrestamosBCRA, C.Persona,")
+sql.add("(select DeposDelComitente from "~Dbo()~".CLIENTES Where Codigo = CU.Comitente) as DeposDelComitente, ")
+sql.add("(select Top(1) NrDepositante from "~Dbo()~".CUENTAS Where Cliente = CU.Cliente and TipoCuenta = 'CUS' and NrDepositante is not Null) as CodComitente, ")
+
+sql.add("C.Sector, C.CategDepositante, C.Pais, C.RazonSocial,C.CodigoPostal,C.Provincia,C.Localidad,C.Calle,C.Altura,C.FechaInsc,C.Piso,C.Depto,C.DireccionEmail email,")
+sql.add("(select count(*) from "~Dbo()~".INTEGRANTESCLI IT where IT.Codigo = CU.Cliente) as Cuantos ")
+sql.add("  from "~Dbo()~".CUENTAS CU ")
+sql.add("  inner join "~Dbo()~".CLIENTES C on CU.Cliente =C.Codigo ")
+if (dialogo.check1 = 0)
+if (NoVacio(dialogo.cliente1))
+sql.add(" where NrDepositante is not null and Comitente = '"~Var('VEHICULODE')~"' and Estado = 'HAB' ")
+sql.add("   and CU.Cliente = '"~dialogo.cliente1~"'  ")
+else
+sql.add(" where NrDepositante is not null and Comitente = '"~Var('VEHICULODE')~"' and Estado = 'HAB' ")
+sql.add("   and FechaAlta >= "~IdxDate2(dialogo.fecha1)~" and FechaAlta <= "~IdxDate2(dialogo.fecha2)~" ")
+endif
+else
+sql.add(" where NrDepositante is not null and Comitente = '"~Var('VEHICULODE')~"' and Estado = 'HAB' ")
+endif
+sql.add("UNION ")
+sql.add("Select 'B' as Tipo, FechaEstado FechaAlta, ")
+sql.add("CU.Codigo,NrDepositante Comitente,Estado,TipoCuenta,Cliente, C.CUIT, C.CatPrestamosBCRA, C.Persona,")
+sql.add("(select DeposDelComitente from "~Dbo()~".CLIENTES Where Codigo = CU.Comitente) as DeposDelComitente, ")
+sql.add("(select Top(1) NrDepositante from "~Dbo()~".CUENTAS Where Cliente = CU.Cliente and TipoCuenta = 'CUS' and NrDepositante is not Null) as CodComitente, ")
+sql.add("C.Sector, C.CategDepositante, C.Pais, C.RazonSocial,C.CodigoPostal,C.Provincia,C.Localidad,C.Calle,C.Altura,C.FechaInsc,C.Piso,C.Depto,C.DireccionEmail email,")
+sql.add("(select count(*) from "~Dbo()~".INTEGRANTESCLI IT where IT.Codigo = CU.Cliente) as Cuantos ")
+sql.add("  from "~Dbo()~".CUENTAS CU ")
+sql.add("  inner join "~Dbo()~".CLIENTES C on CU.Cliente =C.Codigo ")
+if (dialogo.check1 = 0)
+if (NoVacio(dialogo.cliente1))
+sql.add(" where NrDepositante is not null and Comitente = '"~Var('VEHICULODE')~"' and Estado = 'CER' ")
+sql.add("   and CU.Cliente = '"~dialogo.cliente1~"'  ")
+else
+sql.add(" where NrDepositante is not null and Comitente = '"~Var('VEHICULODE')~"' and Estado = 'CER' ")
+sql.add("   and FechaEstado >= "~IdxDate2(dialogo.fecha1)~" and FechaEstado <= "~IdxDate2(dialogo.fecha2)~" ")
+endif
+else
+sql.add(" where NrDepositante is not null and Comitente = '"~Var('VEHICULODE')~"' and Estado = 'CER' ")
+endif
+sql.add(" Order By Cliente ")
+Watch(sql.batch)
+Act(cl:1, 'Primero')
+recorrer sql
+
+Scn(co1, 1)
+Act(aa1, dialogo.string1~dialogo.string2~FStr(Val(co1), 1, 0)~'.XML')
+
+Message('Creando Archivo '~dialogo.string2)
+
+abrirascii(Val(aa1), 0, SI, 1, Var('UIFENCODE'))
+Act(x20, Fbn()['CategDepositante'])
+escribirascii('<?xml version="1.0" encoding="utf-8"?>')
+escribirascii('<Operacion>')
+escribirascii('  <Cuentas_Comitentes Version="1.0">')
+Acd(f1, dialogo.fecha1)
+Acd(fe1, iif (Fbn()['FechaAlta'] > Val(fe2), Fbn()['FechaAlta'], Val(f1)))
+Act(fe9, Fecha(Val(fe1), 'YYYY-MM-DD')~'T00:00:00-03:00')
+escribirascii('    '~xmlelemento('Fecha_de_la_acci93n', Val(fe9), 'SI'))
+if (Eqstr(Fbn()['Estado'], 'HAB'))
+Act(x1, 'Activa')
+else
+Act(x1, 'Inactiva')
+endif
+escribirascii('    '~xmlelemento('Estado_de_la_cuenta_al_momento_de_realizar_la_acci93n', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['DeposDelComitente']))
+escribirascii('    '~xmlelemento('Cuenta_depositante_Nro', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['CodComitente']))
+escribirascii('    '~xmlelemento('Cuenta_comitente_Nro', Val(x1), 'SI'))
+Act(x1, iif (Fbn()['Cuantos'] = 0, '1', iif (Eqstr(Fbn()['Persona'], 'SI'), FStr(Fbn()['Cuantos'], 0, 0), FStr(Fbn()['Cuantos'] + 1, 0, 0))))
+escribirascii('    '~xmlelemento('Cantidad_de_clientes_y_otros_sujetos_vinculados_a_la_acci93n', Val(x1), 'SI'))
+
+if (Eqstr(Fbn()['Tipo'], 'A'))
+Act(tp:1, 'Alta')
+escribirascii('    '~xmlelemento('Tipo_de_acci93n', 'Apertura de cuenta', 'SI'))
+else
+Act(tp:1, 'Baja')
+escribirascii('    '~xmlelemento('Tipo_de_acci93n', 'Cierre de cuenta', 'SI'))
+endif
+
+escribirascii('    <IDENTIFICACI98N_DE_CLIENTES88'~Val(tp:1)~'>')
+Act(pe:1, Fbn()['Persona'])
+if (Eqstr(Fbn()['Persona'], 'SI'))
+sql.add("Select ICL.TipoPoder,ICL.FAlta FechaAlta,ICL.TipoDocumento,ICL.NrDocumento, Apellido, Nombre, Sexo, Nacionalidad,Pais, CodigoPEP, FechaNacimiento,  ")
+sql.add("CodigoPostal,Provincia,Localidad,Direccion Calle,Numero Altura,Depto,Piso,(select CatPrestamosBCRA from CLIENTES where Codigo='"~Fbn()['Cliente']~"') CatPrestamosBCRA, ")
+sql.add("P.EmpleadoGobierno,P.Telefono,(select DireccionEMail from CLIENTES where Codigo='"~Fbn()['Cliente']~"') email")
+sql.add("from INTEGRANTESCLI ICL ")
+sql.add("left join PERSONAS P with (nolock) on ICL.TipoDocumento=P.TipoDocumento and ICL.NrDocumento=P.NrDocumento ")
+sql.add(" Where ICL.Codigo='"~Fbn()['Cliente']~"' and ICL.NrDocumento= (select substring(CUIT,3,8) from CLIENTES where Codigo='"~Fbn()['Cliente']~"') ")
+       **watch(sql.batch)
+borrarceldas(x:2..x:10)
+recorrer sql
+Act(x2, Trim(Fbn()['Apellido']))
+Act(x3, Trim(Fbn()['Nombre']))
+Act(x4, Trim(iif (Eqstr(Fbn()['TipoDocumento'], 'CUI'), 'CUIT', Fbn()['TipoDocumento'])))
+if (Eqstr(Fbn()['TipoDocumento'], 'CUI'))
+Act(x5, Fbn()['NrDocumento'])
+else
+Act(x5, iif (Eqstr(Copy(Fbn()['NrDocumento'], 1, 1), '0'), Copy(Fbn()['NrDocumento'], 2, Longitud(Fbn()['NrDocumento']) - 1), Fbn()['NrDocumento']))
+endif
+Act(x6, Trim(iif (Eqstr(Fbn()['Sexo'], 'FEM'), 'Femenino', iif (Eqstr(Fbn()['Sexo'], 'MAS'), 'Masculino', 'No Binario'))))
+Act(x7, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='NACIONALIDAD' and ValorSistemaExterno ='"~Fbn()['Nacionalidad']~"' ")))
+Act(x8, Trim(BuscarCampo('PAISES', 'NomExterno', 'Codigo', Fbn()['Pais'])))
+Acd(fe1, iif (Fbn()['FechaNacimiento'] > Val(fe2), Fbn()['FechaNacimiento'], Val(f1)))
+Act(x9, Fecha(Val(fe1), 'YYYY-MM-DD')~'T00:00:00-03:00')
+Act(x10, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='PEP' and ValorSistemaExterno ='"~Fbn()['CodigoPEP']~"' ")))
+proximo
+
+Act(x1, 'Otro')
+escribirascii('      '~xmlelemento('Tipo_Cliente88'~Val(tp:1), Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['CUIT']))
+escribirascii('      '~xmlelemento('CUIT_CUIL_CDI_CIE88'~Val(tp:1), Val(x1), 'SI'))
+Act(x1, iif (Eqstr(Fbn()['Pais'], Var('PAISARG')), 'Persona humana', 'Persona humana extranjera'))
+escribirascii('      '~xmlelemento('Tipo_de_Persona88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+
+escribirascii('      '~xmlelemento('Apellidos88'~Val(tp:1)~'ClientePF', Val(x2), 'SI'))
+escribirascii('      '~xmlelemento('Nombres88'~Val(tp:1)~'ClientePF', Val(x3), 'SI'))
+escribirascii('      '~xmlelemento('Tipo_Documento88'~Val(tp:1)~'ClientePF', Val(x4), 'SI'))
+escribirascii('      '~xmlelemento('N94mero_Documento88'~Val(tp:1)~'ClientePF', Val(x5), 'SI'))
+
+if (not Eqstr(Val(tp:1), 'Baja'))
+escribirascii('      '~xmlelemento('G91nero88'~Val(tp:1)~'ClientePF', Val(x6), 'SI'))
+escribirascii('      '~xmlelemento('Nacionalidad88'~Val(tp:1)~'ClientePF', Val(x7), 'SI'))
+escribirascii('      '~xmlelemento('Pa92s_de_nacimiento88'~Val(tp:1)~'ClientePF', Val(x8), 'SI'))
+escribirascii('      '~xmlelemento('Lugar_de_nacimiento88'~Val(tp:1)~'ClientePF', Val(x8), 'SI'))
+escribirascii('      '~xmlelemento('Fecha_de_nacimiento88'~Val(tp:1)~'ClientePF', Val(x9), 'SI'))
+escribirascii('      '~xmlelemento('Declar93_ser_PEP88'~Val(tp:1)~'Cliente', Val(x10), 'SI'))
+Act(x1, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='RIESGO' and ValorSistemaExterno ='"~Fbn()['CatPrestamosBCRA']~"' ")))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Riesgo_asignado_al_cliente88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+Act(x1, Trim(BuscarCampo('PAISES', 'NomExterno', 'Codigo', Fbn()['Pais'])))
+escribirascii('      '~xmlelemento('Pa92s88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+Act(x1, Trim(BuscarCampo('PROVINCIAS', 'NomExterno', 'Codigo', Fbn()['Provincia'])))
+escribirascii('      '~xmlelemento('Provincia88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+Act(x1, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='LOCALIDAD' and ValorSistemaExterno ='"~Fbn()['Localidad']~"' ")))
+if (Vacio(Val(x1)))
+Act(x1, Fbn()['Localidad'])
+endif
+escribirascii('      '~xmlelemento('Localidad88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Calle']))
+escribirascii('      '~xmlelemento('Calle88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Altura']))
+escribirascii('      '~xmlelemento('N94mero88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['CodigoPostal']))
+escribirascii('      '~xmlelemento('C93digo_Postal88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Piso']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Piso88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['Depto']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Departamento88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+endif
+Act(x1, '')
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('C93digo_de_90rea_telef93nico88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+escribirascii('      '~xmlelemento('Tel91fono88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['email']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Direcci93n_de_correo_electr93nico88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+endif
+
+escribirascii('    </IDENTIFICACI98N_DE_CLIENTES88'~Val(tp:1)~'>')
+
+else
+Act(x1, iif (Eqstr(Fbn()['Sector'], 'PUB'), 'Organismo Publico', iif (Eqstr(Val(x20), 'FON'), 'FCI', 'Otro')))
+escribirascii('      '~xmlelemento('Tipo_Cliente88'~Val(tp:1), Val(x1), 'SI'))
+if (not Eqstr(Val(x20), 'FON'))
+Act(x1, Trim(Fbn()['CUIT']))
+escribirascii('      '~xmlelemento('CUIT_CUIL_CDI_CIE88'~Val(tp:1), Val(x1), 'SI'))
+endif
+Act(x1, iif (Eqstr(Fbn()['Pais'], Var('PAISARG')), 'Persona jurídica', 'Persona jurídica extranjera'))
+escribirascii('      '~xmlelemento('Tipo_de_Persona88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['RazonSocial']))
+escribirascii('      '~xmlelemento('Denominaci93n88'~Val(tp:1)~'ClientePJ', Val(x1), 'SI'))
+if (not Eqstr(Val(x20), 'FON'))
+Acd(fe1, iif (Fbn()['FechaInsc'] > Val(fe2), Fbn()['FechaInsc'], Val(f1)))
+Act(fe9, Fecha(Val(fe1), 'YYYY-MM-DD')~'T00:00:00-03:00')
+escribirascii('      '~xmlelemento('Fecha_de_Constituci93n88'~Val(tp:1)~'ClientePJ', Val(fe9), 'SI'))
+endif
+
+if (not Eqstr(Val(tp:1), 'Baja'))
+Act(x1, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='RIESGO' and ValorSistemaExterno ='"~Fbn()['CatPrestamosBCRA']~"' ")))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Riesgo_asignado_al_cliente88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+Act(x1, Trim(BuscarCampo('PAISES', 'NomExterno', 'Codigo', Fbn()['Pais'])))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Pa92s88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+Act(x1, Trim(BuscarCampo('PROVINCIAS', 'NomExterno', 'Codigo', Fbn()['Provincia'])))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Provincia88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='LOCALIDAD' and ValorSistemaExterno ='"~Fbn()['Localidad']~"' ")))
+if (Vacio(Val(x1)))
+Act(x1, Fbn()['Localidad'])
+endif
+escribirascii('      '~xmlelemento('Localidad88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Calle']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Calle88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['Altura']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('N94mero88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['Piso']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Piso88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['Depto']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Departamento88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['CodigoPostal']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('C93digo_Postal88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+Act(x1, '')
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('C93digo_de_90rea_telef93nico88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+escribirascii('      '~xmlelemento('Tel91fono88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['email']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Direcci93n_de_correo_electr93nico88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+endif
+
+escribirascii('    </IDENTIFICACI98N_DE_CLIENTES88'~Val(tp:1)~'>')
+endif
+
+if (Eqstr(Fbn()['Persona'], 'SI') y Fbn()['Cuantos'] > 1) o (Eqstr(Fbn()['Persona'], 'NO') y Fbn()['Cuantos'] > 0)
+sql.add("Select ICL.TipoPoder,ICL.FAlta FechaAlta,ICL.TipoDocumento,ICL.NrDocumento, Apellido, Nombre, Sexo, Nacionalidad,Pais, CodigoPEP, FechaNacimiento,  ")
+sql.add("CodigoPostal,Provincia,Localidad,Direccion Calle,Numero Altura, ICL.TipoPoder, P.CUIT,Depto,Piso,(select CatPrestamosBCRA from CLIENTES where Codigo='"~Fbn()['Cliente']~"') CatPrestamosBCRA, ")
+sql.add("P.EmpleadoGobierno,P.FechaNacimiento,P.Telefono, P.Empresa,(select DireccionEMail from CLIENTES where Codigo='"~Fbn()['Cliente']~"') email ")
+sql.add("from INTEGRANTESCLI ICL ")
+sql.add("left join PERSONAS P with (nolock) on ICL.TipoDocumento=P.TipoDocumento and ICL.NrDocumento=P.NrDocumento ")
+sql.add(" Where ICL.Codigo='"~Fbn()['Cliente']~"' ")
+if (Eqstr(Fbn()['Persona'], 'SI'))
+sql.add(" and ICL.NrDocumento= (select substring(CUIT,3,8) from CLIENTES where Codigo='"~Fbn()['Cliente']~"') ")
+
+endif
+recorrer sql
+if (Eqstr(Val(pe:1), 'SI') y Eqstr(Fbn()['TipoPoder'], 'TIT'))
+escribirascii('    <IDENTIFICACI98N_DE_CLIENTES88'~Val(tp:1)~'>')
+Act(x2, Trim(Fbn()['Apellido']))
+Act(x3, Trim(Fbn()['Nombre']))
+Act(x4, Trim(iif (Eqstr(Fbn()['TipoDocumento'], 'CUI'), 'CUIT', Fbn()['TipoDocumento'])))
+if (Eqstr(Fbn()['TipoDocumento'], 'CUI'))
+Act(x5, Fbn()['NrDocumento'])
+else
+Act(x5, iif (Eqstr(Copy(Fbn()['NrDocumento'], 1, 1), '0'), Copy(Fbn()['NrDocumento'], 2, Longitud(Fbn()['NrDocumento']) - 1), Fbn()['NrDocumento']))
+endif
+Act(x6, Trim(iif (Eqstr(Fbn()['Sexo'], 'FEM'), 'Femenino', iif (Eqstr(Fbn()['Sexo'], 'MAS'), 'Masculino', 'No Binario'))))
+Act(x7, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='NACIONALIDAD' and ValorSistemaExterno ='"~Fbn()['Nacionalidad']~"' ")))
+Act(x8, Trim(BuscarCampo('PAISES', 'NomExterno', 'Codigo', Fbn()['Pais'])))
+Acd(fe1, iif (Fbn()['FechaNacimiento'] > Val(fe2), Fbn()['FechaNacimiento'], Val(f1)))
+Act(x9, Fecha(Val(fe1), 'YYYY-MM-DD')~'T00:00:00-03:00')
+Act(x10, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='PEP' and ValorSistemaExterno ='"~Fbn()['CodigoPEP']~"' ")))
+Act(x1, 'Otro')
+escribirascii('      '~xmlelemento('Tipo_Cliente88'~Val(tp:1), Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['CUIT']))
+escribirascii('      '~xmlelemento('CUIT_CUIL_CDI_CIE88'~Val(tp:1), Val(x1), 'SI'))
+Act(x1, iif (Eqstr(Fbn()['Pais'], Var('PAISARG')), 'Persona humana', 'Persona humana extranjera'))
+escribirascii('      '~xmlelemento('Tipo_de_Persona88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+
+escribirascii('      '~xmlelemento('Apellidos88'~Val(tp:1)~'ClientePF', Val(x2), 'SI'))
+escribirascii('      '~xmlelemento('Nombres88'~Val(tp:1)~'ClientePF', Val(x3), 'SI'))
+escribirascii('      '~xmlelemento('Tipo_Documento88'~Val(tp:1)~'ClientePF', Val(x4), 'SI'))
+escribirascii('      '~xmlelemento('N94mero_Documento88'~Val(tp:1)~'ClientePF', Val(x5), 'SI'))
+
+if (not Eqstr(Val(tp:1), 'Baja'))
+escribirascii('      '~xmlelemento('G91nero88'~Val(tp:1)~'ClientePF', Val(x6), 'SI'))
+escribirascii('      '~xmlelemento('Nacionalidad88'~Val(tp:1)~'ClientePF', Val(x7), 'SI'))
+escribirascii('      '~xmlelemento('Pa92s_de_nacimiento88'~Val(tp:1)~'ClientePF', Val(x8), 'SI'))
+escribirascii('      '~xmlelemento('Lugar_de_nacimiento88'~Val(tp:1)~'ClientePF', Val(x8), 'SI'))
+escribirascii('      '~xmlelemento('Fecha_de_nacimiento88'~Val(tp:1)~'ClientePF', Val(x9), 'SI'))
+escribirascii('      '~xmlelemento('Declar93_ser_PEP88'~Val(tp:1)~'Cliente', Val(x10), 'SI'))
+Act(x1, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='RIESGO' and ValorSistemaExterno ='"~Fbn()['CatPrestamosBCRA']~"' ")))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Riesgo_asignado_al_cliente88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+Act(x1, Trim(BuscarCampo('PAISES', 'NomExterno', 'Codigo', Fbn()['Pais'])))
+escribirascii('      '~xmlelemento('Pa92s88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+Act(x1, Trim(BuscarCampo('PROVINCIAS', 'NomExterno', 'Codigo', Fbn()['Provincia'])))
+escribirascii('      '~xmlelemento('Provincia88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+Act(x1, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='LOCALIDAD' and ValorSistemaExterno ='"~Fbn()['Localidad']~"' ")))
+if (Vacio(Val(x1)))
+Act(x1, Fbn()['Localidad'])
+endif
+escribirascii('      '~xmlelemento('Localidad88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Calle']))
+escribirascii('      '~xmlelemento('Calle88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Altura']))
+escribirascii('      '~xmlelemento('N94mero88'~Val(tp:1)~'ClienteArg', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['CodigoPostal']))
+escribirascii('      '~xmlelemento('C93digo_Postal88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+Act(x1, '')
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('C93digo_de_90rea_telef93nico88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+escribirascii('      '~xmlelemento('Tel91fono88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['email']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Direcci93n_de_correo_electr93nico88'~Val(tp:1)~'Cliente', Val(x1), 'SI'))
+endif
+endif
+
+escribirascii('    </IDENTIFICACI98N_DE_CLIENTES88'~Val(tp:1)~'>')
+else
+escribirascii('    <IDENTIFICACI98N_DE_OTROS_SUJETOS_VINCULADOS_A_LA_ACCI98N88'~Val(tp:1)~'>')
+Act(x1, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='TIPOINTEGRANTE' and ValorSistemaExterno ='"~Fbn()['TipoPoder']~"' ")))
+if (Eqstr(Val(x20), 'FON') y not Eqstr(Fbn()['TipoPoder'], 'SDE'))
+escribirascii('      '~xmlelemento('Naturaleza_del_v92nculo_con_elX85Xlos_clientes88'~Val(tp:1), Var('UIFFCIGEN'), 'SI'))
+else
+escribirascii('      '~xmlelemento('Naturaleza_del_v92nculo_con_elX85Xlos_clientes88'~Val(tp:1), Val(x1), 'SI'))
+endif
+if (Incluido(Fbn()['TipoDocumento'], 'CUI|CIL'))
+Act(x1, Fbn()['NrDocumento'])
+escribirascii('      '~xmlelemento('CUIT_CUIL_CDI_CIE88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+else
+if (NoVacio(Fbn()['CUIT']))
+Act(x1, Trim(Fbn()['CUIT']))
+escribirascii('      '~xmlelemento('CUIT_CUIL_CDI_CIE88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+endif
+endif
+if (Eqstr(Fbn()['Nombre'], '') o Vacio(Fbn()['Nombre']))
+Act(x1, iif (Eqstr(Fbn()['Pais'], Var('PAISARG')), 'Persona jurídica', 'Persona jurídica extranjera'))
+escribirascii('      '~xmlelemento('Tipo_de_Persona88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Apellido']))
+escribirascii('      '~xmlelemento('Denominaci93n88Vinculado'~Val(tp:1)~'PJ', Val(x1), 'SI'))
+Acd(fe1, Fbn()['FechaNacimiento'])
+Act(fe9, Fecha(Val(fe1), 'YYYY-MM-DD')~'T00:00:00-03:00')
+escribirascii('      '~xmlelemento('Fecha_de_Constituci93n88Vinculado'~Val(tp:1)~'PJ', Val(fe9), 'SI'))
+Act(x1, Trim(BuscarCampo('PAISES', 'NomExterno', 'Codigo', Fbn()['Pais'])))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Pa92s88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+endif
+Act(x1, Trim(BuscarCampo('PROVINCIAS', 'NomExterno', 'Codigo', Fbn()['Provincia'])))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Provincia88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='LOCALIDAD' and ValorSistemaExterno ='"~Fbn()['Localidad']~"' ")))
+if (Vacio(Val(x1)))
+Act(x1, Fbn()['Localidad'])
+endif
+escribirascii('      '~xmlelemento('Localidad88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Calle']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Calle88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['Altura']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('N94mero88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['Piso']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Piso88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['Depto']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Departamento88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['CodigoPostal']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('C93digo_Postal88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+endif
+else
+Act(x1, iif (Eqstr(Fbn()['Pais'], Var('PAISARG')), 'Persona humana', 'Persona humana extranjera'))
+escribirascii('      '~xmlelemento('Tipo_de_Persona88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Apellido']))
+escribirascii('      '~xmlelemento('Apellidos88Vinculado'~Val(tp:1)~'PF', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Nombre']))
+escribirascii('      '~xmlelemento('Nombres88Vinculado'~Val(tp:1)~'PF', Val(x1), 'SI'))
+if (Eqstr(Trim(Fbn()['TipoDocumento']), 'CUI'))
+Act(x1, 'CUIT')
+else
+if (Eqstr(Trim(Fbn()['TipoDocumento']), 'CIL'))
+Act(x1, 'CUIL')
+else
+if (Eqstr(Trim(Fbn()['TipoDocumento']), 'CED'))
+Act(x1, 'Cédula Mercosur')
+else
+if (Eqstr(Trim(Fbn()['TipoDocumento']), 'CI'))
+Act(x1, 'CDI')
+else
+if (Eqstr(Trim(Fbn()['TipoDocumento']), 'DNI'))
+Act(x1, 'Documento Nacional de Identidad')
+else
+if (Eqstr(Trim(Fbn()['TipoDocumento']), 'LE'))
+Act(x1, 'Libreta de Enrolamiento')
+else
+if (Eqstr(Trim(Fbn()['TipoDocumento']), 'LC'))
+Act(x1, 'Libreta Cívica')
+else
+if (Eqstr(Trim(Fbn()['TipoDocumento']), 'PAS'))
+Act(x1, 'Pasaporte')
+else
+if (Eqstr(Trim(Fbn()['TipoDocumento']), 'DEX'))
+Act(x1, 'Documento EXT')
+else
+Act(x1, 'Tipo Doc. No esperado')
+endif
+endif
+endif
+endif
+endif
+endif
+endif
+endif
+endif
+escribirascii('      '~xmlelemento('Tipo_Documento8888Vinculado'~Val(tp:1)~'PF', Val(x1), 'SI'))
+Act(x1, iif (Eqstr(Copy(Fbn()['NrDocumento'], 3, 1), '0'), Copy(Fbn()['NrDocumento'], 4, 7), Copy(Fbn()['NrDocumento'], 3, 8)))
+escribirascii('      '~xmlelemento('N94mero_Documento8888Vinculado'~Val(tp:1)~'PF', Val(x1), 'SI'))
+
+if (not Eqstr(Val(tp:1), 'Baja'))
+Act(x1, Trim(iif (Eqstr(Fbn()['Sexo'], 'FEM'), 'Femenino', iif (Eqstr(Fbn()['Sexo'], 'MAS'), 'Masculino', 'No Binario'))))
+escribirascii('      '~xmlelemento('G91nero88Vinculado'~Val(tp:1)~'PF', Val(x1), 'SI'))
+Act(x1, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='NACIONALIDAD' and ValorSistemaExterno ='"~Fbn()['Nacionalidad']~"' ")))
+escribirascii('      '~xmlelemento('Nacionalidad88Vinculado'~Val(tp:1)~'PF', Val(x1), 'SI'))
+Act(x1, Trim(BuscarCampo('PAISES', 'NomExterno', 'Codigo', Fbn()['Pais'])))
+escribirascii('      '~xmlelemento('Pa92s_de_nacimiento88Vinculado'~Val(tp:1)~'PF', Val(x1), 'SI'))
+Act(x1, Trim(BuscarCampo('PAISES', 'NomExterno', 'Codigo', Fbn()['Pais'])))
+escribirascii('      '~xmlelemento('Lugar_de_nacimiento88Vinculado'~Val(tp:1)~'PF', Val(x1), 'SI'))
+Acd(fe1, iif (Fbn()['FechaNacimiento'] > Val(fe2), Fbn()['FechaNacimiento'], Val(f1)))
+Act(x1, Fecha(Val(fe1), 'YYYY-MM-DD')~'T00:00:00-03:00')
+escribirascii('      '~xmlelemento('Fecha_de_nacimiento88Vinculado'~Val(tp:1)~'PF', Val(x1), 'SI'))
+
+Act(x1, Trim(BuscarCampo('PAISES', 'NomExterno', 'Codigo', Fbn()['Pais'])))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Pa92s88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+endif
+Act(x1, Trim(BuscarCampo('PROVINCIAS', 'NomExterno', 'Codigo', Fbn()['Provincia'])))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Provincia88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(sql(" SELECT Valor FROM "~Dbo()~".CONFIGVALEXTERNOS WHERE CodigoProceso='UIF' and Atributo='LOCALIDAD' and ValorSistemaExterno ='"~Fbn()['Localidad']~"' ")))
+if (Vacio(Val(x1)))
+Act(x1, Fbn()['Localidad'])
+endif
+escribirascii('      '~xmlelemento('Localidad88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+Act(x1, Trim(Fbn()['Calle']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Calle88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['Altura']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('N94mero88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['Piso']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Piso88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['Depto']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Departamento88Vinculado'~Val(tp:1)~'Arg', Val(x1), 'SI'))
+endif
+Act(x1, Trim(Fbn()['CodigoPostal']))
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('C93digo_Postal88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+endif
+Act(x1, '')
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('C93digo_de_90rea_telef93nico88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+escribirascii('      '~xmlelemento('Tel91fono88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+endif
+Act(x1, '')
+if (NoVacio(Val(x1)))
+escribirascii('      '~xmlelemento('Direcci93n_de_correo_electr93nico88Vinculado'~Val(tp:1), Val(x1), 'SI'))
+endif
+endif
+endif
+escribirascii('    </IDENTIFICACI98N_DE_OTROS_SUJETOS_VINCULADOS_A_LA_ACCI98N88'~Val(tp:1)~'>')
+endif
+proximo
+endif
+
+
+escribirascii('  </Cuentas_Comitentes>')
+escribirascii('</Operacion>')
+
+cerrarascii
+
+proximo
+
+Messagebox('Generados '~FStr(Val(co1), 0, 0)~' Archivos '~dialogo.string2~' XML en '~dialogo.string1)
+
+
+

@@ -1,0 +1,112 @@
+creardialogo
+fecha1:'Fecha';;;;NO;;dialogo.fecha1 > 0;'Fecha Inválida';NO;FSys();
+mercado1: 'Mercado';;;;;NO;;;;;;
+radio1:'Plazo|Contado|Otros';;;;;;dialogo.radio1 >= 0;'Debe elegir una Opcion';NO;-1;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (sql("Select 1 From "~Dbo()~".FLAGSMERCADO Where Fecha = "~IdxDate2(dialogo.fecha1)~" and Paso = "~FStr(dialogo.radio1, 1, 0)~" and Registro = 'CGAR' and Estado='PRO' ") = 1)
+else
+Cancelar()('No se ha corrido el cierre de la Rueda Garantizada para el Plazo '~iif (dialogo.radio1 = 0, '-Contado-', '-Otros-')~'')
+endif
+
+sql.add("SELECT ORD.NrOrden, B.NrBit  ")
+sql.add("  FROM "~Dbo()~".ORDENES ORD, "~Dbo()~".OPERACIONESBITS B ")
+sql.add(" WHERE ORD.NrOrden=B.NrOperacion ")
+sql.add("   AND ORD.FechaOrden="~IdxDate2(dialogo.fecha1))
+sql.add("   AND B.NrBit in( 10 ) ")
+sql.add("   AND B.Valor=1 ")
+
+if (NoVacio(dialogo.mercado1))
+sql.add("AND ORD.Mercado3='"~dialogo.mercado1~"' ")
+endif
+
+
+if (dialogo.radio1 = 0)
+sql.add("AND ORD.Lotes=0 ")
+else
+sql.add("AND ORD.Lotes<>0 ")
+endif
+
+recorrer sql
+
+
+ejecutarevento('CBOINS', string1 = Fbn()['NrOrden'], radio1 = 1, radio2 = 0, entero1 = 10, entero2 = 8)
+
+proximo
+
+sql.add("SELECT ORD.NrOrden, B1.NrBit NrBitOrd, OP.NrOperacion, B2.NrBit NrBitOp ")
+sql.add("  FROM "~Dbo()~".ORDENES ORD, "~Dbo()~".OPERACIONESBITS B1, "~Dbo()~".OPERACIONES OP, "~Dbo()~".OPERACIONESBITS B2 ")
+sql.add(" WHERE ORD.NrOrden=B1.NrOperacion ")
+sql.add("   AND B1.NrBit in( 9, 11 ) ")
+sql.add("   AND B1.Valor=1 ")
+sql.add("   AND ORD.NrOrden=OP.NrOrden1 ")
+sql.add("   AND OP.NrOperacion=B2.NrOperacion ")
+sql.add("   AND B2.NrBit in( 7, 10 ) ")
+sql.add("   AND B2.Valor=1 ")
+sql.add("   AND ORD.FechaOrden="~IdxDate2(dialogo.fecha1))
+sql.add("   AND Not Exists (SELECT 1 FROM "~Dbo()~".MOVEJECUTADOS M WHERE M.NrOperacion=OP.NrOperacion ) ")
+sql.add("   AND IsNull(ORD.CB7,0)=0 ")
+sql.add("   AND IsNull(OP.CB4,0)=1 ")
+
+
+if (NoVacio(dialogo.mercado1))
+sql.add("AND ORD.Mercado3='"~dialogo.mercado1~"' ")
+endif
+
+if (dialogo.radio1 = 0)
+sql.add("AND ORD.Lotes=0 ")
+else
+sql.add("AND ORD.Lotes<>0 ")
+endif
+
+recorrer sql
+
+
+ejecutarevento('CBOINS', string1 = Fbn()['NrOperacion'], radio1 = 1, radio2 = 0, entero1 = Fbn()['NrBitOp'], entero2 = 13)
+
+proximo
+
+sql.add("SELECT ORD.NrOrden  ")
+sql.add("  FROM "~Dbo()~".ORDENES ORD, "~Dbo()~".OPERACIONESBITS B ")
+sql.add(" WHERE ORD.FechaOrden="~IdxDate2(dialogo.fecha1))
+sql.add("   AND ORD.NrOrden=B.NrOperacion ")
+sql.add("   AND CantidadTotalOrden>Cantidad1 ")
+sql.add("   AND (B.NrBit Not in( 30 )   AND B.Valor=1) ")
+Watch(sql.batch)
+if (NoVacio(dialogo.mercado1))
+sql.add("AND ORD.Mercado3='"~dialogo.mercado1~"' ")
+endif
+
+if (dialogo.radio1 = 0)
+sql.add("AND ORD.Lotes=0 ")
+else
+sql.add("AND ORD.Lotes<>0 ")
+endif
+
+recorrer sql
+
+sql.add("Update "~Dbo()~".ORDENES ")
+sql.add("   Set Cantidad5     = 0 ")
+sql.add(" where NrOrden      = '"~Fbn()['NrOrden']~"' ")
+sql.new
+sql.exec
+
+modificarorden(Fbn()['NrOrden'], 0, NO, SI, SI, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, SI, NO, NO, NO)
+sql.exec
+
+
+proximo
+
+
+
+sql.add("Update "~Dbo()~".FLAGSMERCADO ")
+sql.add("   Set Estado     = 'ANU' ")
+sql.add(" where Fecha      = "~IdxDate2(dialogo.fecha1)~" ")
+sql.add("   and Paso       = "~FStr(dialogo.radio1, 1, 0)~" ")
+sql.add("   and Registro   = 'CGAR' ")
+sql.new
+sql.exec

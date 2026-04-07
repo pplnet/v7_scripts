@@ -1,0 +1,85 @@
+mostrarcuadrodemensajes
+
+creardialogo
+fecha1:'Fecha MTM';1;1;;;;EsHabil(dialogo.fecha1, 'ARG') y dialogo.fecha1 <= FSys();'Fecha Invalida';NO;FSys();
+fecha2:'Fecha Futura';2;1;;;;EsHabil(dialogo.fecha2, 'ARG') y dialogo.fecha2 <= FSys();'Fecha Invalida';NO;FSys();
+vehiculo1:'Vehiculo';3;1;;;;;;;;;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Acd(fe:1, Habiles(dialogo.fecha1, 1, 'ARG'))
+Act(ls:1, Var('BRLIQMTM'))
+
+sql.add(" Select 1 ")
+sql.add(" From "~Dbo()~".MOVEJECUTADOS M, "~Dbo()~".OPERACIONES O  ")
+sql.add(" Where M.NrOperacion = O.NrOperacion ")
+if (NoVacio(dialogo.fecha2))
+sql.add(" AND M.FechaEj = '"~IdxDate(dialogo.fecha2)~"' ")
+endif
+sql.add(" AND M.NrMov > 100 ")
+sql.add(" AND M.NrSaldo = 1 ")
+sql.add(" AND M.Cliente IN ("~pipe2comillas(Val(ls:1))~") ")
+sql.add(" AND M.FechaMov = '"~IdxDate(Val(fe:1))~"' ")
+if (NoVacio(dialogo.vehiculo1))
+sql.add(" AND O.Vehiculo1 = '"~dialogo.vehiculo1~"'")
+endif
+sql.add(" and O.TipoOp in ('FXCF','FXVF') ")
+
+sql.add(" UNION ")
+
+sql.add(" Select 1 ")
+sql.add(" From "~Dbo()~".MOVEJECUTADOS M, "~Dbo()~".OPERACIONES O  ")
+sql.add(" Where M.NrOperacion = O.NrOperacion ")
+if (NoVacio(dialogo.fecha2))
+sql.add(" AND M.FechaEj = '"~IdxDate(dialogo.fecha2)~"' ")
+endif
+sql.add(" AND M.NrMov > 100 ")
+sql.add(" AND M.NrSaldo = 1 ")
+sql.add(" AND M.Cliente Not IN ("~pipe2comillas(Val(ls:1))~") ")
+sql.add(" AND M.FechaMov = '"~IdxDate(dialogo.fecha1)~"' ")
+if (NoVacio(dialogo.vehiculo1))
+sql.add(" AND O.Vehiculo1 = '"~dialogo.vehiculo1~"'")
+endif
+sql.add(" and O.TipoOp in ('FXCF','FXVF') ")
+recorrer sql
+Cancelar()("Existen liquidaciones para la fecha futura "~dialogo.fecha2~", no puede anularse el MTM para esa fecha.")
+proximo
+
+sql.add(" Select O.NrOperacion, C.Precio1, O.FechaVto ")
+sql.add(" From "~Dbo()~".OPERACIONES O, "~Dbo()~".CUOTAS C ")
+sql.add(" Where O.NrOperacion = C.NrOperacion ")
+sql.add(" AND C.Fecha1 = '"~IdxDate(dialogo.fecha1)~"' ")
+if (NoVacio(dialogo.fecha2))
+sql.add(" AND O.FechaVto = '"~IdxDate(dialogo.fecha2)~"' ")
+endif
+if (NoVacio(dialogo.vehiculo1))
+sql.add(" AND O.Vehiculo1 = '"~dialogo.vehiculo1~"'")
+endif
+sql.add(" and O.TipoOp in ('FXCF','FXVF') ")
+recorrer sql
+Message(Fbn('NrOperacion'))
+sql.add(" Update "~Dbo()~".OPERACIONES ")
+sql.add(" Set TotalAux3 = TotalAux3 - "~FStr(Fbn('Precio1'), 0, 2)~", ")
+if (Fbn('FechaVto') = dialogo.fecha1)
+sql.add(" Precio2 = 0, FechaEj = NULL, ")
+endif
+if (BuscarCampo('OPERACIONES', 'Cuotas1', 'NrOperacion', Fbn('NrOperacion')) = 0)
+sql.add(" CB5 = 0, ")
+endif
+sql.add(" Cuotas1 = Cuotas1-1 ")
+sql.add(" Where NrOperacion = '"~Fbn('NrOperacion')~"' ")
+sql.new
+sql.exec
+sql.add(" Delete "~Dbo()~".CUOTAS ")
+sql.add(" Where NrOperacion = '"~Fbn('NrOperacion')~"' ")
+sql.add(" AND Fecha1 = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add("  ")
+sql.new
+sql.exec
+sql.actualizarmovimientos2(Fbn('NrOperacion'), SI, NO, NO, NO)
+sql.exec
+proximo
+

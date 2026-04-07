@@ -1,0 +1,256 @@
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+Act(zz6, SQLSet("Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo = '"~UsuarioActivo()~"'"))
+endif
+
+sql.add("Select * from "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".OPERACIONESBITS B where")
+sql.add("NrSaldo = 1 ")
+sql.add("and M.FechaMov <= '"~IdxDate(FSys())~"' ")
+sql.add("and M.NrOperacion = B.NrOperacion ")
+if (NoVacio(Val(zz6)))
+sql.add(" and M.EnteCustodia In ("~pipe2comillas(Val(zz6))~") ")
+endif
+sql.add("and M.Bits = 'MV'")
+sql.add("and ((B.NrBit = 20 and B.Valor = '1') or (B.NrBit = 50 and B.Valor = '1'))")
+sql.add("order by M.NrOperacion")
+
+recorrer sql
+
+Act(z1, BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', Fbn('NrOperacion')))
+
+if (Incluido(Val(z1), exe('CARTA1C')) o Incluido(Val(z1), exe('CARTA1V')) o Incluido(Val(z1), exe('CARTA2')))
+Message(Fbn('EnteCustodia'))
+Dfa()
+else
+Act(a:fac, Fbn()['NrOperacion'])
+Acd(b:fac, Fbn()['FechaMov'])
+Act(c:fac, Fbn()['Cliente'])
+Act(d:fac, Fbn()['Especie']~' '~Fbn()['Cupon'])
+Acn(e:fac, -Fbn()['Cantidad'])
+Act(f:fac, Fbn()['EnteCustodia'])
+Act(g:fac, Fbn()['Transaccion'])
+Act(h:fac, Fbn()['Cuenta'])
+Act(i:fac, Fbn()['Leyenda'])
+Acn(k:fac, 1)
+Acn(p:fac, Fbn()['NrMov'])
+Act(r:fac, Fbn()['Especie'])
+Act(s:fac, Fbn()['Cupon'])
+endif
+proximo
+
+if (Fac() = 0)
+Cancelar()
+endif
+
+recorrer&i 1, Fac()
+
+Acn(o:&i, 1)
+
+sql.add("Select * from "~Dbo()~".MOVPENDIENTES M where")
+sql.add("NrSaldo=1 ")
+sql.add("and M.FechaMov   <='"~IdxDate(Val(b:&i))~"' ")
+sql.add("and M.EnteCustodia='"~Val(f:&i)~"' ")
+sql.add("and M.Bits = 'MV' ")
+sql.add("and M.Especie = '"~Val(r:&i)~"' ")
+sql.add("and M.Cliente = '"~Val(c:&i)~"' ")
+sql.add("and M.NrOperacion='"~Val(a:&i)~"' ")
+sql.add("and M.NrMov      = "~FStr(Val(p:&i), 0, 0)~" ")
+
+recorrer sql
+Message('Verifico que el Mov. no se haya liquidado Previamente '~Val(a:&i)~' '~FStr(Val(p:&i), 0, 0)~' ...')
+Acn(o:&i, 0)
+proximo
+
+if (Val(o:&i) = 1)
+Cancelar()('El Mov. de la Operacion '~Val(a:&i)~' Nro. '~FStr(Val(p:&i), 0, 0)~' fue liquidado Previamente por Otro Usuario ....')
+endif
+
+if (Val(o:&i) = 0)
+Act(t:&i, getnumerador(BuscarCampo('VEHICULOS', 'Alias3', 'Codigo', Val(f:&i))))
+
+if (Vacio(Val(t:&i)))
+Cancelar()('Proceso Cancelado, Numerador Inexistente Vehiculo '~Val(f:&i)~' Op. Nro. '~Val(a:&i))
+endif
+
+sql.add("Insert into "~Dbo()~".TRANSACCIONES2 (")
+sql.add("Especie, ")
+sql.add("Fecha1, ")
+sql.add("Fecha2, ")
+sql.add("Cliente1, ")
+sql.add("Vehiculo1, ")
+sql.add("NrOperacionRef1, ")
+sql.add("TipoTr2, ")
+sql.add("Cantidad1, ")
+sql.add("Cupon1, ")
+sql.add("NrTrans ")
+
+sql.add(") Values (")
+
+sql.add("'"~Val(r:&i)~"', ")
+sql.add("'"~IdxDate(FSys())~"', ")
+sql.add("'"~IdxDate(FSys())~"', ")
+sql.add("'"~Val(c:&i)~"', ")
+sql.add("'"~Val(f:&i)~"', ")
+
+sql.add("'"~Val(a:&i)~"', ")
+if (Val(e:&i) > 0)
+sql.add("'DEP', ")
+sql.add(""~FStr(Val(e:&i), 1, 2)~", ")
+else
+sql.add("'RET', ")
+sql.add(""~FStr(-Val(e:&i), 1, 2)~", ")
+endif
+sql.add("'"~Val(s:&i)~"', ")
+sql.add("'"~Val(t:&i)~"' ")
+
+sql.add(")")
+sql.new
+
+sql.add("Insert into "~Dbo()~".OPERACIONESBITS ")
+sql.add("(NrBit, NrOperacion, Valor) ")
+sql.add("Select NrInstancia, '"~Val(t:&i)~"', '0'")
+sql.add("from "~Dbo()~".INSTANCIAS ")
+sql.add("where Tabla = 'TRANSACCIONES2'")
+sql.new
+
+sql.add(" UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add(" SET Valor = '1' ")
+sql.add(" Where NrBit = 10 and NrOperacion = '"~Val(t:&i)~"' ")
+sql.new
+
+Message('Genera Voucher '~Val(t:&i))
+
+sql.add("Insert into "~Dbo()~".MOVEJECUTADOS (")
+sql.add("FechaEje, ")
+sql.add("UsuarioEje, ")
+sql.add("NrTrans2, ")
+sql.add("NrOperacion, ")
+sql.add("Leyenda, ")
+sql.add("Cantidad, ")
+sql.add("Cliente, ")
+sql.add("Especie, ")
+sql.add("CallPut, ")
+sql.add("NrSaldo, ")
+sql.add("NrGrupo, ")
+sql.add("NrGrupo2, ")
+sql.add("Bits, ")
+sql.add("Cupon, ")
+sql.add("NrMov, ")
+sql.add("NrInstan, ")
+sql.add("FechaMov, ")
+sql.add("EnteCustodia ")
+sql.add(") Values (")
+sql.add("'"~IdxDate(Hoy())~"', ")
+sql.add("'"~UsuarioActivo()~"', ")
+
+sql.add("'"~Val(t:&i)~"', ")
+sql.add("'"~Val(t:&i)~"', ")
+if (Val(e:&i) > 0)
+sql.add("'Cobro', ")
+else
+sql.add("'Pago', ")
+endif
+sql.add(""~FStr(Val(e:&i), 1, 2)~", ")
+sql.add("'"~Val(f:&i)~"',")
+sql.add("'"~Val(r:&i)~"', ")
+sql.add("'', ")
+sql.add(""~FStr(1, 1, 0)~", ")
+sql.add(""~FStr(0, 1, 0)~", ")
+sql.add(""~FStr(0, 1, 0)~", ")
+
+sql.add("'AV', ")
+sql.add("'"~Val(s:&i)~"', ")
+sql.add(""~FStr(0, 1, 0)~", ")
+sql.add(""~FStr(0, 1, 0)~", ")
+sql.add("'"~IdxDate(FSys())~"', ")
+sql.add("'"~Val(f:&i)~"' ")
+sql.add(")")
+sql.new
+
+
+sql.add("Insert into "~Dbo()~".MOVEJECUTADOS (")
+sql.add("NrOperacion, ")
+sql.add("FechaMov, ")
+sql.add("Cliente, ")
+sql.add("Especie, ")
+sql.add("NrSaldo, ")
+sql.add("CallPut, ")
+sql.add("FechaEj, ")
+sql.add("PrecioEj, ")
+sql.add("EnteCustodia, ")
+sql.add("Mercado, ")
+sql.add("Formula, ")
+sql.add("Leyenda, ")
+sql.add("Bits, ")
+sql.add("NrGrupo, ")
+sql.add("Concepto, ")
+sql.add("NrGrupo2, ")
+sql.add("NrMov, ")
+sql.add("NrLiq, ")
+sql.add("Status, ")
+sql.add("NrComprob, ")
+sql.add("NrInstan, ")
+sql.add("FechaEje, ")
+sql.add("UsuarioEje, ")
+sql.add("Cupon, ")
+sql.add("NrTrans2, ")
+sql.add("Cantidad ")
+sql.add(") select ")
+sql.add("NrOperacion, ")
+sql.add("FechaMov, ")
+sql.add("Cliente, ")
+sql.add("Especie, ")
+sql.add("NrSaldo, ")
+sql.add("CallPut, ")
+sql.add("FechaEj, ")
+sql.add("PrecioEj, ")
+sql.add("EnteCustodia, ")
+sql.add("Mercado, ")
+sql.add("Formula, ")
+sql.add("Leyenda, ")
+sql.add("Bits, ")
+sql.add("NrGrupo, ")
+sql.add("Concepto, ")
+sql.add("NrGrupo2, ")
+sql.add("NrMov, ")
+sql.add("NrLiq, ")
+sql.add("Status, ")
+sql.add("NrComprob, ")
+sql.add("NrInstan, ")
+sql.add("'"~IdxDate(FSys())~"', ")
+sql.add("'"~UsuarioActivo()~"', ")
+sql.add("Cupon, ")
+sql.add("'"~Val(t:&i)~"', ")
+sql.add("Cantidad ")
+sql.add(" from "~Dbo()~".MOVPENDIENTES ")
+sql.add("where NrOperacion = '"~Val(a:&i)~"' ")
+sql.add("and NrSaldo = 1 ")
+sql.add("and FechaMov = '"~IdxDate(Val(b:&i))~"'")
+sql.add("and Cliente = '"~Val(c:&i)~"'")
+sql.add("and Especie = '"~Val(r:&i)~"' ")
+if (NoVacio(Val(s:&i)))
+sql.add("and Cupon = '"~Val(s:&i)~"' ")
+else
+sql.add("and (Cupon = '"~Val(s:&i)~"' or Cupon is NULL)")
+endif
+sql.add("and NrMov = "~FStr(Val(p:&i), 1, 0)~" ")
+sql.new
+
+sql.add("DELETE FROM "~Dbo()~".MOVPENDIENTES ")
+sql.add("where NrOperacion = '"~Val(a:&i)~"' ")
+sql.add("and NrSaldo = 1 ")
+sql.add("and FechaMov = '"~IdxDate(Val(b:&i))~"'")
+sql.add("and Cliente = '"~Val(c:&i)~"'")
+sql.add("and Especie = '"~Val(r:&i)~"' ")
+if (NoVacio(Val(s:&i)))
+sql.add("and Cupon = '"~Val(s:&i)~"' ")
+else
+sql.add("and (Cupon = '"~Val(s:&i)~"' or Cupon is NULL)")
+endif
+sql.add("and NrMov = "~FStr(Val(p:&i), 1, 0)~" ")
+sql.new
+sql.exec
+endif
+proximo
+
+SetFont(w1..z6, 1)
+

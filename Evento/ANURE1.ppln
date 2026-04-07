@@ -1,0 +1,59 @@
+mostrarcuadrodemensajes
+creardialogo
+fecha1: 'Fecha Desde';1;1;;;;;;;FSys()
+cuenta1: 'Cuenta';;;;;;NoVacio(dialogo.cuenta1);'Debe ingresar una cuenta';NO;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+let(&fechalimite, FinDeMes(dialogo.fecha1, NO))
+
+recorrer&i dialogo.fecha1, &fechalimite
+Message('Anulando Calculo Remuneradas '~Fecha(&i)~' - Cuenta '~dialogo.cuenta1)
+Act(op:1, '')
+let(&nroperacionmmrpac, '')
+let(&fechacuotas, '')
+sql.add("SELECT NrOperacion, TotalIntereses, OperacionRef, FechaOp FROM "~Dbo()~".OPERACIONES")
+sql.add("WHERE TipoOp = 'MMCCR' ")
+sql.add("AND CB1 = '1' ")
+sql.add("AND FechaOp = '"~IdxDate(&i)~"' ")
+sql.add("AND Cuenta1 = '"~dialogo.cuenta1~"' ")
+recorrer sql
+Act(op:1, Val(op:1)~Fbn()['NrOperacion']~'|')
+let(&totalinteresesanulados, Fbn()['TotalIntereses'])
+let(&nroperacionmmrpac, Fbn()['OperacionRef'])
+let(&fechacuotas, Fbn()['FechaOp'])
+
+if (sql("SELECT COUNT(*) FROM MOVEJECUTADOS WHERE NrOperacion = '"~&nroperacionmmrpac~"' AND NrSaldo = 1") > 0)
+Cancelar()('No se puede ejecutar la Anulacion porque la Operacion: '~&nroperacionmmrpac~' ya fue liquidada. Anule la liquidacion antes de seguir')
+endif
+sql.add(" UPDATE "~Dbo()~".OPERACIONES")
+sql.add(" SET TotalIntereses = TotalIntereses-"~FStr(&totalinteresesanulados, 0, 2)~", ")
+sql.add("       TotalNetoCli1 = 0 ")
+sql.add("WHERE NrOperacion = '"~&nroperacionmmrpac~"'")
+sql.new
+sql.exec
+
+sql.add("DELETE FROM "~Dbo()~".CUOTAS")
+sql.add("WHERE NrOperacion = '"~&nroperacionmmrpac~"' AND Fecha1 = '"~IdxDate(&fechacuotas)~"'")
+sql.new
+sql.exec
+
+proximo
+
+sql.add(" UPDATE "~Dbo()~".SALDOSBANCARIOS")
+sql.add(" SET Estado = 'REC'")
+sql.add(" Where FechaSaldo = '"~IdxDate(Fecha(&i))~"' ")
+sql.add(" AND NrCuenta = '"~BuscarCampo('CUENTAS', 'Numero', 'Codigo', dialogo.cuenta1)~"' ")
+sql.add(" AND Estado = 'PRO'     ")
+sql.new
+sql.exec
+
+sql.add("DELETE FROM "~Dbo()~".OPERACIONES")
+sql.add("WHERE NrOperacion in ("~pipe2comillas(Val(op:1))~")")
+sql.new
+sql.exec
+proximo
+

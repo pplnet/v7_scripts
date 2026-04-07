@@ -1,0 +1,160 @@
+mostrarcuadrodemensajes
+creardialogo
+nrtrans1: 'Nro.Comprobante';;;;;;Incluido(Copy(dialogo.nrtrans1, 1, 1), 'V');'Numero de Comprobante incorrecto';NO;;;;;;" TipoTr2 IN ('DEP','RET','MATCH','COMP') ";
+findialogo
+if (not ok)
+Cancelar()
+endif
+
+Message('Generando datos de confirmacion')
+sql.add("Select * from "~Dbo()~".TRANSACCIONES2 where NrTrans='"~dialogo.nrtrans1~"' order by NrTrans")
+recorrer sql
+Act(tr1, Fbn()['TipoTr2'])
+Act(tr2, Fbn()['NrOperacionRef2'])
+Acn(tr3, Fbn()['Cantidad1'])
+
+if (not Incluido(Fbn()['TipoTr2'], 'DEP|RET|COMP|MATCH|TRACTA'))
+Cancelar()('Tipo de Transaccion incorrecto.')
+endif
+
+Act(x1, sql("Select Valor from "~Dbo()~".OPERACIONESBITS where NrOperacion = '"~dialogo.nrtrans1~"' and NrBit = 70 "))
+if (celdavacia(x1) o not Eqstr(Val(x1), '1'))
+if (Incluido(Fbn()['TipoTr2'], 'TRACTA'))
+Cancelar()('La Transferencia Nro '~Fbn()['NrTrans']~' no esta confirmada.')
+else
+Cancelar()('El Voucher Nro '~Fbn()['NrTrans']~' no esta confirmado.')
+endif
+endif
+if (Fbn()['CB9'] = 0)
+Cancelar()('El Voucher Nro '~Fbn()['NrTrans']~' esta Transportado.')
+endif
+
+proximo
+
+
+sql.add(" UPDATE "~Dbo()~".TRANSACCIONES2 Set CB10='0',CB9='0',Fecha3=Null where NrTrans='"~dialogo.nrtrans1~"' ")
+sql.new
+sql.exec
+
+sql.add(" UPDATE "~Dbo()~".INSTANCIASOP Set Usuario=' ',Fecha=Null where NrOperacion='"~dialogo.nrtrans1~"' and (NrInstancia=8 or NrInstancia=3) ")
+sql.new
+sql.exec
+
+if (Incluido(Val(tr1), '|RET|'))
+sql.add(" UPDATE "~Dbo()~".OPERACIONESBITS Set Valor='1' where NrOperacion='"~dialogo.nrtrans1~"' and NrBit = 6 ")
+else
+if (Incluido(Val(tr1), '|DEP|'))
+sql.add(" UPDATE "~Dbo()~".OPERACIONESBITS Set Valor='1' where NrOperacion='"~dialogo.nrtrans1~"' and NrBit = 3 ")
+else
+if (Incluido(Val(tr1), '|MATCH|') y Val(tr3) >= 0)
+sql.add(" UPDATE "~Dbo()~".OPERACIONESBITS Set Valor='1' where NrOperacion='"~dialogo.nrtrans1~"' and NrBit = 6 ")
+else
+sql.add(" UPDATE "~Dbo()~".OPERACIONESBITS Set Valor='1' where NrOperacion='"~dialogo.nrtrans1~"' and NrBit = 3 ")
+endif
+endif
+
+endif
+
+sql.new
+sql.exec
+
+sql.add(" UPDATE "~Dbo()~".OPERACIONESBITS Set Valor = '0' where NrOperacion='"~dialogo.nrtrans1~"' and NrBit = 70 ")
+sql.new
+sql.exec
+
+if (Incluido(BuscarCampo('TRANSACCIONES2', 'TipoTr2', 'NrTrans', Val(tr2)), 'DTP|RTP'))
+Message('Modifica DTP/RTP  Y Paso a Pendientes - '~Val(tr2))
+
+
+sql.add("UPDATE "~Dbo()~".TRANSACCIONES2                             ")
+sql.add("SET    RB2='0',Fecha5=null, CB9 = '0'                    ")
+
+Acn(am:1, 0)
+if (not Eqstr(Val(tr1), 'MATCH'))
+sql.add("       ,Cantidad1 = '"~FStr(Val(tr3), 1, 2)~"'          ")
+else
+Acn(am:1, 1)
+endif
+
+sql.add("WHERE  NrTrans= '"~Val(tr2)~"'                            ")
+sql.new
+sql.exec
+Message('Actualizando movimientos')
+sql.add("INSERT INTO "~Dbo()~".MOVPENDIENTES ")
+sql.add("(NrOperacion , FechaMov, Cliente, Especie, CallPut, ")
+sql.add("FechaEj , PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+sql.add("Leyenda , Bits, NrGrupo, Concepto, NrGrupo2,        ")
+sql.add("NrMov , NrLiq, Status, NrInstan, Cupon,             ")
+sql.add("Cuenta, Transaccion, Cantidad)                      ")
+
+sql.add("Select ")
+sql.add("NrOperacion, FechaMov, Cliente, Especie, CallPut,   ")
+sql.add("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado,  ")
+sql.add("Leyenda, ")
+if (Val(am:1) = 0)
+sql.add("Bits,  ")
+else
+sql.add("'MV',  ")
+endif
+sql.add(" NrGrupo, Concepto, NrGrupo2,         ")
+sql.add("NrMov, NrLiq, Status, NrInstan, Cupon,              ")
+sql.add("Cuenta, Transaccion, Cantidad                       ")
+sql.add("from "~Dbo()~".MOVEJECUTADOS                          ")
+sql.add("where NrOperacion = '"~Val(tr2)~"'                     ")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".MOVEJECUTADOS ")
+sql.add("where NrOperacion = '"~Val(tr2)~"'   ")
+sql.new
+
+sql.exec
+
+
+Message('Actualizando instancias')
+Act(az3, Val(tr2))
+Act(az4, 'TRANSACCIONES2')
+Acn(az5, 1)
+Acn(az6, 0)
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+sql.add("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+sql.new
+
+if (sql(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+ejecutarevento('INSBIT', entero1 = Val(az5), nroperacion1 = Val(az3))
+endif
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+
+endif
+
+sql.add(" SELECT M.NrOperacion, M.Concepto FROM "~Dbo()~".MOVEJECUTADOS M ")
+sql.add(" WHERE M.NrTrans2 = '"~dialogo.nrtrans1~"' ")
+sql.add(" AND   M.Concepto IN ('TI','FX')  ")
+recorrer sql
+if (Incluido(Fbn('Concepto'), 'TI|FX') y Incluido(Val(tr:1), 'DEP|MATCH'))
+Message('Restableciendo limites')
+sql.add("UPDATE "~Dbo()~".OPERACIONES ")
+sql.add("  SET RB10        = '0',   ")
+sql.add("      FechaPrecan = null   ")
+sql.add("Where NrOperacion = '"~Fbn()['NrOperacion']~"' ")
+sql.add("  and TipoOp     In ('TIC','TIV','TIFC','TIFV','TICO','TIPO','TCOPRI') ")
+sql.new
+sql.exec
+Message('Actualizando movimientos y limites')
+sql.actualizarmovimientos2(Fbn()['NrOperacion'], NO, SI, NO, NO)
+sql.exec
+endif
+proximo
+

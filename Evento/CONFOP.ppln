@@ -1,0 +1,230 @@
+HojaVisible(NO)
+mostrarcuadrodemensajes
+
+Act(v:1, BuscarCampo('VARIABLES', 'Valor', 'Codigo', 'CONTMEM'))
+if (Eqstr(Val(v:1), 'SI'))
+
+require'..\Lib\MemoryUtils.dll'
+importhelperclass, 'MemoryUtils.Helper'
+let(&memoryhelper, newhelperclass())
+
+Acn(x:1, BuscarCampo('VARIABLES', 'Valor', 'Codigo', 'MEMMINIMA'))
+Acn(x:2, &memoryhelper.availablephysicalmemory())
+if (Val(x:2) < Val(x:1))
+if (Messagebox('La memoria disponible ('~PYC(Val(x:2), 0, 0)~' MB) es menor que la minima recomendada ('~PYC(Val(x:1), 0, 0)~' MB). Desea Continuar?', 3, 2) = 7)
+Cancelar()('Evento cancelado')
+else
+Act(x:3, 'Recomendada: '~PYC(Val(x:1), 0, 0)~' MB')
+Act(x:4, 'Disponible: '~PYC(Val(x:2), 0, 0)~' MB')
+sql.add(" INSERT INTO "~Dbo()~".PMAUDIT (Operador,Fecha,Accion,Tabla,Codigo,Campo,ValorAnterior,ValorActual) ")
+sql.add(" VALUES ('"~UsuarioActivo()~"',GETDATE(), 'M', 'EVENTOS', '"~codigoinforme~"', 'Problema de Memoria','"~Val(x:3)~"','"~Val(x:4)~"') ")
+sql.new
+sql.exec
+endif
+endif
+endif
+borrarceldas(v:1..x:4)
+
+
+
+creardialogo
+fecha1:'Fecha Liq.';;;;;;dialogo.fecha1 <> 0;'Fecha Incorrecta';NO;FSys();
+cliente1:'Cliente';;;;;;;;;
+especie1:'Especie';;;;;;;;;
+mercado1:'Mercado';;;;;;;;;
+cuenta1:'Cuenta';;;;;;;;;
+vehiculo1: 'Vehiculo';;;;;;;;;Var('VEHICULODE');
+string1:'NrOperacionRef4';;;;;dialogo.check1 = 0;;;;;;;;'!!!!!!!!'
+nrtrans1:'NrTrans';;;;;dialogo.check1 = 0;;;;;;;;'!!!!!!!!'
+check1:'Manual';;;;;NO;;;;1;
+check2:'Interfase';;;;NO;NO;;;;1;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+sql.add("Select T.Cliente1, M.Especie, M.NrTrans2, T.Mercado1 Mercado, T.TipoTr2, IsNull(T.Cantidad1,0) Cantidad1, T.UsrInput,     ")
+sql.add("       T.Vehiculo1, T.Cuenta1, T.Cuenta2, T.Fecha1, T.Fecha2, T.NrOperacionRef4, T.NrOperacionRef1, T.Cantidad11 ")
+sql.add("from "~Dbo()~".MOVEJECUTADOS M  with (NOLOCK Index = INDME5),"~Dbo()~".TRANSACCIONES2 T,                             ")
+sql.add("     "~Dbo()~".ESPECIES E, "~Dbo()~".CLIENTES C, "~Dbo()~".OPERACIONESBITS OB                                          ")
+sql.add("where ((T.TipoTr2 ='COMP' AND M.NrTrans2 = T.NrTrans) OR (T.TipoTr2 <>'COMP' AND M.NrOperacion = T.NrTrans))     ")
+sql.add("  AND M.Especie=E.Codigo                                                                                         ")
+sql.add("  AND M.Cliente=C.Codigo                                                                                         ")
+
+if (dialogo.check1 = 0)
+sql.add("  AND  T.NrTrans = '"~Trim(dialogo.nrtrans1)~"' ")
+endif
+if (dialogo.check1 = 1)
+if (NoVacio(dialogo.cliente1))
+sql.add("and T.Cliente1 = '"~dialogo.cliente1~"' ")
+endif
+if (NoVacio(dialogo.especie1))
+sql.add("and M.Especie = '"~dialogo.especie1~"' ")
+endif
+if (NoVacio(dialogo.mercado1))
+sql.add("and M.Mercado = '"~dialogo.mercado1~"' ")
+endif
+if (NoVacio(dialogo.cuenta1))
+sql.add("and M.Cuenta = '"~dialogo.cuenta1~"' ")
+endif
+endif
+sql.add("  AND T.Vehiculo1 = '"~dialogo.vehiculo1~"'                                               ")
+sql.add("  AND T.NrTrans=OB.NrOperacion AND M.FechaMov = '"~IdxDate(dialogo.fecha1)~"'             ")
+sql.add("  AND T.Fecha2 = '"~IdxDate(dialogo.fecha1)~"' AND OB.NrBit in(14) AND OB.Valor='1'           ")
+
+sql.add(" and M.NrGrupo <> '15'                                                                    ")
+sql.add(" and T.TipoTr2 in ('DEP','RET','COMP','MATCH')                                            ")
+
+sql.add(" order by M.Cliente, M.Especie, M.Cuenta, T.Mercado1, M.NrTrans2")
+Watch(sql.batch())
+Act(tr:1, '')
+
+recorrer sql
+if (not Eqstr(Fbn()['NrTrans2'], Val(tr:1)))
+Act(b:fac, Fbn()['NrTrans2'])
+Act(c:fac, Fbn()['TipoTr2'])
+Acd(d:fac, Fbn()['Fecha1'])
+Acd(e:fac, Fbn()['Fecha2'])
+Act(f:fac, Fbn()['Cliente1'])
+Act(g:fac, Fbn()['Mercado'])
+Act(h:fac, Fbn()['Especie'])
+Acn(i:fac, Fbn()['Cantidad1'])
+Act(j:fac, Fbn()['Cuenta1'])
+Act(k:fac, Fbn()['Cuenta2'])
+Act(l:fac, Fbn()['NrOperacionRef4'])
+if (NoVacio(Fbn()['NrOperacionRef1']))
+Act(m:fac, Fbn()['NrOperacionRef1'])
+else
+Act(m:fac, sql(" Select NrOperacion from "~Dbo()~".MOVEJECUTADOS where NrTrans2 = '"~Fbn()['NrTrans2']~"' and NrOperacion <> '"~Fbn()['NrTrans2']~"' "))
+endif
+Act(n:fac, Fbn()['Vehiculo1'])
+Act(o:fac, Fbn()['UsrInput'])
+Acn(p:fac, Fbn()['Cantidad11'])
+if (dialogo.check1 = 0)
+Acn(a:fac, 1)
+endif
+Scn(zz1, 1)
+else
+Dfa()
+endif
+Act(tr:1, Fbn()['NrTrans2'])
+proximo
+
+if (Val(zz1) = 0)
+if (dialogo.check1 = 1)
+Cancelar()('No Existen liquidaciones para confirmar especificaciones')
+endif
+endif
+
+if (dialogo.check1 = 1)
+crearlistbox;'Arial,8,';'Seleccione las Operaciones a Autorizar'
+'Autoriza';a:1..a:fac;;;;50;check
+'Voucher';b:1..b:fac;NO;;;60;string;;
+'Tipo   ';c:1..c:fac;NO;;;60;string;;
+'Fecha1';d:1..d:fac;NO;;;70;fecha;;
+'Fecha2';e:1..e:fac;NO;;;70;fecha;;
+'Cliente';f:1..f:fac;NO;;;70;string;;
+'Mercado';g:1..g:fac;NO;;;70;string;;
+'Especie ';h:1..h:fac;NO;;;80;string;;
+'Cantidad';i:1..i:fac;NO;;;100;numero;'###,###,###,###.##'
+'Cta.Cliente';j:1..j:fac;NO;;;100;string;RGB(180, 180, 193);
+'Cta.Vehiculo';k:1..k:fac;NO;;;100;string;RGB(180, 180, 193);
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+endif
+
+Acn(bz:2, 1)
+Acn(bz:3, 1)
+if (Val(zz1) >= 1)
+recorrer&i 1, Fac()
+if (Val(a:&i) = 1)
+Acn(zz:2, 0)
+Message('Confirmando Liquidacion...')
+ejecutarevento('CONCUS', vehiculo1 = dialogo.vehiculo1, string1 = Val(l:&i), nrtrans1 = Val(b:&i))
+if (DesciendeDeEspecie(Val(h:&i), 'MONEDA') y Eqstr(Val(g:&i), Var('MERCADOBT')))
+Acn(xx:1, 1)
+endif
+if (not Eqstr(Val(f:&i)~Val(h:&i)~Val(j:&i), Val(bz:1)) y NoVacio(Val(bz:1)))
+Acn(xx:2, 1)
+endif
+if (DesciendeDeEspecie(Val(bb:Val(bz:2)), 'MONEDA') y Eqstr(Val(bi:Val(bz:2)), Var('MERCADOBT')))
+Acn(xx:3, 1)
+endif
+if (DesciendeDeEspecie(Val(h:&i), 'MONEDA') y Eqstr(Val(g:&i), Var('MERCADOBT'))) o ((not Eqstr(Val(f:&i)~Val(h:&i)~Val(j:&i), Val(bz:1)) y NoVacio(Val(bz:1))) y DesciendeDeEspecie(Val(bb:Val(bz:2)), 'MONEDA') y Eqstr(Val(bi:Val(bz:2)), Var('MERCADOBT')))
+endif
+if (Round(sql("SELECT count(1) FROM "~Dbo()~".OPERACIONESBITS WHERE NrOperacion in(SELECT Nrtrans FROM "~Dbo()~".TRANSACCIONES2 WHERE NrOperacionRef1='"~Val(m:&i)~"' and Nrtrans<>'"~Val(b:&i)~"') and Valor=1 and NrBit=14 "), 0) = Round(0, 0))
+if (Round(sql("SELECT count(1) FROM "~Dbo()~".MOVPENDIENTES WHERE Nroperacion='"~Val(m:&i)~"' "), 2) = Round(0, 2))
+Act(az3, Val(m:&i))
+Act(az4, 'OPERACIONES')
+Acn(az5, 70)
+Acn(az6, 10)
+Act(tp:1, sql("SELECT TipoOp FROM "~Dbo()~".OPERACIONES WHERE Nroperacion='"~Val(m:&i)~"' "))
+if (Incluido(Val(tp:1), 'FXCF|FXVF'))
+if (Round(sql("SELECT count(1) FROM "~Dbo()~".MOVEJECUTADOS WHERE Nroperacion='"~Val(m:&i)~"' and Leyenda like 'Liquidacion FIX%'"), 2) = Round(1, 2))
+sql.add("SELECT NrOperacion FROM "~Dbo()~".MOVEJECUTADOS WHERE NrTrans2 = '"~Val(b:&i)~"'")
+recorrer sql
+Act(az3, Fbn()['NrOperacion'])
+Act(az4, 'OPERACIONES')
+Acn(az5, 70)
+Acn(az6, 10)
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+sql.add("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+sql.new
+
+if (sql(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+ejecutarevento('INSBIT', entero1 = Val(az5), nroperacion1 = Val(az3))
+endif
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+proximo
+endif
+else
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+sql.add("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+sql.new
+
+if (sql(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+ejecutarevento('INSBIT', entero1 = Val(az5), nroperacion1 = Val(az3))
+endif
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+endif
+endif
+endif
+else
+if ((not Eqstr(Val(f:&i)~Val(h:&i)~Val(j:&i), Val(bz:1)) y NoVacio(Val(bz:1))) y DesciendeDeEspecie(Val(bb:Val(bz:2)), 'MONEDA') y Eqstr(Val(bi:Val(bz:2)), Var('MERCADOBT')))
+endif
+endif
+proximo
+if (DesciendeDeEspecie(Val(h:&i), 'MONEDA') y Eqstr(Val(g:&i), Var('MERCADOBT')))
+endif
+endif
+

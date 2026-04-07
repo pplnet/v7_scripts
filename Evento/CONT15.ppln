@@ -1,0 +1,239 @@
+mostrarcuadrodemensajes
+creardialogo
+fecha1: 'Fecha';1;;;;;;;;FSys()
+vehiculo1: 'Vehiculo';2;;;NO;;;;;Var('VEHICON')
+listatabla1: 'Operaciones';1;2;;;;;;;;;;;;;'NrOperacion';'NrOperacion;Cliente1;FechaOp;Especie;FechaVto';'OPERACIONES'
+check1: 'Contab.Procesada';;;;NO;NO;
+radio1: 'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos';4;1;;NO;NO;;;;0;
+radio2: 'Procesa|Fin de Mes|Diario';;;;NO;;;;;1;;;;;
+findialogo
+
+if (not ok)
+raise('Evento Cancelado')
+endif
+
+Act(ml:1, Var('MONELOCA'))
+Acn(na:1, Var('ASINUM'))
+Act(vc:1, dialogo.vehiculo1)
+Acd(fe:1, Habiles(dialogo.fecha1, -Var('FVALORCONT'), 'ARG'))
+Acn(x:1, sql("Select 1 from "~Dbo()~".VARIABLES where Codigo = 'DIASCONT' "))
+if (Val(x:1) = 1)
+Acn(x:1, Trunc(Var('DIASCONT'), 0))
+endif
+if (Val(x:1) < 1)
+Acn(x:1, 1)
+endif
+Acd(x:2, Habiles(PriDeMes(dialogo.fecha1, SI) - 1, Val(x:1), 'ARG'))
+Acd(fe:2, Habiles(dialogo.fecha1, -1, 'ARG', SI))
+Acd(fe:3, Habiles(dialogo.fecha1, 1, 'ARG', SI))
+Acd(pm:1, PriDeMes(dialogo.fecha1, SI))
+Acd(fm:1, FinDeMes(dialogo.fecha1, SI))
+
+if (Mes(Val(fe:2)) <> Mes(dialogo.fecha1))
+Acd(de:1, PriDeMes(dialogo.fecha1, SI))
+else
+Acd(de:1, dialogo.fecha1)
+endif
+if (Mes(Val(fe:3)) <> Mes(dialogo.fecha1))
+Acd(ha:1, FinDeMes(dialogo.fecha1, SI))
+else
+Acd(ha:1, Val(fe:3) - 1)
+endif
+
+let(&habilsiguientehoy, Habiles(dialogo.fecha1, 1, 'ARG', SI) - 1)
+let(&findemeshoy, FinDeMes(dialogo.fecha1, SI))
+if (&habilsiguientehoy > &findemeshoy)
+let(&fechadevhoy, &findemeshoy)
+else
+let(&fechadevhoy, &habilsiguientehoy)
+endif
+
+let(&fechaayer, Habiles(dialogo.fecha1, -1, 'ARG', SI))
+let(&habilsiguienteayer, Habiles(&fechaayer, 1, 'ARG', SI) - 1)
+let(&findemesayer, FinDeMes(&fechaayer, SI))
+if (&habilsiguienteayer > &findemesayer)
+let(&fechadevayer, &findemesayer)
+else
+let(&fechadevayer, &habilsiguienteayer)
+endif
+if (dialogo.radio1 = 0 o dialogo.radio1 = 4 o dialogo.radio1 = 3)
+Message('Devengados Diarios de Pases')
+sql.add(" Select Sum(M.Monto) Monto, O.Especie, O.ContraEspecie, O.NrOperacion, O.TipoOp, O.Precio1, O.Vehiculo1, MA.Codigo CodAsi, ")
+sql.add(" O.Cantidad, O.Cliente1, O.Book1, O.FechaOp, O.ContraEspecie Moneda, O.Cliente1 Cliente, C.CategDepositante, M.Especie MonDev, ")
+sql.add(" E.Tipo TipoEspecie, E.MonedaEmision, E.Cotiza, E.Issuer, E.Alias1 as EspBanTotal,O.FechaVto,O.Plazo, O.FechaVto2, ")
+sql.add(" O.FechaCargaSys, M.Fecha FechaMov")
+sql.add("FROM "~Dbo()~".OPERACIONES O ")
+sql.add("      INNER JOIN "~Dbo()~".MODELOSASIENTO MA ON O.TipoOp = MA.TipoOp ")
+sql.add("      INNER JOIN "~Dbo()~".MOVDEVENGADOS M ON M.NrOperacion = O.NrOperacion ")
+sql.add("      INNER JOIN "~Dbo()~".OPERACIONESBITS B ON O.NrOperacion = B.NrOperacion ")
+sql.add("      INNER JOIN "~Dbo()~".CLIENTES C ON C.Codigo = O.Cliente1 ")
+sql.add("      INNER JOIN "~Dbo()~".ESPECIES E ON O.Especie = E.Codigo  ")
+sql.add(" Where B.Valor = 1 AND B.NrBit Not IN (1, 30, 31) ")
+sql.add(" AND MA.TipoAsiento IN ("~pipe2comillas(Var('TIPASDEV'))~") ")
+sql.add(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+sql.add(" AND MA.Habilitado = 'SI' ")
+sql.add(" AND M.NrSaldo = 140 ")
+sql.add(" AND O.TipoOp IN ('TIPP','TIPA','MMCO','MMCT','DDV','DDC') ")
+sql.add(" And M.TipoDevengado = 'INTLEN' ")
+sql.add(" AND O.FechaVto >= '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND O.FechaOp <= '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND '"~IdxDate(dialogo.fecha1)~"' >= '"~IdxDate(Val(fe:1))~"' ")
+if (NoVacio(dialogo.listatabla1))
+sql.add(" AND O.NrOperacion IN ("~pipe2comillas(dialogo.listatabla1)~") ")
+endif
+sql.add("AND ((O.FechaCargaSys = '"~IdxDate(dialogo.fecha1)~"' AND O.FechaOp<'"~IdxDate(dialogo.fecha1)~"' AND M.Fecha >= O.FechaOp ) ")
+sql.add("OR (M.Fecha >= '"~IdxDate(Val(de:1))~"' AND O.FechaCargaSys <= '"~IdxDate(dialogo.fecha1)~"')) ")
+sql.add(" AND M.Fecha <= '"~IdxDate(Val(ha:1))~"' ")
+sql.add(" Group By O.Especie, O.ContraEspecie, O.NrOperacion, O.TipoOp, O.Precio1, O.Vehiculo1, MA.Codigo, ")
+sql.add(" O.Cantidad, O.Cliente1, O.Book1, O.FechaOp, C.CategDepositante, M.Especie, E.Tipo, E.MonedaEmision, E.Cotiza, ")
+sql.add(" E.Issuer, E.Alias1, O.FechaVto, O.Plazo, O.FechaVto2, O.FechaCargaSys, M.Fecha ")
+Watch(sql.batch)
+recorrer sql
+Dfa()
+if (Fbn('FechaCargaSys') = dialogo.fecha1 y Fbn('FechaOp') < dialogo.fecha1)
+Acd(fv:1, Fbn('FechaMov'))
+
+if (not EsHabil(Val(fv:1), 'ARG'))
+if (Mes(Val(fv:1)) = Mes(Habiles(Val(fv:1), -1, 'ARG')))
+Acd(fv:1, Habiles(Val(fv:1), -1, 'ARG'))
+else
+Acd(fv:1, Habiles(Val(fv:1), 1, 'ARG'))
+endif
+endif
+
+else
+Acd(fv:1, dialogo.fecha1)
+endif
+Acn(dv:1, Fbn('Monto'))
+Act(fv:2, Fbn('FechaVto'))
+if (not Eqstr(Fbn('MonDev'), Val(ml:1)) y Incluido(Fbn('TipoOp'), 'TIPA|TIPP|MMCO|MMCT|DDC|DDV'))
+Act(mn:99, Fbn('MonDev'))
+Acn(dv:1, Val(dv:1) * EvalFormula('TCCONTABLE'))
+endif
+Acn(dv:2, Val(dv:1))
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(sql(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrOperacion = '"~Fbn('NrOperacion')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+let(&codasi, Fbn('CodAsi'))
+if (Val(ck:1) = 0)
+Message(Fbn('NrOperacion')~' - Modelo: '~Fbn('CodAsi'))
+sql.generarasientoop(&codasi, Fbn('NrOperacion'), '', '', Val(na:1), Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoOp'), null, null, null, null, null, null, FSys(), dialogo.fecha1)
+sql.exec
+endif
+proximo
+Message('Devengados Diarios de Prestamos y Depositos')
+sql.add(" Select Sum(M.Monto) Monto, O.Especie, O.ContraEspecie, O.NrOperacion, O.TipoOp, O.Precio1, O.Vehiculo1, MA.Codigo CodAsi, ")
+sql.add(" O.Cantidad, O.Cliente1, O.Book1, O.FechaOp, O.ContraEspecie Moneda, O.Cliente1 Cliente, C.CategDepositante, M.Especie MonDev, ")
+sql.add(" E.Tipo TipoEspecie, E.MonedaEmision, E.Cotiza, E.Issuer, E.Alias1 as EspBanTotal,O.FechaVto, 'Hoy' Tipo ")
+sql.add("FROM "~Dbo()~".OPERACIONES O ")
+sql.add("      INNER JOIN "~Dbo()~".MODELOSASIENTO MA ON O.TipoOp = MA.TipoOp ")
+sql.add("      INNER JOIN "~Dbo()~".MOVDEVENGADOS M ON M.NrOperacion = O.NrOperacion ")
+sql.add("      INNER JOIN "~Dbo()~".OPERACIONESBITS B ON O.NrOperacion = B.NrOperacion ")
+sql.add("      INNER JOIN "~Dbo()~".CLIENTES C ON C.Codigo = O.Cliente1 ")
+sql.add("      INNER JOIN "~Dbo()~".ESPECIES E ON O.Especie = E.Codigo  ")
+sql.add(" Where B.Valor = 1 AND B.NrBit Not IN (1, 30, 31) ")
+sql.add(" AND MA.TipoAsiento IN ("~pipe2comillas(Var('TIPASDEV'))~") ")
+sql.add(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+sql.add(" AND MA.Habilitado = 'SI' ")
+sql.add(" AND M.NrSaldo = 140 ")
+sql.add(" AND O.TipoOp IN ('TIDE','TICT','TICO','TIPO') ")
+sql.add(" And M.TipoDevengado = 'TIDEV' ")
+sql.add(" AND O.FechaVto >= '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND O.FechaOp <= '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND '"~IdxDate(dialogo.fecha1)~"' >= '"~IdxDate(Val(fe:1))~"' ")
+if (NoVacio(dialogo.listatabla1))
+sql.add(" AND O.NrOperacion IN ("~pipe2comillas(dialogo.listatabla1)~") ")
+endif
+sql.add(" AND M.Fecha <= '"~IdxDate(&fechadevhoy)~"' ")
+sql.add(" Group By O.Especie, O.ContraEspecie, O.NrOperacion, O.TipoOp, O.Precio1, O.Vehiculo1, MA.Codigo, ")
+sql.add(" O.Cantidad, O.Cliente1, O.Book1, O.FechaOp, C.CategDepositante, M.Especie, E.Tipo, E.MonedaEmision, E.Cotiza, ")
+sql.add(" E.Issuer, E.Alias1, O.FechaVto ")
+
+sql.add(" UNION ")
+
+sql.add(" Select Sum(M.Monto) Monto, O.Especie, O.ContraEspecie, O.NrOperacion, O.TipoOp, O.Precio1, O.Vehiculo1, MA.Codigo CodAsi, ")
+sql.add(" O.Cantidad, O.Cliente1, O.Book1, O.FechaOp, O.ContraEspecie Moneda, O.Cliente1 Cliente, C.CategDepositante, M.Especie MonDev, ")
+sql.add(" E.Tipo TipoEspecie, E.MonedaEmision, E.Cotiza, E.Issuer, E.Alias1 as EspBanTotal,O.FechaVto, 'Ayer' Tipo ")
+sql.add("FROM "~Dbo()~".OPERACIONES O ")
+sql.add("      INNER JOIN "~Dbo()~".MODELOSASIENTO MA ON O.TipoOp = MA.TipoOp ")
+sql.add("      INNER JOIN "~Dbo()~".MOVDEVENGADOS M ON M.NrOperacion = O.NrOperacion ")
+sql.add("      INNER JOIN "~Dbo()~".OPERACIONESBITS B ON O.NrOperacion = B.NrOperacion ")
+sql.add("      INNER JOIN "~Dbo()~".CLIENTES C ON C.Codigo = O.Cliente1 ")
+sql.add("      INNER JOIN "~Dbo()~".ESPECIES E ON O.Especie = E.Codigo  ")
+sql.add(" Where B.Valor = 1 AND B.NrBit Not IN (1, 30, 31) ")
+sql.add(" AND MA.TipoAsiento IN ("~pipe2comillas(Var('TIPASDEV'))~") ")
+sql.add(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+sql.add(" AND MA.Habilitado = 'SI' ")
+sql.add(" AND M.NrSaldo = 140 ")
+sql.add(" AND O.TipoOp IN ('TIDE','TICT','TICO','TIPO') ")
+sql.add(" And M.TipoDevengado = 'TIDEV' ")
+sql.add(" AND O.FechaVto >= '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND O.FechaOp <= '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND '"~IdxDate(dialogo.fecha1)~"' >= '"~IdxDate(Val(fe:1))~"' ")
+if (NoVacio(dialogo.listatabla1))
+sql.add(" AND O.NrOperacion IN ("~pipe2comillas(dialogo.listatabla1)~") ")
+endif
+sql.add(" AND M.Fecha <= '"~IdxDate(&fechadevayer)~"' ")
+sql.add(" Group By O.Especie, O.ContraEspecie, O.NrOperacion, O.TipoOp, O.Precio1, O.Vehiculo1, MA.Codigo, ")
+sql.add(" O.Cantidad, O.Cliente1, O.Book1, O.FechaOp, C.CategDepositante, M.Especie, E.Tipo, E.MonedaEmision, E.Cotiza, ")
+sql.add(" E.Issuer, E.Alias1, O.FechaVto ")
+sql.add(" Order By O.NrOperacion, Tipo")
+Watch(sql.batch)
+recorrer sql
+Dfa()
+Acd(fv:1, dialogo.fecha1)
+Acn(dv:1, Fbn('Monto'))
+Act(fv:2, Fbn('FechaVto'))
+if (not Eqstr(Val(op:1), Fbn('NrOperacion')) o Vacio(Val(op:1)))
+let(&valhoy, 0)
+let(&valayer, 0)
+Act(op:1, Fbn('NrOperacion'))
+endif
+if (Eqstr(Fbn('Tipo'), 'Hoy'))
+let(&precioniif, CotizacionNIIF(Fbn('Especie'), dialogo.fecha1, Fbn('Book1')))
+if (Vacio(&precioniif))
+let(&preciohoy, 0)
+else
+let(&preciohoy, &precioniif.preciocotizaciondeterminada)
+endif
+let(&valhoy, Fbn('Monto') * &preciohoy)
+if (Fbn('FechaVto') = dialogo.fecha1)
+if (Mes(dialogo.fecha1) <> Mes(Habiles(dialogo.fecha1, -1, 'ARG')))
+let(&valdia, sql("Select Sum(Monto) from "~Dbo()~".MOVDEVENGADOS where NrOperacion = '"~Fbn('NrOperacion')~"' and Fecha >= '"~IdxDate(PriDeMes(dialogo.fecha1, SI))~"' "))
+else
+let(&valdia, 0)
+endif
+else
+let(&valdia, &valhoy - &valayer)
+endif
+Act(mn:99, Fbn('Cotiza'))
+Acn(dv:2, Val(dv:1))
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(sql(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrOperacion = '"~Fbn('NrOperacion')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+let(&codasi, Fbn('CodAsi'))
+if (Val(ck:1) = 0)
+Message(Fbn('NrOperacion')~' - Modelo: '~Fbn('CodAsi'))
+sql.generarasientoop(&codasi, Fbn('NrOperacion'), '', '', Val(na:1), Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoOp'), null, null, null, null, null, null, FSys(), dialogo.fecha1)
+sql.exec
+endif
+else
+let(&valdia, 0)
+let(&precioniif, CotizacionNIIF(Fbn('Especie'), dialogo.fecha1 - 1, Fbn('Book1')))
+if (Vacio(&precioniif))
+let(&precioayer, 0)
+else
+let(&precioayer, &precioniif.preciocotizaciondeterminada)
+endif
+let(&valayer, Fbn('Monto') * &precioayer)
+endif
+proximo
+
+endif
+

@@ -1,0 +1,77 @@
+creardialogo
+nroperacion1: 'Nr. Operacion';1;1;1;;;NoVacio(dialogo.nroperacion1) y Incluido(BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', dialogo.nroperacion1), 'TIC|TIV|TCOPRI') y BuscarCampo('OPERACIONES', 'PaseCB', 'NrOperacion', dialogo.nroperacion1) = 0;'Operacion Invalida.';NO;;;;;;"TipoOp in ('TIC','TIV','TCOPRI') and PaseCB=0 "
+check1: 'Procesa';1;2;1;NO;NO;;;;1;
+findialogo
+if (not ok)
+Cancelar()
+endif
+if (dialogo.check1 = 0)
+HojaVisible(SI)
+endif
+
+
+Act(a:1, dialogo.nroperacion1)
+Acn(a:2, dialogo.check1)
+Act(a:3, BuscarCampo('OPERACIONES', 'Book1', 'NrOperacion', dialogo.nroperacion1))
+creardialogo
+nroperacion1: 'Nr. Operacion';1;1;1;NO;;;;;Val(a: 1);
+check1: 'Procesa';1;2;1;NO;NO;;;;Val(a: 2);
+book1: 'Book Actual';2;1;1;NO;SI;;;;Val(a: 3);
+book2: 'Book Nuevo';3;1;1;SI;SI;NoVacio(dialogo.book2) y not Eqstr(dialogo.book2, dialogo.book1);'Debe ingresar un book distinto al actual.';NO;;
+findialogo
+
+if (not ok)
+Cancelar()('Evento Cancelado')
+endif
+
+
+sql.add(" Select Books From "~Dbo()~".MODELOSNEGOCIO ")
+sql.add(" Where ValuaCarteraPartida = 'SI' ")
+
+
+
+recorrer sql
+Act(bk:1, Val(bk:1)~'|'~Fbn('Books'))
+proximo
+
+if (Incluido(dialogo.book1, Val(bk:1)) y not Incluido(dialogo.book2, Val(bk:1)))
+Acn(x:1, 1)
+Messagebox("Evento cancelado. No está contemplado el pasaje de INVESTMENT a TRADING.")
+
+endif
+
+let(&opsinanularcambiobook, sql("Select 1 from "~Dbo()~".OPERACIONES Where NrOperacion = '"~dialogo.nroperacion1~"' and FechaCambioBook is not null and FechaAnulacionCambioBook is null"))
+if (&opsinanularcambiobook = 1)
+Acn(x:1, 1)
+Messagebox("Evento cancelado. Debe anular el cambio de book anterior para poder continuar.")
+endif
+
+Act(a:4, dialogo.book2)
+Acn(a:5, sql("Select 1 from "~Dbo()~".MOVEJECUTADOS where NrOperacion='"~dialogo.nroperacion1~"' and NrSaldo <> 1 "))
+if (Val(a:5) > 0)
+Acn(x:1, 1)
+Messagebox('La operacion esta liquidada. No se puede modificar el Book.')
+endif
+
+if (Val(x:1) = 0)
+if (dialogo.check1 = 1)
+sql.add("Update "~Dbo()~".OPERACIONES Set Book1 = '"~dialogo.book2~"', ")
+sql.add(" BookAnterior= '"~dialogo.book1~"' WHERE NrOperacion='"~dialogo.nroperacion1~"' ")
+sql.new
+sql.exec
+
+if (sql("Select 1 from "~Dbo()~".OPERACIONES where NrOperacion='"~dialogo.nroperacion1~"' and FechaAnulacionCambioBook='"~IdxDate(FSys())~"' and  FechaCambioBook<'"~IdxDate(FSys())~"'") = 0)
+sql.add("Update "~Dbo()~".OPERACIONES Set  FechaCambioBook = '"~IdxDate(FSys())~"' WHERE NrOperacion='"~dialogo.nroperacion1~"' ")
+else
+sql.add("Update "~Dbo()~".OPERACIONES Set  FechaAnulacionCambioBook = null WHERE NrOperacion='"~dialogo.nroperacion1~"' ")
+endif
+sql.new
+sql.exec
+sql.actualizarmovimientos2(dialogo.nroperacion1, SI, NO, NO, SI)
+sql.exec
+
+Messagebox('La operacion fue actualizada correctamente')
+
+endif
+endif
+

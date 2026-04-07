@@ -1,0 +1,97 @@
+mostrarcuadrodemensajes
+creardialogo
+fecha1:'Fecha:';;;;;;;;;FSys()
+vehiculo1: 'Vehiculo:';;;;;;NoVacio(dialogo.vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+cliente1:'Agente';;;;;;Vacio(dialogo.cliente1) o (dialogo.entero1 <> 0);'Agente Invalido';NO;;;;;;" NrMAE Is Not Null AND NrMAE <> 0 ";
+entero1:'NrMAE';;;;NO;NO;;;;;BuscarCampo('CLIENTES', 'NrMAE', 'Codigo', dialogo.cliente1);
+findialogo
+if (not ok)
+Cancelar()
+endif
+
+Acn(bd:1, 0)
+SetFilaActual(0)
+sql.add(" Select NrTrans From "~Dbo()~".TRANSACCIONES2 ")
+sql.add(" Where TipoTr2 = 'LIQOCT' ")
+sql.add(" AND Fecha1 = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+if (NoVacio(dialogo.cliente1))
+sql.add(" AND Cliente1 = '"~dialogo.cliente1~"' ")
+endif
+recorrer sql
+if (sql(" Select 1 From "~Dbo()~".MOVEJECUTADOS Where NrOperacion = '"~Fbn('NrTrans')~"' ") = 1)
+Cancelar()('El Mark To Mark del dia ya fue liquidado')
+else
+Acn(bd:1, 1)
+Act(ta:fac, Fbn('NrTrans'))
+endif
+proximo
+
+Acn(fi:1, Fac())
+Act(me:1, Var('MERCOCT'))
+Act(ct:2, sql("select Codigo from "~Dbo()~".CUENTAS WHERE Cliente = '"~dialogo.vehiculo1~"' AND Estado = 'HAB' and Especies Like '%ARP%' and Permanente = 'SI' "))
+
+sql.add(" Select Sum(Cantidad) Cantidad, EnteCustodia, Cliente ")
+sql.add(" From "~Dbo()~".MOVEJECUTADOS ")
+sql.add(" Where FechaMov = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND NrSaldo = 100 ")
+sql.add(" AND EnteCustodia = '"~dialogo.vehiculo1~"' ")
+if (NoVacio(dialogo.cliente1))
+sql.add(" AND Cliente = '"~dialogo.cliente1~"' ")
+endif
+sql.add(" Group By EnteCustodia, Cliente ")
+
+recorrer sql
+Act(nt:1, getnumerador(88))
+Message('Generando LIQOCT '~Val(nt:1))
+sql.add(" Insert Into "~Dbo()~".TRANSACCIONES2 ")
+sql.add(" (NrTrans, TipoTr2, Cliente1, Especie, ")
+sql.add(" Vehiculo1, Cantidad1, Fecha1, Cuenta1, ")
+sql.add(" FechaCarga, FechaCargaSys, Numerador, UsrInput, ")
+sql.add(" Cambio1, Mercado1, Cuenta2) ")
+sql.add(" Values ")
+sql.add(" ('"~Val(nt:1)~"', 'LIQOCT', '"~Fbn('Cliente')~"', 'ARP', ")
+sql.add(" '"~dialogo.vehiculo1~"', "~FStr(Fbn('Cantidad'), 0, 2)~", '"~IdxDate(dialogo.fecha1)~"', '"~Val(ct:1)~"', ")
+sql.add(" "~SQLFecha(Ahora())~", '"~IdxDate(FSys())~"', 88, '"~UsuarioActivo()~"', ")
+sql.add(" 0, '"~Val(me:1)~"', '"~Val(ct:2)~"') ")
+sql.new
+
+sql.add(" Insert Into "~Dbo()~".OPERACIONESBITS ")
+sql.add(" (NrOperacion, NrBit, Valor) ")
+sql.add(" Values ")
+sql.add(" ('"~Val(nt:1)~"', 2, '1') ")
+sql.new
+
+if (Fbn('Cantidad') <> 0)
+sql.add(" Insert Into "~Dbo()~".MOVPENDIENTES ( ")
+sql.add(" NrOperacion, FechaMov, Cliente, Especie, ")
+sql.add(" Mercado, EnteCustodia, NrSaldo, Cantidad, ")
+sql.add(" Leyenda, Bits, Cuenta, NrMov, ")
+sql.add(" Concepto, NrGrupo, NrGrupo2, NrInstan) ")
+sql.add(" Values ")
+sql.add(" ('"~Val(nt:1)~"', '"~IdxDate(dialogo.fecha1)~"', '"~Fbn('Cliente')~"', 'ARP', ")
+sql.add(" '"~Val(me:1)~"', '"~dialogo.vehiculo1~"', 1, "~FStr(-Fbn('Cantidad'), 0, 2)~", ")
+sql.add(" 'Liquidacion OCT', 'MV', '"~Val(ct:1)~"', 1, ")
+sql.add(" 'OCT', 0, 0, 0) ")
+sql.new
+endif
+sql.add(" Update "~Dbo()~".MOVEJECUTADOS ")
+sql.add(" Set NrTrans2 = '"~Val(nt:1)~"' ")
+sql.add(" Where FechaMov = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND NrSaldo = 100 ")
+sql.add(" AND EnteCustodia = '"~dialogo.vehiculo1~"' ")
+sql.add(" AND Cliente = '"~Fbn('Cliente')~"' ")
+sql.new
+sql.exec
+
+
+proximo
+if (Val(bd:1) = 1)
+Message('***---Anulando Transacciones anteriores')
+recorrer&k 1, Val(fi:1)
+if (NoVacio(Val(ta:&k)))
+ejecutarevento('ANLOCT', nrtrans1 = Val(ta:&k))
+endif
+proximo
+endif
+

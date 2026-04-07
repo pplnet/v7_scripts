@@ -1,0 +1,342 @@
+mostrarcuadrodemensajes
+creardialogo
+fecha1: 'Fecha';;;;;;;;;FSys()
+lista1: 'Vehiculos';3;1;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet(" Select Codigo From "~Dbo()~".VEHICULOS"), SQLSet(" Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"'"))
+check1: 'Contab.Procesada';;;;NO;NO;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+Message('--- Asientos de Corte de Cupon ---')
+
+sql.add(" SELECT Codigo FROM "~Dbo()~".MODELOSASIENTO MA WHERE TipoAsiento IN ("~pipe2comillas(Var('TIPASOCORT'))~") AND Habilitado = 'SI' AND Entorno = '"~sigla~"' ")
+if (NoVacio(dialogo.lista1))
+sql.add(" AND (( ")
+recorrer&i 1, Elementos(dialogo.lista1)
+sql.add(" '|'+rtrim(MA.Vehiculo)+'|' like '%|"~ItemLista(dialogo.lista1, &i)~"|%' ")
+if (not Elementos(dialogo.lista1) = &i)
+sql.add(" OR ")
+endif
+proximo
+sql.add(") OR MA.Vehiculo is null OR MA.Vehiculo = '' OR MA.Vehiculo = ' ' )")
+endif
+
+recorrer sql
+Dfa()
+Act(la:1, Val(la:1)~Fbn('Codigo')~'|')
+proximo
+
+Act(us:1, Descendientes('ESPECIES', 'U$S'))
+Acd(fe:2, Habiles(PriDeMes(dialogo.fecha1, SI), -1, 'ARG'))
+
+sql.add(" SELECT Case T.TipoTr2 When 'CUPON ' Then T.Especie Else T.Especie2 END Especie, ")
+sql.add(" T.Fecha1, T.Fecha2, T.Vehiculo1,  T.NrTrans NrOperacion, T.Cantidad1, V.Valor1, V.Valor2, ")
+sql.add(" E.Codigo, E.TasaIntVigente, E.TasaIntAnterior, E.InteresesC, E.CuponFeriado, E.Tasa1, ")
+sql.add(" E.FechaCambioTasa, E.IntsCapitalizados, E.Cotiza, T.TipoTr2, E.ZeroCoupon, T.Cupon1, T.Precio2 Renta, ")
+sql.add(" Case T.TipoTr2 When 'CUPON ' Then Precio1 Else Precio3 END Amort, T.Cuenta2, T.Cantidad5, T.Cantidad6, ")
+sql.add(" '' Observaciones, T.Cliente1, T.Cantidad1 Cantidad, T.Cambio3, CASE T.TipoTr2 WHEN 'CUPON ' THEN T.Cambio1 ELSE T.PrecioEj END  VTAnt, E.Alias8, E.Cotiza Moneda, ")
+sql.add(" V.Alias4 MonLocalVeh, E.Issuer Emisor, Cantidad9, E.TipoTasa, T.Book1 Book, T.Cambio1 IVAGastos, T.Cantidad8 Gastos, T.Especie3 MonedaGastos ")
+sql.add(" FROM "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".VEHICULOS V, "~Dbo()~".ESPECIES E ")
+sql.add(" WHERE T.Vehiculo1 = V.Codigo ")
+sql.add(" AND   (   (T.Especie  = E.Codigo AND T.TipoTr2 ='CUPON')   ")
+sql.add("        OR (T.Especie2 = E.Codigo AND T.TipoTr2<>'CUPON') ) ")
+sql.add(" AND   T.TipoTr2   IN ('CUPON','CCUPON','PCUPON') ")
+sql.add(" AND   (T.Cantidad4=2 OR T.TipoTr2<>'CUPON') ")
+sql.add(" AND   T.FechaCargaSys = "~IdxDate2(dialogo.fecha1)~"   ")
+sql.add(" AND   T.Vehiculo1 Not IN ("~pipe2comillas(Var('VLIQUIDAA'))~") ")
+if (NoVacio(dialogo.lista1))
+sql.add(" AND (T.Vehiculo1 IN ("~pipe2comillas(dialogo.lista1)~") OR T.Vehiculo1 is null OR T.Vehiculo1 = '' OR T.Vehiculo1 = ' ' )")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" AND T.Vehiculo1 IN (Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo = '"~UsuarioActivo()~"') ")
+endif
+endif
+sql.add("  ORDER BY NrOperacion ")
+
+recorrer sql
+Message(Fbn('Vehiculo1'))
+Acn(bd:1, 0)
+Act(em:1, Fbn('Emisor'))
+Act(tz:1, Fbn('Cotiza'))
+Act(tt:1, Fbn('TipoTasa'))
+Act(vh:11, Fbn('Vehiculo1'))
+Act(mn:1, Fbn('Moneda'))
+let(&moneda, Fbn('Moneda'))
+let(&book, Fbn('Book'))
+if (Eqstr(Fbn('TipoTr2'), 'CUPON'))
+Acn(pk:1, Fbn('Cantidad5'))
+else
+Acn(pk:1, Fbn('Cantidad9'))
+endif
+if (Eqstr(Fbn('ZeroCoupon'), 'SI'))
+Acn(ic:1, 1)
+else
+Acn(ic:1, sql(" Select IntsCapitalizados FROM "~Dbo()~".AGENDACUPONES WHERE Especie = '"~Fbn('Especie')~"' AND NrCupon = '"~FStr(Fbn('Cupon1'), 0, 0)~"' "))
+Scn(ic:1, 1)
+endif
+if (Eqstr(Fbn('TipoTr2'), 'CUPON'))
+Acn(ma:1, Fbn('Cantidad1') * Val(ic:1) * Fbn('Amort') / 100)
+Acn(mr:1, Fbn('Cantidad1') * Val(ic:1) * Fbn('Renta') * Fbn('VTAnt') / 100)
+sql.add(" Select Indice From "~Dbo()~".ESPECIES ")
+sql.add(" Where Indice Is Not Null ")
+sql.add(" AND Codigo = '"~Fbn('Especie')~"' ")
+recorrer sql
+Dfa()
+Acn(bd:1, 1)
+proximo
+if (Val(bd:1) = 0)
+Acn( in :1, 1)
+else
+Acn( in :1, Fbn('Cambio3'))
+endif
+Acn(ma:1, Val(ma:1) * Val( in :1))
+Acn(mr:1, Val(mr:1) * Val( in :1))
+Acn(ic:11, 0)
+Acn(ic:21, 0)
+Acn(ic:31, 0)
+Acn(ic:41, 0)
+Acn(id:1, 0)
+Acn(id:2, 0)
+Acn(id:3, 0)
+Acn(ar:11, 0)
+Acn(ar:21, 0)
+Acn(ar:31, 0)
+Acn(ar:41, 0)
+Acn(yc:11, 0)
+Acn(yc:21, 0)
+Acn(yc:31, 0)
+Acn(yc:41, 0)
+Acn(ia:11, 0)
+Acn(ia:21, 0)
+Acn(ia:31, 0)
+Acn(ia:41, 0)
+Acn(aj:11, 0)
+Acn(aj:21, 0)
+Acn(aj:31, 0)
+Acn(aj:41, 0)
+if (EsHabil(Fbn('Fecha1'), 'ARG'))
+Acd(fe:1, Fbn('Fecha1'))
+else
+Acd(fe:1, Habiles(Fbn('Fecha1'), 1, 'ARG'))
+endif
+if (NO)
+if (not Eqstr(Fbn('ZeroCoupon'), 'SI'))
+if (EsHabil(Fbn('Fecha1')))
+Acd(fe:3, Fbn('Fecha1'))
+else
+Acd(fe:3, Habiles(Fbn('Fecha1'), -1, 'ARG'))
+endif
+sql.add(" Select YCMEDAY, YCMFDAY, YCMCDAY, YCMLDAY, Vehiculo, Especie ")
+sql.add(" From "~Dbo()~".RESULTADOS2 ")
+sql.add(" Where (Vehiculo = '"~Fbn('Vehiculo1')~"' OR Vehiculo is null OR Vehiculo = '' OR Vehiculo = ' '  )")
+sql.add(" AND NrSaldo = 2 ")
+sql.add(" AND Especie = '"~Fbn('Especie')~"' ")
+sql.add(" AND Fecha = '"~IdxDate(Val(fe:3))~"' ")
+recorrer sql
+Dfa()
+Acn(ic:11, Fbn('YCMFDAY'))
+Acn(ic:21, Fbn('YCMLDAY'))
+Acn(ic:31, Fbn('YCMCDAY'))
+Acn(ic:41, Fbn('YCMEDAY'))
+if (NO)
+if (not Eqstr(Val(tt:1), 'FIJA') y not celdavacia(tt:1))
+sql.add(" Select YNMEMTD, YNMFMTD, YNMCMTD, YNMLMTD, Especie, Vehiculo ")
+sql.add(" From "~Dbo()~".RESULTADOS2 ")
+sql.add(" Where (Vehiculo = '"~Fbn('Vehiculo')~"' OR Vehiculo is null OR Vehiculo = '' OR Vehiculo = ' ' ) ")
+sql.add(" AND NrSaldo = 2 ")
+sql.add(" AND Especie = '"~Fbn('Especie')~"' ")
+sql.add(" AND Fecha = '"~IdxDate(Val(fe:2))~"' ")
+recorrer sql
+Dfa()
+Acn(ia:11, Fbn('YNMFMTD'))
+Acn(ia:21, Fbn('YNMLMTD'))
+Acn(ia:31, Fbn('YNMCMTD'))
+Acn(ia:41, Fbn('YNMEMTD'))
+sql.add(" Select Sum(Cantidad1) Fuerte, Sum(Cantidad2) Local, Sum(Cantidad3) Grupo, Sum(Valor1) Emision, A1.Alias7 Especie, ")
+sql.add(" A.Vehiculo  ")
+sql.add(" From "~Dbo()~".ASIENTOSCON1 A1, "~Dbo()~".ASIENTOSCON A, "~Dbo()~".MODELOSASIENTO M ")
+sql.add(" Where A1.NrUnicoAsiento = A.NrUnicoAsiento ")
+sql.add(" AND A.Modelo = M.Codigo ")
+sql.add(" AND (A.Vehiculo = '"~Fbn('Vehiculo')~"' OR A.Vehiculo is null OR A.Vehiculo = '' OR A.Vehiculo = ' ' ) ")
+sql.add(" AND A1.Alias7 = '"~Fbn('Especie')~"' ")
+sql.add(" AND A.FechaValor = '"~IdxDate(Val(fe:2))~"' ")
+sql.add(" AND M.TipoAsiento IN ("~pipe2comillas(Var('TIPASITESE'))~") ")
+sql.add(" AND A1.DebitoCredito = 'CRE' ")
+sql.add(" AND A1.Valor1 > 0 ")
+sql.add(" AND A1.Alias1 = 'INTERES' ")
+sql.add(" Group By A1.Alias7, A.Vehiculo ")
+recorrer sql
+Acn(yc:11, Fbn('Fuerte'))
+Acn(yc:21, Fbn('Local'))
+Acn(yc:31, Fbn('Grupo'))
+Acn(yc:41, Fbn('Emision'))
+Act(k:fac, Val(mn:1))
+Acd(v:2, Val(fe:2))
+Acd(v:3, FinDeMes(PriDeMes(Val(v:2), SI) - 1, NO))
+Acn(ic:1, 0)
+Acn(ia:1, 0)
+Acn(df:1, 0)
+Acn(df:2, 0)
+Acn(df:3, 0)
+Acn(df:4, 0)
+Act(mf:1, Var('MONEFUERTE'))
+Act(ml:1, Var('MONELOCA'))
+Act(mg:1, Var('MONEGRUPO'))
+sql.add(" Select NrOperacion, Cantidad, Intereses, FechaMov, Especie From "~Dbo()~".MOVPOSEJE2 ")
+sql.add(" Where Especie = '"~Fbn('Especie')~"' ")
+sql.add(" AND Vehiculo = '"~Fbn('Vehiculo')~"' ")
+sql.add(" AND Tipo = 1 ")
+sql.add(" AND NrSaldo = 2 ")
+sql.add(" AND FechaMov > '"~IdxDate(Val(v:3))~"' ")
+sql.add(" AND FechaMov < '"~IdxDate(Val(v:2))~"' ")
+recorrer sql
+Dfa()
+sql.add(" Select Intereses From "~Dbo()~".INTERESESCORRIDOS ")
+sql.add(" Where Especie = '"~Fbn('Especie')~"' ")
+sql.add(" AND Fecha = '"~IdxDate(Fbn('FechaMov'))~"' ")
+recorrer sql
+Dfa()
+Acn(ic:1, Fbn('Intereses'))
+proximo
+Acn(ia:1, Fbn('Cantidad') * Val(ic:1))
+Scn(df:4, Fbn('Intereses') - Val(ia:1))
+proximo
+Acn(df:1, sql(" Select dbo.ObtenerConversionMoneda_EspecieFechaEspecieResultadoValorAConvertir('"~Val(k:fac)~"', '"~IdxDate(Val(v:2))~"', '"~Val(mf:1)~"', "~FStr(Val(df:4), 0, 2)~") "))
+Acn(df:2, sql(" Select dbo.ObtenerConversionMoneda_EspecieFechaEspecieResultadoValorAConvertir('"~Val(k:fac)~"', '"~IdxDate(Val(v:2))~"', '"~Val(ml:1)~"', "~FStr(Val(df:4), 0, 2)~") "))
+Acn(df:3, sql(" Select dbo.ObtenerConversionMoneda_EspecieFechaEspecieResultadoValorAConvertir('"~Val(k:fac)~"', '"~IdxDate(Val(v:2))~"', '"~Val(mg:1)~"', "~FStr(Val(df:4), 0, 2)~") "))
+
+
+Scn(yc:11, Val(df:1))
+Scn(yc:21, Val(df:2))
+Scn(yc:31, Val(df:3))
+Scn(yc:41, Val(df:4))
+proximo
+Acn(aj:11, Val(ia:11) - Val(yc:11))
+Acn(aj:21, Val(ia:21) - Val(yc:21))
+Acn(aj:31, Val(ia:31) - Val(yc:31))
+Acn(aj:41, Val(ia:41) - Val(yc:41))
+Scn(ic:11, Val(aj:11))
+Scn(ic:21, Val(aj:21))
+Scn(ic:31, Val(aj:31))
+Scn(ic:41, Val(aj:41))
+proximo
+endif
+endif
+proximo
+endif
+endif
+if (Fbn('Amort') > 0)
+sql.add(" Select AMMEDAY, AMMFDAY, AMMCDAY, AMMLDAY, ARMEDAY, ARMFDAY, ARMCDAY, ARMLDAY ")
+sql.add(" From "~Dbo()~".RESULTADOS2 ")
+sql.add(" Where (Vehiculo = '"~Fbn('Vehiculo1')~"' OR Vehiculo is null OR Vehiculo = '' OR Vehiculo = ' ' ) ")
+sql.add(" AND NrSaldo = 2 ")
+sql.add(" AND Especie = '"~Fbn('Especie')~"' ")
+sql.add(" AND Fecha = '"~IdxDate(Val(fe:1))~"' ")
+recorrer sql
+Dfa()
+Acn(ar:11, Fbn('AMMFDAY') + Fbn('ARMFDAY'))
+Acn(ar:21, Fbn('AMMLDAY') + Fbn('ARMLDAY'))
+Acn(ar:31, Fbn('AMMCDAY') + Fbn('ARMCDAY'))
+Acn(ar:41, Fbn('AMMEDAY') + Fbn('ARMEDAY'))
+proximo
+endif
+else
+Acn(cn:1, Fbn('Cantidad1'))
+Acn(ir:1, 0)
+Acn(iz:4, 0)
+Acn(ma:1, Fbn('Cantidad6'))
+Acn(mr:1, Fbn('Cantidad5'))
+Acn(ip:1, Fbn('Renta'))
+Acn(cb:3, 1)
+Acn(vt:1, Fbn('VTAnt'))
+let(&bono, Fbn('Especie'))
+sql.add(" Select FechaCorte From "~Dbo()~".AGENDACUPONES ")
+sql.add(" Where Especie = '"~Fbn('Especie')~"' ")
+sql.add(" AND NrCupon = '"~Fbn('Cupon1')~"' ")
+sql.add("  ")
+recorrer sql
+Dfa()
+Acd(fe:8, Fbn('FechaCorte'))
+proximo
+sql.add(" Select P2.PFRME, P2.IFME, P2.Especie, P2.Vehiculo From "~Dbo()~".POSICIONES2 P2 ")
+sql.add(" Where P2.Especie = '"~Fbn('Especie')~"' ")
+sql.add(" AND P2.Vehiculo = '"~Fbn('Vehiculo1')~"' ")
+sql.add(" AND P2.NrSaldo = 2 ")
+sql.add(" AND P2.Fecha = (Select Max(PP2.Fecha) From "~Dbo()~".POSICIONES2 PP2 ")
+sql.add("              Where P2.Especie = PP2.Especie ")
+sql.add("              AND P2.Vehiculo = PP2.Vehiculo ")
+sql.add("              AND P2.NrSaldo = PP2.NrSaldo ")
+sql.add("              AND PP2.Fecha <= '"~IdxDate(Val(fe:8))~"') ")
+recorrer sql
+if (Val(bd:1) = 1)
+if (Eqstr(Val(tz:1), Var('MONELOCA')))
+Acn(cb:3, 1)
+else
+sql.add(" Select Cambio3 From "~Dbo()~".TRANSACCIONES2 Where TipoTr2 = 'CUPON' ")
+sql.add(" AND Especie = '"~Fbn('Especie')~"' ")
+sql.add(" AND Cupon1 = '"~Val(cp:86)~"' ")
+sql.add(" AND Vehiculo1 = '"~Fbn('Vehiculo')~"' ")
+recorrer sql
+Dfa()
+Acn(cb:3, Fbn('Cambio3'))
+proximo
+endif
+endif
+Acn(pp:1, Fbn('IFME'))
+Acn(ir:1, Val(cn:1) * ((Val(ip:1) * Val(vt:1)) - (Val(pp:1) * Val(cb:3))))
+Acn(iz:4, Val(cn:1) * ((Val(ip:1) * Val(vt:1)) - (Val(pp:1) * Val(cb:3))))
+let(&resultadointeresme, 0)
+if (Fbn('Renta', 0) > 0)
+let(&resultadointeresme, Val(cn:1) * ((Fbn('Renta', 0) * Val(vt:1)) - (Fbn('IFME') * Val(cb:3))))
+endif
+let(&resultadocapitalme, 0)
+if (Fbn('Amort', 0) > 0)
+Acd(fe:44, Habiles(PriDeMes(Val(fe:8), SI), -1, 'ARG'))
+let(&intereses, 0)
+let(&cotizacion, Cotizacion(&bono, null, null, null, Val(fe:44), 1, SI, NO))
+sql.add(" Select Intereses From "~Dbo()~".INTERESESCORRIDOS ")
+sql.add(" Where Especie = '"~&bono~"' ")
+sql.add(" AND Fecha = '"~IdxDate(Val(fe:44))~"' ")
+sql.add("  ")
+recorrer sql
+Dfa()
+let(&intereses, Fbn('Intereses'))
+proximo
+let(&precioanterior, &cotizacion - &intereses)
+let(&resultadocapitalme, Val(cn:1) * ((Fbn('Amort', 0) * Val(vt:1)) - (&precioanterior * Val(cb:3))))
+endif
+Dfa()
+proximo
+endif
+recorrer&i 1, Elementos(Val(la:1))
+Acd(fv:1, Fbn('Fecha1'))
+Act(vh:1, Fbn('Vehiculo1'))
+Acd(fo:1, Val(fv:1))
+Acd(fo:2, Habiles(FinDeMes(Val(fo:1), NO, 'ARG')))
+Acn(v1, 0)
+sql.add("Select FechaInicio, FechaFin    from "~Dbo()~".PERIODOSCONTABLES where ")
+sql.add("    Vehiculo = '"~Val(vh:1)~"' ")
+recorrer sql
+if (Fbn()['FechaInicio'] <= Val(fv:1))
+else
+Acd(fv:1, Fbn()['FechaInicio'])
+endif
+proximo
+
+
+Acn(ck:1, 0)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(sql(" Select A.NrUnicoAsiento From "~Dbo()~".ASIENTOSCON A, "~Dbo()~".ASIENTOSCON1 A1 Where A.NrUnicoAsiento = A1.NrUnicoAsiento AND A1.Alias7 = '"~Fbn('Especie')~"' AND A.Modelo = '"~ItemLista(Val(la:1), &i)~"' AND A.NrTrans2 = '"~Fbn('NrOperacion')~"' AND A.Estado = 'E' AND (A.NrAsiento Is Null OR A.NrAsiento = '' OR A.NrAsiento = ' ') AND (A.FechaValor > '"~IdxDate(Val(fo:2))~"' OR A.FechaValor = '"~IdxDate(Val(fo:1))~"') AND A.Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Message('Modelo: '~ItemLista(Val(la:1), &i))
+let(&modelocontable, ItemLista(Val(la:1), &i))
+sql.generarasientoop(ItemLista(Val(la:1), &i), '', '', '', 810, Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, null, null, Fbn('NrOperacion'), null, null, null, null, FSys(), dialogo.fecha1)
+sql.exec
+endif
+proximo
+proximo

@@ -1,0 +1,310 @@
+creardialogo
+nroperacion1:'Nro. Operacion';;;;;;NoVacio(dialogo.nroperacion1);'Debe ingresar un numero de Op.';NO
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+sql.add(" Select Vehiculo1, Vehiculo2, TipoOp, Cuotas1, FechaEj, Operador, CB1 ")
+sql.add(" From "~Dbo()~".OPERACIONES ")
+sql.add(" Where NrOperacion = '"~dialogo.nroperacion1~"' ")
+recorrer sql
+Act(vh:1, Fbn('Vehiculo1'))
+Act(vh:3, Fbn('Vehiculo2'))
+Act(z:7, Fbn('TipoOp'))
+Acn(ct:1, Fbn('Cuotas1'))
+Acd(fj:1, Fbn('FechaEj'))
+Act(op:1, Fbn('Operador'))
+Acn(cb:1, Fbn('CB1'))
+proximo
+
+
+sql.add("SELECT U.Vehiculo FROM "~Dbo()~".USRVEHICULO U,"~Dbo()~".VEHICULOS V ")
+sql.add("WHERE  U.Codigo='"~UsuarioActivo()~"' and U.Vehiculo=V.Codigo ")
+sql.add("       and (Status='HAB' or Status Is Null or Status='')")
+
+recorrer sql
+Dfa()
+Act(vh2, Fbn()['Vehiculo']~'|'~Val(vh2))
+proximo
+if (not Incluido(Val(vh1), Val(vh2)) y NoVacio(Val(vh2)))
+Cancelar()('Usuario no Habilitado para Trabajar con el Vehiculo ')
+endif
+
+
+Messagebox('Paso por aca')
+
+if (Incluido(Copy(Val(z7), 1, 2), 'SE|FX|DT|DP') y not Incluido(Val(z:7), 'SEPTMV|SEPVMV'))
+Cancelar()("Las operaciones del Tipo "~Val(z7)~" no se modifican por evento")
+endif
+
+if (Incluido(Val(z:7), 'MMPCCM|MMPCCV|SEPVMV') y Val(cb:1) = 1)
+Cancelar()(" Las operaciones automaticas del Tipo "~Val(z7)~" no se modifican por evento ")
+endif
+
+if (Incluido(Val(z7), 'DTSFV|DTSFF|DTSVV'))
+Cancelar()("Las operaciones del Tipo "~Val(z7)~" no se modifican por evento")
+endif
+
+Acn(z9, sql("Select count(*) from "~Dbo()~".MOVPENDIENTES where NrOperacion = '"~dialogo.nroperacion1~"' and NrSaldo = 1"))
+
+if (Val(z9) = 0 y Val(ct:1) < 1 y Incluido(Copy(Val(z7), 1, 2), 'MM') y not Eqstr(Val(z7), 'MMCCR'))
+Cancelar()("Las operaciones liquidadas del Tipo "~Val(z7)~" no se modIfican")
+endif
+
+if (Val(z9) = 0 y Val(fj:1) < FSys() y Val(ct:1) < 1 y Incluido(Copy(Val(z7), 1, 2), 'DP|DT'))
+Cancelar()("Las operaciones liquidadas del Tipo "~Val(z7)~" no se modIfican")
+endif
+
+if (not Eqstr(Val(op:1), UsuarioActivo()) y not Incluido(UsuarioActivo(), Var('ULMODI')))
+Cancelar()('El usuario no esta autorizado a modIficar la operacion')
+endif
+Acn(z:2, sql("Select count(*) from "~Dbo()~".MOVEJECUTADOS where NrOperacion = '"~dialogo.nroperacion1~"' and NrSaldo = 1"))
+if (Val(z:2) = 0)
+Cancelar()('La operacion no tiene liquidaciones')
+else
+Acn(z3, sql("Select 1 from "~Dbo()~".OPERACIONESBITS where NrOperacion = '"~dialogo.nroperacion1~"' and NrBit in (20,50) and Valor = '1'"))
+if (Val(z3) <> 1)
+Cancelar()('La Operacion no esta Aprobada')
+else
+Messagebox('Antes de modificar')
+modificaroperacion(dialogo.nroperacion1, 0, NO, SI, SI, NO, SI, NO, NO, SI, SI, SI, SI, NO, NO, NO, NO, NO, SI, NO, SI, NO, NO, NO, NO, 0)
+Messagebox('Luego de modificar')
+if (ok)
+sql.add("Update "~Dbo()~".OPERACIONES set Impresa='1' where NrOperacion='"~dialogo.nroperacion1~"'")
+sql.new
+sql.exec
+sql.add(" Select NrBit from "~Dbo()~".OPERACIONESBITS where NrOperacion = '"~dialogo.nroperacion1~"' and Valor = '1' ")
+recorrer sql
+Dfa()
+if (Fbn('NrBit') = 50)
+if (sql(" Select Count(*) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~dialogo.nroperacion1~"' ") = 1)
+ejecutarevento('INSBIT', string1 = 'OPERACIONES', entero1 = 50, nroperacion1 = dialogo.nroperacion1)
+endif
+endif
+proximo
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='0' where NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.new
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='1' where NrOperacion = '"~dialogo.nroperacion1~"' and NrBit=19 ")
+sql.new
+sql.add(" Insert into "~Dbo()~".EXCEPCIONES ")
+sql.add(" (NrOperacion, Fecha, Tipo, Descripcion) Values ")
+sql.add(" ('"~dialogo.nroperacion1~"', '"~IdxDate(FSys())~"','MODEVENTO','"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~" "~Hora(Ahora())~"') ")
+sql.new
+sql.exec
+if (Eqstr(Val(z:7), 'SEPVMV'))
+sql.add(" Select FechaOp2, Book1, Book2, FechaVto, Plazo, Cuotas1, ImpGastos2, TasaImp1, Plazo4, ")
+sql.add("        TipoTasa, RB8, Observac2, TablaFeriados1, Precio3, MB1, DeltaTasa, RB11, NrOperacion3 ")
+sql.add(" From "~Dbo()~".OPERACIONES ")
+sql.add(" Where NrOperacion = '"~dialogo.nroperacion1~"' ")
+recorrer sql
+Act(op:1, Fbn('NrOperacion3'))
+sql.add("  Update "~Dbo()~".OPERACIONES ")
+sql.add("  Set")
+sql.add("    FechaOp2 = '"~IdxDate(Fbn('FechaOp2'))~"' , Book1 = '"~Fbn('Book2')~"', Book2 = '"~Fbn('Book1')~"', ")
+sql.add("    FechaVto = '"~IdxDate(Fbn('FechaVto'))~"' , Plazo = "~Fbn('Plazo')~", ")
+sql.add("    Cuotas1 = "~Fbn('Cuotas1')~"            , ImpGastos2 = "~Fbn('ImpGastos2')~", ")
+sql.add("    TasaImp1 = "~Fbn('TasaImp1')~"          , Plazo4 = "~Fbn('Plazo4')~", ")
+sql.add("    TipoTasa = '"~Fbn('TipoTasa')~"'        , RB8 = "~FStr(Fbn('RB8'), 0, 0)~", ")
+sql.add("    Observac2 = '"~Fbn('Observac2')~"'      , TablaFeriados1 = '"~Fbn('TablaFeriados1')~"', ")
+sql.add("    Precio3 = "~Fbn('Precio3')~"            , MB1 = "~FStr(Fbn('MB1'), 0, 0)~",  ")
+sql.add("    DeltaTasa = "~Fbn('DeltaTasa')~"        , RB11 = "~FStr(Fbn('RB11'), 0, 0)~",  ")
+sql.add("    Impresa = '1' ")
+sql.add("  Where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+proximo
+
+
+sql.add(" Delete From "~Dbo()~".CUOTAS ")
+sql.add(" Where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+sql.exec
+
+sql.add(" Select * into #TEMPCUOTAS from "~Dbo()~".CUOTAS where NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.add(" Update #TEMPCUOTAS ")
+sql.add(" Set NrOperacion = '"~Val(op:1)~"' ")
+sql.add(" Insert into "~Dbo()~".CUOTAS ")
+sql.add(" Select * FROM #TEMPCUOTAS ")
+sql.add(" Where NrOperacion = '"~Val(op:1)~"' ")
+sql.add(" DROP TABLE #TEMPCUOTAS ")
+sql.new
+sql.exec
+
+
+sql.add(" Delete From "~Dbo()~".COMISIONES2 ")
+sql.add(" Where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+
+sql.add(" Select * into #TEMPCOM2 from "~Dbo()~".COMISIONES2 where NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.add(" Update #TEMPCOM2 ")
+sql.add(" Set NrOperacion = '"~Val(op:1)~"' ")
+sql.add(" Insert into "~Dbo()~".COMISIONES2 ")
+sql.add(" Select * FROM #TEMPCOM2 ")
+sql.add(" Where NrOperacion = '"~Val(op:1)~"' ")
+sql.add(" DROP TABLE #TEMPCOM2 ")
+sql.new
+sql.exec
+
+if (Incluido(Val(vh:1), Var('VEHIEXTRAN')) o Incluido(Val(vh:3), Var('VEHIEXTRAN')))
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='0' where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='1' where NrOperacion = '"~Val(op:1)~"' and NrBit=19 ")
+sql.new
+else
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='0' where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='1' where NrOperacion = '"~Val(op:1)~"' and NrBit=15 ")
+sql.new
+endif
+
+sql.add(" Insert into "~Dbo()~".EXCEPCIONES ")
+sql.add(" (NrOperacion, Fecha, Tipo, Descripcion) Values ")
+sql.add(" ('"~Val(op:1)~"', '"~IdxDate(FSys())~"','MODEVENTO','"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~" "~Hora(Ahora())~"') ")
+sql.new
+
+sql.exec
+
+sql.actualizarmovimientos3(Val(op:1), SI, NO, NO, NO, SI)
+sql.exec
+
+ejecutarevento('TTNOP', nroperacion1 = Val(op:1), entero1 = 0, nroperacion2 = '', lista1 = '')
+
+
+endif
+if (Eqstr(Val(z:7), 'MMPCCM'))
+sql.add(" Select FechaOp2, Book1, Book2, FechaVto, Plazo, Cuotas1, ImpGastos2, TasaBase, TipoTasa, TasaPrecan, CB5, ")
+sql.add("        Cotizacion1, Cotizacion2, ContraEspecie, TotalAux1, TablaFeriados1, MB4, MB5, RB10, RB11, RB12, RB13, NrOperacion3 ")
+sql.add(" From "~Dbo()~".OPERACIONES ")
+sql.add(" Where NrOperacion = '"~dialogo.nroperacion1~"' ")
+recorrer sql
+Act(op:1, Fbn('NrOperacion3'))
+sql.add("  Update "~Dbo()~".OPERACIONES ")
+sql.add("  Set")
+sql.add("    FechaOp2 = '"~IdxDate(Fbn('FechaOp2'))~"' , Book1 = '"~Fbn('Book2')~"'       , Book2 = '"~Fbn('Book1')~"', ")
+sql.add("    FechaVto = '"~IdxDate(Fbn('FechaVto'))~"' , Plazo = "~Fbn('Plazo')~"         , Cuotas1 = "~Fbn('Cuotas1')~", ")
+sql.add("    ImpGastos2 = "~Fbn('ImpGastos2')~"        , TasaBase = "~Fbn('TasaBase')~"   , TipoTasa = '"~Fbn('TipoTasa')~"', ")
+sql.add("    TasaPrecan = "~Fbn('TasaPrecan')~"        , CB5 = "~FStr(Fbn('CB5'), 0, 0)~"   , Cotizacion1 = "~Fbn('Cotizacion1')~", ")
+sql.add("    Cotizacion2 = '"~Fbn('cotizacion2')~"'    , TotalAux1 = "~Fbn('TotalAux1')~" , ContraEspecie = '"~Fbn('ContraEspecie')~"', ")
+sql.add("    TablaFeriados1 = '"~Fbn('TablaFeriados1')~"',  MB4 = "~FStr(Fbn('MB4'), 0, 0)~", MB5 = "~FStr(Fbn('MB5'), 0, 0)~", ")
+sql.add("    RB10 = "~FStr(Fbn('RB10'), 0, 0)~",  RB11 = "~FStr(Fbn('RB11'), 0, 0)~",   RB12 = "~FStr(Fbn('RB12'), 0, 0)~"  , RB13 = "~FStr(Fbn('RB10'), 0, 0)~", ")
+sql.add("    Impresa = '1' ")
+sql.add("  Where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+proximo
+
+
+sql.add(" Delete From "~Dbo()~".CUOTAS ")
+sql.add(" Where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+sql.exec
+
+sql.add(" Select * into #TEMPCUOTAS from "~Dbo()~".CUOTAS where NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.add(" Update #TEMPCUOTAS ")
+sql.add(" Set NrOperacion = '"~Val(op:1)~"' ")
+sql.add(" Insert into "~Dbo()~".CUOTAS ")
+sql.add(" Select * FROM #TEMPCUOTAS ")
+sql.add(" Where NrOperacion = '"~Val(op:1)~"' ")
+sql.add(" DROP TABLE #TEMPCUOTAS ")
+sql.new
+sql.exec
+
+
+sql.add(" Delete From "~Dbo()~".COMISIONES2 ")
+sql.add(" Where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+
+sql.add(" Select * into #TEMPCOM2 from "~Dbo()~".COMISIONES2 where NrOperacion = '"~dialogo.nroperacion1~"' ")
+sql.add(" Update #TEMPCOM2 ")
+sql.add(" Set NrOperacion = '"~Val(op:1)~"' ")
+sql.add(" Insert into "~Dbo()~".COMISIONES2 ")
+sql.add(" Select * FROM #TEMPCOM2 ")
+sql.add(" Where NrOperacion = '"~Val(op:1)~"' ")
+sql.add(" DROP TABLE #TEMPCOM2 ")
+sql.new
+sql.exec
+
+
+if (Incluido(Val(vh:1), Var('VEHIEXTRAN')) o Incluido(Val(vh:3), Var('VEHIEXTRAN')))
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='0' where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='1' where NrOperacion = '"~Val(op:1)~"' and NrBit=19 ")
+sql.new
+else
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='0' where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='1' where NrOperacion = '"~Val(op:1)~"' and NrBit=15 ")
+sql.new
+endif
+
+sql.add(" Insert into "~Dbo()~".EXCEPCIONES ")
+sql.add(" (NrOperacion, Fecha, Tipo, Descripcion) Values ")
+sql.add(" ('"~Val(op:1)~"', '"~IdxDate(FSys())~"','MODEVENTO','"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~" "~Hora(Ahora())~"') ")
+sql.new
+
+sql.exec
+
+sql.actualizarmovimientos3(Val(op:1), SI, NO, NO, SI, SI)
+sql.exec
+
+ejecutarevento('TTNOP', nroperacion1 = Val(op:1), entero1 = 0, nroperacion2 = '', lista1 = '')
+
+
+endif
+if (Eqstr(Val(z:7), 'MMPCCV'))
+sql.add(" Select NrOperacion3, FechaOp2, Book1, Book2, FechaVto, FechaPago, Plazo, TipoTasa, Precio1, TotalIntereses, Operador, ")
+sql.add("        TasaImp1, ValorRB1, TotalIVA, Spread, TotalNetoCli1, TotalNetoCli2, TotalBrutoCli1, TotalImpuestos, TotalRetenciones,  ")
+sql.add("        Cotizacion1, Cotizacion2, TotalAux2, TotalAux3, TotalAux4, TablaFeriados1, MB4, RB11, TotalGastos, ImporteImp, ImpGastos2 ")
+sql.add(" From "~Dbo()~".OPERACIONES ")
+sql.add(" Where NrOperacion = '"~dialogo.nroperacion1~"' ")
+recorrer sql
+Act(op:1, Fbn('NrOperacion3'))
+sql.add("  Update "~Dbo()~".OPERACIONES ")
+sql.add("  Set")
+sql.add("    FechaOp2 = '"~IdxDate(Fbn('FechaOp2'))~"', Book1 = '"~Fbn('Book2')~"'                 , Book2 = '"~Fbn('Book1')~"', ")
+sql.add("    FechaVto = '"~IdxDate(Fbn('FechaVto'))~"', FechaPago = '"~IdxDate(Fbn('FechaPago'))~"', Plazo = "~Fbn('Plazo')~", ")
+sql.add("    TipoTasa = '"~Fbn('TipoTasa')~"'         , Precio1 = "~Fbn('Precio1')~"               , TotalIntereses = "~Fbn('TotalIntereses')~", ")
+sql.add("    Operador = '"~Fbn('Operador')~"'         , TasaImp1 = "~Fbn('TasaImp1')~"             , ValorRB1 = "~Fbn('ValorRB1')~", ")
+sql.add("    MB4 = "~FStr(Fbn('MB4'), 0, 0)~"           , TablaFeriados1 = '"~Fbn('TablaFeriados1')~"',RB11 = "~FStr(Fbn('RB11'), 0, 0)~", ")
+sql.add("    Cotizacion1 = "~Fbn('Cotizacion1')~"     , Cotizacion2 = '"~Fbn('Cotizacion2')~"'     , TotalIVA = "~Fbn('TotalIVA')~", ")
+sql.add("    TotalAux2 = "~Fbn('TotalAux2')~"         , TotalAux3 = "~Fbn('TotalAux3')~"           , TotalAux4 = "~Fbn('TotalAux4')~", ")
+sql.add("    Spread = "~Fbn('Spread')~"               , TotalNetoCli1 = "~Fbn('TotalNetoCli1')~"   , TotalNetoCli2 = "~Fbn('TotalNetoCli2')~", ")
+sql.add("    TotalGastos = "~Fbn('TotalGastos')~"     , TotalBrutoCli1 = "~Fbn('TotalBrutoCli1')~" , TotalRetenciones = "~Fbn('TotalRetenciones')~", ")
+sql.add("    ImporteImp = "~Fbn('ImporteImp')~"       , TotalImpuestos = "~Fbn('TotalImpuestos')~" , ImpGastos2 = "~Fbn('ImpGastos2')~", ")
+sql.add("    Impresa = '1' ")
+sql.add("  Where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+proximo
+
+
+if (Incluido(Val(vh:1), Var('VEHIEXTRAN')) o Incluido(Val(vh:3), Var('VEHIEXTRAN')))
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='0' where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='1' where NrOperacion = '"~Val(op:1)~"' and NrBit=19 ")
+sql.new
+else
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='0' where NrOperacion = '"~Val(op:1)~"' ")
+sql.new
+sql.add("Update "~Dbo()~".OPERACIONESBITS set Valor='1' where NrOperacion = '"~Val(op:1)~"' and NrBit=15 ")
+sql.new
+endif
+
+sql.add(" Insert into "~Dbo()~".EXCEPCIONES ")
+sql.add(" (NrOperacion, Fecha, Tipo, Descripcion) Values ")
+sql.add(" ('"~Val(op:1)~"', '"~IdxDate(FSys())~"','MODEVENTO','"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~" "~Hora(Ahora())~"') ")
+sql.new
+
+sql.exec
+
+sql.actualizarmovimientos3(Val(op:1), SI, NO, NO, NO, SI)
+sql.exec
+
+ejecutarevento('TTNOP', nroperacion1 = Val(op:1), entero1 = 0, nroperacion2 = '', lista1 = '')
+
+
+endif
+endif
+endif
+endif
+
+

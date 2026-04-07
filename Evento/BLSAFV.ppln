@@ -1,0 +1,773 @@
+creardialogo
+fecha1:'FechaValor';1;1;;;;dialogo.fecha1 >= Habiles(FSys(), -Var('FVALORCONT'), 'ARG', SI) y dialogo.fecha1 <= FSys() y EsHabil(dialogo.fecha1, 'ARG');'Debe ingresar una Fecha Habil no inferior al dia habil anterior';NO;FSys()
+radio4:"Tipo Cliente|"~Var('LABEL')~"|Caja|Todos";1;2;;NO;NO;;;;2;
+cliente1:"Cliente";2;1;;;;((Vacio(dialogo.especie1) y NoVacio(dialogo.cliente1)) o (NoVacio(dialogo.especie1) y Vacio(dialogo.cliente1)) o (NoVacio(dialogo.cliente1) y NoVacio(dialogo.especie1)));'Debe ingresar un Cliente o Especie';NO;
+especie1:"Especie";2;2;;;;(Vacio(dialogo.especie1) y NoVacio(dialogo.cliente1)) o (NoVacio(dialogo.especie1) y Vacio(dialogo.cliente1)) o (NoVacio(dialogo.cliente1) y NoVacio(dialogo.especie1));'Debe ingresar un Cliente o Especie';NO;
+vehiculo1:"Vehiculo";4;1;;;;;;;Var('VEHICULODE');dialogo.vehiculo1;
+radio2:"Bloqueo Tipo|Especie|Efectivo";5;1;;;;;;;0;dialogo.radio2;
+radio1:"Cantidad|Nominal|Residual";6;1;;dialogo.radio2 = 0;dialogo.radio2 = 0;;;;0;iif (dialogo.radio2 = 0, dialogo.radio1, -1);
+radio3:"Operacion|Bloqueo|Desbloqueo";7;1;;;;;;;0;dialogo.radio3;
+listatabla3: 'Cuentas';;;;;;;;;;;;;;;'Codigo';'Codigo;Nombre';'CUENTAS'
+cantidad1:'a Reponer';1;1;;NO;NO;;;;0;
+entero1:'Saldo a Reponer';1;1;;NO;NO
+especie2:'Moneda a Reponer';1;1;;NO;NO;;;;Var('MONELOCA')
+cantidad2:'Cantidad Exigida';1;1;1;NO;NO;;;;0
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+
+if (dialogo.radio3 = 0)
+Act(z2, 'BLOQUEO ')
+else
+Act(z2, 'DESBLOQUEO ')
+endif
+
+if (dialogo.radio2 = 0)
+if (dialogo.radio1 = 0)
+Act(z2, Val(z2)~' en V.N.')
+else
+Act(z2, Val(z2)~' en V.R.')
+endif
+else
+Act(z2, Val(z2)~' de Monto')
+endif
+
+Act(z2, Val(z2)~' a Fecha '~dialogo.fecha1)
+
+if (dialogo.cantidad1 <> 0)
+Acn(z6, 0)
+Act(y2, FStr(dialogo.entero1 - 100, 0, 0))
+Act(y3, BuscarCampo('ESTADOSCUSTODIA', 'Descripcion', 'NrSaldo', Val(y2)))
+
+Act(z2, 'REPOSICION: '~FStr(dialogo.cantidad1, 0, 2)~' '~dialogo.especie2~' '~Val(y3))
+endif
+
+
+Acn(sd1, BuscarCampo('ESTADOSCUSTODIA', 'NrSaldo', 'Codigo', Var('SALLIBRECU')))
+Act(v:1, Var('MERAUXLIQ'))
+
+
+if (dialogo.radio3 = 0)
+sql.add("SELECT Descripcion, NrSaldo+100 NrSaldo ")
+else
+sql.add("SELECT Descripcion, NrSaldo ")
+endif
+sql.add("FROM "~Dbo()~".ESTADOSCUSTODIA ")
+sql.add("WHERE ISNULL(Habilitado, '') <> 'NO' AND ")
+if (dialogo.radio3 = 0)
+sql.add("   Codigo <> '"~Var('SALLIBRECU')~"'  and Codigo <> '"~Var('SALBLOQVTA')~"' ")
+else
+sql.add("   Codigo = '"~Var('SALLIBRECU')~"' ")
+endif
+sql.add("ORDER BY Jerarquia ")
+
+Acn(y1, 0)
+Act(z5, '')
+recorrer sql
+Act(z5, Val(z5)~Fbn()['Descripcion']~'|')
+Acn(x:Val(y1), Fbn()['NrSaldo'])
+Scn(y1, 1)
+proximo
+
+Act(ta1, 'SALDOS')
+
+if (dialogo.fecha1 < FSys())
+Act(ta1, 'SALDOSDIA')
+endif
+
+sql.add("SELECT 1 Marca, S.Cliente, S.Cuenta, S.Saldo, S.Especie, S.Cupon, S.NrSaldo, S.Mercado, S.EnteCustodia, ")
+sql.add("       E.Descripcion, ESP.FechaCambioTasa, ESP.TasaIntAnterior, ESP.TasaIntVigente,ESP.Cotiza, ESP.InteresesC ")
+sql.add("FROM "~Dbo()~"."~Val(ta1)~" S, "~Dbo()~".CLIENTES C, "~Dbo()~".ESTADOSCUSTODIA E, "~Dbo()~".ESPECIES ESP ")
+sql.add("WHERE S.Cliente = C.Codigo ")
+if (NoVacio(dialogo.cliente1))
+sql.add("   AND S.Cliente ='"~dialogo.cliente1~"' ")
+endif
+sql.add("      AND (C.Alias1 IS NULL OR C.Alias1 = ' ' OR (C.Codigo = '"~dialogo.vehiculo1~"') ) ")
+sql.add("      AND S.Especie = ESP.Codigo  ")
+if (NoVacio(dialogo.especie1))
+sql.add(" AND S.Especie = '"~dialogo.especie1~"'  ")
+endif
+sql.add("    AND  S.EnteCustodia = '"~dialogo.vehiculo1~"' ")
+sql.add("    AND  S.Saldo <> 0  ")
+if (NoVacio(dialogo.listatabla3))
+sql.add(" AND S.Cuenta IN ("~pipe2comillas(dialogo.listatabla3)~")")
+endif
+if (dialogo.radio4 = 0)
+sql.add(" AND C.TipoCliente = '"~Var('CLISUD')~"' ")
+endif
+if (dialogo.radio4 = 1)
+sql.add(" AND C.TipoCliente = '"~Var('CLICAJA')~"' ")
+endif
+if (dialogo.radio3 = 0)
+sql.add(" AND S.NrSaldo = E.NrSaldo ")
+sql.add(" AND E.Codigo = '"~Var('SALLIBRECU')~"' ")
+endif
+if (dialogo.radio3 = 1)
+sql.add(" AND S.NrSaldo = E.NrSaldo+100 AND S.NrSaldo <> 207 ")
+sql.add(" AND E.Codigo <> '"~Var('SALLIBRECU')~"' ")
+if (dialogo.cantidad1 <> 0)
+sql.add(" AND S.NrSaldo = "~FStr(dialogo.entero1, 0, 0)~" ")
+endif
+endif
+if (dialogo.fecha1 < FSys())
+sql.add("      and S.Fecha = (SELECT MAX(S2.Fecha) ")
+sql.add("      FROM "~Dbo()~"."~Val(ta1)~" S2 ")
+sql.add("      WHERE S2.Cliente = S.Cliente AND ")
+sql.add("      S2.Especie = S.Especie AND ")
+sql.add("      S2.EnteCustodia = S.EnteCustodia AND ")
+sql.add("      S2.Mercado = S.Mercado AND ")
+sql.add("      S2.NrSaldo = S.NrSaldo AND ")
+sql.add("      S2.Cuenta = S.Cuenta AND ")
+sql.add("      S2.Fecha <= '"~IdxDate(dialogo.fecha1)~"' ) ")
+endif
+sql.add("ORDER BY S.Cliente, S.Cuenta, S.Especie ")
+
+Acn(z1, 4)
+
+SetFilaActual(Val(z1))
+
+recorrer sql
+Acn(a:fac, Fbn()['Marca'])
+Act(b:fac, Fbn()['Cliente'])
+Act(c:fac, Fbn()['Cuenta'])
+Acn(ac:fac, ValorTeorico2(Fbn()['Especie'], dialogo.fecha1))
+
+if (dialogo.radio3 = 0)
+sql.add("SELECT SUM(Cantidad) CantPend FROM "~Dbo()~".MOVPENDIENTES ")
+sql.add("WHERE Cantidad < 0 AND ")
+sql.add("      Cliente = '"~Fbn()['Cliente']~"' AND ")
+sql.add("      Especie = '"~Fbn()['Especie']~"' AND ")
+sql.add("      Cuenta = '"~Fbn()['Cuenta']~"' AND ")
+sql.add("      Mercado = '"~Fbn()['Mercado']~"' AND ")
+sql.add("      EnteCustodia = '"~Fbn()['EnteCustodia']~"' AND ")
+if (NoVacio(Fbn()['Cupon']) o Fbn()['Cupon'] <> 0)
+sql.add("   Cupon = '"~Fbn()['Cupon']~"' AND ")
+endif
+sql.add("      NrSaldo = "~FStr(Val(sd1), 0, 0)~" ")
+
+Acn(sm:fac, 0)
+Act(w1, 'NO')
+recorrer sql
+Act(w1, 'SI')
+Acn(sm:fac - 1, Fbn()['CantPend'])
+proximo
+if (Eqstr(Val(w1), 'SI'))
+Dfa()
+endif
+endif
+
+Acn(sl:fac, Fbn()['Saldo'] + Val(sm:fac))
+
+if (dialogo.radio2 = 0)
+if (dialogo.radio1 = 0)
+Acn(d:fac, Val(sl:fac))
+else
+Acn(d:fac, Val(sl:fac) * Val(ac:fac))
+endif
+else
+Acn(d:fac, Val(sl:fac))
+endif
+
+Acn(ad:fac, Val(sl:fac))
+Act(e:fac, Fbn()['Especie'])
+Act(f:fac, Fbn()['Cupon'])
+Acn(g:fac, Fbn()['NrSaldo'])
+Act(h:fac, Fbn()['Descripcion'])
+Act(m:fac, Fbn()['Mercado'])
+
+
+Acn(n:fac, dialogo.cantidad2)
+Acn(aa:fac, Cotizacion(Fbn()['Especie'], null, null, null, dialogo.fecha1, 1))
+
+Acn(p:fac, CotizacionC(Fbn()['Especie'], null, null, null, dialogo.fecha1, 25, SI, Fbn()['Cotiza']))
+
+
+Act(ae:fac, Fbn()['Cotiza'])
+
+Act(o:fac, Fbn()['Cotiza'])
+Act(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', Fbn()['Especie']))
+
+Acn(yt1, Fac())
+Acd(yu:fac, dialogo.fecha1)
+Act(yv:fac, Fbn()['Especie'])
+Acn(yw:fac, Val(sl:fac) * (1 + IntsCapitalizados2(Fbn()['Especie'], dialogo.fecha1)))
+Acd(yx:fac, Fbn()['FechaCambioTasa'])
+Acn(yy:fac, Fbn()['TasaIntAnterior'])
+Acn(yz:fac, Fbn()['TasaIntVigente'])
+
+
+Acn(i:fac, Val(ad:fac) * CotizacionC(Fbn()['Especie'], null, null, null, dialogo.fecha1, 25, SI, dialogo.especie2))
+
+Acn(ab:fac, BuscarCampo('Especies', 'LaminaMinima', 'Codigo', Fbn()['Especie']))
+
+if (dialogo.radio3 = 0 y dialogo.radio2 = 0)
+Acn(k:fac, Val(d:fac))
+endif
+
+Scn(z1, 1)
+proximo
+
+if (Val(z1) <= 4)
+Cancelar()('No se encontraron saldos')
+endif
+
+recorrer&i 1, 1000
+crearlistbox;'MS Sans Serif,8,';Val(z2)
+'Marca';a5..a:Val(z1);SI;SI;;30;check;RGB(220, 220, 193)
+'Cliente';b5..b:Val(z1);NO;SI;;80;string;;RGB(180, 180, 193)
+'Cuenta';c5..c:Val(z1);NO;SI;;80;string;;RGB(180, 180, 193)
+'Saldo';d5..d:Val(z1);NO;SI;;80;numero;'###,###,###,###.##';RGB(180, 180, 193)
+'Especie';e5..e:Val(z1);NO;SI;;80;string;;RGB(180, 180, 193)
+'Cupon';f5..f:Val(z1);NO;SI;;40;string;;RGB(180, 180, 193)
+'Estado ';h5..h:Val(z1);NO;SI;;100;string;;RGB(180, 180, 193)
+'Valuacion ';i5..i:Val(z1);NO;SI;;100;numero;'###,###,###,###.##';RGB(180, 180, 193);CotizacionC(Val(e:flb), null, null, null, dialogo.fecha1, 25, SI, Val(o:flb)) * Val(d:flb)
+'En Especie';o5..o:Val(z1);Val(a:flb) = 1 y dialogo.radio2 = 1;Val(a:flb) = 0 o dialogo.radio2 = 0 o DesciendeDeEspecie(Val(o:flb), 'MONEDA');'Debe Seleccionar una Moneda para el Bloqueo en Efectivo !!!';80;tabla;'Especies';'Codigo';'Codigo;Nombre';;iif (dialogo.radio2 = 0, RGB(180, 180, 193), RGB(220, 220, 193));;;;'8,14';
+'A Mover (EnEspecie)';k5..k:Val(z1);Val(a:flb) = 1;SI;;100;numero;'###,###,###,###.##';RGB(220, 220, 193);
+'Estado Nuevo';j5..j:Val(z1);Val(a:flb) = 1;SI;;120;combo;Val(z5);RGB(220, 220, 193)
+'Gtia Exigida';n5..n:Val(z1);Val(a:flb) = 1 y dialogo.cantidad2 = 0 y dialogo.radio3 = 0 y dialogo.radio2 = 1;(Val(n:flb) <= Val(k:flb) y Val(n:flb) > 0) o Val(n:flb) = 0;'Monto de Garantia a Controlar Invalido';80;numero;'##,###,###.##';RGB(220, 220, 193);iif (dialogo.cantidad2 <> 0, dialogo.cantidad2, iif (dialogo.radio3 = 0 y dialogo.radio2 = 1, Val(k:flb), 0));NO;NO;
+'Fecha Vto.';l5..l:Val(z1);Val(a:flb) = 1;Val(a:flb) = 0 o (NoVacio(Val(l:flb)) y Val(l:flb) > FSys()) o Vacio(Val(l:flb));'La fecha de venc. debe ser mayor a la del dia';80;fecha;RGB(220, 220, 193)
+'CotizacionC';p5..p:Val(z1);NO;SI;;100;numero;'###,###,###,###.##';RGB(180, 180, 193);CotizacionC(Val(e:flb), null, null, null, dialogo.fecha1, 25, SI, Val(o:flb))
+finlistbox
+
+
+if (not ok)
+Cancelar()('Evento Cancelado')
+endif
+
+Acn(z3, 0)
+Acn(z6, 0)
+
+recorrer&j 5, Val(z1)
+if (Val(a:&j) = 1)
+if (Val(k:&j) = 0)
+Acn(z3, 1)
+else
+if (dialogo.radio2 = 0)
+if (Val(k:&j) > Val(d:&j))
+Acn(z3, 2)
+else
+if (dialogo.radio1 = 0)
+Acn(mn:&j, Val(k:&j))
+else
+Acn(mn:&j, Round(Val(k:&j) / Val(ac:&j), 5))
+endif
+if (Val(ab:&j) > 0)
+if (Val(mn:&j) mod2 (Val(ab:&j)) <> 0)
+Acn(z3, 3)
+endif
+endif
+endif
+else
+if (dialogo.cantidad1 <> 0)
+Scn(z6, Val(k:&j) * CotizacionC(Val(ae:&j), null, null, null, FSys(), 1, SI))
+if (not Eqstr(Val(y2), FStr(Val(x:Val(j:&j)) - 100, 3, 0)) y dialogo.radio3 = 0)
+Acn(z3, 5)
+endif
+if (not Eqstr(Val(y3), Val(h:fac)) y dialogo.radio3 = 1)
+Acn(z3, 5)
+endif
+endif
+
+if (Val(k:&j) > Val(i:&j))
+Acn(z3, 4)
+else
+
+Acn(mn:&j, Round(Val(ad:&j) * Val(k:&j) / Val(i:&j), 5))
+if (Val(ab:&j) > 0)
+Messagebox('* si monto/cant no es multiplo de LaminaMinima '~FStr(Val(mn:&j), 1, 2)~' '~FStr(Val(ab:&j), 1, 2)~' Mod '~FStr(Val(mn:&j) mod2 (Val(ab:&j)), 1, 2))
+if (Val(mn:&j) mod2 (Val(ab:&j)) <> 0)
+Acn(mp:&j, Val(mn:&j) div (Val(ab:&j)))
+
+Acn(mp:&j, (Val(mp:&j)) * Val(ab:&j))
+
+
+Acn(mo:&j, Round(Val(mp:&j) * Val(i:&j) / Val(ad:&j), 5))
+
+Messagebox('* Nuevo monto en base a la nueva cantidad nominal multiplo de laminaminima '~FStr(Val(mp:&j), 1, 2)~' '~FStr(Val(i:&j), 1, 2)~' '~FStr(Val(ab:&j), 1, 2))
+if (Val(mo:&j) > Val(i:&j))
+Acn(mp:&j, Val(mn:&j) div (Val(ab:&j)))
+Acn(mp:&j, (Val(mp:&j) - 1) * Val(ab:&j))
+
+Acn(mo:&j, Round(Val(mp:&j) * Val(i:&j) / Val(ad:&j), 5))
+if (Val(mo:&j) > Val(i:&j))
+Acn(z3, 4)
+endif
+endif
+if (Val(z3) = 0)
+Acn(vl1, Messagebox('Cliente: '~Val(b:&j)~', Nuevo Monto a Mover: '~FStr(Val(mo:&j), 0, 0)~', V.N.: '~FStr(Val(mp:&j), 0, 0), 0, 1))
+if (Val(vl1) = 1)
+Acn(mn:&j, Val(mp:&j))
+Acn(k:&j, Val(mo:&j))
+else
+Acn(z3, 99)
+endif
+endif
+endif
+endif
+endif
+endif
+endif
+endif
+
+if (Val(z3) <> 0)
+if (Val(z3) = 1)
+Messagebox("Error. El dato 'A Mover' no puede ser cero")
+endif
+if (Val(z3) = 2)
+Messagebox("Error. El dato 'A Mover' es mayor al Saldo")
+endif
+if (Val(z3) = 3)
+Messagebox("Error. El dato 'A Mover' "~Val(b:&j)~" "~Val(c:&j)~" "~Val(e:&j)~" Saldo "~FStr(Val(mn:&j), 0, 0)~" No es multiplo de Lamina Minima "~FStr(Val(ab:&j), 0, 0))
+endif
+if (Val(z3) = 4)
+Messagebox("Error. El dato 'A Mover' es mayor que la Valuacion")
+endif
+if (Val(z3) = 5 y dialogo.radio3 = 0)
+Messagebox("Error. El Estado Nuevo no es "~Val(y3)~" ... ")
+endif
+if (Val(z3) = 5 y dialogo.radio3 = 1)
+Messagebox("Error. El Estado Anterior no es "~Val(y3)~" ... ")
+endif
+
+break
+else
+if (dialogo.fecha1 < FSys() y Val(a:&j) = 1)
+Acn(ac5, SaldoC(Val(b:&j), Val(e:&j), null, null, null, Val(m:&j), dialogo.vehiculo1, null, Val(g:&j), FSys()))
+Scn(ac5, Val(sm:&j))
+
+if (dialogo.radio2 = 0 y (Val(ac5) - Val(k:&j)) < 0)
+Messagebox("Error. El dato 'A Mover' es mayor al Saldo para la Fecha del Sistema")
+Acn(z3, 2)
+break
+endif
+
+if (dialogo.radio2 = 1)
+Acn(ad:&j, Val(ac5))
+
+Acn(yt1, &j)
+Acd(yu:&j, FSys())
+Act(yv:&j, Val(e:&j))
+Acn(yw:&j, Val(sl:&j))
+sql.add("SELECT FechaCambioTasa,TasaIntAnterior,TasaIntVigente,InteresesC FROM "~Dbo()~".ESPECIES WHERE Codigo='"~Val(e:&j)~"' ")
+recorrer sql
+Dfa()
+Acd(yx:&j, Fbn()['FechaCambioTasa'])
+Acn(yy:&j, Fbn()['TasaIntAnterior'])
+Acn(yz:&j, Fbn()['TasaIntVigente'])
+Act(yt2, Fbn()['InteresesC'])
+proximo
+
+if (NO)
+Acn(ti:1, 0)
+if (Eqstr(BuscarCampo('ESPECIES', 'InteresesC', 'Codigo', Val(yv:Val(yt1))), 'CLE'))
+Acn(ti:1, InteresEspecie(Val(yv:1), Val(yu:1), Val(yw:1) * (1 + IntsCapitalizados2(Val(yv:1), Val(yu:1)))))
+endif
+
+
+if (Eqstr(Val(yt2), 'CLE'))
+if (Incluido(Val(al4), '1585'))
+Acn(i:&j, Val(ad:&j) * Val(ac:&j) * Val(aa:&j) + (Val(zz:&j) * Val(aa:&j)))
+else
+Acn(i:&j, Val(ad:&j) * Val(ac:&j) * Val(aa:&j) + Val(zz:&j))
+endif
+else
+Acn(i:&j, Val(ad:&j) * Val(aa:&j) + Val(zz:&j))
+endif
+endif
+Acn(i:&j, Val(ad:&j) * Val(p:&j))
+
+if (NO)
+if (Eqstr(Val(yt2), 'CLE'))
+Acn(zc:&j, interesespeciecap(Val(yv:&j), dialogo.fecha1, Val(sl:&j), null, CampoAgenda(Val(yv:&j), Val(f:&j), 4), (1 + IntsCapitalizados2(Val(yv:&j), dialogo.fecha1)), Val(aa:&j)))
+Acn(zz:&j, InteresEspecie(Val(yv:&j), dialogo.fecha1, Val(sl:&j) * (1 + IntsCapitalizados2(Val(yv:&j), dialogo.fecha1))))
+if (Incluido(Val(al4), '1585'))
+Acn(i:&j, (Val(ad:&j) * (1 + IntsCapitalizados2(Val(yv:&j), dialogo.fecha1)) * Val(ac:&j) * Val(aa:&j)) + (Val(zz:&j) * Val(aa:&j)) + interesespeciecap(Val(yv:&j), dialogo.fecha1, Val(sl:&j), null, CampoAgenda(Val(yv:&j), Val(f:&j), 4), (1 + IntsCapitalizados2(Val(yv:&j), dialogo.fecha1)), Val(aa:&j)))
+else
+Acn(i:&j, (Val(ad:&j) * (1 + IntsCapitalizados2(Val(yv:&j), dialogo.fecha1)) * Val(ac:&j) * Val(aa:&j)) + Val(zz:&j) + interesespeciecap(Val(yv:&j), dialogo.fecha1, Val(sl:&j), null, CampoAgenda(Val(yv:&j), Val(f:&j), 4), (1 + IntsCapitalizados2(Val(yv:&j), dialogo.fecha1)), Val(aa:&j)))
+endif
+else
+Acn(i:&j, Val(ad:&j) * Val(aa:&j))
+endif
+endif
+
+
+if (Val(k:&j) > Val(i:&j))
+Messagebox("Error. El dato 'A Mover' es mayor que la Valuacion para la Fecha del Sistema.")
+Acn(z3, 5)
+break
+endif
+endif
+endif
+
+if (dialogo.radio3 = 1)
+if (Val(bz:1) = 0)
+Scn(bz:1, 1)
+Act(bk:1, Val(b:&j))
+else
+Acn(bz:2, 0)
+recorrer&k 1, Val(bz:1)
+if (Eqstr(Val(b:&j), Val(bk:&k)))
+Acn(bz:2, &k)
+break
+endif
+proximo
+if (Val(bz:2) = 0)
+Scn(bz:1, 1)
+Act(bk:Val(bz:1), Val(b:&j))
+endif
+endif
+endif
+
+
+endif
+proximo
+
+if (dialogo.cantidad1 <> 0 y Round(Val(z6), 2) > Round(Abs(dialogo.cantidad1), 2))
+Acn(z4, Messagebox("Continua? El dato 'A REPONER' "~FStr(Round(Val(z6), 2), 0, 2)~" es mayor que la Cantidad a REVALUAR "~FStr(Round(Abs(dialogo.cantidad1), 2), 0, 2)~"... ", 1, 2))
+if (Val(z4) = 6)
+Acn(z3, 0)
+else
+Acn(z6, 0)
+Acn(z3, 6)
+endif
+endif
+if (Val(z3) = 0)
+break
+endif
+proximo
+
+if (dialogo.radio3 = 1)
+if (Val(bz:1) > 0)
+recorrer&j 1, Val(bz:1)
+Acn(bm:&j, SaldoC(Val(bk:&j), 'ARP', null, null, null, Val(v:1), dialogo.vehiculo1, null, 1, dialogo.fecha1))
+Acn(bn:&j, SaldoC(Val(bk:&j), 'USD', null, null, null, Val(v:1), dialogo.vehiculo1, null, 1, dialogo.fecha1))
+if (Val(bm:&j) <= 0 y Val(bn:&j) <= 0)
+Message('No existe saldo para liberar en la cuenta '~Val(bl:&j))
+else
+if (Val(bm:&j) > 0)
+Act(bo:&j, sql("Select Codigo from .CUENTAS where Mercado='"~Val(v:1)~"' and Cliente='"~Val(bk:&j)~"' and TipoCuenta='VIS' "))
+if (NoVacio(Val(bo:&j)))
+Scn(bz:3, 1)
+Act(ba:Val(bz:3), Val(bk:&j))
+Act(bb:Val(bz:3), 'ARP')
+Act(bc:&j, Val(v:1))
+Act(bd:Val(bz:3), Val(bo:&j))
+Acn(be:Val(bz:3), Round(Val(bm:&j), 2))
+Acn(bf:Val(bz:3), 0)
+Act(bg:Val(bz:3), Var('MERCADOBT'))
+Act(bh:Val(bz:3), '')
+endif
+endif
+if (Val(bn:&j) > 0)
+Act(bp:&j, sql("Select Codigo from .CUENTAS where Mercado='"~Val(v:1)~"' and Cliente='"~Val(bk:&j)~"' and TipoCuenta='VIS' "))
+if (NoVacio(Val(bp:&j)))
+Scn(bz:3, 1)
+Act(ba:Val(bz:3), Val(bk:&j))
+Act(bb:Val(bz:3), 'USD')
+Act(bc:&j, Val(v:1))
+Act(bd:Val(bz:3), Val(bo:&j))
+Acn(be:Val(bz:3), Round(Val(bm:&j), 2))
+Acn(bf:Val(bz:3), 0)
+Act(bg:Val(bz:3), Var('MERCADOBT'))
+Act(bh:Val(bz:3), '')
+endif
+endif
+endif
+proximo
+endif
+if (Val(bz:3) > 0)
+Messagebox('Existen saldos para liberar en cuentas Vista')
+crearlistbox;'MS Sans Serif,8,';'Ingrese Saldos a liberar.'
+'Cliente';ba:1..ba:Val(bz:3);NO;SI;;80;string;;RGB(180, 180, 193)
+'Moneda';bb:1..bb:Val(bz:3);NO;SI;;80;string;;RGB(180, 180, 193)
+'Cuenta';bd:1..bd:Val(bz:3);NO;SI;;80;string;;RGB(180, 180, 193)
+'Saldo';be:1..be:Val(bz:3);NO;SI;;80;numero;'###,###,###,###.##';RGB(180, 180, 193)
+'A Liberar';bf:1..bf:Val(bz:3);Val(be:flb) > 0;Val(bf:flb) >= 0 y Val(bf:flb) <= Val(be:flb);'Importe ARP a liberar incorrecto';80;numero;'###,###,###,###.##';RGB(250, 250, 193)
+'Merc.Dest.';bg:1..bg:Val(bz:3);Val(bf:flb) > 0;Val(bf:flb) <= 0 o NoVacio(Val(bg:flb));'Debe indicar Mercado ARP';100;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';" IsNull(EsLiquidacion,'NO')='SI' and TipoNegocio like '%M%' ";RGB(250, 250, 193);
+'Cta.Dest.';bh:1..bh:Val(bz:3);Val(bf:flb) > 0;Val(bf:flb) <= 0 o NoVacio(Val(bh:flb));'Debe indicar Cuenta ARP';100;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CC','CA') and Cliente='"~Val(ba:flb)~"' and Mercado='"~Val(bg:flb)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(bb:flb)~"%') ";RGB(250, 250, 193);iif (Val(bf:flb) > 0, sql("Select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CC','CA') and Cliente='"~Val(ba:flb)~"' and Mercado='"~Val(bg:flb)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(bb:flb)~"%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "), '');NO;NO;
+finlistbox
+if (not ok)
+Cancelar()('Evento Cancelado')
+endif
+endif
+endif
+
+Acn(aa1, 0)
+recorrer&j 5, Val(z1)
+if (Val(a:&j) = 1)
+Act(az6, bookdefault2tr(dialogo.vehiculo1, 'CAMEST', '', Val(e:&j), '', '', '', '', 'HAB'))
+Act(at:&j, getnumerador(27))
+sql.add("INSERT INTO "~Dbo()~".TRANSACCIONES2 (")
+sql.add("       Cliente1, Cuenta1, Vehiculo1, Especie, RB1, ")
+sql.add("       RB2, RB3, RB4, Cantidad1, Cantidad2, ")
+sql.add("       Precio1, Cupon1, Precio2, Precio3, Precio4, ")
+sql.add("       Fecha1, TipoTr2, NrTrans, ")
+sql.add("       Fecha2, CB1,  Book1, ")
+sql.add("       FechaCarga, FechaCargaSys, UsrInput, Cantidad3, Especie1 ")
+sql.add(" ) VALUES( ")
+sql.add(" '"~Val(b:&j)~"', ")
+sql.add(" '"~Val(c:&j)~"', ")
+sql.add(" '"~dialogo.vehiculo1~"', ")
+sql.add(" '"~Val(e:&j)~"', ")
+sql.add(" '"~FStr(dialogo.radio1, 1, 0)~"', ")
+
+sql.add(" '"~FStr(dialogo.radio2, 1, 0)~"', ")
+sql.add(" '"~FStr(dialogo.radio3, 1, 0)~"', ")
+sql.add(" '"~FStr(dialogo.radio4, 1, 0)~"', ")
+sql.add(" "~FStr(Val(g:&j), 3, 0)~", ")
+sql.add(" "~FStr(Val(x:Val(j:&j)), 3, 0)~", ")
+
+sql.add(" "~FStr(Val(d:&j), 15, 4)~", ")
+sql.add(" '"~Val(f:&j)~"', ")
+sql.add(" "~FStr(Val(mn:&j), 15, 4)~", ")
+sql.add(" "~FStr(Val(k:&j), 15, 4)~", ")
+sql.add(" "~FStr(Val(az:&j), 15, 4)~", ")
+
+sql.add(" '"~IdxDate(dialogo.fecha1)~"', ")
+sql.add(" 'CAMEST', ")
+sql.add(" '"~Val(at:&j)~"', ")
+
+sql.add(" '"~IdxDate(Val(l:&j))~"', ")
+sql.add(" "~iif (dialogo.cantidad1 = 0, '0', '1')~", ")
+sql.add(" '"~Val(az6)~"', ")
+
+sql.add(" "~IdxDate2(FSys())~", ")
+sql.add(" "~IdxDate2(FSys())~", ")
+sql.add(" '"~UsuarioActivo()~"', ")
+sql.add(" "~FStr(Val(n:&j), 3, 0)~", ")
+sql.add(" '"~Val(o:&j)~"'")
+
+sql.add(" ) ")
+sql.new
+sql.exec
+
+sql.actualizarmovimientost2(Val(at:&j), SI, NO, NO, SI)
+sql.exec
+
+Act(az3, Val(at:&j))
+Act(az4, 'TRANSACCIONES2')
+Act(az5, '70')
+Message('Ingresando Instancias Operacion '~Val(az3)~' ...')
+
+sql.add("SELECT NrInstancia FROM "~Dbo()~".INSTANCIAS Where Tabla='"~Val(az4)~"' ")
+sql.add("ORDER BY NrInstancia ")
+
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+sql.add("(NrOperacion,NrBit,Valor) ")
+sql.add(" Values ")
+sql.add("('"~Val(az3)~"',"~FStr(Fbn()['NrInstancia'], 3, 0)~",")
+if (Incluido(Fbn()['NrInstancia'], Val(az5)))
+sql.add("'1')")
+else
+sql.add("'0')")
+endif
+sql.new
+sql.exec
+proximo
+
+sql.add("UPDATE "~Dbo()~".OPERACIONES Set ")
+sql.add("Observaciones=Observaciones+'"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~"' ")
+sql.add("Where NrOperacion='"~Val(az3)~"' ")
+sql.new
+sql.exec
+
+
+
+
+if (Val(bz:3) > 0)
+recorrer&i 1, Val(bz:3)
+if (Val(bf:&i) > 0)
+if (Val(bj:&i) = 0)
+if (Eqstr(Val(ba:&i), Val(b:&j)))
+Act(bi:&i, Val(at:&j))
+
+
+Act(mp:13, 'AV')
+Acd(mp:2, dialogo.fecha1)
+
+Act(mp:1, Val(bi:&i))
+Act(mp:3, Val(ba:&i))
+Act(mp:4, Val(bb:&i))
+
+Act(mp:5, '')
+Act(mp:6, '')
+Acn(mp:7, 0)
+Act(mp:8, Val(bc:&i))
+Act(mp:9, dialogo.vehiculo1)
+
+Acn(mp:10, -Val(bf:&i))
+Act(mp:12, 'Desbloqueo de '~Val(e:&j)~'.')
+Acn(mp:14, 1)
+
+Act(mp:19, Val(bd:&i))
+Act(mp:29, '')
+Acn(mp:22, 3)
+Acn(mp:26, 0)
+
+if (Eqstr(Val(mp13), 'AV') y Val(mp2) <= FSys())
+sql.add("INSERT INTO "~Dbo()~".MOVEJECUTADOS (")
+else
+sql.add("INSERT INTO "~Dbo()~".MOVPENDIENTES (")
+endif
+sql.add("NrOperacion,FechaMov,")
+sql.add("Cliente,Especie,")
+sql.add("CallPut,")
+if (Incluido(Val(mp5), 'CAL|PUT'))
+sql.add("FechaEj,PrecioEj,")
+endif
+sql.add("Mercado,")
+sql.add("EnteCustodia,Cantidad,")
+sql.add("Formula,Leyenda,")
+sql.add("Bits,NrSaldo,")
+sql.add("NrGrupo,Concepto,")
+sql.add("FechaEje,UsuarioEje,")
+sql.add("Cuenta,NrGrupo2,")
+sql.add("Transaccion,NrMov,")
+sql.add("NrLiq,Status,")
+sql.add("NrComprob,NrInstan,")
+sql.add("Cupon,NrTrans2,")
+sql.add("Book,Vehiculo")
+sql.add(") Values (")
+sql.add(" '"~Val(mp1)~"',")
+sql.add(" '"~IdxDate(Val(mp2))~"',")
+sql.add(" '"~Val(mp3)~"', ")
+sql.add(" '"~Val(mp4)~"',")
+sql.add(" '"~Val(mp5)~"',")
+if (Incluido(Val(mp5), 'CAL|PUT'))
+sql.add(" '"~IdxDate(Val(mp6))~"',"~FStr(Val(mp7), 0, 6)~", ")
+endif
+sql.add(" '"~Val(mp8)~"',")
+sql.add(" '"~Val(mp9)~"',")
+sql.add(" "~FStr(Val(mp10), 0, 2)~", ")
+sql.add(" '"~Val(mp11)~"', ")
+sql.add(" '"~Copy(Val(mp12), 1, 50)~"', ")
+sql.add(" '"~Val(mp13)~"', ")
+sql.add(" "~FStr(Val(mp14), 0, 0)~", ")
+sql.add(" "~FStr(Val(mp15), 0, 0)~",")
+sql.add(" '"~Val(mp16)~"',")
+sql.add(" '"~IdxDate(FSys())~"','"~Val(mp18)~"',")
+sql.add(" '"~Val(mp19)~"',"~FStr(Val(mp20), 0, 0)~",")
+sql.add(" '"~Val(mp21)~"',"~FStr(Val(mp22), 0, 0)~",")
+if (Vacio(Val(mp24)))
+sql.add(" "~FStr(Val(mp23), 0, 2)~",Null,")
+else
+sql.add(" "~FStr(Val(mp23), 0, 2)~",'"~Val(mp24)~"',")
+endif
+sql.add(" "~FStr(Val(mp25), 0, 0)~", ")
+if (Val(mp:26) <> 0)
+sql.add(" "~FStr(Val(mp26), 0, 6)~",")
+else
+sql.add(" "~FStr(Val(mp26), 0, 6)~",")
+endif
+sql.add(" '"~Val(mp27)~"','"~Val(mp28)~"',")
+sql.add(" '"~Val(mp29)~"','"~Val(mp30)~"' ")
+sql.add(" )")
+sql.new
+sql.exec
+
+if (DesciendeDeEspecie(Val(mp4), 'MONEDA') y Eqstr(Val(mp8), Var('MERCADOBT')))
+endif
+
+
+Act(mp:8, Val(bg:&i))
+Acn(mp:10, Val(bf:&i))
+Act(mp:19, Val(bh:&i))
+Acn(mp:22, 4)
+
+if (Eqstr(Val(mp13), 'AV') y Val(mp2) <= FSys())
+sql.add("INSERT INTO "~Dbo()~".MOVEJECUTADOS (")
+else
+sql.add("INSERT INTO "~Dbo()~".MOVPENDIENTES (")
+endif
+sql.add("NrOperacion,FechaMov,")
+sql.add("Cliente,Especie,")
+sql.add("CallPut,")
+if (Incluido(Val(mp5), 'CAL|PUT'))
+sql.add("FechaEj,PrecioEj,")
+endif
+sql.add("Mercado,")
+sql.add("EnteCustodia,Cantidad,")
+sql.add("Formula,Leyenda,")
+sql.add("Bits,NrSaldo,")
+sql.add("NrGrupo,Concepto,")
+sql.add("FechaEje,UsuarioEje,")
+sql.add("Cuenta,NrGrupo2,")
+sql.add("Transaccion,NrMov,")
+sql.add("NrLiq,Status,")
+sql.add("NrComprob,NrInstan,")
+sql.add("Cupon,NrTrans2,")
+sql.add("Book,Vehiculo")
+sql.add(") Values (")
+sql.add(" '"~Val(mp1)~"',")
+sql.add(" '"~IdxDate(Val(mp2))~"',")
+sql.add(" '"~Val(mp3)~"', ")
+sql.add(" '"~Val(mp4)~"',")
+sql.add(" '"~Val(mp5)~"',")
+if (Incluido(Val(mp5), 'CAL|PUT'))
+sql.add(" '"~IdxDate(Val(mp6))~"',"~FStr(Val(mp7), 0, 6)~", ")
+endif
+sql.add(" '"~Val(mp8)~"',")
+sql.add(" '"~Val(mp9)~"',")
+sql.add(" "~FStr(Val(mp10), 0, 2)~", ")
+sql.add(" '"~Val(mp11)~"', ")
+sql.add(" '"~Copy(Val(mp12), 1, 50)~"', ")
+sql.add(" '"~Val(mp13)~"', ")
+sql.add(" "~FStr(Val(mp14), 0, 0)~", ")
+sql.add(" "~FStr(Val(mp15), 0, 0)~",")
+sql.add(" '"~Val(mp16)~"',")
+sql.add(" '"~IdxDate(FSys())~"','"~Val(mp18)~"',")
+sql.add(" '"~Val(mp19)~"',"~FStr(Val(mp20), 0, 0)~",")
+sql.add(" '"~Val(mp21)~"',"~FStr(Val(mp22), 0, 0)~",")
+if (Vacio(Val(mp24)))
+sql.add(" "~FStr(Val(mp23), 0, 2)~",Null,")
+else
+sql.add(" "~FStr(Val(mp23), 0, 2)~",'"~Val(mp24)~"',")
+endif
+sql.add(" "~FStr(Val(mp25), 0, 0)~", ")
+if (Val(mp:26) <> 0)
+sql.add(" "~FStr(Val(mp26), 0, 6)~",")
+else
+sql.add(" "~FStr(Val(mp26), 0, 6)~",")
+endif
+sql.add(" '"~Val(mp27)~"','"~Val(mp28)~"',")
+sql.add(" '"~Val(mp29)~"','"~Val(mp30)~"' ")
+sql.add(" )")
+sql.new
+sql.exec
+
+if (DesciendeDeEspecie(Val(mp4), 'MONEDA') y Eqstr(Val(mp8), Var('MERCADOBT')))
+endif
+
+
+Acn(bj:&i, 1)
+endif
+endif
+endif
+proximo
+endif
+
+if (Eqstr(FStr(Val(x:Val(j:&j)), 3, 0), Var('BLOQGROFEX')) o Eqstr(FStr(Val(g:&j), 3, 0), Var('BLOQGROFEX')))
+
+ejecutarevento('ASIROF', fecha1 = dialogo.fecha1, especie1 = Val(e:&j), vehiculo1 = Var('VEHICULODE'), mercado1 = Var('MERROFEX'))
+
+endif
+
+Scn(aa1, 1)
+endif
+proximo
+
+if (Val(aa1) > 0)
+Messagebox("El proceso finalizo con exito.")
+endif
+
+
+
+
+
+

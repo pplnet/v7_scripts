@@ -1,0 +1,143 @@
+creardialogo
+directorio1:'Ruta';1;1;;;;;;;Var('PATHACREM')
+string2:'Archivo';2;1;;;;;;;Var('ACREM')
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+HojaVisible(SI)
+
+
+if (Eqstr(Copy(dialogo.directorio1, Longitud(dialogo.directorio1), 1), '\'))
+Act(x:1, dialogo.directorio1~dialogo.string2)
+else
+Act(x:1, dialogo.directorio1~'\'~dialogo.string2)
+endif
+
+importarxls(a:2..h:num(Var('IACREBUCLE')), a:5..h:num(Var('IACREBUCLE')), Val(x:1))
+
+if (not ok)
+Cancelar()('Error al cargar el archivo '~Val(x:1))
+endif
+
+
+CrearFont(1, 'Arial,9,B')
+CrearFont(2, 'Arial,8,')
+CrearFont(3, 'Arial,12,B')
+
+Act(d:1, 'IMPORTACION DE ACUERDOS')
+SetFont(d:1..d:1, 3)
+ACO(1, 10)
+ACO(8, 20)
+
+
+
+Act(a:4, 'Nr Cuenta')
+Act(b:4, 'Inicio')
+Act(c:4, 'Fin')
+Act(d:4, 'Pago')
+Act(e:4, 'Tasa')
+Act(f:4, 'Base')
+Act(g:4, 'Cartera')
+Act(h:4, 'Estado')
+AgregarMarco(a:4..h:4, 2, 3, Var('COLOR6'))
+SetFont(a:4..h:4, 1)
+AlinearCeldas(a:4..h:4, 'C')
+let(&contadorfilas, 0)
+
+recorrer&i 5, Num(Var('IACREBUCLE'))
+if (Vacio(Val(a:&i)))
+break
+endif
+let(&estadovalidacion, 'OK')
+
+Acd(b:&i, Val(b:&i))
+Acd(c:&i, Val(c:&i))
+Acd(d:&i, Val(d:&i))
+
+
+if (Query("IF EXISTS (Select 1 FROM "~Dbo()~".CUENTAS WHERE Numero = '"~Val(a:&i)~"')SELECT 1 ELSE SELECT 2 ") = 1)
+sql.add("Select Codigo, Cliente, Especies, Comitente")
+sql.add("FROM "~Dbo()~".CUENTAS")
+sql.add("WHERE Numero = '"~Val(a:&i)~"' ")
+recorrer sql
+Act(co:1, Fbn()['Codigo'])
+if (Vacio(Val(co:1)))
+let(&estadovalidacion, 'No existe codigo para la cuenta')
+break
+endif
+Act(vh:1, Fbn()['Cliente'])
+if (Vacio(Val(vh:1)))
+let(&estadovalidacion, 'No existe cliente para la cuenta')
+break
+endif
+Act(es:1, Fbn()['Especies'])
+Act(es:2, Copy(Val(es:1), 1, Longitud(Val(es:1)) - 1))
+if (Vacio(Val(es:2)))
+let(&estadovalidacion, 'No existe especie para la cuenta')
+break
+endif
+Act(cl:1, Fbn()['Comitente'])
+if (Vacio(Val(cl:1)))
+let(&estadovalidacion, 'No existe comitente para la cuenta')
+break
+endif
+proximo
+if (Query("Select 1 from "~Dbo()~".BOOKS Where Codigo = '"~Val(g:&i)~"' and Vehiculo = '"~Val(vh:1)~"' and Especies = '"~Val(es:1)~"' and TiposOperacion='MMRPAC'") = 1)
+let(&estadovalidacion, 'Book invalido')
+endif
+
+if (Eqstr(&estadovalidacion, 'OK'))
+Acn(nu:1, BuscarCampo('VEHICULOS', 'Alias1', 'Codigo', Val(vh:1)))
+Act(nr:1, getnumerador(Val(nu:1)))
+if (Val(f:&i) = 360)
+Acn(rb:8, 0)
+else
+Acn(rb:8, 1)
+endif
+Acn(pr:1, Val(e:&i))
+Acn(pl:1, Fecha(Val(c:&i)) - Fecha(Val(b:&i)))
+Act(pe:1, BuscarCampo('USUARIOS', 'Perfiles', 'Codigo', UsuarioActivo()))
+Acn(cd:1, Val(h:&i))
+sql.add("INSERT INTO "~Dbo()~".OPERACIONES ( ")
+sql.add("   TipoOp,          NrOperacion,    FechaOp,         FechaOp2,      FechaVto, ")
+sql.add("   Plazo,           Vehiculo1,      Especie,         Cliente1,      Operador, ")
+sql.add("   TipoTasa,        FechaPago,      Precio1,         RB8,           TablaFeriados1, ")
+sql.add("   Cuenta1,         Book1,          Sector2,         MB3,           UsrInput, ")
+sql.add("   FechaCarga,      FechaCargaSys,  Cantidad, CB3 ")
+sql.add("   ) VALUES (")
+sql.add("   'MMRPAC'                 , '"~Val(nr:1)~"'           , '"~IdxDate(Val(b:&i))~"' , '"~IdxDate(Val(b:&i))~"' , '"~IdxDate(Val(c:&i))~"', ")
+sql.add("   "~FStr(Val(pl:1), 0, 0)~"  , '"~Val(vh:1)~"'           , '"~Val(es:2)~"'           , '"~Val(cl:1)~"'         , '"~UsuarioActivo()~"', ")
+sql.add("   'FIJA'                   , '"~IdxDate(Val(d:&i))~"' , "~FStr(Val(pr:1), 0, 2)~"   , "~FStr(Val(rb:8), 0, 0)~" , 'ARG', ")
+sql.add("   '"~Val(co:1)~"'          , '"~Val(g:&i)~"'          , '"~Val(pe:1)~"'           , '1'                     , '"~UsuarioActivo()~"', ")
+sql.add("   "~SQLAhora()~"             , '"~IdxDate(FSys())~"'       , '"~FStr(Val(h:&i), 0, 2)~"', 1  ")
+sql.add("   )")
+Watch(sql.batch)
+sql.new
+sql.exec
+ejecutarevento('INSBIT', string1 = 'OPERACIONES', entero1 = 1, nroperacion1 = Val(nr:1))
+endif
+else
+let(&estadovalidacion, 'Cuenta invalida en FPA')
+endif
+Act(h:&i, &estadovalidacion)
+let(&contadorfilas, &i)
+
+
+proximo
+FormatoCeldas(a:2..a:&contadorfilas, exe('F0'))
+FormatoCeldas(f:2..f:&contadorfilas, exe('F0'))
+FormatoCeldas(e:2..e:&contadorfilas, exe('F8'))
+SetFilaActual(&contadorfilas)
+Ifa()
+Ifa()
+Act(a:fac, 'Fin del Reporte')
+SetFont(a:fac..a:fac, 1)
+Ifa()
+LimitesVision(i:fac)
+
+Messagebox('Evento Importacion Acuerdos Remuneradas Finalizado Correctamente.')
+
+
+

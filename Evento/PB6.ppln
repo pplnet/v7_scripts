@@ -1,0 +1,111 @@
+mostrarcuadrodemensajes
+creardialogo
+vehiculo1: 'Vehiculo';1;1;;;;NoVacio(dialogo.vehiculo1) y (Incluido(dialogo.vehiculo1, UsrVehiculos(UsuarioActivo())) o Vacio(UsrVehiculos(UsuarioActivo())));'Vehiculo Invalido';NO;BuscarCampo('USRVEHICULO', 'Vehiculo', 'Codigo', UsuarioActivo());;;;;iif (NoVacio(UsrVehiculos(UsuarioActivo())), " Codigo in (Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"') ")
+fecha1: 'Fecha';1;2;;;;;;;FSys()
+especie1: 'Moneda';2;1;;;;Eqstr(BuscarCampo('ESPECIES', 'Tipo', 'Codigo', dialogo.especie1), 'MON');'Moneda Invalida';NO;'ARP';;;;;" Tipo = 'MON' "
+entero1: 'Cant.Movimientos';3;;;;;;;;10
+radio2: 'Tipo Cta|Cta.Cte|Interm|Recaud|C.Ahorro|Todos';4;1;;;;;;;4
+check1: 'Incluye Pagadoras';5;1;;;;;;;1
+lista1: 'Bancos';6;1;1;;;;;;;;SQLSet(" Select Codigo From "~Dbo()~".CLIENTES WHERE Sector='BAN' ");
+lista2: 'Cuentas';0;2;1;;;;;;;;SQLSet(" Select Codigo From "~Dbo()~".CUENTAS  WHERE Cliente = '"~dialogo.vehiculo1~"' AND Comitente IN ("~pipe2comillas(dialogo.lista1)~")"~iif (dialogo.check1 = 0, " AND (Pagadora <>'SI' OR Pagadora IS NULL)"));
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+sql.add(" SELECT /*+ RULE */ C.Codigo, C.Numero, C.Comitente, B.RazonSocial ")
+sql.add(" FROM "~Dbo()~".CUENTAS C, "~Dbo()~".CLIENTES B ")
+sql.add(" WHERE C.Comitente = B.Codigo ")
+sql.add(" AND   C.Cliente   = '"~dialogo.vehiculo1~"' ")
+if (NoVacio(dialogo.lista2))
+sql.add(" AND   C.Codigo IN ("~pipe2comillas(dialogo.lista2)~") ")
+endif
+if (NoVacio(dialogo.lista1))
+sql.add(" AND   C.Comitente IN ("~pipe2comillas(dialogo.lista1)~") ")
+endif
+if (dialogo.radio2 = 0)
+sql.add(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+endif
+if (dialogo.radio2 = 1)
+sql.add(" AND C.TipoCuenta IN ('INT')")
+endif
+if (dialogo.radio2 = 2)
+sql.add(" AND C.TipoCuenta IN ('REC')")
+endif
+if (dialogo.radio2 = 3)
+sql.add(" AND C.TipoCuenta IN ('CA')")
+endif
+if (dialogo.check1 = 0)
+sql.add(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+endif
+sql.add(" AND (C.Especies LIKE '%"~dialogo.especie1~"%' OR C.Especies LIKE '%MONEDA%' ) ")
+sql.add(" ORDER BY C.Comitente, C.Codigo ")
+
+Acn(z:1, 0)
+recorrer sql
+Message('Cuenta: '~Fbn('Codigo')~' - '~Fbn('Numero'))
+Acn(z:1, 1)
+recorrer&i 1, dialogo.entero1
+Acn(a:fac, 0)
+Act(b:fac, Fbn('Comitente'))
+Act(c:fac, Fbn('RazonSocial'))
+Act(d:fac, Fbn('Codigo'))
+Act(e:fac, Fbn('Numero'))
+Acd(f:fac, dialogo.fecha1)
+Acn(g:fac, 0)
+Act(h:fac, dialogo.vehiculo1)
+Ifa()
+proximo
+Dfa()
+proximo
+
+if (Val(z:1) = 0)
+Cancelar()('No se encontraron cuentas.')
+endif
+
+crearlistbox;'Arial,8,';'Vehiculo: '~dialogo.vehiculo1~'  Moneda: '~dialogo.especie1
+'OK';a:1..a:fac;SI;;;30;check;RGB(232, 255, 215);iif (Val(g:flb) <> 0, 1, 0)
+'FechaVto';f:1..f:fac;SI;;;70;fecha;RGB(232, 255, 215);
+'Cod.Banco';b:1..b:fac;NO;;;80;string;;RGB(232, 232, 232);
+'Nombre';c:1..c:fac;NO;;;150;string;;RGB(232, 232, 232);
+'Cod.Cuenta';d:1..d:fac;NO;;;80;string;;RGB(232, 232, 232);
+'Numero';e:1..e:fac;NO;;;120;string;;RGB(232, 232, 232);
+'Monto';g:1..g:fac;SI;;;90;numero;'###,###,###,###,###.##';RGB(232, 255, 215);
+'Vehiculo';h:1..h:fac;NO;;;80;string;;RGB(232, 232, 232);
+'Columna';j:1..j:fac;SI;;;100;combo;'Ingresos|Egresos|Ing.Op.Fin|Egr.Op.Fin|Ing.Prest.IntCia|Eg.Prest.IntCia';RGB(232, 255, 215)
+'Observaciones';i:1..i:fac;SI;;;300;string;;RGB(232, 255, 215);
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+
+recorrer&i 1, Fac()
+if (Val(a:&i) = 1)
+Act(nu:1, getnumerador(10104))
+sql.add(" INSERT INTO "~Dbo()~".TRANSACCIONES2 ( ")
+sql.add(" ConceptoPago, Fecha1, Fecha2, ")
+sql.add(" Especie, Cantidad1, Cliente2, ")
+sql.add(" Cuenta2, Vehiculo1, UsrInput, ")
+sql.add(" NrTrans, TipoTr2, FechaCarga, ")
+sql.add(" FechaCargaSys, Observaciones, RB1 ")
+sql.add(" ) VALUES ( ")
+sql.add(" 'PROYEC', "~IdxDate2(dialogo.fecha1)~", "~IdxDate2(Val(f:&i))~", ")
+sql.add(" '"~dialogo.especie1~"', "~FStr(Val(g:&i), 1, 4)~", '"~Val(b:&i)~"', ")
+sql.add(" '"~Val(d:&i)~"', '"~dialogo.vehiculo1~"', '"~UsuarioActivo()~"', ")
+sql.add(" '"~Val(nu:1)~"', 'PROYEC', "~IdxDate2(dialogo.fecha1)~", ")
+sql.add(" "~IdxDate2(dialogo.fecha1)~", '"~Val(i:&i)~"',  '"~FStr(Val(j:&i), 0, 0)~"' ")
+sql.add(" ) ")
+sql.new
+
+sql.add(" INSERT INTO "~Dbo()~".OPERACIONESBITS ( ")
+sql.add(" NrOperacion, Valor, NrBit ")
+sql.add(" ) VALUES ( ")
+sql.add(" '"~Val(nu:1)~"', '1', 40 ) ")
+sql.new
+Message('Transaccion '~Val(i:&i)~' generada.')
+sql.exec
+endif
+proximo
+

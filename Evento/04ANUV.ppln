@@ -1,0 +1,170 @@
+creardialogo
+nrtrans1:'Nro.Voucher';;;;;;Incluido(BuscarCampo('TRANSACCIONES2', 'TipoTr2', 'NrTrans', dialogo.nrtrans1), 'DEP|RET|COMP|MATCH');'Tipo de Comprobante incorrecto';NO;;;;;;" TipoTr2 IN ('DEP','RET','COMP','MATCH') ";
+check3:'Llamado';;;;NO;NO;;;;0;
+check2:'Interfase';;;;NO;NO;;;;1;
+fecha1:'Fecha';;;;NO;NO;;;;FSys();
+findialogo
+
+if (dialogo.check3 = 0)
+endif
+
+if (not ok)
+Cancelar()
+endif
+
+if (BuscarCampo('TRANSACCIONES2', 'CB9', 'NrTrans', dialogo.nrtrans1) = 1)
+Cancelar()('El Voucher '~dialogo.nrtrans1~' esta confirmado')
+endif
+
+if (Incluido(BuscarCampo('TRANSACCIONES2', 'TipoTr2', 'NrTrans', dialogo.nrtrans1), 'DEP|RET|MATCH'))
+Act(x1, sql("Select Valor from "~Dbo()~".OPERACIONESBITS where NrOperacion = '"~dialogo.nrtrans1~"' and NrBit = 4 "))
+if (Eqstr(Val(x1), '1'))
+Cancelar()('El Voucher '~dialogo.nrtrans1~' esta fallado')
+endif
+endif
+
+if (Incluido(BuscarCampo('TRANSACCIONES2', 'TipoTr2', 'NrOperacionRef1', dialogo.nrtrans1), 'DTP|RTP'))
+Act(x5, BuscarCampo('TRANSACCIONES2', 'NrTrans', 'NrOperacionRef1', dialogo.nrtrans1))
+
+sql.add("DELETE from "~Dbo()~".MOVEJECUTADOS ")
+sql.add("where NrOperacion = '"~Val(x5)~"'")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".MOVPENDIENTES ")
+sql.add("where NrOperacion =  '"~Val(x5)~"' ")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".TRANSACCIONES2 ")
+sql.add("where NrTrans =  '"~Val(x5)~"'   ")
+sql.new
+
+sql.exec
+endif
+
+
+if (Incluido(BuscarCampo('TRANSACCIONES2', 'TipoTr2', 'NrTrans', dialogo.nrtrans1), 'COMP'))
+sql.add(" select NrOperacion from "~Dbo()~".MOVEJECUTADOS ")
+sql.add(" where NrTrans2   = '"~dialogo.nrtrans1~"'     ")
+sql.add(" and NrOperacion <> '"~dialogo.nrtrans1~"'     ")
+recorrer sql
+sql.add("UPDATE "~Dbo()~".OPERACIONES ")
+sql.add("  SET RB10        = '0',  ")
+sql.add("      FechaPrecan = Null ")
+sql.add("Where NrOperacion = '"~Fbn()['NrOperacion']~"' ")
+sql.add("  and TipoOp     In ('TIC','TIV','TIFC','TIFV','TICO','TIPO','TCOPRI') ")
+sql.new
+sql.exec
+sql.actualizarmovimientos2(Fbn()['NrOperacion'], NO, SI, NO, NO)
+sql.exec
+proximo
+endif
+
+
+
+
+sql.add(" select NrOperacion from "~Dbo()~".MOVEJECUTADOS ")
+sql.add(" where NrTrans2   = '"~dialogo.nrtrans1~"'     ")
+sql.add(" and NrOperacion <> '"~dialogo.nrtrans1~"'     ")
+recorrer sql
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("  SET valor        = 0 ")
+sql.add("Where NrOperacion = '"~Fbn()['NrOperacion']~"' ")
+sql.new
+
+sql.add("UPDATE "~Dbo()~".OPERACIONESBITS ")
+sql.add("  SET valor        = 1  ")
+sql.add("Where NrOperacion = '"~Fbn()['NrOperacion']~"' and NrBit = '10' ")
+sql.new
+
+
+sql.exec
+proximo
+
+
+sql.add("SELECT * ")
+sql.add("  FROM "~Dbo()~".TRANSACCIONES2 ")
+sql.add(" WHERE NrTrans='"~dialogo.nrtrans1~"'")
+
+recorrer sql
+
+Act(ba:1, Fbn()['Mercado1'])
+Act(bb:1, Fbn()['Especie'])
+Act(bi:1, Fbn()['TipoTr2'])
+if (Eqstr(Val(bi:1), 'RET'))
+Scn(bf:1, -Fbn()['Cantidad1'])
+else
+Scn(bf:1, Fbn()['Cantidad1'])
+endif
+Act(bh:1, Fbn()['Cuenta1'])
+Act(bq:1, Fbn()['NrTrans']~'|')
+Act(by:1, Fbn()['Cliente1'])
+Acn(bw:1, Fbn()['Cantidad11'])
+
+proximo
+
+sql.add("INSERT INTO "~Dbo()~".MOVPENDIENTES ")
+sql.add("(NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+sql.add("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+sql.add("Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+sql.add("NrMov, NrLiq, Status, NrInstan, Cupon, ")
+sql.add("Cuenta, Transaccion, Cantidad, Book) ")
+
+sql.add("Select ")
+sql.add("NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+sql.add("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+sql.add("Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+sql.add("NrMov, NrLiq, Status, NrInstan, Cupon, ")
+sql.add("Cuenta, Transaccion, Cantidad, Book ")
+sql.add("from "~Dbo()~".MOVEJECUTADOS ")
+sql.add("where NrTrans2 = '"~dialogo.nrtrans1~"'")
+sql.add("and NrOperacion <> '"~dialogo.nrtrans1~"'")
+
+sql.add("Union ")
+
+sql.add("Select ")
+sql.add("NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+sql.add("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+sql.add("Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+sql.add("NrMov, NrLiq, Status, NrInstan, Cupon, ")
+sql.add("Cuenta, Transaccion, Cantidad , Book")
+
+sql.add("from "~Dbo()~".MOVPENDIENTES ")
+sql.add("where NrTrans2 = '"~dialogo.nrtrans1~"'")
+sql.add("and NrOperacion <> '"~dialogo.nrtrans1~"'")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".MOVEJECUTADOS ")
+sql.add("where NrTrans2 = '"~dialogo.nrtrans1~"' ")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".MOVPENDIENTES ")
+sql.add("where NrTrans2 = '"~dialogo.nrtrans1~"' ")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".OPERACIONESBITS ")
+sql.add("where NrOperacion = '"~dialogo.nrtrans1~"' ")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".INSTANCIASOP ")
+sql.add("where NrOperacion = '"~dialogo.nrtrans1~"' ")
+sql.new
+
+sql.add("DELETE from "~Dbo()~".LIQUIDACIONESVT ")
+sql.add("where NrTrans = '"~dialogo.nrtrans1~"' ")
+sql.new
+
+
+sql.add("DELETE from "~Dbo()~".TRANSACCIONES2 ")
+sql.add("where NrTrans = '"~dialogo.nrtrans1~"' ")
+sql.new
+
+sql.exec
+
+sql.exec
+
+if (dialogo.check3 = 0)
+if (DesciendeDeEspecie(Val(bb:1), 'MONEDA') y Eqstr(Val(ba:1), Var('MERCADOBT')))
+Acn(bz:2, 1)
+endif
+endif

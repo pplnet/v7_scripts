@@ -1,0 +1,133 @@
+HojaVisible(NO)
+modoreproceso(sindialogo)
+mostrarcuadrodemensajes
+creardialogo
+fecha1:'Fecha';;;;NO;;;;;;FSys()
+string1:'Path';;;;;;;;;Var('PATHICL')
+string3:'Spread';;;;;;;;;'SPREAD.XLS'
+string2:'Tasas';;;;;;;;;'TASAS.XLS'
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+if (not existedirectorio(Var('PATHICL')))
+Cancelar()('Debe Crear el Directorio '~Var('PATHICL'))
+endif
+
+CrearFont(1, "Arial,10,B")
+CrearFont(2, "Arial,8,")
+CrearFont(3, "Arial,8,B")
+
+importarxls(a:2..b:200, a:1..b:200, dialogo.string1~dialogo.string2)
+
+if (Vacio(Val(a2)))
+Cancelar()('No se ha podido recuperar el archivo Tasas')
+endif
+
+SetFilaActual(1)
+
+Acn(zx1, 0)
+recorrer&i 2, 200
+
+
+Act(c:&i, sql(" Select Codigo From "~Dbo()~".TIPOSTASA Where CodigoExterno = '"~Val(a:&i)~"' AND EspecieValida = '"~Val(b:1)~"'  "))
+
+if (Vacio(Val(a:&i)))
+break
+endif
+Scn(zx3, 1)
+Acn(d:&i, Num(Val(b:&i)))
+if (NOVacio(Val(c:&i)) y Val(d:&i) <> 0)
+Scn(zx1, 1)
+if (sql("SELECT 1 FROM "~Dbo()~".TASASDIA WHERE TipoTasa='"~Val(c:&i)~"' and Fecha='"~IdxDate(dialogo.fecha1)~"' and Especie= '"~Val(b:1)~"' and PlazoDesde=1 and PlazoHasta=999999") = 0)
+Message('Insertando Tasa ICL'~Val(c:&i))
+sql.add(" Insert "~Dbo()~".TASASDIA ")
+sql.add(" (Fecha, Especie, TipoTasa, ")
+sql.add(" PlazoDesde, PlazoHasta, Valor1, ")
+sql.add(" Valor2, Valor3, Valor4, ")
+sql.add(" Valor5) ")
+sql.add(" Values ")
+sql.add(" ('"~IdxDate(dialogo.fecha1)~"', '"~Val(b:1)~"', '"~Val(c:&i)~"', ")
+sql.add(" 1, 999999, "~FStr(Val(d:&i), 0, 8)~", ")
+sql.add(" "~FStr(0, 0, 8)~", "~FStr(0, 0, 8)~", "~FStr(0, 0, 8)~", ")
+sql.add(" "~FStr(0, 0, 8)~" ) ")
+sql.new
+else
+Message('Actualizando Tasa ICL'~Val(c:&i))
+sql.add(" Update "~Dbo()~".TASASDIA ")
+sql.add(" Set Valor1 = "~FStr(Val(d:&i), 0, 8)~", ")
+sql.add(" Valor2 = "~FStr(0, 0, 8)~", ")
+sql.add(" Valor3 = "~FStr(0, 0, 8)~", ")
+sql.add(" Valor4 = "~FStr(0, 0, 8)~", ")
+sql.add(" Valor5 = "~FStr(0, 0, 8)~" ")
+sql.add(" Where Fecha = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND Especie = '"~Val(b:1)~"' ")
+sql.add(" AND TipoTasa = '"~Val(c:&i)~"' ")
+sql.add(" AND PlazoDesde = 1 ")
+sql.add(" AND PlazoHasta = 999999 ")
+sql.new
+endif
+sql.exec
+else
+if (Val(d:&i) = 0)
+Message('Sin valor de Tasa para '~Val(a:&i)~' '~Val(b:1)~' '~Val(b:&i))
+else
+Message('No Existe '~Val(a:&i)~' '~Val(b:1)~' '~Val(b:&i))
+endif
+endif
+proximo
+
+
+Acn(zx3, 0)
+
+importarxls(a:2..h:501, k:1..r:500, dialogo.string1~dialogo.string3)
+
+if (Vacio(Val(k1)))
+Cancelar()('No se ha podido recuperar el archivo Spread')
+endif
+
+SetFilaActual(1)
+
+Acn(zx2, 0)
+
+recorrer&i 1, 500
+
+Act(j:&i, sql(" Select Codigo From "~Dbo()~".ESPECIES Where CodigoExterno = '"~Val(m:&i)~"' AND MonedaEmision = '"~Val(k:&i)~"'  and Tenor = '"~Val(l:&i)~"' "))
+if (Vacio(Val(k:&i)))
+break
+endif
+Scn(zx3, 1)
+
+Acn(s:&i, Num(Val(p:&i)))
+if (NOVacio(Val(j:&i)) y Val(s:&i) <> 0)
+
+Message('Actualizando Spread: '~Val(j:&i))
+
+if (sql("SELECT 1 FROM "~Dbo()~".COTIZACIONES WHERE Codigo='"~Val(j:&i)~"' and (CallPut='CON' or CallPut is Null) and Fecha='"~IdxDate(dialogo.fecha1)~"' and Moneda = '"~Val(k:&i)~"' ") = 1)
+sql.add("UPDATE "~Dbo()~".COTIZACIONES SET ")
+sql.add("Precio1="~FStr(Val(s:&i) / 100, 1, 8)~" ")
+sql.add("WHERE  Codigo='"~Val(j:&i)~"' and (CallPut='CON' or CallPut is Null) and Fecha='"~IdxDate(dialogo.fecha1)~"' ")
+sql.new
+sql.exec
+else
+sql.add("INSERT INTO "~Dbo()~".COTIZACIONES ")
+sql.add("(Fecha, Codigo, CallPut, Precio1, Moneda) ")
+sql.add(" VALUES ('"~IdxDate(dialogo.fecha1)~"', '"~Val(j:&i)~"', 'CON', ")
+sql.add(" "~FStr(Val(s:&i) / 100, 0, 8)~", '"~Val(k:&i)~"' )")
+sql.new
+sql.exec
+endif
+Scn(zx2, 1)
+else
+if (Val(s:&i) = 0)
+Message('Sin valor de Spread para '~Val(k:&i)~' '~Val(l:&i)~' '~Val(m:&i))
+else
+Message('No Existe '~Val(k:&i)~' '~Val(l:&i)~' '~Val(m:&i))
+endif
+endif
+
+
+proximo

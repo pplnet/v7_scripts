@@ -1,0 +1,131 @@
+creardialogo
+fecha1:'Fecha desde';1;1;;;;;;;FSys()
+fecha2:'Fecha hasta';2;1;;;;dialogo.fecha2 >= dialogo.fecha1;"Fecha Hasta tiene tiene que ser mayor a Fecha Desde";;;FSys()
+findialogo
+
+if (not ok)
+Cancelar()("Evento Cancelado.")
+endif
+
+SetFilaActual(0)
+&cantoperaciones := 0
+&totalop := 0
+&secuenciahrs := 0
+
+
+sql.add("SELECT O.NrOperacion,O.Cliente1,O.FechaOp,O.FechaVto,O.TipoOp,O.Especie,O.Cantidad,O.Precio1, ")
+sql.add("O.TotalBrutoCli1, LIB.HoraOr,LIB.Mercado,LIB.Estado,LIB.UsuarioSup")
+sql.add(" FROM "~Dbo()~".OPERACIONES O")
+sql.add("INNER JOIN "~Dbo()~".OPERACIONESBITS OB ON O.NrOperacion = OB.NrOperacion AND Valor = 1")
+sql.add("INNER JOIN "~Dbo()~".CLIENTES CL ON O.Cliente1 = CL.Codigo")
+sql.add("OUTER APPLY (SELECT TOP 1 L.HoraOr, L.UsuarioCarga, L.Estado, L.UsuarioSup, L.Mercado FROM "~Dbo()~".LIBORDENES L WHERE L.NrOperacionRef = O.NrOperacion ORDER BY L.FechaCarga DESC ) LIB")
+
+sql.add("WHERE O.FechaOp BETWEEN "~IdxDate2(dialogo.fecha1)~" AND "~IdxDate2(dialogo.fecha2))
+sql.add("AND TipoOp IN ('TIC','TIV')")
+sql.add("AND OB.NrBit IN ('10','70') ")
+sql.add("AND CL.Status = 'HAB' AND CL.NrMae IS NULL")
+sql.add("AND LIB.Estado IN ('PEN','REC')")
+
+
+recorrer sql
+Act(a:fac, Fbn()['NrOperacion'])
+Act(b:fac, Fbn()['Cliente1'])
+Acd(c:fac, Fbn()['FechaOp'])
+Acd(d:fac, Fbn()['FechaVto'])
+Act(e:fac, Fbn()['TipoOp'])
+Act(f:fac, Fbn()['Especie'])
+Act(g:fac, Fbn()['Cantidad'])
+Act(h:fac, Fbn()['Precio1'])
+Act(i:fac, Fbn()['TotalBrutoCli1'])
+Acn(m:fac, 0)
+Acn(n:fac, Fbn()['Mercado'])
+Act(o:fac, Fbn()['HoraOr'])
+if (NOVacio(Val(o:fac)))
+Acn(j:fac, Num(Copy(Val(o:fac), 1, 2)))
+Acn(k:fac, Num(Copy(Val(o:fac), 4, 2)))
+Acn(l:fac, Num(Copy(Val(o:fac), 7, 2)))
+endif
+Act(p:fac, Fbn()['Estado'])
+if (Eqstr(Val(p:fac), 'PEN'))
+Act(q:fac, "Pendiente")
+else
+Act(q:fac, "Rechazado")
+endif
+Act(p:fac, Fbn()['UsuarioSup'])
+
+
+&cantoperaciones := &cantoperaciones + 1
+proximo
+
+if (&cantoperaciones > 0)
+crearlistbox;'Arial,8,'
+
+'Check';m1..m:fac;SI;iif (Val(m:flb) = 1, (Val(j:flb) + Val(k:flb) + Val(l:flb)) <> 0)'La hora de carga no puede ser 00:00:00. Fila: '~FStr(flb, 1, 0);50;check;RGB(232, 232, 255);
+'Estado';q1..q:fac;NO;SI;;80;string;;RGB(232, 232, 255);
+'Supervisor';p1..p:fac;NO;SI;;80;string;;RGB(232, 232, 255);
+'NrOperacion';a1..a:fac;SI;;;80;string;;RGB(232, 232, 255);
+'Cliente';b1..b:fac;NO;SI;;80;string;;RGB(232, 232, 255);
+'FechaOp';c1..c:fac;NO;SI;;80;fecha;RGB(232, 232, 255);
+'FechaVto';d1..d:fac;NO;SI;;80;fecha;RGB(232, 232, 255);
+'TipoOp';e1..e:fac;NO;SI;;60;string;;RGB(232, 232, 255);
+'Especie';f1..f:fac;NO;SI;;60;string;;RGB(232, 232, 255);
+'Cantidad';g1..g:fac;NO;SI;;100;numero;;RGB(232, 232, 255);
+'Precio';h1..h:fac;NO;SI;;100;numero;'.########'RGB(232, 232, 255);
+'Total';i1..i:fac;NO;;;110;numero;;RGB(232, 232, 255);
+'Horas Orden';j1..j:fac;SI;iif (Val(m:flb) = 1, Val(j:flb) >= 0 y Val(j:flb) < 24);'El rango de horas es entre 0 y 23. Fila: '~FStr(flb, 1, 0);95;numero;'##';RGB(180, 180, 193);
+'Minutos Orden';k1..k:fac;SI;iif (Val(m:flb) = 1, Val(k:flb) >= 0 y Val(k:flb) < 60);'El rango de minutos es entre 0 y 59. Fila: '~FStr(flb, 1, 0);95;numero;'##';RGB(180, 180, 193);
+'Segundos Orden';l1..l:fac;SI;iif (Val(m:flb) = 1, Val(l:flb) >= 0 y Val(l:flb) < 60);'El rango de segundos es entre 0 y 59. Fila: '~FStr(flb, 1, 0);95;numero;'##';RGB(180, 180, 193);
+
+finlistbox
+
+else
+Cancelar()('No hay operaciones que cumplan las condiciones')
+endif
+
+
+
+if (not ok)
+Cancelar()('Evento Cancelado.')
+endif
+
+recorrer&i 1, &cantoperaciones
+
+if (Val(m:&i) = 1)
+&secuenciahrs := Pad0(Val(j:&i), 2)~':'~Pad0(Val(k:&i), 2)~':'~Pad0(Val(l:&i), 2)
+if (Val(n:&i) = 0)
+sql.add(" Insert into "~Dbo()~".LIBORDENES ( ")
+sql.add(" Mercado, Fecha,  FechaOP, NrOperacionRef, FechaHo,")
+sql.add(" HoraOr, SecuenciaHO, Agente,FechaHoraCarga,UsuarioCarga,  ")
+sql.add("Estado")
+sql.add(" ) Values ( ")
+sql.add(" '1'                       ,"~IdxDate2(FSys())~"         ,"~IdxDate2(Val(c:&i))~"    ,'"~Val(a:&i)~"'            ,"~IdxDate2(Val(c:&i))~",")
+sql.add("'"~&secuenciahrs~"'    , '"~Pad0(Val(j:&i), 8)~"'   ,'"~Var('AGESIOP')~"'           ,"~SQLAhora()~" ,'"~UsuarioActivo()~"', ")
+sql.add("'ING'")
+sql.add(" ) ")
+sql.new
+else
+sql.add("UPDATE "~Dbo()~".LIBORDENES SET ")
+sql.add("FechaHoraCarga = "~SQLAhora()~", ")
+sql.add("UsuarioCarga = '"~UsuarioActivo()~"', ")
+sql.add("Estado = 'ING',")
+sql.add("HoraOr ='"~&secuenciahrs~"',")
+sql.add("SecuenciaHO ='"~Pad0(Val(j:&i), 8)~"',")
+sql.add("FechaHoraSup = NULL ,")
+sql.add("UsuarioSup = NULL")
+sql.add("WHERE NrOperacionRef='"~Val(a:&i)~"'")
+sql.new
+endif
+
+&totalop := &totalop + 1
+endif
+proximo
+sql.exec
+if (&totalop = 1)
+Messagebox("Se cargo "~FStr(&totalop, 1, 0)~" operacion")
+else
+Messagebox("Se cargaron "~FStr(&totalop, 1, 0)~" operaciones")
+endif
+
+
+
+

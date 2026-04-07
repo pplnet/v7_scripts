@@ -1,0 +1,90 @@
+creardialogo
+fecha1:'F_Operacion';;;;;;dialogo.fecha1 <> 0;'Debe Ingresar una Fecha';NO;Habiles(FSys(), -1, 'ARG', SI);
+fecha2:'F_Cotizacion';;;;;;dialogo.fecha1 <> 0;'Debe Ingresar una Fecha';NO;Habiles(FSys(), -1, 'ARG', SI);
+lista1:'Vehiculos';;;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"'"))
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Act(z:2, SQLSet(" Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+
+Acn(z:1, 0)
+
+sql.add(" Select Distinct Especie FROM "~Dbo()~".OPERACIONES ")
+sql.add(" Where FechaOp = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" And TipoOp In ('FCR', 'FCS') ")
+if (NoVacio(dialogo.lista1))
+sql.add(" And Vehiculo1 IN ("~pipe2comillas(dialogo.lista1)~") ")
+endif
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" And Vehiculo1 IN ("~pipe2comillas(Val(z2))~") ")
+endif
+recorrer sql
+
+Act(a:1, Fbn()['Especie'])
+
+sql.add(" Select Count(*) Cuantos FROM "~Dbo()~".COTIZACIONES ")
+sql.add(" Where Codigo = '"~Fbn()['Especie']~"' ")
+sql.add(" And Fecha = '"~IdxDate(dialogo.fecha2)~"' ")
+recorrer sql
+
+if (Fbn()['Cuantos'] = 0)
+Messagebox('La Especie '~Val(a1)~' NO tiene Cotizacion para la Fecha: '~dialogo.fecha2)
+Acn(z:1, 1)
+endif
+
+proximo
+
+proximo
+
+if (Val(z:1) > 0)
+Cancelar()('Se Cancela el Proceso por falta de Cotizaciones')
+endif
+
+sql.add(" Select NrOperacion, Especie, Precio1, RB7, Cantidad, TotalNetoCli1, FechaOp, Vehiculo1 ")
+sql.add(" From "~Dbo()~".OPERACIONES ")
+sql.add(" Where FechaOp = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" And TipoOp In ('FCR', 'FCS') ")
+sql.add(" Order by Especie ")
+
+Act(a:2, ' ')
+
+recorrer sql
+
+if (not Eqstr(Val(a:2), Fbn()['Especie']))
+sql.add(" Select Precio1 FROM "~Dbo()~".COTIZACIONES ")
+sql.add(" Where Codigo = '"~Fbn()['Especie']~"' ")
+sql.add(" And Fecha = '"~IdxDate(dialogo.fecha2)~"' ")
+recorrer sql
+Acn(a:3, Fbn()['Precio1'])
+proximo
+Act(a:2, Fbn()['Especie'])
+endif
+
+sql.add(" Update "~Dbo()~".OPERACIONES ")
+sql.add(" Set Precio1 = "~FStr(Val(a:3), 0, 10)~", ")
+if (Fbn()['RB7'] = 0)
+sql.add(" TotalNetoCli1 = "~FStr(Fbn()['Cantidad'] * Val(a:3), 0, 2)~" ")
+else
+Acn(a:4, BuscarCampo('ESPECIES', 'Valor2', 'Codigo', Fbn('Especie')))
+Acn(a:5, BuscarCampo('ESPECIES', 'Valor3', 'Codigo', Fbn('Especie')))
+if (Val(a:5) = 1)
+Acn(a:6, trunc2(Fbn()['TotalNetoCli1'] / Val(a:3), Val(a:4)))
+sql.add(" Cantidad = "~FStr(Val(a:6), 0, Val(a:4))~" ")
+else
+Acn(a:6, Round2(Fbn()['TotalNetoCli1'] / Val(a:3), Val(a:4)))
+sql.add(" Cantidad = "~FStr(Val(a:6), 0, Val(a:4))~" ")
+endif
+endif
+sql.add(" Where NrOperacion = '"~Fbn()['NrOperacion']~"' ")
+sql.new
+sql.exec
+
+sql.actualizarmovimientos2(Fbn()['NrOperacion'], SI, NO, NO, SI)
+sql.exec
+
+ejecutarevento('REGPOS', fecha1 = Fbn()['FechaOp'], fecha2 = Fbn()['FechaOp'], vehiculo1 = Fbn()['Vehiculo1'], especie1 = Fbn()['Especie'])
+
+proximo

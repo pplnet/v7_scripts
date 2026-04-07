@@ -1,0 +1,112 @@
+sql.add("Select T.NrTrans FROM TRANSACCIONES2 T, OPERACIONES O where O.NrOperacion = T.NrOperacionRef1 and T.TipoTr2 = 'DEP' and O.TipoOp IN ("~pipe2comillas(Var('TIPOOPCOMP'))~") ")
+Act(tr:1, '')
+recorrer sql
+if (Vacio(Val(tr:1)))
+Act(tr:1, "'"~Fbn('NrTrans')~"'")
+else
+Act(tr:1, Val(tr:1)~",'"~Fbn('NrTrans')~"'")
+endif
+proximo
+
+creardialogo
+nrtrans1: 'Transaccion';;;;;;NoVacio(dialogo.nrtrans1);'Debe ingresar una transaccion';NO;;;;;;"NrTrans in ("~Val(tr: 1)~")"
+book1: 'Book';;;;;;NoVacio(dialogo.book1);;;;;;;;
+string1: 'Leyenda';;;;;;NoVacio(dialogo.string1);;;;;;;;
+findialogo
+
+if (NOok)
+Cancelar()
+endif
+
+
+if (existedirectorio(Var('PATHCOMPIN')))
+if (Eqstr(Copy(Var('PATHCOMPIN'), Longitud(Var('PATHCOMPIN')), 1), '\'))
+Act(pl:1, Var('PATHCOMPIN')~Var('FILECOMING')~Pad0(FStr(Dia(FSys()), 0, 0), 2)~Pad0(FStr(Mes(FSys()), 0, 0), 2)~FStr(Anio(FSys()), 0, 0))
+else
+Act(pl:1, Var('PATHCOMPIN')~'\'~Var('FILECOMING')~Pad0(FStr(Dia(FSys()), 0, 0), 2)~Pad0(FStr(Mes(FSys()), 0, 0), 2)~FStr(Anio(FSys()), 0, 0))
+endif
+else
+Cancelar()('El directorio '~Var('PATHCOMPIN')~' no existe')
+endif
+
+Act(ig:1, Val(pl:1)~'.csv')
+
+if (existearchivo(Val(ig:1)))
+recorrer&i 1, 9000
+Act(ig:1, Val(pl:1)~'_'~FStr(&i, 10, 0)~'.csv')
+if (not existearchivo(Val(ig:1)))
+break
+endif
+proximo
+endif
+
+Acn(zz:1, 0)
+sql.add("Select TR.Cuenta2,CONVERT(varchar,TR.Fecha2,105) Fecha2,TR.Cantidad1,TR.Especie,TR.NrOperacionRef1, CL.Alias3 BancoPS,")
+sql.add("CU.Numero,CU.Alias6 CuentaPS, O.Operador,O.TipoOp,O.Especie Fondo,CU.Alias1 BookCuenta, U.Alias1 UsuarioAlias1, CU.Alias5 ")
+sql.add("FROM "~Dbo()~".TRANSACCIONES2 TR,"~Dbo()~".CLIENTES CL, "~Dbo()~".CUENTAS CU, "~Dbo()~".OPERACIONES O, "~Dbo()~".USUARIOS U")
+sql.add("Where TR.NrTrans='"~dialogo.nrtrans1~"'")
+sql.add("AND CU.Codigo = TR.Cuenta2")
+sql.add("AND CU.Comitente = CL.Codigo")
+sql.add("AND O.NrOperacion = TR.NrOperacionRef1")
+sql.add("AND O.Operador = U.Codigo")
+recorrer sql
+if (Val(zz:1) = 0)
+abrirascii(Val(ig:1), 0)
+endif
+Act(aa:1, Fbn('Cuenta2'))
+Act(a:4, Fbn('Fecha2'))
+Act(a:5, Fbn('Cantidad1'))
+Act(ad:1, BuscarCampo('ESPECIES', 'Alias10', 'Codigo', Fbn('Especie')))
+Act(ae:1, Fbn('CuentaPS'))
+Act(af:1, Fbn('TipoOp'))
+Act(a:9, Fbn('NrOperacionRef1'))
+Act(a:1, Fbn('Alias5'))
+Act(a:2, Fbn('Numero'))
+Act(a:2, Trim(Val(a:2)))
+if (not Vacio(Fbn('UsuarioAlias1')))
+Act(a:10, Fbn('UsuarioAlias1'))
+else
+Act(a:10, Fbn('Operador'))
+endif
+
+Act(a:3, Val(a:9)~'_'~dialogo.nrtrans1)
+
+
+Act(a:6, 'FPA '~dialogo.string1)
+
+if (NoVacio(dialogo.book1))
+Act(a:8, Copy(BuscarCampo('BOOKS', 'Alias1', 'Codigo', dialogo.book1), 1, 8))
+else
+Act(a:8, Copy(BuscarCampo('BOOKS', 'Alias1', 'Codigo', Fbn('BookCuenta')), 1, 8))
+end
+
+if (Incluido(Val(af:1), 'FCR|SEVS'))
+Act(a:7, 'FC_'~Val(ad:1)~'_'~Val(a:8))
+else
+if (Eqstr(Val(af:1), 'TRANSF'))
+Act(a:7, 'TR_'~Val(ad:1)~'_'~Val(a:8))
+else
+if (Eqstr(Val(af:1), 'MMRPAC'))
+Act(a:7, 'REM_'~Val(ae:1))
+else
+if (Eqstr(Val(af:1), 'MMCPM'))
+Act(a:7, 'PF_'~Val(ad:1)~'_'~Val(a:8))
+else
+Act(a:7, 'NoDefinido')
+endif
+endif
+endif
+endif
+
+Act(a:11, 'G')
+
+escribirascii(Val(a:1)~';'~Val(a:2)~';'~Val(a:3)~';'~Val(a:4)~';'~Val(a:5)~';'~Val(a:11)~';'~Val(a:6)~';'~Val(a:7)~';'~Val(a:10))
+Acn(zz:1, Val(zz:1) + 1)
+proximo
+
+if (Val(zz:1) <> 0)
+cerrarascii
+endif
+
+
+Message('Evento Interfaz Comprobante Ingresos finalizó correctamente.')

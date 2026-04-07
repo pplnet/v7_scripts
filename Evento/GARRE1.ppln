@@ -1,0 +1,188 @@
+creardialogo
+nroperacion1:"Operacion";;;;;;NoVacio(dialogo.nroperacion1);'Debe Ingresar una Operacion';NO;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+Act(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', dialogo.nroperacion1))
+
+sql.add("SELECT U.Vehiculo FROM "~Dbo()~".USRVEHICULO U,"~Dbo()~".VEHICULOS V ")
+sql.add("WHERE  U.Codigo='"~UsuarioActivo()~"' and U.Vehiculo=V.Codigo ")
+sql.add("       and (Status='HAB' or Status Is Null or Status='')")
+
+recorrer sql
+Dfa()
+Act(vh2, Fbn()['Vehiculo']~'|'~Val(vh2))
+proximo
+if (not Incluido(Val(vh1), Val(vh2)) y NoVacio(Val(vh2)))
+Cancelar()('Usuario no Habilitado para Trabajar con el Vehiculo ')
+endif
+
+
+if (not Incluido(BuscarCampo('Operaciones', 'TipoOp', 'NrOperacion', dialogo.nroperacion1), 'FXREPO|FXREPV'))
+Cancelar()('La operacion N? '~dialogo.nroperacion1~' No es un Repo')
+endif
+
+Acn(x1, sql("Select NrBit FROM "~Dbo()~".OPERACIONESBITS  Where NrOperacion='"~dialogo.nroperacion1~"' AND Valor='1'"))
+
+if (Val(x1) <> 20 y Val(x1) <> 50)
+Cancelar()('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~sql("Select Nombre FROM "~Dbo()~".INSTANCIAS  Where NrInstancia="~FStr(Val(x1), 0, 0)~" AND Tabla='OPERACIONES'"))
+endif
+
+if (ok)
+Message(' --- Generando Arbitrajes ...')
+
+sql.add("Select * from "~Dbo()~".OPERACIONES ")
+sql.add("where NrOperacion = '"~dialogo.nroperacion1~"' and (RB1='0' or RB1 IS NULL) and ")
+sql.add(" Especie<>'ARP' and ContraEspecie<>'ARP' ")
+Acn(a1, 0)
+
+recorrer sql
+Acn(a1, 1)
+
+if (Eqstr(Fbn()['TipoOp'], 'FXREPO'))
+Act(z1, 'FXAS')
+Act(z2, 'FXAT')
+endif
+
+if (Eqstr(Fbn()['TipoOp'], 'FXREPV'))
+Act(z1, 'FXASV')
+Act(z2, 'FXATV')
+endif
+
+Act(z3, getnumerador(BuscarCampo('VEHICULOS', 'Alias1', 'Codigo', Fbn()['Vehiculo1'])))
+
+Act(z4, Val(z3))
+
+Acn(z6, 1)
+if (Eqstr(sql(" Select Modo from "~Dbo()~".MODOESPECIES where Especie1='"~Fbn()['ContraEspecie']~"' and Especie2='"~Fbn()['Especie']~"' "), 'INV'))
+Acn(z6, 0)
+endif
+
+if (Fbn()['Puesto'] = 1)
+Acn(z10, Fbn()['Plazo'])
+if (Val(z10) > 3)
+Acn(z10, 4)
+endif
+else
+Acn(z10, Fbn()['Plazo'] - 1)
+if (Val(z10) > 4)
+Acn(z10, 4)
+endif
+endif
+
+Acn(z11, Fbn()['Plazo2'])
+if (Val(z11) > 3)
+Acn(z11, 4)
+endif
+
+Message(' ---- Generando Arbitraje Spot ...')
+sql.add("INSERT INTO "~Dbo()~".OPERACIONES ")
+sql.add("(TipoOp, NrOperacion, Especie, Cliente1, Cantidad, Precio1, ")
+sql.add(" TotalBrutoCli1, TotalNetoCli1, ContraEspecie, ")
+sql.add(" FechaOp, FechaVto, FechaPago, ")
+sql.add(" Operador, Vehiculo1, ")
+sql.add(" ValorRB1, Puesto, Observac2, OperacionRef, TablaFeriados1, TablaFeriados2, ")
+sql.add(" Precio4, ")
+sql.add(" UsrInput, FechaCarga,Vehiculo2,MB4,RB10,CB6,PaseCB, ")
+sql.add(" ValorRB2,RB6,RB3) ")
+sql.add("Values")
+sql.add("('"~Val(z1)~"', '"~Val(z3)~"', '"~Fbn()['Especie']~"', ")
+sql.add(" '"~Fbn()['Cliente1']~"', "~FStr(Fbn()['Cantidad'], 0, 4)~","~FStr(Fbn()['Precio1'], 0, 7)~" , ")
+sql.add(" "~FStr(Fbn()['TotalBrutoCli1'], 0, 4)~", "~FStr(Fbn()['TotalNetoCli1'], 0, 4)~", '"~Fbn()['ContraEspecie']~"', ")
+sql.add(" '"~IdxDate(Fbn()['FechaOp'])~"', '"~IdxDate(Fbn()['FechaVto'])~"', ")
+sql.add(" '"~IdxDate(Fbn()['FechaPago'])~"', ")
+sql.add(" '"~Fbn()['Operador']~"', '"~Fbn()['Vehiculo1']~"', ")
+sql.add(" '"~FStr(Val(z10), 2, 0)~"', '"~Fbn()['Puesto']~"', ")
+sql.add(" '"~Fbn()['Observac2']~"', '"~Fbn()['NrOperacion']~"', '"~Fbn()['TablaFeriados1']~"', '"~Fbn()['TablaFeriados2']~"', ")
+sql.add(" "~FStr(Fbn()['Precio4'], 0, 7)~", ")
+sql.add(" '"~Fbn()['UsrInput']~"', '"~IdxDate(FSys())~"', '"~Fbn()['Vehiculo2']~"', '"~Fbn()['MB4']~"', ")
+sql.add(" '"~Fbn()['RB10']~"','"~Fbn()['CB6']~"','1',")
+sql.add(" '"~FStr(Val(z11), 2, 0)~"','1','"~Fbn()['RB3']~"' ) ")
+sql.new
+
+Message('Ingresando Instancias Operacion '~Val(z3)~' ...')
+
+Acn(i1, 50)
+
+sql.add("SELECT * FROM "~Dbo()~".INSTANCIAS ")
+sql.add(" Where Tabla = 'OPERACIONES' ")
+sql.add(" ORDER BY NrInstancia ")
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ( ")
+sql.add(" NrOperacion, NrBit, Valor ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(z3)~"', ")
+sql.add(" "~FStr(Fbn()['NrInstancia'], 2, 0)~", ")
+sql.add(" '"~iif (Val(i1) = Fbn()['NrInstancia'], '1', '0')~"' ")
+sql.add(" ) ")
+sql.new
+sql.exec
+proximo
+
+
+
+Act(z3, getnumerador(BuscarCampo('VEHICULOS', 'Alias1', 'Codigo', Fbn()['Vehiculo1'])))
+
+Message(' ---- Generando Operacion de Arbitraje Termino ...')
+sql.add("INSERT INTO "~Dbo()~".OPERACIONES ")
+sql.add("(TipoOp, NrOperacion, Especie, Cliente1, Cantidad, Precio1, ")
+sql.add(" TotalBrutoCli1, TotalNetoCli1, ContraEspecie, ")
+sql.add(" FechaOp, FechaVto, FechaPago, Plazo, Plazo2, ")
+sql.add(" Operador, Vehiculo1, ")
+sql.add(" Observac2, OperacionRef, TablaFeriados1, TablaFeriados2, ")
+sql.add(" Precio4, ")
+sql.add(" UsrInput, FechaCarga,Vehiculo2,MB4,RB10,CB6,PaseCB,RB3 ) ")
+sql.add("Values")
+sql.add("('"~Val(z2)~"', '"~Val(z3)~"', '"~Fbn()['ContraEspecie']~"',  ")
+sql.add(" '"~Fbn()['Cliente1']~"', "~FStr(Fbn()['TotalBrutoCli2'], 0, 4)~", "~FStr(Fbn()['Precio2'], 0, 7)~" , ")
+sql.add(" "~FStr(Fbn()['Cantidad'], 0, 4)~", "~FStr(Fbn()['Cantidad'], 0, 4)~", '"~Fbn()['Especie']~"' , ")
+sql.add(" '"~IdxDate(Fbn()['FechaOp'])~"', '"~IdxDate(Fbn()['FechaOp2'])~"', ")
+sql.add(" '"~IdxDate(Fbn()['FechaVto2'])~"', "~FStr(Fbn()['Plazo4'], 2, 0)~", "~FStr(Fbn()['Plazo3'], 2, 0)~", ")
+sql.add(" '"~Fbn()['Operador']~"', '"~Fbn()['Vehiculo1']~"', ")
+sql.add(" '"~Fbn()['Observac2']~"', '"~Fbn()['NrOperacion']~"', '"~Fbn()['TablaFeriados2']~"', '"~Fbn()['TablaFeriados1']~"', ")
+sql.add(" "~FStr(Fbn()['Precio4'], 0, 7)~", ")
+sql.add(" '"~Fbn()['UsrInput']~"', '"~IdxDate(FSys())~"', '"~Fbn()['Vehiculo2']~"', '"~Fbn()['MB4']~"', ")
+sql.add(" '"~Fbn()['RB10']~"','"~Val(z6)~"','1','"~Fbn()['RB3']~"' ) ")
+sql.new
+
+Message('Ingresando Instancias Operacion '~Val(z3)~' ...')
+
+Acn(i1, 50)
+
+sql.add("SELECT * FROM "~Dbo()~".INSTANCIAS ")
+sql.add(" Where Tabla = 'OPERACIONES' ")
+sql.add(" ORDER BY NrInstancia ")
+recorrer sql
+Dfa()
+sql.add("INSERT INTO "~Dbo()~".OPERACIONESBITS ( ")
+sql.add(" NrOperacion, NrBit, Valor ")
+sql.add(" ) Values ( ")
+sql.add(" '"~Val(z3)~"', ")
+sql.add(" "~FStr(Fbn()['NrInstancia'], 2, 0)~", ")
+sql.add(" '"~iif (Val(i1) = Fbn()['NrInstancia'], '1', '0')~"' ")
+sql.add(" ) ")
+sql.new
+sql.exec
+proximo
+
+
+
+sql.add(" UPDATE "~Dbo()~".OPERACIONES SET RB1 = '1' ")
+sql.add(" Where (NrOperacion = '"~Fbn()['NrOperacion']~"')  ")
+sql.new
+sql.exec
+proximo
+
+if (Val(a1) = 0)
+Messagebox('Se han generado con anterioridad las Operaciones de ARBITRAJE para esta Operacion !!!')
+else
+ejecutarevento('GCVARB', nroperacion1 = Val(z4))
+
+ejecutarevento('GCVARB', nroperacion1 = Val(z3))
+endif
+endif

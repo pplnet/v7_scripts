@@ -1,0 +1,118 @@
+creardialogo
+fecha1:'Fecha desde';1;1;;;;;;;FSys()
+fecha2:'Fecha hasta';2;1;;;;dialogo.fecha2 >= dialogo.fecha1;"Fecha Hasta tiene tiene que ser mayor a Fecha Desde";;;FSys()
+findialogo
+
+if (not ok)
+Cancelar()("Evento Cancelado.")
+endif
+SetFilaActual(0)
+&cantoperaciones := 0
+&totalop := 0
+&fechahoracarga := 0
+
+
+sql.add("SELECT O.NrOperacion,O.Cliente1,O.FechaOp,O.FechaVto,O.TipoOp,O.Especie,O.Cantidad,O.Precio1, O.TotalBrutoCli1, LIB.HoraOr, LIB.Estado")
+sql.add(" FROM "~Dbo()~".OPERACIONES O")
+sql.add("INNER JOIN "~Dbo()~".OPERACIONESBITS OB ON O.NrOperacion = OB.NrOperacion AND Valor = 1")
+sql.add("INNER JOIN "~Dbo()~".CLIENTES CL ON O.Cliente1 = CL.Codigo")
+sql.add("OUTER APPLY (SELECT TOP 1 L.HoraOr, L.UsuarioCarga, L.Estado, L.UsuarioSup FROM "~Dbo()~".LIBORDENES L WHERE L.NrOperacionRef = O.NrOperacion ORDER BY L.FechaCarga DESC ) LIB")
+sql.add("WHERE O.FechaOp BETWEEN "~IdxDate2(dialogo.fecha1)~" AND "~IdxDate2(dialogo.fecha2))
+sql.add("AND TipoOp IN ('TIC','TIV')")
+sql.add("AND OB.NrBit IN ('10','70') ")
+sql.add("AND CL.Status = 'HAB' AND CL.NrMae IS NULL")
+sql.add("AND LIB.Estado IN ('ING','SUP')")
+
+recorrer sql
+Act(a:fac, Fbn()['NrOperacion'])
+Act(b:fac, Fbn()['Cliente1'])
+Acd(c:fac, Fbn()['FechaOp'])
+Acd(d:fac, Fbn()['FechaVto'])
+Act(e:fac, Fbn()['TipoOp'])
+Act(f:fac, Fbn()['Especie'])
+Act(g:fac, Fbn()['Cantidad'])
+Act(h:fac, Fbn()['Precio1'])
+Act(i:fac, Fbn()['TotalBrutoCli1'])
+Acn(m:fac, 0)
+Act(o:fac, Fbn()['HoraOr'])
+Acn(j:fac, Num(Copy(Val(o:fac), 1, 2)))
+Acn(k:fac, Num(Copy(Val(o:fac), 4, 2)))
+Acn(l:fac, Num(Copy(Val(o:fac), 7, 2)))
+Act(p:fac, Fbn()['Estado'])
+if (Eqstr(Val(p:fac), 'ING'))
+Act(q:fac, "Ingresado")
+elseif (Eqstr(Val(p:fac), 'REC'))
+Act(q:fac, "Rechazado")
+else
+Act(q:fac, "Supervisado")
+endif
+endif
+
+&cantoperaciones := &cantoperaciones + 1
+proximo
+
+if (&cantoperaciones > 0)
+crearlistbox;'Arial,8,'
+
+'Check';m1..m:fac;SI;;;50;check;RGB(232, 232, 255);
+'Supervisa';n1..n:fac;SI;iif (Val(m:flb) = 1, NOVacio(Val(n:flb)));'Debe seleccionar una opcion'70;combo;'Aprobado|Rechazado';RGB(180, 180, 193);
+'Estado';q1..q:fac;NO;SI;;80;string;;RGB(232, 232, 255);
+'NrOperacion';a1..a:fac;SI;;;80;string;;RGB(232, 232, 255);
+'Cliente';b1..b:fac;NO;SI;;80;string;;RGB(232, 232, 255);
+'FechaOp';c1..c:fac;NO;SI;;80;fecha;RGB(232, 232, 255);
+'FechaVto';d1..d:fac;NO;SI;;80;fecha;RGB(232, 232, 255);
+'TipoOp';e1..e:fac;NO;SI;;60;string;;RGB(232, 232, 255);
+'Especie';f1..f:fac;NO;SI;;60;string;;RGB(232, 232, 255);
+'Cantidad';g1..g:fac;NO;SI;;100;numero;;RGB(232, 232, 255);
+'Precio';h1..h:fac;NO;SI;;100;numero;'.########';RGB(232, 232, 255);
+'Total';i1..i:fac;NO;;;110;numero;;RGB(232, 232, 255);
+'Horas Orden';j1..j:fac;NO;;;95;numero;'##';RGB(232, 232, 255);
+'Minutos Orden';k1..k:fac;NO;;;95;numero;'##';RGB(232, 232, 255);
+'Segundos Orden';l1..l:fac;NO;;;95;numero;'##';RGB(232, 232, 255);
+
+
+finlistbox
+
+else
+Cancelar()('No hay operaciones que cumplan las condiciones')
+endif
+
+
+
+if (not ok)
+Cancelar()('Evento Cancelado.')
+endif
+recorrer&i 1, &cantoperaciones
+if (Val(m:&i) = 1)
+if (Val(n:&i) = 0)
+if (Eqstr(Val(p:&i), 'ING'))
+sql.add("UPDATE "~Dbo()~".LIBORDENES SET ")
+sql.add("FechaHoraSup = "~SQLAhora()~", ")
+sql.add("UsuarioSup = '"~UsuarioActivo()~"', ")
+sql.add("Estado = 'SUP' ")
+sql.add("WHERE NrOperacionRef='"~Val(a:&i)~"'")
+sql.new
+&totalop := &totalop + 1
+endif
+else
+sql.add("UPDATE "~Dbo()~".LIBORDENES SET ")
+sql.add("FechaHoraSup = "~SQLAhora()~" ,")
+sql.add("UsuarioSup ='"~UsuarioActivo()~"',")
+sql.add("Estado = 'REC',")
+sql.add("WHERE NrOperacionRef='"~Val(a:&i)~"'")
+sql.new
+&totalop := &totalop + 1
+endif
+
+endif
+proximo
+sql.exec
+if (&totalop = 1)
+Messagebox("Se superviso "~FStr(&totalop, 1, 0)~" operacion")
+else
+Messagebox("Se supervisaron "~FStr(&totalop, 1, 0)~" operaciones")
+endif
+
+
+
+

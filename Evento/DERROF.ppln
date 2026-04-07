@@ -1,0 +1,141 @@
+HojaVisible(SI)
+modoreproceso(sindialogo)
+creardialogo
+fecha1:"Fecha Concert.";2;1;;;;dialogo.fecha1 <= FSys() y dialogo.fecha1 <> 0;'Debe Ingresar Fecha Concertacion';NO;FSys()
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+CrearFont(1, "Arial,8,")
+CrearFont(2, "Arial,8,B")
+CrearFont(3, "Arial,10,B")
+
+agregarbmp(a1, exe('LOGO'), exe('ESCALOGO'))
+SetFilaActual(4)
+Act(a:fac, 'Recalculo Diario Derechos ROFEX')
+SetFont(a:fac..a:fac, 3)
+SetFilaActual(Fac() + 2)
+
+Act(a:fac, 'F.Concertacion : '~dialogo.fecha1)
+
+SetFilaActual(Fac() + 2)
+
+Act(a:fac, 'Cliente')
+Act(b:fac, 'NrOperacion')
+Act(c:fac, 'TipoOp')
+Act(d:fac, 'FechaOp')
+Act(e:fac, 'FechaVto')
+Act(f:fac, 'Especie')
+Act(g:fac, 'VN')
+Act(h:fac, 'Precio Futuro')
+Act(i:fac, 'Contratos')
+Act(j:fac, 'Coma35')
+Act(k:fac, 'Derechos Orig.')
+Act(l:fac, 'IvaDerechos Orig.')
+Act(m:fac, '% Derechos')
+Act(n:fac, 'Derechos')
+Act(o:fac, 'Iva Derechos')
+Act(p:fac, 'Observaciones')
+
+SetFont(a:5..aa:fac, 2)
+AgregarMarco(a:fac..p:fac, 1, 0, exe('COLOR6'))
+
+
+Acn(co:1, sql("Select Top(1) PrecioContable From "~Dbo()~".COTIZACIONES Where Codigo = 'COMA35' AND Moneda = '"~Var('MONELOCA')~"' AND Fecha <= '"~IdxDate(dialogo.fecha1)~"'  AND CallPut = 'CON'  Order By Fecha Desc "))
+
+sql.add(" Select O.Cliente1, O.Especie, O.ContraEspecie, O.Cantidad VN, O.Vehiculo1, O.PorArancel, O.Mercado4, ")
+sql.add(" O.Precio1, O.NrOperacion, O.TotalNetoCli1, O.TotalBrutoCli3 Contratos, O.TotalBrutoCli1, O.TotalGastos Derechos, O.TotalIvaAdi IvaDerechos, ")
+sql.add(" O.FechaOp, O.FechaVto, O.TipoOp, C.RazonSocial, C.CondicionIVA, C.Res3125, C.Res3337, E.Nombre, O.TotalAux4, ")
+sql.add(" O.Mercado, O.Mercado4, O.TotalAux2 Comision, TotalAux4 PorcIVA, TotalIVA, TotalAux3 ComisionAnt, ")
+sql.add(" (select Count(*) from "~Dbo()~".MOVEJECUTADOS M where M.NrOperacion = O.NrOperacion) Ejecutados, ")
+sql.add(" (select Count(*) from "~Dbo()~".MOVPENDIENTES M where M.NrOperacion = O.NrOperacion and NrGrupo=16 and (NrMov=13 or NrMov=14)) Pendientes ")
+sql.add(" from "~Dbo()~".OPERACIONES O,  "~Dbo()~".CLIENTES C, "~Dbo()~".ESPECIES E, "~Dbo()~".OPERACIONESBITS OB ")
+sql.add("  WHERE O.NrOperacion = OB.NrOperacion ")
+sql.add("    and O.Cliente1    = C.Codigo ")
+sql.add("    and O.Especie     = E.Codigo ")
+sql.add("    and OB.Valor = '1' and OB.NrBit in (7,10) ")
+sql.add("    and TipoOp  in ('FXCF','FXVF') ")
+sql.add("    and Mercado4  = '"~Var('MERROFEX')~"' ")
+sql.add("    and FechaOp  = '"~IdxDate(dialogo.fecha1)~"'")
+
+Watch(sql.batch)
+
+recorrer sql
+
+Acn(z:1, 1)
+Act(a:fac, Fbn('Cliente1')~' - '~Fbn('RazonSocial'))
+Act(b:fac, Fbn('NrOperacion'))
+Act(c:fac, Fbn('TipoOp'))
+Acd(d:fac, Fbn('FechaOp'))
+Acd(e:fac, Fbn('FechaVto'))
+Act(f:fac, Fbn('Especie')~' - '~Fbn('Nombre'))
+Acn(g:fac, Fbn('VN'))
+Acn(h:fac, Fbn('Precio1'))
+Acn(i:fac, Fbn('Contratos'))
+Acn(j:fac, Val(co:1))
+Acn(k:fac, Fbn('Derechos'))
+Acn(l:fac, Fbn('IvaDerechos'))
+Acn(m:fac, MontoGastos(Fbn('TipoOp'), Fbn('Especie'), Fbn('Vehiculo1'), 'DMERC', 0, 4, null, Fbn('Mercado4')))
+FormatoCeldas(m:fac, exe('F5'))
+Acn(n:fac, Val(co:1) * Val(i:fac) * Val(m:fac) / 100)
+Acn(o:fac, Val(n:fac) * Fbn('TotalAux4'))
+Act(p:fac, iif (Fbn('Ejecutados') > 0, 'Ya Tiene Liquidaciones - No se recalcula', iif (Fbn('Pendientes') = 0, 'No tiene Derechos generados - No se Generan', '')))
+
+if (Fbn('Ejecutados') = 0)
+if (Val(n:fac) = 0)
+sql.add(" DELETE "~Dbo()~".MOVPENDIENTES  ")
+sql.add(" WHERE NrOperacion = '"~Val(b:fac)~"' and NrGrupo=16 and (NrMov=13 or NrMov=14) ")
+sql.new
+sql.exec
+else
+if (Fbn('Pendientes') = 0)
+else
+sql.add(" UPDATE "~Dbo()~".OPERACIONES SET ")
+sql.add(" TotalGastos  = '"~FStr(Val(n:fac), 0, 2)~"', ")
+sql.add(" TotalIvaAdi  = '"~FStr(Val(o:fac), 0, 2)~"' ")
+sql.add(" WHERE NrOperacion = '"~Val(b:fac)~"' ")
+sql.new
+
+sql.add(" UPDATE "~Dbo()~".MOVPENDIENTES SET ")
+sql.add(" Cantidad  = '"~FStr(Val(n:fac) * -1, 0, 2)~"' ")
+sql.add(" WHERE NrOperacion = '"~Val(b:fac)~"' and NrGrupo=16 and NrMov=13 ")
+sql.new
+
+sql.add(" UPDATE "~Dbo()~".MOVPENDIENTES SET ")
+sql.add(" Cantidad  = '"~FStr(Val(o:fac) * -1, 0, 2)~"' ")
+sql.add(" WHERE NrOperacion = '"~Val(b:fac)~"' and NrGrupo=16 and NrMov=14 ")
+sql.new
+
+sql.exec
+endif
+endif
+endif
+
+
+proximo
+
+if (Val(z:1) = 0)
+Cancelar()('No hay operaciones para Actualizar. Las operaciones liquidadas no se toman')
+endif
+
+ACO(1, 28)
+ACO(2, 8)
+ACO(3, 10)
+ACO(4, 10)
+ACO(5, 10)
+ACO(6, 10)
+ACO(7, 10)
+ACO(8, 10)
+ACO(9, 10)
+ACO(10, 10)
+ACO(11, 10)
+ACO(12, 10)
+ACO(13, 10)
+ACO(14, 10)
+ACO(15, 10)
+ACO(16, 25)
+
+LimitesVision(p:fac)
+

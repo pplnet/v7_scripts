@@ -1,0 +1,86 @@
+mostrarcuadrodemensajes
+creardialogo
+fecha1:'Fecha';;;;;;dialogo.fecha1 > 0;'Fecha Invalida';NO;FSys()
+listatabla1: 'Operaciones';;;;NO;NO;;;;;;;;;;'NrOperacion';'NrOperacion;Cliente1;FechaOp;Especie;FechaVto';'OPERACIONES'
+tipoop1:'TipoOp';;;;NO;NO;;
+lista1:'Vehiculos';;;;NO;NO;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), SQLSet("Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo = '"~UsuarioActivo()~"'"))
+check1:'Contab.Procesada';;;;NO;NO;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Message('--- Asientos NDF Fin de Mes ---')
+
+Acn(x1, sql("Select 1 from "~Dbo()~".VARIABLES where Codigo = 'DIASCONT' "))
+if (Val(x1) = 1)
+Acn(x1, Trunc(Var('DIASCONT'), 0))
+endif
+if (Val(x1) < 1)
+Acn(x1, 1)
+endif
+Acd(x2, Habiles(PriDeMes(dialogo.fecha1, SI) - 1, Val(x1), 'ARG'))
+
+Acd(v:1, dialogo.fecha1)
+Acd(v:2, FinDeMes(PriDeMes(dialogo.fecha1, SI) - 1, NO))
+Acd(v:3, PriDeMes(Val(v:2), SI))
+Acd(v:4, PriDeMes(Val(v:1), SI))
+Acd(v:5, Val(v:4) - 1)
+
+
+if (Val(v:1) <> Val(x2))
+Cancelar()
+endif
+
+sql.add(" Select O.TipoOp, O.Vehiculo1, M.Codigo CodAsi, O.Cliente1, O.NrOperacion, O.Precio1, O.Plazo, ")
+sql.add(" O.Cantidad, O.MB3, O.Cantidad, O.Especie, O.ContraEspecie, O.FechaOp, O.ContraEspecie Moneda, O.FechaPago, V.Alias4 ")
+sql.add(" From "~Dbo()~".OPERACIONES O, "~Dbo()~".VEHICULOS V, "~Dbo()~".MODELOSASIENTO M ")
+sql.add("   Where O.FechaOp  <= "~IdxDate2(Val(v:2))~" ")
+sql.add("   and O.FechaVto   >  "~IdxDate2(Val(v:5))~" ")
+sql.add("   and O.TipoOp in ('FXCT','FXVT','FXCTV','FXVTV','FXAT','FXATV') ")
+sql.add("   and O.Vehiculo1 IN ("~pipe2comillas(Var('VLIQUIDA')~Var('VLIQUIDA2'))~") ")
+sql.add(" AND M.Habilitado = 'SI' ")
+if (NoVacio(dialogo.lista1))
+sql.add(" AND O.Vehiculo1 IN ("~pipe2comillas(dialogo.lista1)~") AND ( ")
+recorrer&i 1, Elementos(dialogo.lista1)
+sql.add(" '|'+rtrim(M.Vehiculo)+'|' like '%|"~ItemLista(dialogo.lista1, &i)~"|%' ")
+if (not Elementos(dialogo.lista1) = &i)
+sql.add(" OR ")
+endif
+proximo
+sql.add(") ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+sql.add(" AND O.Vehiculo1 IN (Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo = '"~UsuarioActivo()~"') ")
+endif
+endif
+sql.add("   and O.Vehiculo1   =  V.Codigo ")
+sql.add("   and M.TipoAsiento IN ("~pipe2comillas(Var('TIPASINDFM'))~") ")
+sql.add("   and M.TipoOp      = O.TipoOp ")
+sql.add("   and O.CB9 = 1 and O.CB8=1 ")
+sql.add(" Order by O.NrOperacion ")
+
+recorrer sql
+Acn(ck:1, 0)
+Acd(fv:1, Val(v:5))
+Act(vh:1, Fbn('Vehiculo1'))
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(sql(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrOperacion = '"~Fbn('NrOperacion')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado = 'E' AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+Acn(ct:1, CotizacionC(Fbn('Especie'), null, Fbn('FechaPago'), null, Val(v:5), 1, SI, Fbn('ContraEspecie')))
+
+if (Eqstr(Fbn('TipoOp'), 'FXCT'))
+Acn(nd:1, Fbn('Cantidad') * (Val(ct:1) - Fbn('Precio1')))
+else
+Acn(nd:1, Fbn('Cantidad') * (Fbn('Precio1') - Val(ct:1)))
+endif
+if (Val(ck:1) = 0)
+Message(Fbn('NrOperacion')~' - Modelo: '~Fbn('CodAsi'))
+sql.generarasientoop(Fbn('CodAsi'), Fbn('NrOperacion'), '', '', 810, Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoOp'), null, null, null, null, null, null, FSys(), dialogo.fecha1)
+sql.exec
+endif
+proximo

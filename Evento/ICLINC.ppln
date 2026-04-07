@@ -1,0 +1,228 @@
+creardialogo
+fecha1:'Fecha';;;;;;;;;;FSys()
+fecha2:'Fecha FMes';;;;NO;;;;;;FinDeMes(Habiles(dialogo.fecha1, -1, 'ARG', SI), SI)
+nroperacion1:'Operacion';;;;;;;;;;;;;;"TipoOp In ('CONU') and   FechaOp  <= '"~IdxDate(dialogo.fecha1)~"' and (FechaVto >= '"~IdxDate(dialogo.fecha1)~"'  or CB1=1) "
+cantidad1:'Interes';;;;;;dialogo.cantidad1 > 0;'Debe Ingresar Interes a Capitalizar';NO;
+vehiculo1:'Vehiculo';;;;NO;;NoVacio(dialogo.vehiculo1);'Debe Ingresar un Vehiculo';NO;Var('VEHICULODE');
+check1:'Manual';;;;NO;NO;;;;;1
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+Acn(co:1, sql("Select PrecioContable From "~Dbo()~".COTIZACIONES WHERE Codigo='"~Var('MONEEXTR')~"' and (CallPut='CON' or CallPut is Null) and Moneda = '"~Var('MONELOCA')~"' and Fecha= (Select max(C.Fecha) From "~Dbo()~".COTIZACIONES C WHERE Codigo='"~Var('MONEEXTR')~"' and (CallPut='CON' or CallPut is Null) and Moneda = '"~Var('MONELOCA')~"' and C.Fecha <= '"~IdxDate(dialogo.fecha2)~"')  "))
+
+Acn(wt:1, Round(dialogo.cantidad1 * Var('ICLWTH') / 100, 2))
+
+Acn(iv:1, Round(dialogo.cantidad1 * Var('ICLBIVA') / 100 * Var('ICLIVA') / 100, 2))
+Acn(iv:2, dialogo.cantidad1 * Var('ICLBIVA') / 100)
+
+Acn(fl:1, 0)
+
+if (sql(" Select 1 from "~Dbo()~".CUOTAS where NrOperacion='"~dialogo.nroperacion1~"' and  Fecha1= '"~IdxDate(dialogo.fecha1)~"' and Radio1 = '3'  ") > 0)
+if (sql(" Select 1 from "~Dbo()~".MOVEJECUTADOS where NrOperacion='"~dialogo.nroperacion1~"' and  FechaMov = '"~IdxDate(dialogo.fecha1)~"' Group by NrOperacion  ") > 0)
+if (dialogo.check1 = 1)
+Messagebox('Hay Liquidaciones de Impuestos realizadas - debera anularla para porder reprocesar - CONU '~dialogo.nroperacion1)
+Cancelar()('Se cancela el proceso de Capitalizacion de Intereses ICL')
+else
+Acn(fl:1, 1)
+endif
+else
+Message('Borrando devengados del dia ... ')
+sql.add("DELETE FROM "~Dbo()~".CUOTAS  ")
+sql.add(" WHERE Fecha1        = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND   Radio1        = '3'  ")
+sql.add(" AND   NrOperacion   = '"~dialogo.nroperacion1~"' ")
+sql.new
+Message('Borrando Movimientos del dia ... ')
+sql.add("DELETE FROM "~Dbo()~".MOVPENDIENTES  ")
+sql.add(" WHERE FechaMov      = '"~IdxDate(dialogo.fecha1)~"' ")
+sql.add(" AND   NrOperacion   = '"~dialogo.nroperacion1~"' ")
+sql.new
+sql.exec
+endif
+
+endif
+
+if (Val(fl:1) = 0)
+Acn(ct:1, sql("Select Max(NrCuota) From "~Dbo()~".CUOTAS Where NrOperacion='"~dialogo.nroperacion1~"' ") + 1)
+
+Message('Generando CUOTA Interes Capitalizado ... ')
+sql.add(" INSERT INTO "~Dbo()~".CUOTAS ( ")
+sql.add(" NrOperacion, NrCuota, Radio1, Fecha1, Cantidad1, Cantidad5, Cantidad2, ")
+sql.add(" Cantidad3, Cantidad6, Cantidad4, Precio1,  Precio2, Precio3, ")
+sql.add("  NrOperacion1")
+sql.add(" ) VALUES ( ")
+sql.add(" '"~dialogo.nroperacion1~"', "~Val(ct:1)~",  '3', '"~IdxDate(dialogo.fecha1)~"', "~FStr((dialogo.cantidad1 - Val(wt:1)) * -1, 0, 2)~", "~FStr(dialogo.cantidad1, 0, 2)~", "~FStr(0, 0, 2)~",")
+sql.add(" "~FStr(Val(iv:1), 0, 2)~", "~FStr(Val(iv:2), 0, 2)~","~FStr(Val(wt:1), 0, 2)~", "~FStr(Val(co:1), 0, 8)~", "~FStr(Var('ICLIVA'), 0, 8)~", "~FStr(Var('ICLWTH'), 0, 8)~", ")
+sql.add(" '"~dialogo.nroperacion1~"' ")
+sql.add(" ) ")
+sql.new
+
+sql.add(" Select NrOperacion, Cliente2, ContraEspecie2, Cuenta1, Cuenta2, Mercado2, Book1 ")
+sql.add(" from "~Dbo()~".OPERACIONES ")
+sql.add(" where NrOperacion = '"~dialogo.nroperacion1~"' ")
+Watch(sql.batch)
+
+recorrer sql
+
+Message('Generando Movimientos IVA - WTH ... ')
+Act(mp1, dialogo.nroperacion1)
+Acd(mp2, dialogo.fecha1)
+Acd(mp17, dialogo.fecha1)
+Act(mp3, Fbn()['Cliente2'])
+Act(mp4, Fbn()['ContraEspecie2'])
+Act(mp5, '')
+Act(mp6, '')
+Acn(mp7, 0)
+Act(mp8, Fbn()['Mercado2'])
+Act(mp9, dialogo.vehiculo1)
+Acn(mp10, Val(iv:1) * Val(co:1))
+Act(mp12, 'IVA por Intereses CONU '~Val(mp3)~' - '~Val(mp1))
+Act(mp13, 'MV')
+Acn(mp14, 1)
+Acn(mp15, 1)
+Act(mp16, 'MM')
+Act(mp19, Fbn()['Cuenta2'])
+Acn(mp22, 1)
+Act(mp30, dialogo.vehiculo1)
+if (Eqstr(Val(mp13), 'AV') y Val(mp2) <= FSys())
+sql.add("INSERT INTO "~Dbo()~".MOVEJECUTADOS (")
+else
+sql.add("INSERT INTO "~Dbo()~".MOVPENDIENTES (")
+endif
+sql.add("NrOperacion,FechaMov,")
+sql.add("Cliente,Especie,")
+sql.add("CallPut,")
+if (Incluido(Val(mp5), 'CAL|PUT'))
+sql.add("FechaEj,PrecioEj,")
+endif
+sql.add("Mercado,")
+sql.add("EnteCustodia,Cantidad,")
+sql.add("Formula,Leyenda,")
+sql.add("Bits,NrSaldo,")
+sql.add("NrGrupo,Concepto,")
+sql.add("FechaEje,UsuarioEje,")
+sql.add("Cuenta,NrGrupo2,")
+sql.add("Transaccion,NrMov,")
+sql.add("NrLiq,Status,")
+sql.add("NrComprob,NrInstan,")
+sql.add("Cupon,NrTrans2,")
+sql.add("Book,Vehiculo")
+sql.add(") Values (")
+sql.add(" '"~Val(mp1)~"',")
+sql.add(" '"~IdxDate(Val(mp2))~"',")
+sql.add(" '"~Val(mp3)~"', ")
+sql.add(" '"~Val(mp4)~"',")
+sql.add(" '"~Val(mp5)~"',")
+if (Incluido(Val(mp5), 'CAL|PUT'))
+sql.add(" '"~IdxDate(Val(mp6))~"',"~FStr(Val(mp7), 0, 6)~", ")
+endif
+sql.add(" '"~Val(mp8)~"',")
+sql.add(" '"~Val(mp9)~"',")
+sql.add(" "~FStr(Val(mp10), 0, 2)~", ")
+sql.add(" '"~Val(mp11)~"', ")
+sql.add(" '"~Copy(Val(mp12), 1, 50)~"', ")
+sql.add(" '"~Val(mp13)~"', ")
+sql.add(" "~FStr(Val(mp14), 0, 0)~", ")
+sql.add(" "~FStr(Val(mp15), 0, 0)~",")
+sql.add(" '"~Val(mp16)~"',")
+sql.add(" '"~IdxDate(FSys())~"','"~Val(mp18)~"',")
+sql.add(" '"~Val(mp19)~"',"~FStr(Val(mp20), 0, 0)~",")
+sql.add(" '"~Val(mp21)~"',"~FStr(Val(mp22), 0, 0)~",")
+if (Vacio(Val(mp24)))
+sql.add(" "~FStr(Val(mp23), 0, 2)~",Null,")
+else
+sql.add(" "~FStr(Val(mp23), 0, 2)~",'"~Val(mp24)~"',")
+endif
+sql.add(" "~FStr(Val(mp25), 0, 0)~", ")
+if (Val(mp:26) <> 0)
+sql.add(" "~FStr(Val(mp26), 0, 6)~",")
+else
+sql.add(" "~FStr(Val(mp26), 0, 6)~",")
+endif
+sql.add(" '"~Val(mp27)~"','"~Val(mp28)~"',")
+sql.add(" '"~Val(mp29)~"','"~Val(mp30)~"' ")
+sql.add(" )")
+sql.new
+sql.exec
+
+if (DesciendeDeEspecie(Val(mp4), 'MONEDA') y Eqstr(Val(mp8), Var('MERCADOBT')))
+endif
+
+
+Acn(mp10, Val(wt:1) * Val(co:1))
+Act(mp12, 'WTH por CONU '~Val(mp3)~' - '~Val(mp1))
+Act(mp16, 'MM')
+Acn(mp22, 2)
+if (Eqstr(Val(mp13), 'AV') y Val(mp2) <= FSys())
+sql.add("INSERT INTO "~Dbo()~".MOVEJECUTADOS (")
+else
+sql.add("INSERT INTO "~Dbo()~".MOVPENDIENTES (")
+endif
+sql.add("NrOperacion,FechaMov,")
+sql.add("Cliente,Especie,")
+sql.add("CallPut,")
+if (Incluido(Val(mp5), 'CAL|PUT'))
+sql.add("FechaEj,PrecioEj,")
+endif
+sql.add("Mercado,")
+sql.add("EnteCustodia,Cantidad,")
+sql.add("Formula,Leyenda,")
+sql.add("Bits,NrSaldo,")
+sql.add("NrGrupo,Concepto,")
+sql.add("FechaEje,UsuarioEje,")
+sql.add("Cuenta,NrGrupo2,")
+sql.add("Transaccion,NrMov,")
+sql.add("NrLiq,Status,")
+sql.add("NrComprob,NrInstan,")
+sql.add("Cupon,NrTrans2,")
+sql.add("Book,Vehiculo")
+sql.add(") Values (")
+sql.add(" '"~Val(mp1)~"',")
+sql.add(" '"~IdxDate(Val(mp2))~"',")
+sql.add(" '"~Val(mp3)~"', ")
+sql.add(" '"~Val(mp4)~"',")
+sql.add(" '"~Val(mp5)~"',")
+if (Incluido(Val(mp5), 'CAL|PUT'))
+sql.add(" '"~IdxDate(Val(mp6))~"',"~FStr(Val(mp7), 0, 6)~", ")
+endif
+sql.add(" '"~Val(mp8)~"',")
+sql.add(" '"~Val(mp9)~"',")
+sql.add(" "~FStr(Val(mp10), 0, 2)~", ")
+sql.add(" '"~Val(mp11)~"', ")
+sql.add(" '"~Copy(Val(mp12), 1, 50)~"', ")
+sql.add(" '"~Val(mp13)~"', ")
+sql.add(" "~FStr(Val(mp14), 0, 0)~", ")
+sql.add(" "~FStr(Val(mp15), 0, 0)~",")
+sql.add(" '"~Val(mp16)~"',")
+sql.add(" '"~IdxDate(FSys())~"','"~Val(mp18)~"',")
+sql.add(" '"~Val(mp19)~"',"~FStr(Val(mp20), 0, 0)~",")
+sql.add(" '"~Val(mp21)~"',"~FStr(Val(mp22), 0, 0)~",")
+if (Vacio(Val(mp24)))
+sql.add(" "~FStr(Val(mp23), 0, 2)~",Null,")
+else
+sql.add(" "~FStr(Val(mp23), 0, 2)~",'"~Val(mp24)~"',")
+endif
+sql.add(" "~FStr(Val(mp25), 0, 0)~", ")
+if (Val(mp:26) <> 0)
+sql.add(" "~FStr(Val(mp26), 0, 6)~",")
+else
+sql.add(" "~FStr(Val(mp26), 0, 6)~",")
+endif
+sql.add(" '"~Val(mp27)~"','"~Val(mp28)~"',")
+sql.add(" '"~Val(mp29)~"','"~Val(mp30)~"' ")
+sql.add(" )")
+sql.new
+sql.exec
+
+if (DesciendeDeEspecie(Val(mp4), 'MONEDA') y Eqstr(Val(mp8), Var('MERCADOBT')))
+endif
+
+
+proximo
+
+sql.exec
+endif

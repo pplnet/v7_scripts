@@ -1,0 +1,198 @@
+creardialogo
+fecha1: 'Fecha';1;;;;;dialogo.fecha1 >= Habiles(FSys(), -Var('FVALORMAX'), 'ARG') y dialogo.fecha1 <= FSys();'Fecha fuera de rango permitido';NO;FSys()
+nroperacion1: 'TCPCEM';;;;;;;;;;;;;;"TipoOp in ('TCPCEM')"
+lista1: 'Mercados';;;;NO;;;;;;'MAE|BYMA';SQLSet("SELECT Codigo FROM "~Dbo()~".MERCADOS  ORDER BY Codigo ");SI
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Acn(y:1, 1)
+if (Val(y:1) = 0)
+HojaVisible(SI)
+endif
+
+sql.add(" Select O.NrOperacion, ")
+sql.add("  ISNULL((Select top(1) 'SI' from dbo.ORDENES  where NrOperacion1=O.NrOperacion and NrOperacion2 <> ''),'NO') NrTCOPRI, ")
+sql.add("  (Select Count(*)  from "~Dbo()~".ORDENES  where NrOperacion1=O.NrOperacion ) Ordenes, ")
+sql.add("  ISNULL((Select Top (1) 'SI'  from "~Dbo()~".ORDENES  where NrOperacion1=O.NrOperacion and  Cliente <> '"~Var('VEHICULODE')~"'),'NO') Terceros ")
+sql.add("   From "~Dbo()~".OPERACIONES O ")
+sql.add(" Where  O.TipoOp        = 'TCPCEM'                          ")
+sql.add("   and  O.RB8 = '0' ")
+sql.add("    and    O.FechaPago  = "~IdxDate2(dialogo.fecha1)~"      ")
+if (NoVacio(dialogo.nroperacion1))
+sql.add("AND  O.NrOperacion = '"~dialogo.nroperacion1~"' ")
+endif
+if (NoVacio(dialogo.lista1))
+sql.add("AND  O.Mercado4 In ("~pipe2comillas(dialogo.lista1)~") ")
+endif
+
+Watch(sql.batch())
+Acn(co:1, 0)
+Acn(co:2, 0)
+
+
+recorrer sql
+
+if (Fbn('Ordenes') = 0)
+Acn(co:1, 1)
+Acn(co:2, 2)
+else
+if (Eqstr(Fbn('NrTcopri'), 'SI'))
+Acn(co:1, 2)
+if (Eqstr(Fbn('Terceros'), 'SI'))
+Acn(co:2, 1)
+else
+Acn(co:2, 2)
+endif
+else
+Acn(co:1, 2)
+Acn(co:2, 2)
+endif
+endif
+
+if (Val(y:1) = 1)
+sql.add(" Update "~Dbo()~".OPERACIONES   ")
+if (Val(co:1) = 2)
+sql.add(" Set RB8 = '1'            ")
+else
+sql.add(" Set RB8 = '2'            ")
+endif
+
+sql.add(" Where NrOperacion = '"~Fbn()['NrOperacion']~"' ")
+sql.new
+sql.exec
+
+Acn( in :1, sql("select NrBit from "~Dbo()~".OPERACIONESBITS where NrOperacion = '"~Fbn()['NrOperacion']~"' and Valor = '1' "))
+
+if (Val(co:2) = 1)
+ejecutarevento('CBOINS', string1 = Fbn()['NrOperacion'], radio1 = 0, radio2 = 2, entero1 = Val( in :1), entero2 = 10)
+else
+ejecutarevento('CBOINS', string1 = Fbn()['NrOperacion'], radio1 = 0, radio2 = 2, entero1 = Val( in :1), entero2 = 70)
+endif
+
+endif
+
+proximo
+
+
+
+
+
+
+
+
+if (NO)
+sql.add(" Select O.NrOperacion, OD.NrOperacion1, OD.NrOperacion2  NrTCOPRI ")
+sql.add("   From "~Dbo()~".OPERACIONES O ")
+sql.add("         left outer join "~Dbo()~".ORDENES OD on O.NrOperacion = OD.NrOperacion1 ")
+sql.add(" Where  O.TipoOp        = 'TCPCEM'                          ")
+sql.add("   and  O.RB8 = '0' ")
+
+sql.add("    and    O.FechaPago  = "~IdxDate2(dialogo.fecha1)~"      ")
+
+if (NoVacio(dialogo.nroperacion1))
+sql.add("AND  O.NrOperacion = '"~dialogo.nroperacion1~"' ")
+endif
+if (NoVacio(dialogo.lista1))
+sql.add("AND  O.Mercado4 In ("~pipe2comillas(dialogo.lista1)~") ")
+endif
+sql.add(" Group by O.NrOperacion , OD.NrOperacion1 , OD.NrOperacion2 ")
+Watch(sql.batch())
+Acn(co:1, 0)
+Acn(co:10, 0)
+Act(co:2, '')
+Acn(co:3, 0)
+Act(co:4, '')
+
+recorrer sql
+if (Val(co:3) = 0)
+Act(co:2, Fbn()['NrOperacion'])
+Acn(co:3, 1)
+endif
+
+if (Eqstr(Val(co:2), Fbn()['NrOperacion']))
+Acn(co:20, sql(" SELECT Count(*) Desierta FROM   "~Dbo()~".ORDENES  WHERE NrOperacion1  ='"~Fbn()['NrOperacion']~"' "))
+if (Vacio(Fbn('NrTcopri')))
+Acn(co:1, 2)
+else
+if (Val(co:20) > 0)
+Acn(co:1, 2)
+else
+Acn(co:1, 1)
+endif
+endif
+if (Vacio(Fbn('NrTcopri')))
+Acn(co:10, 2)
+else
+Acn(co:20, sql(" SELECT Count(*) Cerrada FROM   "~Dbo()~".ORDENES  WHERE NrOperacion1  ='"~Fbn()['NrOperacion']~"' and  Cliente <> '"~Var('VEHICULODE')~"' "))
+if (Val(co:20) > 0)
+Acn(co:10, 1)
+else
+Acn(co:10, 2)
+endif
+endif
+else
+if (Val(y:1) = 1)
+sql.add(" Update "~Dbo()~".OPERACIONES   ")
+if (Val(co:1) = 2)
+sql.add(" Set RB8 = '1'            ")
+else
+sql.add(" Set RB8 = '2'            ")
+endif
+
+sql.add(" Where NrOperacion = '"~Val(co:2)~"' ")
+sql.new
+sql.exec
+endif
+
+Acn(co:1, 0)
+Act(co:2, Fbn()['NrOperacion'])
+Act(co:4, Fbn()['NrTcopri'])
+endif
+proximo
+
+Acn(co:20, sql(" SELECT Count(*) Desierta FROM   "~Dbo()~".ORDENES  WHERE NrOperacion1  ='"~Val(co:2)~"' "))
+if (Vacio(Val(co:4)))
+Acn(co:1, 2)
+else
+if (Val(co:20) > 0)
+Acn(co:1, 2)
+else
+Acn(co:1, 1)
+endif
+endif
+if (Vacio(Val(co:2)))
+Acn(co:10, 2)
+else
+Acn(co:20, sql(" SELECT Count(*) Cerrada FROM   "~Dbo()~".ORDENES  WHERE NrOperacion1  ='"~Val(co:2)~"' and  Cliente <> '"~Var('VEHICULODE')~"' "))
+if (Val(co:20) > 0)
+Acn(co:10, 1)
+else
+Acn(co:10, 2)
+endif
+endif
+
+
+if (Val(y:1) = 1)
+sql.add(" Update "~Dbo()~".OPERACIONES   ")
+if (Val(co:1) = 2)
+sql.add(" Set RB8 = '1'            ")
+else
+sql.add(" Set RB8 = '2'            ")
+endif
+sql.add(" Where NrOperacion = '"~Val(co:2)~"' ")
+sql.new
+sql.exec
+endif
+
+Acn( in :1, sql("select NrBit from "~Dbo()~".OPERACIONESBITS where NrOperacion = '"~Val(co:2)~"' and Valor = '1' "))
+if (Val(y:1) = 1)
+if (Val(co:10) = 1)
+ejecutarevento('CBOINS', string1 = Val(co:2), radio1 = 0, radio2 = 2, entero1 = Val( in :1), entero2 = 10)
+else
+ejecutarevento('CBOINS', string1 = Val(co:2), radio1 = 0, radio2 = 2, entero1 = Val( in :1), entero2 = 70)
+endif
+endif
+endif
