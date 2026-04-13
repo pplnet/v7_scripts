@@ -1,17 +1,17 @@
 if (Eqstr(Var('INSTALACIO'), 'MLASA'))
-* v6 require stripped
+require'FPA.BOFA.COMMON.dll'
 
-* v6 import stripped
-* v6 import stripped
-* v6 import stripped
-* v6 import stripped
-* v6 import stripped
+importservicefpa, 'FPA.BOFA.COMMON.Services.Default.ServiceFPA'
+importinputdealcreate, 'FPA.BOFA.COMMON.Entities.Raiden_IO.Input_SisExt_DealCreateResponse'
+importinputdealcancel, 'FPA.BOFA.COMMON.Entities.Raiden_IO.Input_SisExt_DealCancelResponse'
+importinputdealcreatesiopel, 'FPA.BOFA.COMMON.Entities.Raiden_IO.Input_SisExt_Siopel_DealCreationContingency'
+importinputdealcancelsiopel, 'FPA.BOFA.COMMON.Entities.Raiden_IO.Input_SisExt_Siopel_DealCancelationContingency'
 
-let(&serv, nil)
+let(&serv, newservicefpa())
 
 
 def DealCreateResp(success, raidenid, nrop, siopelid, settdate, errors)
-let(&input, nil)
+let(&input, newinputdealcreate())
 &input.action := "ND"
 &input.success := success
 &input.raidenrefid := Str(raidenid)
@@ -19,28 +19,28 @@ let(&input, nil)
 &input.fpaid := Str(nrop)
 &input.siopelid := Str(siopelid)
 &input.settlementdate := Dat(settdate)
-nil
-let(&resp, nil)
+&input.seterrormessage(Str(errors))
+let(&resp, &serv.sisext_dealcreateresponse(&input))
 outputwrite("DealCreateResp: "~&resp)
 return &resp
 end
 
 
 def DealCancelResp(success, raidenid, nrop, errors)
-let(&input, nil)
+let(&input, newinputdealcancel())
 &input.action := "CD"
 &input.success := success
 &input.raidenrefid := Str(raidenid)
 &input.timesent := Dat(Ahora())
 &input.fpaid := Str(nrop)
-nil
-let(&resp, nil)
+&input.seterrormessage(Str(errors))
+let(&resp, &serv.sisext_dealcancelresponse(&input))
 outputwrite("DealCancelResp: "~&resp)
 return &resp
 end
 
 def DealCreateSiopelCont(nrop, siopelid, tipoopera, especie, tipoesp, cliente, coperid, amount, precio, moneda, tipocambio, book, fechacargasys, fechaliq, fechaop, plazo, operad, mercad)
-let(&input, nil)
+let(&input, newinputdealcreatesiopel())
 &input.action := "NA"
 &input.timesent := Dat(Ahora())
 &input.fpaid := Str(nrop)
@@ -62,19 +62,19 @@ let(&input, nil)
 &input.settlementdays := _int(plazo)
 &input.tradernbk := Str(operad)
 &input.clearinglocation := Str(mercad)
-let(&resp, nil)
+let(&resp, &serv.sisext_siopel_dealcreationcontingency(&input))
 outputwrite("DealCreateSiopelCont: "~&resp)
 return &resp
 end
 
 def DealCancelSiopelCont(raidenid, nrop, operad)
-let(&input, nil)
+let(&input, newinputdealcancelsiopel())
 &input.action := "CA"
 &input.raidenrefid := Str(raidenid)
 &input.fpaid := Str(nrop)
 &input.timesent := Dat(Ahora())
 &input.tradernbk := Str(operad)
-let(&resp, nil)
+let(&resp, &serv.sisext_siopel_dealcancelationcontingency(&input))
 outputwrite("DealCancelSiopelCont: "~&resp)
 return &resp
 end
@@ -87,20 +87,20 @@ Acn(p:1, 1)
 Message("Borrando operaciones en Anulacion manual")
 
 if (Val(p:1) = 1)
-Sqladd(" Select OB.* From "~Dbo()~".OPERACIONES O, "~Dbo()~".OPERACIONESBITS OB ")
-Sqladd("  Where O.NrOperacion = OB.NrOperacion  ")
-Sqladd("    and OB.NrBit=30  ")
-Sqladd("    and OB.Valor = 1  ")
+sql.add(" Select OB.* From "~Dbo()~".OPERACIONES O, "~Dbo()~".OPERACIONESBITS OB ")
+sql.add("  Where O.NrOperacion = OB.NrOperacion  ")
+sql.add("    and OB.NrBit=30  ")
+sql.add("    and OB.Valor = 1  ")
 recorrer sql
 try
-Sqladd("DELETE "~Dbo()~".OPERACIONES WHERE Exists ")
-Sqladd("           (SELECT 1 FROM "~Dbo()~".OPERACIONESBITS OB ")
-Sqladd("             WHERE OPERACIONES.NrOperacion=OB.NrOperacion   ")
-Sqladd("               and OPERACIONES.NrOperacion='"~Fbn()['NrOperacion']~"'")
-Sqladd("               and OB.NrBit = 30 ")
-Sqladd("               and OB.Valor = 1 )")
-Sqlnew()
-Sqlexec()
+sql.add("DELETE "~Dbo()~".OPERACIONES WHERE Exists ")
+sql.add("           (SELECT 1 FROM "~Dbo()~".OPERACIONESBITS OB ")
+sql.add("             WHERE OPERACIONES.NrOperacion=OB.NrOperacion   ")
+sql.add("               and OPERACIONES.NrOperacion='"~Fbn()['NrOperacion']~"'")
+sql.add("               and OB.NrBit = 30 ")
+sql.add("               and OB.Valor = 1 )")
+sql.new
+sql.exec
 catch 
 Message('Se está intentando eliminar una operacion liquidada '~Fbn()['NrOperacion'])
 end

@@ -16,7 +16,6 @@ def GetClientes()
             RTRIM(RazonSocial) as RazonSocial,
             RTRIM(ISNULL(NrCuenta, '')) as NrCuenta
         FROM CLIENTES
-        WHERE RTRIM(Status) = 'ACT'
         ORDER BY RazonSocial
     >>
     &resultado := QueryTable(&sql)
@@ -31,11 +30,10 @@ def GetEspecies()
         SELECT
             RTRIM(Codigo) as Codigo,
             RTRIM(Nombre) as Nombre,
-            RTRIM(ISNULL(Tipo, '')) as Tipo,
-            RTRIM(ISNULL(MonedaEmision, '')) as Moneda,
+            RTRIM(ISNULL(Jerarquia, '')) as Tipo,
+            RTRIM(ISNULL(Cotiza, '')) as Moneda,
             ISNULL(VTeorico, 0) as VTeorico
         FROM ESPECIES
-        WHERE RTRIM(Habilitada) = 'SI'
         ORDER BY Codigo
     >>
     &resultado := QueryTable(&sql)
@@ -51,7 +49,6 @@ def GetMonedas()
             RTRIM(Codigo) as Codigo,
             RTRIM(Nombre) as Nombre
         FROM ESPECIES
-        WHERE RTRIM(Habilitada) = 'SI'
         ORDER BY Codigo
     >>
     &resultado := QueryTable(&sql)
@@ -184,8 +181,6 @@ def RecalcularOrden(especie, cliente, cantVN, precio, contraEspecie, mercado3, v
         Else
             If rb5 = 2
                 &lotes := 48
-            Else
-                &lotes := 72
             EndIf
         EndIf
     EndIf
@@ -224,7 +219,7 @@ def RecalcularOrden(especie, cliente, cantVN, precio, contraEspecie, mercado3, v
     &totalAux1 := &cantidad3
 
     ** Lamina minima
-    &vcan17 := Query("SELECT ISNULL(LaminaMinima, 1) FROM ESPECIES WHERE Codigo='" ~ especie ~ "'")
+    &vcan17 := 1
     If &vcan17 = 0
         &vcan17 := 1
     EndIf
@@ -240,7 +235,7 @@ def RecalcularOrden(especie, cliente, cantVN, precio, contraEspecie, mercado3, v
     ** Tipo cliente y CP
     &vtxt2 := ''
     If NoVacio(cliente)
-        &vtxt2 := Query("SELECT RTRIM(ISNULL(TipoCliente,'')) FROM CLIENTES WHERE Codigo='" ~ cliente ~ "'")
+        &vtxt2 := ''
     EndIf
 
     &vtxt7 := '0'
@@ -257,7 +252,7 @@ def RecalcularOrden(especie, cliente, cantVN, precio, contraEspecie, mercado3, v
     ** Cond IVA
     &vtxt16 := ''
     If NoVacio(vehiculo)
-        &vtxt16 := Query("SELECT RTRIM(ISNULL(CondicionIVA,'')) FROM CLIENTES WHERE Codigo='" ~ vehiculo ~ "'")
+        &vtxt16 := ''
     EndIf
 
     ** Derechos
@@ -290,9 +285,9 @@ def RecalcularOrden(especie, cliente, cantVN, precio, contraEspecie, mercado3, v
     &cantidad6 := 0
 
     If NoVacio(book1)
-        &vtxt25 := Query("SELECT RTRIM(ISNULL(Issuer,'')) FROM ESPECIES WHERE Codigo='" ~ especie ~ "'")
-        &vtxt26 := Query("SELECT RTRIM(ISNULL(EntidadEmisora,'')) FROM ESPECIES WHERE Codigo='" ~ especie ~ "'")
-        &vtxt10 := Query("SELECT RTRIM(ISNULL(Controlante,'')) FROM GRUPOSECONOMICOS WHERE Cliente='" ~ cliente ~ "'")
+        &vtxt25 := ''
+        &vtxt26 := ''
+        &vtxt10 := ''
     EndIf
 
     return ${ Vpre1 = &vpre1, Vpre10 = &vpre10, CantidadEnProceso = &cantidadEnProceso, Intereses = &intereses, Cantidad3 = &cantidad3, TotalAux1 = &totalAux1, Vcan2 = &vcan2, PrecioReal = &precioReal, PrecPromCompletado = &precPromCompletado, FechaVto = &fechaVto, FechaLimite = &fechaLimite, Lotes = &lotes, Cotizacion1 = &cotizacion1, Cupon1 = &cupon1, Vcan17 = &vcan17, Vtxt3 = &vtxt3, Vtxt7 = &vtxt7, Vtxt2 = &vtxt2, Vpre7 = &vpre7, Vpre8 = &vpre8, Vpre13 = &vpre13, Vpre14 = &vpre14, TotalAux2 = &totalAux2, TotalAux3 = &totalAux3, Cantidad10 = &cantidad10, MtoArancel = &montoArancel, IvaArancel = &ivaArancel, Impuestos = &impuestos, MtoGastos = &montoGastos, IvaGastos = &ivaGastos, Vtxt16 = &vtxt16, Vcan3 = &vcan3, Vcan5 = &vcan5, Cantidad9 = &cantidad9, Vcan47 = &vcan47, Vtxt19 = &vtxt19, Vcan11 = &vcan11, Vtxt10 = &vtxt10, Vcan40 = &vcan40, Vtxt25 = &vtxt25, Vtxt26 = &vtxt26, Vtxt27 = &vtxt27, Cantidad6 = &cantidad6 }
@@ -301,11 +296,19 @@ end
 ** ============================================================================
 ** Funcion: Crear orden de compra de titulos (INSERT en ORDENES)
 ** ============================================================================
-def CrearOrdenCompra(pEspecie, pContraEspecie, pCliente, pCantidad, pPrecio, pFechaOrden, pMercado3, pMercadoLiq, pMercado2, pBook1, pVehiculo, pAfectaLS, pCanal1, pCuenta1, pCuenta4, pCuenta5, pLeyenda1, pHoraOrden, pFeriados, pLotes, pRb1, pRb2, pRb5, pRb9, pRb10, pCb7, pCuotas, pObs)
+def CrearOrdenCompra(pEspecie, pContraEspecie, pCliente, pCantidad, pPrecio, pFechaOrden, pMercado3, pMercadoLiq, pMercado2, pBook1, pVehiculo, pCanal1, pCuenta1, pCuenta4, pCuenta5, pLeyenda1, pHoraOrden, pFeriados, pLotes, pRb1, pRb2, pRb5, pRb9, pRb10, pCb7, pCuotas, pObs)
 
-    ** Obtener proximo numero de orden
+    ** Obtener proximo numero de orden con prefijo OR
+    ** Considera tanto ordenes con prefijo OR como ordenes numericas puras
     &sqlNextNro := <<
-        SELECT 'ORD' + RIGHT('00000' + CAST(ISNULL(MAX(CAST(REPLACE(NrOrden, 'ORD', '') AS INT)), 0) + 1 AS VARCHAR(5)), 5)
+        SELECT 'OR' + RIGHT('000000' + CAST(
+            ISNULL(MAX(
+                CASE
+                    WHEN NrOrden LIKE 'OR%' THEN TRY_CAST(SUBSTRING(NrOrden, 3, LEN(NrOrden) - 2) AS INT)
+                    ELSE TRY_CAST(NrOrden AS INT)
+                END
+            ), 0) + 1
+        AS VARCHAR(6)), 6)
         FROM ORDENES
     >>
     &nrOrden := Query(&sqlNextNro)
@@ -324,7 +327,7 @@ def CrearOrdenCompra(pEspecie, pContraEspecie, pCliente, pCantidad, pPrecio, pFe
     &sql := &sql ~ "Lotes, Plazo1, RB5, "
     &sql := &sql ~ "Mercado3, Mercado, Mercado2, "
     &sql := &sql ~ "Book1, Vehiculo, "
-    &sql := &sql ~ "AfectaLS, Canal1, "
+    &sql := &sql ~ "Canal1, "
     &sql := &sql ~ "Cuenta1, Cuenta4, Cuenta5, "
     &sql := &sql ~ "Leyenda1, HoraOrden, TablaFeriados1, "
     &sql := &sql ~ "RB1, RB2, RB9, RB10, "
@@ -352,7 +355,6 @@ def CrearOrdenCompra(pEspecie, pContraEspecie, pCliente, pCantidad, pPrecio, pFe
     &sql := &sql ~ "LEFT('" ~ pMercado2 ~ "', 10), "
     &sql := &sql ~ "LEFT('" ~ pBook1 ~ "', 10), "
     &sql := &sql ~ "LEFT('" ~ pVehiculo ~ "', 10), "
-    &sql := &sql ~ "LEFT('" ~ pAfectaLS ~ "', 10), "
     &sql := &sql ~ "LEFT('" ~ pCanal1 ~ "', 10), "
     &sql := &sql ~ "LEFT('" ~ pCuenta1 ~ "', 20), "
     &sql := &sql ~ "LEFT('" ~ pCuenta4 ~ "', 20), "

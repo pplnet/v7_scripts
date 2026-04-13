@@ -27,7 +27,6 @@
         'especie': 'Especie', 'Especie': 'Especie',
         'especienombre': 'EspecieNombre', 'EspecieNombre': 'EspecieNombre',
         'contraespecie': 'ContraEspecie', 'ContraEspecie': 'ContraEspecie',
-        'book': 'Book', 'Book': 'Book',
         'posinicial': 'PosInicial', 'PosInicial': 'PosInicial', 'posInicial': 'PosInicial',
         'compras': 'Compras', 'Compras': 'Compras',
         'ventas': 'Ventas', 'Ventas': 'Ventas',
@@ -112,7 +111,6 @@
             }
         },
         { data: 'ContraEspecie', title: 'C.Esp.' },
-        { data: 'Book', title: 'Book' },
         {
             data: 'PosInicial',
             title: 'Pos. Inicial',
@@ -181,7 +179,6 @@
         var today = new Date().toISOString().split('T')[0];
         $('#filter-fecha').val(today);
 
-        loadFilters();
         initDataTable();
         loadInitialData();
         setupEventListeners();
@@ -190,18 +187,6 @@
         console.log('POSI4: Inicializado');
     }
 
-    // ========================================================================
-    // Load filters
-    // ========================================================================
-    function loadFilters() {
-        bound.execPPL("GetBooks()").then(function(result) {
-            var books = transformData(result);
-            var select = $('#filter-book');
-            books.forEach(function(b) {
-                select.append('<option value="' + b.Codigo + '">' + b.Codigo + '</option>');
-            });
-        });
-    }
 
     // ========================================================================
     // Filter params
@@ -209,14 +194,12 @@
     function getFilterParams() {
         var fecha = $('#filter-fecha').val() || new Date().toISOString().split('T')[0];
         var especie = ($('#filter-especie').val() || '').trim();
-        var bookVal = $('#filter-book').val();
-        var book = bookVal ? "'" + bookVal + "'" : '';
         var tipoEspecie = $('#filter-tipo-especie').val() || '';
-        return { fecha: fecha, especie: especie, book: book, tipoEspecie: tipoEspecie };
+        return { fecha: fecha, especie: especie, tipoEspecie: tipoEspecie };
     }
 
     function buildGetPosicionesCall(p) {
-        return 'GetPosiciones("' + p.fecha + '", "' + p.especie + '", "' + p.book + '", "' + p.tipoEspecie + '")';
+        return 'GetPosiciones("' + p.fecha + '", "' + p.especie + '", "' + p.tipoEspecie + '")';
     }
 
     // ========================================================================
@@ -259,11 +242,11 @@
                 lengthMenu: "Mostrar _MENU_",
                 paginate: { first: "Primera", last: "\u00daltima", next: ">", previous: "<" }
             },
-            order: [[3, 'asc'], [1, 'asc']]
+            order: [[1, 'asc']]
         });
 
         $$.setDataTable(dataTable, dtSelector);
-        $$.setKeyNames(["Especie", "Book"]);
+        $$.setKeyNames(["Especie"]);
     }
 
     // ========================================================================
@@ -377,8 +360,7 @@
         if (!posData) return;
 
         var fecha = $('#filter-fecha').val() || new Date().toISOString().split('T')[0];
-        var call = 'GetResultados("' + (posData.Especie || '') + '", "' +
-                   (posData.Book || '') + '", "' + fecha + '")';
+        var call = 'GetResultados("' + (posData.Especie || '') + '", "' + fecha + '")';
 
         bound.execPPL(call).then(function(result) {
             var ops = transformData(result);
