@@ -15,7 +15,6 @@ def GetClientes()
             RTRIM(Codigo) as Codigo,
             RTRIM(RazonSocial) as RazonSocial
         FROM CLIENTES
-        WHERE RTRIM(Status) = 'ACT'
         ORDER BY RazonSocial
     >>
     &resultado := QueryTable(&sql)
@@ -30,10 +29,9 @@ def GetEspecies()
         SELECT
             RTRIM(Codigo) as Codigo,
             RTRIM(Nombre) as Nombre,
-            RTRIM(ISNULL(Tipo, '')) as Tipo,
-            RTRIM(ISNULL(MonedaEmision, '')) as MonedaEmision
+            RTRIM(ISNULL(Jerarquia, '')) as Tipo,
+            RTRIM(ISNULL(Cotiza, '')) as MonedaEmision
         FROM ESPECIES
-        WHERE RTRIM(Habilitada) = 'SI'
         ORDER BY Codigo
     >>
     &resultado := QueryTable(&sql)
@@ -49,7 +47,6 @@ def GetContraEspecies()
             RTRIM(Codigo) as Codigo,
             RTRIM(Nombre) as Nombre
         FROM ESPECIES
-        WHERE RTRIM(Habilitada) = 'SI'
         ORDER BY Codigo
     >>
     &resultado := QueryTable(&sql)
@@ -152,14 +149,11 @@ end
 ** Funcion: Obtener propiedades de la especie
 ** ============================================================================
 def GetEspecieProps(especie)
-    &sql := "SELECT RTRIM(ISNULL(MonedaEmision,'')) as MonedaEmision, "
+    &sql := "SELECT RTRIM(ISNULL(Cotiza,'')) as MonedaEmision, "
     &sql := &sql ~ "RTRIM(ISNULL(InteresesC,'')) as InteresesC, "
-    &sql := &sql ~ "RTRIM(ISNULL(ZeroCoupon,'')) as ZeroCoupon, "
-    &sql := &sql ~ "RTRIM(ISNULL(CodMAEContado,'')) as CodMAEContado, "
-    &sql := &sql ~ "RTRIM(ISNULL(Tipo,'')) as Tipo, "
+    &sql := &sql ~ "RTRIM(ISNULL(Jerarquia,'')) as Tipo, "
     &sql := &sql ~ "RTRIM(ISNULL(Cotiza,'')) as Cotiza, "
-    &sql := &sql ~ "RTRIM(ISNULL(CotizaMAE,'')) as CotizaMAE, "
-    &sql := &sql ~ "RTRIM(ISNULL(PlazoLiq,'')) as PlazoLiq "
+    &sql := &sql ~ "RTRIM(ISNULL(DiasMes,'')) as PlazoLiq "
     &sql := &sql ~ "FROM ESPECIES WHERE Codigo = '" ~ especie ~ "'"
     &resultado := QueryTable(&sql)
     return &resultado
@@ -169,7 +163,7 @@ end
 ** Funcion: Obtener PlazoLiq de la especie
 ** ============================================================================
 def GetPlazoLiq(especie)
-    &resultado := BuscarCampo('ESPECIES', 'PlazoLiq', 'Codigo', especie)
+    &resultado := BuscarCampo('ESPECIES', 'DiasMes', 'Codigo', especie)
     return &resultado
 end
 
@@ -177,7 +171,7 @@ end
 ** Funcion: Obtener NrMAE del cliente
 ** ============================================================================
 def GetClienteNrMAE(cliente)
-    &resultado := BuscarCampo('CLIENTES', 'NrMAE', 'Codigo', cliente)
+    &resultado := BuscarCampo('CLIENTES', 'Alias2', 'Codigo', cliente)
     return &resultado
 end
 
@@ -185,7 +179,7 @@ end
 ** Funcion: Obtener CondicionIVA del vehiculo (como en el dialogo original)
 ** ============================================================================
 def GetClienteCondIVA(vehiculo)
-    &resultado := BuscarCampo('CLIENTES', 'CondicionIVA', 'Codigo', vehiculo)
+    &resultado := BuscarCampo('CLIENTES', 'Alias1', 'Codigo', vehiculo)
     return &resultado
 end
 
@@ -245,7 +239,7 @@ def RecalcularCampos(especie, contraespecie, cliente, vehiculo, cantidad, precio
 
     ** Propiedades especie
     &result.VTXT3 := &interesC
-    &result.VTXT14 := BuscarCampo('ESPECIES', 'MonedaEmision', 'Codigo', especie)
+    &result.VTXT14 := BuscarCampo('ESPECIES', 'Cotiza', 'Codigo', especie)
     &result.VTXT13 := BuscarCampo('ESPECIES', 'Cotiza', 'Codigo', especie)
 
     ** ClienteNoLim (VCAN1)
@@ -284,8 +278,19 @@ end
 ** ============================================================================
 def CrearOperacionTIC(pFechaOp, pFechaVto, pFechaPago, pEspecie, pContraEspecie, pCliente1, pCantidad, pPrecio1, pCorredor, pMercado4, pPlataforma, pMercado, pMercado2, pBook1, pVehiculo1, pFeriados, pNrExterno, pNrOrden1, pOpSIOPEL, pObs, pRb5, pPlazo, pFormaLiq1, pFormaLiq2, pRb6, pRb9, pCartera, pCb6, pCb7, pCb10, pConvenio, pFechaAltaSisExt, pCuenta1, pCuenta2, pCuenta3, pCuenta4, pCuenta5, pCuenta6, pAfectaLS, pOperacionRef, pTotalAux8)
 
-    ** Obtener proximo numero de operacion
-    &sqlNext := "SELECT ISNULL(MAX(CAST(NrOperacion AS INT)), 0) + 1 FROM OPERACIONES"
+    ** Obtener proximo numero de operacion con prefijo TI
+    ** Considera tanto operaciones con prefijo TI como operaciones numericas puras
+    &sqlNext := <<
+        SELECT 'TI' + RIGHT('000000' + CAST(
+            ISNULL(MAX(
+                CASE
+                    WHEN NrOperacion LIKE 'TI%' THEN TRY_CAST(SUBSTRING(NrOperacion, 3, LEN(NrOperacion) - 2) AS INT)
+                    ELSE TRY_CAST(NrOperacion AS INT)
+                END
+            ), 0) + 1
+        AS VARCHAR(6)), 6)
+        FROM OPERACIONES
+    >>
     &nrOperacion := Query(&sqlNext)
 
     &operador := UsuarioActivo()

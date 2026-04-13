@@ -34,7 +34,7 @@
         'cantidad': 'Cantidad',
         'precio': 'Precio',
         'monto': 'Monto',
-        'operador': 'Operador',
+        'contraespecie': 'ContraEspecie',
         'mercado': 'Mercado',
         'cantidadtotalorden': 'CantidadTotalOrden',
         'preciolimite': 'PrecioLimite',
@@ -47,7 +47,8 @@
         'pendientes': 'Pendientes',
         'ejecutadas': 'Ejecutadas',
         'canceladas': 'Canceladas',
-        'montototal': 'MontoTotal'
+        'montototalarp': 'MontoTotalARP',
+        'montototalusd': 'MontoTotalUSD'
     };
 
     function capitalizeKey(key) {
@@ -141,7 +142,7 @@
                 return type === 'display' ? $$.numberFormat(data, 2, true, false) : data;
             }
         },
-        { data: 'Operador', title: 'Operador' }
+        { data: 'ContraEspecie', title: 'C.Especie' }
     ];
 
     // ========================================================================
@@ -278,7 +279,8 @@
             $('#stat-total').text(stats.TotalOrdenes || 0);
             $('#stat-pendientes').text(stats.Pendientes || 0);
             $('#stat-ejecutadas').text(stats.Ejecutadas || 0);
-            $('#stat-monto').text('$ ' + $$.numberFormat(stats.MontoTotal || 0, 2, false, false));
+            $('#stat-monto-arp').text('$ ' + $$.numberFormat(stats.MontoTotalARP || 0, 2, false, false));
+            $('#stat-monto-usd').text('U$S ' + $$.numberFormat(stats.MontoTotalUSD || 0, 2, false, false));
         }).catch(function(err) {
             console.error('Error cargando estadisticas:', err);
         });

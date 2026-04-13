@@ -116,6 +116,174 @@
     }
 
     // ========================================================================
+    // Searchable Combo - Convierte <select> en combos filtrables
+    // ========================================================================
+    function initSearchableCombos() {
+        // Selects que NO deben convertirse (leyenda1 tiene opciones fijas pocas)
+        var exclude = ['leyenda1'];
+
+        $('.otic-app select.form-control').each(function () {
+            var sel = $(this);
+            var id = sel.attr('id') || '';
+            if (exclude.indexOf(id) >= 0) return;
+            wrapSelectAsCombo(sel);
+        });
+    }
+
+    function wrapSelectAsCombo(sel) {
+        var id = sel.attr('id') || '';
+
+        // Ocultar select original
+        sel.hide();
+
+        // Crear wrapper
+        var wrapper = $('<div class="otic-combo"></div>');
+        var input = $('<input type="text" class="otic-combo-input" autocomplete="off" placeholder="Seleccione...">');
+        var arrow = $('<span class="otic-combo-arrow">&#9660;</span>');
+        var dropdown = $('<div class="otic-combo-dropdown"></div>');
+
+        if (id) input.attr('data-combo-for', id);
+
+        sel.after(wrapper);
+        wrapper.append(input).append(arrow).append(dropdown);
+
+        // Sync: si el select ya tiene valor, mostrarlo
+        syncInputFromSelect(sel, input);
+
+        // Rebuild dropdown cuando el select cambie (por populate dinámico)
+        sel.on('change.combo', function () {
+            syncInputFromSelect(sel, input);
+        });
+
+        // Observar cambios de opciones (populate async)
+        var observer = new MutationObserver(function () {
+            syncInputFromSelect(sel, input);
+        });
+        observer.observe(sel[0], { childList: true });
+
+        // Focus: abrir dropdown, seleccionar texto para tipear
+        input.on('focus', function () {
+            buildDropdownOptions(sel, dropdown, input.val());
+            wrapper.addClass('open');
+            input.select();
+        });
+
+        // Typing: filtrar opciones
+        input.on('input', function () {
+            var q = input.val();
+            buildDropdownOptions(sel, dropdown, q);
+            if (!wrapper.hasClass('open')) wrapper.addClass('open');
+        });
+
+        // Keyboard navigation
+        input.on('keydown', function (e) {
+            var items = dropdown.find('.otic-combo-option');
+            var highlighted = dropdown.find('.highlighted');
+            var idx = items.index(highlighted);
+
+            if (e.keyCode === 40) { // Down
+                e.preventDefault();
+                if (idx < items.length - 1) {
+                    items.removeClass('highlighted');
+                    $(items[idx + 1]).addClass('highlighted');
+                    scrollIntoViewIfNeeded(items[idx + 1], dropdown[0]);
+                }
+            } else if (e.keyCode === 38) { // Up
+                e.preventDefault();
+                if (idx > 0) {
+                    items.removeClass('highlighted');
+                    $(items[idx - 1]).addClass('highlighted');
+                    scrollIntoViewIfNeeded(items[idx - 1], dropdown[0]);
+                }
+            } else if (e.keyCode === 13) { // Enter
+                e.preventDefault();
+                if (highlighted.length) {
+                    selectOption(sel, input, wrapper, highlighted.attr('data-value'), highlighted.text());
+                }
+            } else if (e.keyCode === 27) { // Escape
+                closeCombo(sel, input, wrapper);
+            } else if (e.keyCode === 9) { // Tab
+                closeCombo(sel, input, wrapper);
+            }
+        });
+
+        // Click en opción
+        dropdown.on('mousedown', '.otic-combo-option', function (e) {
+            e.preventDefault();
+            var opt = $(this);
+            selectOption(sel, input, wrapper, opt.attr('data-value'), opt.text());
+        });
+
+        // Blur: cerrar
+        input.on('blur', function () {
+            setTimeout(function () { closeCombo(sel, input, wrapper); }, 150);
+        });
+    }
+
+    function buildDropdownOptions(sel, dropdown, filter) {
+        dropdown.empty();
+        var q = (filter || '').toLowerCase();
+        var hasResults = false;
+
+        sel.find('option').each(function () {
+            var opt = $(this);
+            var val = opt.val();
+            var text = opt.text();
+            // Siempre omitir el placeholder vacío en el dropdown
+            if (!val && text.indexOf('Seleccione') >= 0) return;
+            // Filtrar por texto
+            if (q && text.toLowerCase().indexOf(q) < 0 && val.toLowerCase().indexOf(q) < 0) return;
+            var div = $('<div class="otic-combo-option"></div>')
+                .attr('data-value', val)
+                .text(text);
+            if (val === sel.val()) div.addClass('selected');
+            if (!hasResults) div.addClass('highlighted');
+            dropdown.append(div);
+            hasResults = true;
+        });
+
+        if (!hasResults) {
+            dropdown.append('<div class="otic-combo-empty">Sin resultados</div>');
+        }
+    }
+
+    function selectOption(sel, input, wrapper, value, text) {
+        sel.val(value).trigger('change');
+        input.val(text);
+        wrapper.removeClass('open');
+    }
+
+    function closeCombo(sel, input, wrapper) {
+        wrapper.removeClass('open');
+        // Si el input no coincide con ninguna opción, restaurar al valor actual del select
+        var currentVal = sel.val();
+        if (currentVal) {
+            var selectedText = sel.find('option:selected').text();
+            input.val(selectedText);
+        } else {
+            input.val('');
+        }
+    }
+
+    function syncInputFromSelect(sel, input) {
+        var val = sel.val();
+        if (val) {
+            input.val(sel.find('option:selected').text());
+        } else {
+            input.val('');
+        }
+    }
+
+    function scrollIntoViewIfNeeded(el, container) {
+        var elTop = el.offsetTop;
+        var elBottom = elTop + el.offsetHeight;
+        var cTop = container.scrollTop;
+        var cBottom = cTop + container.clientHeight;
+        if (elTop < cTop) container.scrollTop = elTop;
+        else if (elBottom > cBottom) container.scrollTop = elBottom - container.clientHeight;
+    }
+
+    // ========================================================================
     // Init
     // ========================================================================
     function init() {
@@ -124,6 +292,9 @@
         setupEventListeners();
         setDefaults();
         loadAllLookups();
+        // Convertir selects a combos searchables después de un breve delay
+        // para que los populate async tengan tiempo de completar
+        setTimeout(initSearchableCombos, 500);
         setupWebSocketConnection();
     }
 
@@ -139,8 +310,8 @@
 
         // Fechas
         $('#fechaOrden').val(today);
-        $('#fechaVto').val(today).prop('readonly', false);
-        $('#fechaLimite').val(today).prop('readonly', false);
+        $('#fechaVto').val(today);
+        $('#fechaLimite').val(today);
         $('#horaOrden').val(hh + ':' + mm + ':' + ss);
 
         // Contraespecie
@@ -148,6 +319,7 @@
 
         // Radios - valores por defecto
         $('input[name="rb5"][value="0"]').prop('checked', true);   // Plazo: CI
+        calcFechaLiq();  // Calcular Fecha Liq = Fecha Orden + Plazo
         $('input[name="rb2"][value="0"]').prop('checked', true);   // Orden Tipo: Cantidad
         $('input[name="rb1"][value="0"]').prop('checked', true);   // Cartera: Trading
         $('input[name="rb9"][value="0"]').prop('checked', true);   // Liquidacion STD
@@ -158,9 +330,9 @@
         // Modo
         $('#leyenda1').val('TELEFONICO');
 
-        // Numericos en 0
-        $('#cantidadTotalOrden').val('0');
-        $('#precioLimite').val('0');
+        // Numericos vacios (sin defaults de cantidad y precio)
+        $('#cantidadTotalOrden').val('');
+        $('#precioLimite').val('');
         $('#totalAux1').val('0');
 
         // Displays calculados
@@ -290,6 +462,8 @@
                 selNeg.append('<option value="' + m.Codigo + '">' + m.Codigo + ' - ' + (m.Descripcion || m.Nombre || '') + '</option>');
             }
         });
+        // Default Merc. Neg.: BYMA
+        if (selNeg.find('option[value="BYMA"]').length > 0) selNeg.val('BYMA');
 
         ['mercado', 'mercado2'].forEach(function (selId) {
             var sel = $('#' + selId);
@@ -300,6 +474,10 @@
                 }
             });
         });
+        // Default Merc. Liq. Especie: CV
+        if ($('#mercado').find('option[value="CV"]').length > 0) $('#mercado').val('CV');
+        // Default Merc. Liq. Mon.: MERINT
+        if ($('#mercado2').find('option[value="MERINT"]').length > 0) $('#mercado2').val('MERINT');
     }
 
     function loadMercados() {
@@ -354,10 +532,13 @@
             books.forEach(function (b) {
                 sel.append('<option value="' + b.Codigo + '">' + b.Codigo + ' - ' + (b.Descripcion || '') + '</option>');
             });
+            // Default Book: TBOOK
+            if (sel.find('option[value="TBOOK"]').length > 0) sel.val('TBOOK');
         }).catch(function () {
             var sel = $('#book1');
             sel.empty().append('<option value="">Seleccione...</option>');
-            sel.append('<option value="TRADING">TRADING</option>');
+            sel.append('<option value="TBOOK">TBOOK</option>');
+            sel.val('TBOOK');
         });
     }
 
@@ -482,8 +663,9 @@
             loadCuentasMoneda();
         });
 
-        // Plazo radio change -> recalc
+        // Plazo radio change -> recalc fecha liq + recalc
         $('input[name="rb5"]').on('change', function () {
+            calcFechaLiq();
             recalcular();
         });
 
@@ -521,8 +703,14 @@
             }
         });
 
-        // Vehiculo / Book / Mercado3 / FechaOrden changes -> recalc
-        $('#vehiculo, #book1, #mercado3, #fechaOrden').on('change', function () {
+        // Vehiculo / Book / Mercado3 changes -> recalc
+        $('#vehiculo, #book1, #mercado3').on('change', function () {
+            recalcular();
+        });
+
+        // FechaOrden change -> recalc fecha liq + recalc
+        $('#fechaOrden').on('change', function () {
+            calcFechaLiq();
             recalcular();
         });
 
@@ -545,6 +733,25 @@
                 $(this).removeClass('collapsed');
             }
         });
+    }
+
+    // ========================================================================
+    // Calculate Fecha Liq = Fecha Orden + Plazo (calendar days)
+    // ========================================================================
+    function calcFechaLiq() {
+        var fechaOrden = $('#fechaOrden').val();
+        if (!fechaOrden) return;
+
+        var rb5 = parseInt($('input[name="rb5"]:checked').val()) || 0;
+        var dias = 0;
+        if (rb5 === 1) dias = 1;
+        else if (rb5 === 2) dias = 2;
+
+        var d = new Date(fechaOrden + 'T00:00:00');
+        d.setDate(d.getDate() + dias);
+        var fv = d.toISOString().split('T')[0];
+        $('#fechaVto').val(fv);
+        $('#fechaLimite').val(fv);
     }
 
     // ========================================================================
@@ -581,9 +788,7 @@
             setFieldDisplay(data, 'PrecioReal', '#precioReal-display', 8);
             setFieldDisplay(data, 'PrecPromCompletado', '#precPromCompletado-display', 8);
 
-            // Dates
-            if (data.FechaVto) $('#fechaVto').val(data.FechaVto);
-            if (data.FechaLimite) $('#fechaLimite').val(data.FechaLimite);
+            // Dates - fechaVto se calcula en calcFechaLiq(), no desde backend
 
             // Lotes
             if (data.Lotes !== undefined) {
@@ -737,7 +942,6 @@
             mercado2: $('#mercado2').val() || '',
             book1: $('#book1').val() || '',
             vehiculo: $('#vehiculo').val() || '',
-            afectaLS: $('#afectaLS').val() || '',
             canal1: $('#canal1').val() || '',
             cuenta1: $('#cuenta1').val() || '',
             cuenta4: $('#cuenta4').val() || '',
@@ -768,7 +972,6 @@
             '"' + esc(params.mercado2) + '", ' +
             '"' + esc(params.book1) + '", ' +
             '"' + esc(params.vehiculo) + '", ' +
-            '"' + esc(params.afectaLS) + '", ' +
             '"' + esc(params.canal1) + '", ' +
             '"' + esc(params.cuenta1) + '", ' +
             '"' + esc(params.cuenta4) + '", ' +
