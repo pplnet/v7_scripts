@@ -1,0 +1,71 @@
+﻿CrearDialogo
+    Fecha1    : 'Fecha'                      ;;;;;;;;;;;;;
+    Cuenta1   : 'Cuenta'                     ;;;;;;;;;;;;;
+    Cantidad1 : 'Ajuste'                     ;;;;;;;;;;;;;
+    NrTrans1  : 'Nr.Trans.'                  ;;;;;;;;;;;;;
+    Radio1    : 'Tipo:|Ajuste|Contraajuste'  ;;;;;;;;;;;;;
+FinDialogo
+
+If Not Ok
+    Cancelar
+Endif
+
+let &Cuenta Dialogo.Cuenta1
+let &NrCuenta BuscarCampo('Cuentas','Numero','Codigo',&Cuenta) 
+let &Banco BuscarCampo('Clientes','Alias3','Codigo',BuscarCampo('Cuentas','Comitente','Codigo',&Cuenta))
+let &FechaLimiteAju Habiles(Dialogo.Fecha1,1,'ARG',SI) - 1
+IF FinDeMes(Dialogo.Fecha1,SI) > Fecha(&FechaLimiteAju)
+    let &FechaLimProceso FinDeMes(Dialogo.Fecha1,SI)
+ELSE
+    let &FechaLimProceso &FechaLimiteAju
+ENDIF
+***---FechaLimAju es la fecha hasta donde aplico el Ajusto
+***---FechaLimProceso es la fecha hasta la que tengo que recalcular los Acumulados y Promedios
+
+let &AjusteAcumulado 0
+
+Recorrer&i Dialogo.Fecha1, &FechaLimProceso
+    ***---Actualizo Saldos hasta fin de mes
+    IF &i <= &FechaLimiteAju
+        ***---Acumulo los dias que debo ajustar, caso fin de semana
+        IF Dialogo.Radio1 = 0
+            let &AjusteAcumulado &AjusteAcumulado + Dialogo.Cantidad1
+        ELSE
+            let &AjusteAcumulado &AjusteAcumulado - Dialogo.Cantidad1
+        ENDIF
+    ENDIF
+    SQL.ADD(" UPDATE "~DBO~".SALDOSBANCARIOS Set ")
+    IF &i <= &FechaLimiteAju
+*    MessageBox('1')
+*    MessageBox(Fecha(&i))
+*    MessageBox(&AjusteAcumulado)
+        SQL.ADD(" NrTransAjuste = '"~Dialogo.NrTrans1~"',")
+        *Verifica si es ajuste o contraajuste 
+        IF  Dialogo.Radio1=0
+            SQL.ADD("Ajuste = "~Fstr(Dialogo.Cantidad1,0,2)~", ")
+        ELSE
+            SQL.ADD("Ajuste = "~Fstr(0,0,2)~", ")
+        ENDIF
+        SQL.ADD(" SaldoAcuCon = SaldoAcuCon + "~Fstr(&AjusteAcumulado,0,2)~", ")
+        SQL.ADD(" SaldoAcuOpe = SaldoAcuOpe + "~Fstr(&AjusteAcumulado,0,2)~", ")
+        SQL.ADD(" SaldoAcuIni = SaldoAcuIni + "~Fstr(&AjusteAcumulado,0,2)~", ")
+        SQL.ADD(" SaldoConPromedio = Round((SaldoAcuCon + "~Fstr(&AjusteAcumulado,0,2)~") / DiasAcu, 2), ")
+        SQL.ADD(" SaldoOpePromedio = Round((SaldoAcuOpe + "~Fstr(&AjusteAcumulado,0,2)~") / DiasAcu, 2), ")
+        SQL.ADD(" SaldoIniPromedio = Round((SaldoAcuIni + "~Fstr(&AjusteAcumulado,0,2)~") / DiasAcu, 2) ")
+    ELSE
+*    MessageBox('2')
+*    MessageBox(Fecha(&i))
+        SQL.ADD(" SaldoAcuCon = SaldoAcuCon + Ajuste + "~Fstr(&AjusteAcumulado,0,2)~", ")
+        SQL.ADD(" SaldoAcuOpe = SaldoAcuOpe + Ajuste + "~Fstr(&AjusteAcumulado,0,2)~", ")
+        SQL.ADD(" SaldoAcuIni = SaldoAcuIni + Ajuste + "~Fstr(&AjusteAcumulado,0,2)~", ")
+        SQL.ADD(" SaldoConPromedio = Round((SaldoAcuCon + Ajuste + "~Fstr(&AjusteAcumulado,0,2)~") / DiasAcu, 2), ")
+        SQL.ADD(" SaldoOpePromedio = Round((SaldoAcuOpe + Ajuste + "~Fstr(&AjusteAcumulado,0,2)~") / DiasAcu, 2), ")
+        SQL.ADD(" SaldoIniPromedio = Round((SaldoAcuIni + Ajuste + "~Fstr(&AjusteAcumulado,0,2)~") / DiasAcu, 2) ")
+    ENDIF
+    SQL.ADD(" Where FechaSaldo = '"~IdxDate(&i)~"' ")
+    SQL.ADD(" AND Banco = '"~&Banco~"' ")
+    SQL.ADD(" AND NrCuenta = '"~&NrCuenta~"'")
+    SQL.ADD(" AND Estado <> 'ANU' ")
+    SQL.NEW
+    SQL.EXEC
+Proximo

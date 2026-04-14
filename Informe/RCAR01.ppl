@@ -1,0 +1,649 @@
+﻿*ModoReproceso(ConDialogo)
+CrearDialogo
+  Vehiculo2  : 'Grupo'                                         ; 1;1;;Vacio(Dialogo.Lista1);;;;;;;;;;"TipoVehiculo <> 'DIV'";
+  Lista1     : 'Vehiculos'                                     ; 2;1;;Vacio(Dialogo.Vehiculo2);;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where TipoVehiculo = 'DIV'"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"'"));;;;;
+  Lista2     : 'Tipos Book'                                    ; 3;1;;;;;;;;;SQLSET("Select Codigo From "~DBO~".TIPOSBOOK");
+  Lista3     : 'Books'                                         ;-3;2;;;;;;;;;iif(Vacio(Dialogo.Lista2),SQLSET("Select Codigo From "~DBO~".BOOKS"),SQLSET("Select Codigo From "~DBO~".BOOKS where TipoBook in ("~Pipe2Comillas(Dialogo.Lista2)~") "));
+  Fecha1     : 'Fecha'                                         ;-2;1;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha Desde';NO;FSys
+  Especie1   : 'Especie'                                       ;-1;1;;
+  Radio2     : 'Consolidado |Si|No'                            ; 0;1;;;;;;;0
+  Radio3     : 'A nivel|Familias|Intermedio|Detalle'           ; 1;1;;;;;;;2
+  Radio1     : 'Expresado   |Pesos|Dolares'                    ; 2;1;;;;;;;0
+  Check1     : 'TIR Resumida'                                  ; 3;1;;;;;;;1
+  Check2     : 'Borra Renglones'                               ; 4;1;;;;;;;1
+  Radio4     : 'Familia|Todas|Titulos|Fondos|Monedas|Time Dep' ; 5;1;;;;;;;0
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+*-- Veo solamente los tipos seleccionados
+SetListaClaves(2)
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+  ACT(r:1,Dialogo.Lista1)
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    ACT(r:1, SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  EndIf
+EndIf
+If NoVacio(Dialogo.Lista2)
+  If NoVacio(Dialogo.Lista3)
+    ACT(r:3, SQLSET("Select Codigo From "~DBO~".BOOKS Where TipoBook in ("~Pipe2Comillas(Dialogo.Lista2)~") and Codigo in ("~Pipe2Comillas(Dialogo.Lista3)~") "))
+  else
+    ACT(r:3, SQLSET("Select Codigo From "~DBO~".BOOKS Where TipoBook in ("~Pipe2Comillas(Dialogo.Lista2)~") "))
+  endif
+Else
+  If NoVacio(Dialogo.Lista3)
+    ACT(r:3, SQLSET("Select Codigo From "~DBO~".BOOKS Where Codigo in ("~Pipe2Comillas(Dialogo.Lista3)~") "))
+  EndIf
+EndIf
+
+** Max Lineas para calculo TIR
+ACN(x:4, 10)
+if Dialogo.Radio1=0
+  * Expresado en
+  ACT(r:2, 'ARP')
+  * Saldo Titulos
+  ACN(q:1, 120)
+  * Saldo Fondos
+  ACN(q:2, 121)
+  * Saldo Monedas Spot
+  ACN(q:3, 122)
+  * Saldo Monedas Futuras
+  ACN(q:4, 123)
+else
+  * Expresado en
+  ACT(r:2, 'USD')
+  * Saldo Titulos
+  ACN(q:1, 130)
+  * Saldo Fondos
+  ACN(q:2, 131)
+  * Saldo Monedas Spot
+  ACN(q:3, 132)
+  * Saldo Monedas Futuras
+  ACN(q:4, 133)
+endif
+
+ACN(r:4, 0)
+ACN(r:4, SQL("Select 1 from "~DBO~".VARIABLES where Codigo='MESINIEJE' "))
+if Val(r:4)=0
+  ACN(r:5, 1)
+else
+  ACN(r:5, VAR('MESINIEJE'))
+endif
+if Val(r:5)<1 or Val(r:5)>12
+  ACN(r:5, 1)
+endif
+if Mes(Dialogo.Fecha1)>=Val(r:5)
+  ACT(r:6, '01/'~Pad0(FStr(Val(r:5),1,0),2)~'/'~FStr(Anio(Dialogo.Fecha1),4,0))
+else
+  ACT(r:6, '01/'~Pad0(FStr(Val(r:5),1,0),2)~'/'~FStr(Anio(Dialogo.Fecha1)-1,4,0))
+endif
+ACD(r:7, Fecha(Val(r:6)))
+
+(.'RCARTIT'.)
+
+if Dialogo.Radio4=0 o Dialogo.Radio4=1
+  ACT(aa:0, 'AA')
+  ACT(am:0, 'AM NMV')
+  ACT(aq:0, 'AQ R.TRADE')
+  ACT(as:0, 'AS R.REALIZ')
+  ACT(au:0, 'AU R.CUP')
+  ACT(aw:0, 'AW R.DIV')
+  ACT(eg:0, 'EG')
+  ACT(el:0, 'EL')
+
+  ACT(fg:1, 'PUBLIC')
+  ACT(fh:1, '0')
+  ACT(fg:2, 'EXTRAN')
+  ACT(fh:2, '0')
+  ACT(fg:3, 'CORP B')
+  ACT(fh:3, '1')
+  ACT(fg:4, 'ACCION')
+  ACT(fh:4, '2')
+  ACT(fg:5, 'INDICE')
+  ACT(fh:5, '3')
+
+  recorrer&i 1,5
+    if &i>1
+      SQL.ADD(" Union All ")
+    endif
+
+    SQL.ADD("Select P.Especie, P.Cupon, P.Vehiculo, P.Book, V.Descripcion, ")
+    SQL.ADD("       E.Nombre, E.Cotiza, E.InteresesC, E.Alias3, ")
+    SQL.ADD("       '"~Val(fh:&i)~"' Tipo1, ")
+    SQL.ADD("       E.PaisOrigen, ")
+    SQL.ADD("       CASE E.PaisOrigen When 'ARG' Then '0' Else '1' End Tipo2, ")
+    SQL.ADD("       '0' Tipo3, ")
+    SQL.ADD("       P.Fecha, P.NrSaldo, ")
+    SQL.ADD("       P.CantidadIni, P.PrecioIni, ")
+    SQL.ADD("       P.Cantidad1, P.Precio1, ")
+    SQL.ADD("       P.Cantidad2, P.Precio2, ")
+    SQL.ADD("       P.CantidadFin, P.PrecioFin ")
+    SQL.ADD(" from  "~DBO~".POSICIONES P, "~DBO~".ESPECIES E, "~DBO~".VEHICULOS V, "~DBO~".BOOKS B ")
+    SQL.ADD(" where P.Especie              =  E.Codigo ")
+    SQL.ADD("  and  E.Codigo               in ("~Pipe2Comillas(Descendientes('ESPECIES', Val(fg:&i)))~") ")
+    SQL.ADD("  and  P.Vehiculo             =  V.Codigo ")
+    SQL.ADD("  and  P.Book                 =  B.Codigo ")
+    SQL.ADD("  and  P.NrSaldo              =  "~Val(q:1)~" ")
+    SQL.ADD("  and  IsNull(E.EsCupon,'NO') = 'NO' ")
+    SQL.ADD("  and  P.TipoNegocio          =  'SEC' ")
+    SQL.ADD("  and  (P.CantidadFin <> 0 or P.Fecha >= "~IdxDate2(Val(r:7))~")")
+    If NoVacio(Dialogo.Lista1)
+      SQL.ADD(" and P.Vehiculo             in ("~Pipe2Comillas(val(r:1))~") ")
+    ELSE
+      If NoVacio(Dialogo.Vehiculo2)
+        SQL.ADD("and P.Vehiculo            in ("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+      EndIf
+    endif
+    if NoVacio(Dialogo.Especie1)
+      SQL.ADD("  and P.Especie             = '"~Dialogo.Especie1~"' ")
+    endif
+*    if NoVacio(Val(r:3))
+*      SQL.ADD("  and P.Book                in ("~Pipe2Comillas(val(r:3))~") ")
+*    endif
+    If NoVacio(Dialogo.Lista2)
+      SQL.ADD("  and B.TipoBook             in ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+    endif
+    If NoVacio(Dialogo.Lista3)
+      SQL.ADD("  and B.Codigo               in ("~Pipe2Comillas(Dialogo.Lista3)~") ")
+    endif
+    SQL.ADD("  and  P.Fecha     = (select Max(P1.Fecha) ")
+    SQL.ADD("                        from "~DBO~".POSICIONES P1 ")
+    SQL.ADD("                       where P1.Especie          =  P.Especie ")
+    SQL.ADD("                         and IsNull(P1.Cupon,'') = IsNull(P.Cupon,'') ")
+    SQL.ADD("                         and P1.Vehiculo         =  P.Vehiculo ")
+    SQL.ADD("                         and IsNull(P1.Book,'')  = IsNull(P.Book,'') ")
+    SQL.ADD("                         and P1.NrSaldo          =  P.NrSaldo ")
+    SQL.ADD("                         and P1.TipoNegocio      =  P.TipoNegocio ")
+    SQL.ADD("                         and P1.Fecha            <= "~IdxDate2(Dialogo.Fecha1)~" ) ")
+  proximo
+  SQL.ADD(" order by Tipo1, Tipo2, Tipo3, P.Especie, P.Vehiculo, P.Book, P.Cupon, P.NrSaldo ")
+
+  Recorrer SQL
+    ACN(w:2, 0)
+    if EqStr(fbn('Especie'),Val(v:6))
+      if EqStr(fbn('Vehiculo'),Val(v:7))
+        if EqStr(fbn('book'),Val(v:8))
+          if fbn('NrSaldo')=Val(v:9)
+            ACN(w:2, 1)
+          endif
+        endif
+      endif
+    endif
+    ACT(v:6, fbn('Especie'))
+    ACT(v:7, fbn('Vehiculo'))
+    ACT(v:8, fbn('Book'))
+    ACN(v:9, fbn('NrSaldo'))
+    if Val(z:1)=0
+      ACT(a:FAC, 'TITULOS')
+      ACN(r:FAC, 0)
+      ACN(s:FAC, 1)
+      ACN(t:FAC, 0)
+      ACN(v:FAC, 1)
+      ACN(y:1, FAC)
+      ACN(s:1, FAC)
+      IFA
+      if EqStr(fbn('Tipo1'),'0')
+        ACT(a:FAC, Pad('',5)~'Publicos')
+      else
+        if EqStr(fbn('Tipo1'),'1')
+          ACT(a:FAC, Pad('',5)~'Privados')
+        else
+          if EqStr(fbn('Tipo1'),'2')
+            ACT(a:FAC, Pad('',5)~'Acciones')
+          else
+            ACT(a:FAC, Pad('',5)~'Indices')
+          endif
+        endif
+      endif
+      ACN(r:FAC, 0)
+      ACN(s:FAC, 1)
+      ACN(t:FAC, 0)
+      ACN(v:FAC, 2)
+      ACN(l:FAC, Val(s:1))
+      ACN(s:2, FAC)
+      IFA
+      if EqStr(fbn('Tipo2'),'0')
+        ACT(a:FAC, Pad('',10)~'Locales')
+      else
+        ACT(a:FAC, Pad('',10)~'Extranjeros')
+      endif
+      ACN(r:FAC, 0)
+      ACN(s:FAC, 1)
+      ACN(t:FAC, 1)
+      ACN(v:FAC, 3)
+      ACN(l:FAC, Val(s:1))
+      ACN(m:FAC, Val(s:2))
+      ACN(s:3, FAC)
+      IFA
+      ACT(a:FAC, Pad('',15)~fbn('Especie'))
+      ACN(r:FAC, 0)
+      ACN(s:FAC, 1)
+      ACN(t:FAC, 2)
+      ACN(v:FAC, 4)
+      ACN(l:FAC, Val(s:1))
+      ACN(m:FAC, Val(s:2))
+      ACN(n:FAC, Val(s:3))
+      ACN(s:4, FAC)
+      IFA
+      ACT(v:2, fbn('Tipo1'))
+      ACT(v:3, fbn('Tipo2'))
+      ACT(v:4, fbn('Especie'))
+    endif
+    if Not EqStr(fbn('Tipo1'),Val(v:2))
+      if EqStr(fbn('Tipo1'),'0')
+        ACT(a:FAC, Pad('',5)~'Publicos')
+      else
+        if EqStr(fbn('Tipo1'),'1')
+          ACT(a:FAC, Pad('',5)~'Privados')
+        else
+          if EqStr(fbn('Tipo1'),'2')
+            ACT(a:FAC, Pad('',5)~'Acciones')
+          else
+            ACT(a:FAC, Pad('',5)~'Indices')
+          endif
+        endif
+      endif
+      ACN(r:FAC, 0)
+      ACN(s:FAC, 1)
+      ACN(t:FAC, 0)
+      ACN(v:FAC, 2)
+      ACN(l:FAC, Val(s:1))
+      ACN(s:2, FAC)
+      IFA
+      ACT(v:2, fbn('Tipo1'))
+      ACT(v:3, '')
+      ACT(v:4, '')
+      ACT(v:5, '')
+    endif
+    if Not EqStr(fbn('Tipo2'),Val(v:3))
+      if EqStr(fbn('Tipo2'),'0')
+        ACT(a:FAC, Pad('',10)~'Locales')
+      else
+        ACT(a:FAC, Pad('',10)~'Extranjeros')
+      endif
+      ACN(r:FAC, 0)
+      ACN(s:FAC, 1)
+      ACN(t:FAC, 1)
+      ACN(v:FAC, 3)
+      ACN(l:FAC, Val(s:1))
+      ACN(m:FAC, Val(s:2))
+      ACN(s:3, FAC)
+      IFA
+      ACT(v:3, fbn('Tipo2'))
+      ACT(v:4, '')
+      ACT(v:5, '')
+    endif
+    if Not EqStr(fbn('Especie'),Val(v:4))
+      ACT(a:FAC, Pad('',15)~fbn('Especie'))
+      ACN(r:FAC, 0)
+      ACN(s:FAC, 1)
+      ACN(t:FAC, 2)
+      ACN(v:FAC, 4)
+      ACN(l:FAC, Val(s:1))
+      ACN(m:FAC, Val(s:2))
+      ACN(n:FAC, Val(s:3))
+      ACN(s:4, FAC)
+      IFA
+      ACT(v:4, fbn('Especie'))
+      ACT(v:5, '')
+    endif
+    if EqStr(fbn('Tipo3'),Val(v:5))
+      DFA
+    else
+      if EqStr(fbn('Tipo3'),'0')
+        ACT(a:FAC, Pad('',20)~'SPOT')
+      else
+        ACT(a:FAC, Pad('',20)~'YYYY')
+      endif
+      ACT(i:FAC, 'SECS-SEVS')
+      ACN(r:FAC, 0)
+      ACN(s:FAC, 1)
+*      ACN(t:FAC, 2)
+* Para no mostrar linea SPOT
+      ACN(t:FAC, 3)
+      ACN(v:FAC, 5)
+      ACN(l:FAC, Val(s:1))
+      ACN(m:FAC, Val(s:2))
+      ACN(n:FAC, Val(s:3))
+      ACN(o:FAC, Val(s:4))
+      ACN(z:FAC, 1)
+
+      ACT(v:5, fbn('Tipo3'))
+    endif
+    SCN(z:1, 1)
+
+    ** Armado de lista de saldos para TIR
+    ACN(q:FAC, fbn('NrSaldo'))
+    ACN(q:Val(l:FAC), fbn('NrSaldo'))
+    ACN(q:Val(m:FAC), fbn('NrSaldo'))
+    ACN(q:Val(n:FAC), fbn('NrSaldo'))
+    ACN(q:Val(o:FAC), fbn('NrSaldo'))
+    ** Armado de lista de especies para TIR
+    ACT(p:FAC, fbn('Especie'))
+    if Vacio(Val(p:Val(l:FAC)))
+      ACT(p:Val(l:FAC), fbn('Especie'))
+    else
+      if Not Incluido(fbn('Especie'),Val(p:Val(l:FAC)))
+        ACT(p:Val(l:FAC), Val(p:Val(l:FAC))~'|'~fbn('Especie'))
+      endif
+    endif
+    if Vacio(Val(p:Val(m:FAC)))
+      ACT(p:Val(m:FAC), fbn('Especie'))
+    else
+      if Not Incluido(fbn('Especie'),Val(p:Val(m:FAC)))
+        ACT(p:Val(m:FAC), Val(p:Val(m:FAC))~'|'~fbn('Especie'))
+      endif
+    endif
+    if Vacio(Val(p:Val(n:FAC)))
+      ACT(p:Val(n:FAC), fbn('Especie'))
+    else
+      if Not Incluido(fbn('Especie'),Val(p:Val(n:FAC)))
+        ACT(p:Val(n:FAC), Val(p:Val(n:FAC))~'|'~fbn('Especie'))
+      endif
+    endif
+    if Vacio(Val(p:Val(o:FAC)))
+      ACT(p:Val(o:FAC), fbn('Especie'))
+    else
+      if Not Incluido(fbn('Especie'),Val(p:Val(o:FAC)))
+        ACT(p:Val(o:FAC), Val(p:Val(o:FAC))~'|'~fbn('Especie'))
+      endif
+    endif
+
+    ACT(aa:Val(z:1), fbn('Especie'))
+    ACN(ab:Val(z:1), fbn('Cupon'))
+    ACT(ac:Val(z:1), fbn('Cotiza'))
+    ACT(ad:Val(z:1), fbn('Vehiculo'))
+    ACT(ae:Val(z:1), fbn('Book'))
+    ACN(af:Val(z:1), fbn('NrSaldo'))
+    ACN(ag:Val(z:1), fbn('CantidadIni'))
+    ACN(ah:Val(z:1), fbn('PrecioIni'))
+    ACN(ai:Val(z:1), fbn('CantidadFin'))
+    ACN(aj:Val(z:1), fbn('PrecioFin'))
+    ACN(ak:Val(z:1), Cotizacion(fbn('Especie'),,,,Dialogo.Fecha1-1,1,SI))
+    ACN(al:Val(z:1), CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1-1,1,SI,Val(r:2)))
+    * Net Market Value
+    ACN(am:Val(z:1), fbn('CantidadFin')*Val(al:Val(z:1))*iif(Eqstr(fbn('InteresesC'),'CLE'),ValorTeorico(fbn('Especie')),1))
+    ACN(an:Val(z:1), fbn('CantidadFin')*Val(aj:Val(z:1))*iif(Eqstr(fbn('InteresesC'),'CLE'),ValorTeorico(fbn('Especie')),1))
+    * P&L NO Realizado
+    ACN(ao:Val(z:1), Val(am:Val(z:1))-Val(an:Val(z:1)))
+
+IF Eqstr(fbn('Especie'), 'AA13')
+MessageBox(Val(AM:Val(Z:1)))
+MessageBox(Val(AN:Val(Z:1)))
+ENDIF
+
+
+    ACT(eh:Val(z:1), fbn('Tipo1'))
+    ACT(ei:Val(z:1), fbn('PaisOrigen'))
+    ACT(ej:Val(z:1), fbn('Tipo2'))
+    ACD(ek:Val(z:1), fbn('Fecha'))
+    ACN(el:Val(z:1), Val(w:2))
+
+    if Val(w:2)=0
+      SQL.ADD("Select R1.TipoResultado,R1.YTD from "~DBO~".RESULTADOS R1 ")
+      SQL.ADD(" where R1.TipoResultado   in ('TRADE','REALIZ') ")
+      SQL.ADD("   and R1.Especie         =  '"~fbn('Especie')~"' ")
+      SQL.ADD("   and R1.Vehiculo        =  '"~fbn('Vehiculo')~"' ")
+      SQL.ADD("   and IsNull(R1.Book,'') =  '"~fbn('Book')~"' ")
+      SQL.ADD("   and R1.NrSaldo         =  "~fbn('NrSaldo')~" ")
+      SQL.ADD("   and R1.Fecha           >= "~IdxDate2(Val(r:7))~" ")
+      SQL.ADD("   and R1.Fecha           =  (select Max(Fecha) ")
+      SQL.ADD("                                from "~DBO~".RESULTADOS R2 ")
+      SQL.ADD("                               where R2.Especie       =  R1.Especie ")
+      SQL.ADD("                                 and R2.Vehiculo      =  R1.Vehiculo ")
+      SQL.ADD("                                 and IsNull(R2.Book,'') = IsNull(R1.Book,'') ")
+      SQL.ADD("                                 and R2.NrSaldo       =  R1.NrSaldo ")
+      SQL.ADD("                                 and R2.TipoResultado =  R1.TipoResultado ")
+      SQL.ADD("                                 and R2.Fecha       <= "~IdxDate2(Dialogo.Fecha1)~" ) ")
+      recorrer SQL
+        DFA
+        if EqStr(fbn('TipoResultado'),'TRADE')
+          SCN(ap:Val(z:1), 1)
+          SCN(aq:Val(z:1), fbn('YTD'))
+        else
+          SCN(ar:Val(z:1), 1)
+          SCN(as:Val(z:1), fbn('YTD'))
+        endif
+      proximo
+
+      if NoVacio(fbn('Alias3')) o SI
+        SQL.ADD("Select R1.TipoResultado,R1.YTD from "~DBO~".RESULTADOS R1 ")
+        SQL.ADD(" where R1.TipoResultado   in ('CUPAMO','CUPREN') ")
+*        SQL.ADD("   and R1.Especie         =  '"~fbn('Alias3')~"' ")
+        SQL.ADD("   and R1.Especie         =  '"~fbn('Especie')~"' ")
+        SQL.ADD("   and R1.Vehiculo        =  '"~fbn('Vehiculo')~"' ")
+        SQL.ADD("   and IsNull(R1.Book,'') =  '"~fbn('Book')~"' ")
+        SQL.ADD("   and R1.NrSaldo         =  "~fbn('NrSaldo')~" ")
+        SQL.ADD("   and R1.Fecha           >= "~IdxDate2(Val(r:7))~" ")
+        SQL.ADD("   and R1.Fecha           =  (select Max(Fecha) ")
+        SQL.ADD("                                from "~DBO~".RESULTADOS R2 ")
+        SQL.ADD("                               where R2.Especie         =  R1.Especie ")
+        SQL.ADD("                                 and R2.Vehiculo        =  R1.Vehiculo ")
+        SQL.ADD("                                 and IsNull(R2.Book,'') =  IsNull(R1.Book,'') ")
+        SQL.ADD("                                 and R2.NrSaldo         =  R1.NrSaldo ")
+        SQL.ADD("                                 and R2.TipoResultado   =  R1.TipoResultado ")
+        SQL.ADD("                                 and R2.Fecha           <= "~IdxDate2(Dialogo.Fecha1)~" ) ")
+        recorrer SQL
+          DFA
+          SCN(at:Val(z:1), 1)
+          SCN(au:Val(z:1), fbn('YTD'))
+        proximo
+      endif
+
+      if EqStr(fbn('Tipo1'),'2')
+        SQL.ADD("Select R1.TipoResultado,R1.YTD from "~DBO~".RESULTADOS R1 ")
+        SQL.ADD(" where R1.TipoResultado   in ('DIVEFV','DIVACC') ")
+        SQL.ADD("   and R1.Especie         =  '"~fbn('Especie')~"' ")
+        SQL.ADD("   and R1.Vehiculo        =  '"~fbn('Vehiculo')~"' ")
+        SQL.ADD("   and IsNull(R1.Book,'') =  '"~fbn('Book')~"' ")
+        SQL.ADD("   and R1.NrSaldo         =  "~fbn('NrSaldo')~" ")
+        SQL.ADD("   and R1.Fecha           >= "~IdxDate2(Val(r:7))~" ")
+        SQL.ADD("   and R1.Fecha           =  (select Max(Fecha) ")
+        SQL.ADD("                                from "~DBO~".RESULTADOS R2 ")
+        SQL.ADD("                               where R2.Especie         =  R1.Especie ")
+        SQL.ADD("                                 and R2.Vehiculo        =  R1.Vehiculo ")
+        SQL.ADD("                                 and IsNull(R2.Book,'') =  IsNull(R1.Book,'') ")
+        SQL.ADD("                                 and R2.NrSaldo         =  R1.NrSaldo ")
+        SQL.ADD("                                 and R2.TipoResultado   =  R1.TipoResultado ")
+        SQL.ADD("                                 and R2.Fecha           <= "~IdxDate2(Dialogo.Fecha1)~" ) ")
+        recorrer SQL
+          DFA
+          SCN(av:Val(z:1), 1)
+          SCN(aw:Val(z:1), fbn('YTD'))
+        proximo
+      endif
+
+    endif
+
+    * Net Market Value
+    SCN(b:FAC, Val(am:Val(z:1)))
+    * Res. Realizado
+    SCN(d:FAC, Val(aq:Val(z:1))+Val(as:Val(z:1))+Val(au:Val(z:1))+Val(aw:Val(z:1)))
+    * Res. NO Realizado
+    SCN(e:FAC, Val(ao:Val(z:1)))
+*IF Eqstr(Val(A:fac), 'AA13  ')
+*MessageBox(Val(ao:Val(z:1)))
+*MessageBox('XXX'~Val(A:fac)~'XXX')
+*ENDIF
+    * Totales
+    SCN(t:1, Val(am:Val(z:1)))
+    SCN(t:2, Val(aq:Val(z:1))+Val(as:Val(z:1))+Val(au:Val(z:1))+Val(aw:Val(z:1)))
+    SCN(t:3, Val(ao:Val(z:1)))
+
+    * Aculuma Nivel 1
+    SCN(b:Val(l:FAC), Val(am:Val(z:1)))
+    SCN(d:Val(l:FAC), Val(aq:Val(z:1))+Val(as:Val(z:1))+Val(au:Val(z:1))+Val(aw:Val(z:1)))
+    SCN(e:Val(l:FAC), Val(ao:Val(z:1)))
+    * Aculuma Nivel 2
+    SCN(b:Val(m:FAC), Val(am:Val(z:1)))
+    SCN(d:Val(m:FAC), Val(aq:Val(z:1))+Val(as:Val(z:1))+Val(au:Val(z:1))+Val(aw:Val(z:1)))
+    SCN(e:Val(m:FAC), Val(ao:Val(z:1)))
+    * Aculuma Nivel 3
+    SCN(b:Val(n:FAC), Val(am:Val(z:1)))
+    SCN(d:Val(n:FAC), Val(aq:Val(z:1))+Val(as:Val(z:1))+Val(au:Val(z:1))+Val(aw:Val(z:1)))
+    SCN(e:Val(n:FAC), Val(ao:Val(z:1)))
+    * Aculuma Nivel Especie
+    SCN(b:Val(o:FAC), Val(am:Val(z:1)))
+    SCN(d:Val(o:FAC), Val(aq:Val(z:1))+Val(as:Val(z:1))+Val(au:Val(z:1))+Val(aw:Val(z:1)))
+    SCN(e:Val(o:FAC), Val(ao:Val(z:1)))
+
+    SCN(j:FAC, 1)
+    SCN(k:FAC, fbn('CantidadFin'))
+  proximo
+
+  if Val(z:1)>0
+    SetFont(aa:1..az:Val(z:1),1)
+    SetFont(eg:1..el:Val(z:1),1)
+    FormatoCeldas(ag:1..as:Val(z:1),Exe('F2'))
+    FormatoCeldas(ah:1..ah:Val(z:1),Exe('F8'))
+    FormatoCeldas(aj:1..al:Val(z:1),Exe('F8'))
+  endif
+endif
+
+if Dialogo.Radio4=0 o Dialogo.Radio4=2
+  (.'RCARFON'.)
+endif
+
+if Dialogo.Radio4=0 o Dialogo.Radio4=3
+  (.'RCARMON'.)
+endif
+
+if Dialogo.Radio4=0 o Dialogo.Radio4=4
+  (.'RCARTDEP'.)
+endif
+
+ACN(u:1, FAC)
+if FAC>Val(w1)
+  recorrer&i Val(w1)+1,FAC
+    * % NMV
+    ACN(c:&i, Val(b:&i)/Val(t:1)*100)
+    * P&L Total
+    ACN(f:&i, Val(d:&i)+Val(e:&i))
+    * Calculo TIR
+    if Val(s:&i)=1
+      if Val(r:&i)<3
+        if NoVacio(Val(p:&i))
+          * Lista Especies
+          ACT(x:1, Val(p:&i))
+          * Saldo
+          ACN(x:2, Val(q:&i))
+          (.'RCARTIR'.)
+          ACN(g:&i, Val(fa:2))
+          ACT(h:&i, Val(fa:4))
+          if Val(fa:1)>Val(x:4)
+            ACN(x:4, Val(fa:1))
+          endif
+          ACL(g:&i, 'RCAR02',Vehiculo2=Dialogo.Vehiculo2,Lista1=Dialogo.Lista1,Lista2=Dialogo.Lista2,Lista3=Dialogo.Lista3,Lista4=Val(x:1),Fecha1=Dialogo.Fecha1,Radio1=Dialogo.Radio1,Entero1=Val(x:2),Radio2=Val(r:&i),Check1=Dialogo.Check1)
+        endif
+      else
+        LinkearHoja('RCAR04',1,Vehiculo2=Dialogo.Vehiculo2,Lista1=Dialogo.Lista1,Lista2=Dialogo.Lista2,Lista3=Dialogo.Lista3,Fecha1=Dialogo.Fecha1,Especie1=Val(p:&i),Radio1=Dialogo.Radio1,Radio2=Val(q:&i),Check1=1)
+        ACN(g:&i, LinkH(1,z:1))
+        CerrarHoja('RCAR04',1,Vehiculo2=Dialogo.Vehiculo2,Lista1=Dialogo.Lista1,Lista2=Dialogo.Lista2,Lista3=Dialogo.Lista3,Fecha1=Dialogo.Fecha1,Especie1=Val(p:&i),Radio1=Dialogo.Radio1,Radio2=Val(q:&i),Check1=1)
+        ACL(g:&i, 'RCAR04',Vehiculo2=Dialogo.Vehiculo2,Lista1=Dialogo.Lista1,Lista2=Dialogo.Lista2,Lista3=Dialogo.Lista3,Fecha1=Dialogo.Fecha1,Especie1=Val(p:&i),Radio1=Dialogo.Radio1,Radio2=Val(q:&i),Check1=0)
+      endif
+    endif
+    * Control 0
+    ACN(w:&i, 1)
+    if Trunc(Val(b:&i)*100)=0 y Trunc(Val(d:&i)*100)=0 y Trunc(Val(e:&i)*100)=0 y Trunc(Val(f:&i)*100)=0 
+      ACN(w:&i, 0)
+    endif
+  proximo
+  recorrer&i Val(w1)+1,FAC
+    if &i<FAC
+      recorrer&j &i+1,FAC
+        if Val(v:&i)=1
+          if Val(l:&j)=&i
+            SCN(x:&i, Val(w:&j))
+            SCN(ea:&i, 1)
+          endif
+        endif
+        if Val(v:&i)=2
+          if Val(m:&j)=&i
+            SCN(x:&i, Val(w:&j))
+            SCN(eb:&i, 1)
+          endif
+        endif
+        if Val(v:&i)=3
+          if Val(n:&j)=&i
+            SCN(x:&i, Val(w:&j))
+            SCN(ec:&i, 1)
+          endif
+        endif
+        if Val(v:&i)=4
+          if Val(o:&j)=&i
+            SCN(x:&i, Val(w:&j))
+            SCN(ed:&i, 1)
+          endif
+        endif
+      proximo
+    endif
+    if Val(t:&i)>Dialogo.Radio3
+      ACT(u:&i, 'Eliminar')
+    endif
+    if [Val(x:&i)=0 y Val(z:&i)=0] o [Val(w:&i)=0 y Val(z:&i)=1]
+      ACT(y:&i, 'Eliminar')
+    endif
+  proximo
+  ACN(u:2, Val(w1))
+  recorrer&i Val(w1)+1,Val(u:1)
+    SCN(u:2, 1)
+    if EqStr(Val(u:Val(u:2)),'Eliminar') o EqStr(Val(y:Val(u:2)),'Eliminar')
+      ACT(ee:Val(u:2), 'Eliminado')
+      if Dialogo.Check2=1
+        EliminarFila(Val(u:2))
+        SCN(u:2, -1)
+        DFA
+      endif
+    endif
+  proximo
+  ACN(u:3, FAC)
+
+  SetFont(a:Val(w1)+1..a:FAC,2)
+  SetFont(b:Val(w1)+1..z:FAC,1)
+  SetFont(ea:Val(w1)+1..ee:FAC,1)
+  FormatoCeldas(b:Val(w1)+1..f:FAC,Exe('F2'))
+  FormatoCeldas(g:Val(w1)+1..g:FAC,Exe('F2'))
+  FormatoCeldas(j:Val(w1)+1..j:FAC,Exe('F0'))
+  FormatoCeldas(k:Val(w1)+1..k:FAC,Exe('F2'))
+endif
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Total Cartera')
+ACN(b:FAC, Val(t:1))
+ACN(c:FAC, Val(b:FAC)/Val(t:1)*100)
+ACN(d:FAC, Val(t:2))
+ACN(e:FAC, Val(t:3))
+ACN(f:FAC, Val(t:2)+Val(t:3))
+SetFont(a:FAC..f:FAC,2)
+FormatoCeldas(b:FAC..f:FAC,Exe('F2'))
+
+SetFont(q:1..z:7, 1)
+SetFont(fa:1..fa:4, 1)
+SetFont(fb:1..fc:Val(x:4), 1)
+SetFont(fg:1..fh:5, 1)
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Fin del Listado')
+SetFont(a:FAC,2)
+
+ACO(1,15)
+ACO(2,9)
+ACO(3,6)
+ACO(4,9)
+ACO(5,9)
+ACO(6,9)
+ACO(7,6)
+ACO(9,15)
+ACO(16,25)
+
+LimitesVision(h:FAC)
+Impresion(1,1)
+SetMargins(1,1,0.5,1)

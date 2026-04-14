@@ -1,0 +1,101 @@
+creardialogo
+nroperacion1: 'Nr.Operacion';1;1;;;;;;;;;;;;" TipoOp in ('PME','PMU') and isnull(RB2,'0')<>'1' and NrOperacion  not in (Select M.NrOperacion From "~Dbo()~".MOVPENDIENTES M Where M.NrOperacion = NrOperacion and NrSaldo=1 and NrGrupo=1) and NrOperacion not in (Select ME.NrOperacion From "~Dbo()~".MOVEJECUTADOS ME Where ME.NrOperacion= NrOperacion and NrSaldo=1 and NrGrupo=1 ) and NrOperacion in (Select OB.NrOperacion from "~Dbo()~".OPERACIONESBITS OB where OB.NrOperacion=NrOperacion and OB.NrBit in ('10','70') and OB.Valor='1')  "
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Act(z1, dialogo.nroperacion1)
+
+Acn(x1, Query("Select 1 From "~Dbo()~".MOVPENDIENTES Where NrOperacion='"~Val(z1)~"' and NrSaldo=1 and NrGrupo=1 "))
+if (Val(x1) = 1)
+Cancelar('El Desembolso ya fue cancelado. No puede cancelar.')
+endif
+
+Acn(x1, Query("Select 1 From "~Dbo()~".MOVEJECUTADOS Where NrOperacion='"~Val(z1)~"' and NrSaldo=1 and NrGrupo=1 "))
+if (Val(x1) = 1)
+Cancelar('El Desembolso fue liquidado. No puede cancelar.')
+endif
+
+Acn(x1, Query("Select 1 from "~Dbo()~".OPERACIONESBITS where NrOperacion='"~Val(z1)~"' and NrBit in ('10','70') and Valor='1'"))
+if (Val(x1) <> 1)
+Cancelar('La Operacion '~Val(z1)~' debe estar en instancia Liquidacion o Terminal ')
+endif
+
+
+Sqladd("Select Especie, Cliente1, Cantidad, FechaOp, Plazo, FechaVto, Vehiculo1, Mercado, TipoOp, Cuenta3, RB2 ")
+Sqladd("From "~Dbo()~".OPERACIONES Where NrOperacion='"~Val(z1)~"' ")
+recorrer sql
+Act(a1, Fbn()['Especie'])
+Act(b1, Fbn()['Cliente1'])
+Acn(c1, Fbn()['Cantidad'])
+Acd(d1, Fbn()['FechaOp'])
+Acn(e1, Fbn()['Plazo'])
+Acd(f1, Fbn()['FechaVto'])
+Act(p1, Fbn()['Vehiculo1'])
+Act(q1, Fbn()['Mercado'])
+Act(w1, Fbn()['TipoOp'])
+Act(c3, Fbn()['Cuenta3'])
+Act(bo4, Fbn()['RB2'])
+proximo
+
+if (Eqstr(Val(bo4), '1'))
+Cancelar('La Operacion '~Val(z1)~' es Gar. 2412. No puede cancelar desembolso.')
+endif
+
+creardialogo
+nroperacion1:"Operacion";1;1;;NO;;;;;Val(z1)
+cliente1:"Cliente";2;1;;NO;;;;;Val(b1)
+especie1:"Moneda";3;1;;NO;;;;;Val(a1)
+cantidad1:"Cantidad";4;1;;NO;;;;;Val(c1)
+fecha1:"F.Concer.";1;2;;NO;;;;;Val(d1)
+entero3:"Pl.Original";2;2;;NO;;;;;Val(e1)
+fecha2:"F.Vto.Original";3;2;;NO;;;;;Val(f1)
+cuenta1:"Cuenta ";5;1;;NO;;;;;Val(c3)
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (Messagebox('Confirma la Cancelacion del Desembolso del Prestamo '~Val(z1)~' ?', 3, 1) = 1)
+
+Acn(pc1, 0)
+Acd(z2, FSys())
+if (Eqstr(Val(w1), 'PMU'))
+Act(z3, 'Alta Prestamo Pago Unico')
+else
+Act(z3, 'Alta de Prestamo con Esquema')
+endif
+Act(nm1, getnumerador(iif (Eqstr(Val(p1), 'INGCURA'), 303, 203)))
+
+Sqladd("INSERT INTO "~Dbo()~".TRANSACCIONES2 ")
+Sqladd("(TipoTr2,NrTrans, NrOperacionRef1, Cupon1, ")
+Sqladd("Fecha1, Fecha2, Cantidad1, Especie, Vehiculo1) ")
+Sqladd("VALUES ")
+Sqladd("('CUPDES','"~Val(nm1)~"','"~Val(z1)~"','"~Val(pc1)~"', ")
+Sqladd(""~IdxDate2(Val(z2))~","~IdxDate2(Val(z2))~","~Val(c1)~",'"~Val(a1)~"','"~Val(p1)~"') ")
+Sqlnew()
+
+Sqladd("INSERT INTO "~Dbo()~".MOVPENDIENTES ( ")
+Sqladd("NrOperacion, FechaMov, Cliente, Especie, ")
+Sqladd("Mercado, EnteCustodia, Cantidad, Leyenda, ")
+Sqladd("Bits, NrSaldo, NrGrupo, Concepto, NrGrupo2, ")
+Sqladd("NrMov, NrInstan, CallPut, Formula, ")
+Sqladd("Cuenta, Transaccion, Status, Cupon ")
+Sqladd(") VALUES ( ")
+Sqladd("'"~Val(z1)~"',"~IdxDate2(Val(z2))~",'"~Val(b1)~"','"~Val(a1)~"', ")
+Sqladd("'"~Val(q1)~"','"~Val(p1)~"',"~Val(c1)~", '"~Val(z3)~"', ")
+Sqladd("'MV', 1, 1,'PM', 0, ")
+Sqladd("1, 0,' ',' ', ")
+Sqladd("'"~Val(c3)~"',' ',' ',' ') ")
+Sqlnew()
+
+Sqlexec()
+
+
+Linkearhoja('PMODES', 5, 'nrtrans1', Val(nm1), 'check1', 0)
+endif
+
+

@@ -1,0 +1,953 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1   : 'Fecha'       ;1;1; ;  ;  ;EsHabil(Dialogo.Fecha1,'ARG') y Dialogo.Fecha1<=FSys;'Fecha incorrecta (> FSys) o no habil';NO;FSys;
+  Vehiculo1: 'Vehiculo:'   ;2;1; ;NO;SI;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+  Cliente1 : 'Cliente'     ;3;1; ;NO;NO;
+  Check1   : 'Procesa'     ;1;2; ;NO;NO;;;;1;
+  Check2   : 'Ejec.Liq.'   ;2;2; ;NO;NO;;;;1;
+  Check3   : 'Contingencia';3;2; ;NO;NO;;;;0;
+FinDialogo
+if not ok
+  Cancelar
+endif
+if Dialogo.Check1=0
+  Message('**** NO PROCESA ****')
+  HojaVisible(SI)
+endif
+
+ACT(dy:1, Fecha(Hoy))
+ACT(dy:2, Copy(Val(dy:1),9,2)~Copy(Val(dy:1),4,2)~Copy(Val(dy:1),1,2))
+ACT(dz:1, Hora(Ahora))
+ACT(dz:2, Copy(Val(dz:1),1,2)~Copy(Val(dz:1),4,2)~Copy(Val(dz:1),7,2))
+CrearFont(1,'Arial,8,')
+CrearFont(2,'Arial,8,B')
+ACD(bz:1, SQL("Select Max(Fecha) From "~DBO~".FLAGSOCT Where Registro = 'MTMD' "))
+if Val(bz:1)>Dialogo.Fecha1
+  MessageBox('Existe Flag MTM posterior al '~Dialogo.Fecha1)
+  if Dialogo.Check1=1
+    Cancelar('Evento cancelado')
+  endif
+endif
+if SQL(" Select 1 From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' and Registro = '4427' ") <> 1
+  if Dialogo.Check3=0
+    MessageBox('No Se Han Recibido Las COTIZACIONES desde el MAE')
+    if Dialogo.Check1=1
+      Cancelar('Evento cancelado')
+    endif
+  else
+    if MessageBox('No Se Han Recibido Las COTIZACIONES desde el MAE, Desea Continuar?', 3, 2) = 7
+      Cancelar('MTM Cancelado')
+    endif
+  endif
+endif
+***Obtengo Especies validas de OCT
+SetFilaActual(0)
+acn(ed:1, 0)
+acn(ee:1, 0)
+SQL.ADD("Select EspecieDestino2,EspecieOrigen,EspecieDestino1,TipoNegociacion From "~DBO~".EQUIVALENCIA_ESPECIES ")
+Recorrer SQL
+  act(ea:fac, fbn('EspecieDestino2'))
+  acn(ec:fac, 0)
+  act(eg:fac, fbn('EspecieDestino1'))
+  if NoVacio(fbn('EspecieOrigen'))
+    dfa
+    SQL.ADD("Select * From "~DBO~".PLAZOSOCT P ")
+    SQL.ADD(" Where P.Habilitado = 'SI' ")
+    SQL.ADD("   and P.TipoNegociacion = '"~fbn('TipoNegociacion')~"' ")
+    SQL.ADD("   and P.Especie = '"~fbn('EspecieDestino1')~"' ")
+    SQL.ADD(" order by Fecha ")
+    Recorrer SQL
+      act(ea:fac, fbn('EspecieDestino2',0))
+      acd(ef:fac, fbn('Fecha'))
+      act(eg:fac, fbn('EspecieDestino1',0))
+      SQL.ADD("Select C.* From "~DBO~".COTIZACIONES C ")
+      SQL.ADD(" Where C.Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+      SQL.ADD(" AND C.Codigo  = '"~Val(ea:fac)~"' ")
+      SQL.ADD(" AND C.CallPut = 'FUT' ")
+      SQL.ADD(" AND C.FechaEj = '"~IdxDate(fbn('Fecha'))~"' ")
+      Recorrer SQL
+        dfa
+        acn(eb:fac, fbn('Precio1'))
+        acn(ec:fac, 1)
+        Break
+      Proximo
+      scn(ed:1, 1)
+    Proximo
+  else
+    SQL.ADD("Select * From "~DBO~".COTIZACIONES ")
+    SQL.ADD(" Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND Codigo  = '"~val(ea:fac)~"' ")
+    Recorrer SQL
+      dfa
+      acn(eb:fac, fbn('Precio1'))
+      acn(ec:fac, 1)
+    Proximo
+    scn(ed:1,1)
+  endif
+Proximo
+Recorrer&i 1, val(ed:1)
+  if val(ec:&i) = 0
+     acn(ee:1,1)
+  endif
+Proximo
+if val(ee:1) = 1
+   **** muestra las cotizaciones y valida si sigue ****
+   MessageBox('No Se Han Actualizado todas las COTIZACIONES en FPA')
+   CrearListBox ; 'Arial,8,';'Cotizaciones del Dia '~Dialogo.Fecha1
+     'Especie'    ;ea:1..ea:val(ed:1);NO;;;90 ;STRING;;RGB(450,200,250);
+     'Cotizacion' ;eb:1..eb:val(ed:1);NO;;;120;NUMERO;'####.######';RGB(450,200,250);
+     'Plazo'      ;ef:1..ef:val(ed:1);NO;;;120;FECHA;RGB(450,200,250);
+   FinListBox
+   if Not OK
+     Cancelar('MTM Cancelado')
+   endif
+endif
+
+ACN(bx:1, SQL("Select Count(*) from "~DBO~".TRANSACCIONES2 Where TipoTr2 in ('OCTDEP','OCTRET') and Fecha1='"~IdxDate(Dialogo.Fecha1)~"' and Precio5=0 "))
+if Val(bx:1)>1
+  MessageBox('Existe mas de una trasaccion de Cobro/Pago')
+  if Dialogo.Check1=1
+    Cancelar('Evento cancelado')
+  endif
+else
+  ACT(bx:2, SQL("Select NrTrans from "~DBO~".TRANSACCIONES2 Where TipoTr2 in ('OCTDEP','OCTRET') and Fecha1='"~IdxDate(Dialogo.Fecha1)~"' and Precio5=0 "))
+endif
+ACN(by:1, SQL("Select Count(*) from "~DBO~".TRANSACCIONES2 Where TipoTr2 in ('OCTDEP','OCTRET') and Fecha1='"~IdxDate(Dialogo.Fecha1)~"' and Precio5>0 "))
+if Val(by:1)>1
+  MessageBox('Existen trasacciones de Cobro/Pago para pasos siguientes')
+endif
+
+ACT(a:0, 'A')
+ACT(k:0, 'K')
+ACT(aa:0, 'AA')
+ACT(ai:0, 'AI')
+ACT(ba:0, 'BA')
+ACT(bk:0, 'BK')
+ACT(ca:0, 'CA')
+ACT(ci:0, 'CI')
+ACT(da:0, 'DA')
+ACT(dk:0, 'DK')
+
+ACT(bk:1, 'Cant.Tr2')
+ACT(bl:1, 'NrTr2')
+ACT(bm:1, 'Cliente')
+ACT(bn:1, 'Cantidad')
+ACT(bo:1, 'Cant.MovEje')
+ACT(bp:1, 'Monto')
+ACT(bq:1, 'Cant.Ops')
+ACT(br:1, 'Monto')
+ACT(71:1, 'Anula')
+ACT(bt:1, 'Genera')
+
+SetFilaActual(1)
+SQL.ADD("Select NrTrans,Cantidad1,Cliente1 from "~DBO~".TRANSACCIONES2 ")
+SQL.ADD(" Where Fecha1    = "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("   and TipoTr2   = 'LIQOCT' ")
+SQL.ADD("   and Cambio1   = 0 ")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD("   and Cliente1 = '"~Dialogo.Cliente1~"' ")
+endif
+recorrer SQL
+  SCN(bk:2, 1)
+  ACT(bl:FAC, fbn('NrTrans'))
+  ACT(bm:FAC, fbn('Cliente1'))
+  ACN(bn:FAC, fbn('Cantidad1'))
+proximo
+SetFilaActual(0)
+if Val(bk:2)>0
+  recorrer&i 2,Val(bk:2)+1
+    SQL.ADD("Select Cantidad from "~DBO~".MOVEJECUTADOS ")
+    SQL.ADD(" Where NrOperacion    = '"~Val(bl:&i)~"' ")
+    SQL.ADD("   and NrSaldo        = 1 ")
+    recorrer SQL
+      SCN(bo:&i, 1)
+      SCN(bp:&i, fbn('Cantidad'))
+    proximo
+    if Val(bo:&i)>0
+      MessageBox('La transacccion '~Val(bl:&i)~' esta liquidada.')
+      ACN(bk:3,1)
+    endif
+  proximo
+  if Val(bk:3)>0
+    Cancelar('Evento Cancelado')
+  endif
+endif
+
+SQL.ADD("Select NrOperacion,Cantidad from "~DBO~".MOVEJECUTADOS ")
+SQL.ADD(" Where FechaMov    = "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("   and NrOperacion Like 'OC%' ")
+SQL.ADD("   and NrSaldo     = 100 ")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD(" and Cliente = '"~Dialogo.Cliente1~"' ")
+endif
+SQL.ADD(" order by NrOperacion ")
+recorrer SQL
+  SCN(cy:1, 1)  
+  SCN(cz:1, 1)  
+  SCN(cz:2, fbn('Cantidad'))
+  ACT(da:Val(cz:1), fbn('NrOperacion'))
+  ACN(db:Val(cz:1), fbn('Cantidad'))
+proximo
+SQL.ADD("Select NrOperacion,Cantidad from "~DBO~".MOVPENDIENTES ")
+SQL.ADD(" Where FechaMov    = "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("   and NrOperacion Like 'OC%' ")
+SQL.ADD("   and NrSaldo     = 100 ")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD(" and Cliente = '"~Dialogo.Cliente1~"' ")
+endif
+SQL.ADD(" order by NrOperacion ")
+recorrer SQL
+  SCN(cy:2, 1)  
+  SCN(cz:1, 1)  
+  SCN(cz:2, fbn('Cantidad'))  
+  ACT(da:Val(cz:1), fbn('NrOperacion'))
+  ACN(db:Val(cz:1), fbn('Cantidad'))
+proximo
+if Val(cy:1)>0 y Val(cy:2)>0
+  Cancelar('Hay Movimientos saldo 100 Ejecutados y Pendientes')
+endif
+
+SetFilaActual(1)
+ACT(a:FAC, 'NrOper.')
+ACT(b:FAC, 'TipoOp')
+ACT(c:FAC, 'Cliente1')
+ACT(d:FAC, 'Especie')
+ACT(e:FAC, 'Cantidad')
+ACT(f:FAC, 'Precio1')
+ACT(g:FAC, 'ConEsp')
+ACT(h:FAC, 'TBC1')
+ACT(i:FAC, 'Vehiculo1')
+ACT(j:FAC, 'Book1')
+ACT(k:FAC, 'FechaOp')
+ACT(l:FAC, 'FechaVto')
+ACT(m:FAC, 'FechaPago')
+ACT(n:FAC, 'FechaPrec')
+ACT(o:FAC, 'Alta')
+ACT(p:FAC, 'Fixing')
+ACT(q:FAC, 'Pre.Ant  (PMer)')
+ACT(r:FAC, 'F.MTM.Ant(FUltC)')
+ACT(s:FAC, 'Pre.Hoy  (PEj)')
+ACT(t:FAC, 'F.MTM.Hoy(FEj)')
+ACT(u:FAC, 'Espec.MTM')
+ACT(v:FAC, 'MB1 (Fix)')
+ACT(w:FAC, 'Espec.Fix')
+ACT(x:FAC, 'Clave MAE')
+ACT(y:FAC, 'Tipo Neg.')
+ACT(z:FAC, 'Especie')
+ACT(aa:FAC, 'Variable')
+ACT(ab:FAC, 'Pre.Ant')
+ACT(ac:FAC, 'Fecha.Ant')
+ACT(ad:FAC, 'Pre.Hoy')
+ACT(ae:FAC, 'Fecha.Hoy')
+ACT(af:FAC, 'MTM')
+ACT(ag:FAC, 'NrMov')
+ACT(ai:FAC, 'Movs.Eje')
+ACT(aj:FAC, 'Movs.Pen')
+ACT(ak:FAC, 'MTM Movs')
+ACT(am:FAC, 'Acum.Ant.(Op)')
+ACT(an:FAC, 'Acum.Ant.(Op)')
+ACT(ao:FAC, 'Acum.Hoy(Suma)')
+ACT(ap:FAC, 'Acum.Hoy(Calc)')
+ACT(ar:FAC, 'Reproceso')
+ACT(as:FAC, 'Distinto')
+ACT(at:FAC, 'Control')
+ACT(au:FAC, 'Cod.Fix')
+ACT(av:FAC, 'Inst.70')
+ACT(aw:FAC, 'Movs.MTM')
+ACT(ax:FAC, 'NO 70')
+ACT(ay:FAC, 'Error')
+ACT(ca:FAC, 'Cartera')
+ACT(cb:FAC, 'Book Spot')
+ACT(cc:FAC, 'Cot Esp/USD')
+ACT(cd:FAC, 'Cant en USD')
+ACT(ce:FAC, 'Cant Reval')
+ACT(cf:FAC, 'Modo CEsp/USD')
+ACT(cg:FAC, 'Precio USD')
+ACT(ch:FAC, 'Precio ARP')
+
+SQL.ADD("Select O.NrOperacion,   O.TipoOp,        O.Cliente1,       O.Especie,     O.Cantidad,     ")
+SQL.ADD("       O.Precio1,       O.ContraEspecie, O.TotalBrutoCli1, O.Vehiculo1,   O.Book1,        ")
+SQL.ADD("       O.FechaOp,       O.FechaVto,      O.FechaPago,      O.FechaPrecan, O.PrecioMer,    ")
+SQL.ADD("       O.FechaUltCupon, O.PrecioEj,      O.FechaEj,        O.MB1,         O.ObsErrorMAE,  ")
+SQL.ADD("       O.TotalAux1,     O.TotalAux3,     O.ContraEspecie2, O.EnteCus1     ")
+SQL.ADD("  from "~DBO~".OPERACIONES O, "~DBO~".CLIENTES C , "~DBO~".OPERACIONESBITS B ")
+SQL.ADD(" Where C.Codigo    = O.Cliente1 ")
+SQL.ADD("   and O.TipoOp In ('FXOCTC','FXOCTV') ")
+SQL.ADD("   and O.FechaOp  <= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("   and O.FechaVto >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("   and (O.FechaPrecan is Null or O.FechaPrecan >= "~IdxDate2(Dialogo.Fecha1)~") ")
+SQL.ADD("   and O.NrOperacion = B.NrOperacion ")
+SQL.ADD("   and B.NrBit       = 30 ")
+SQL.ADD("   and B.Valor       = '0' ")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD("   and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+endif
+SQL.ADD(" order by C.NrMAE,O.FechaVto,O.ObsErrorMAE,O.NrOperacion ")
+ACN(az:1,0)
+Recorrer SQL
+  SCN(az:1,1)
+  Message('Operacion '~fbn['TipoOp']~' '~fbn['NrOperacion'])
+  ACT(a:fac, fbn['NrOperacion'])
+  ACT(b:fac, fbn['TipoOp'])
+  ACT(c:fac, fbn['Cliente1'])
+  ACT(d:fac, fbn['Especie'])
+  ACN(e:fac, fbn['Cantidad'])
+  ACN(f:fac, fbn['Precio1'])
+  ACT(g:fac, fbn['ContraEspecie'])
+  ACN(h:fac, fbn['TotalBrutoCli1'])
+  ACT(i:fac, fbn['Vehiculo1'])
+  ACT(j:fac, fbn['Book1'])
+  ACD(k:fac, fbn['FechaOp'])
+  ACD(l:fac, fbn['FechaVto'])
+  ACD(m:fac, fbn['FechaPago'])
+  ACD(n:fac, fbn['FechaPrecan'])
+
+  ACN(av:fac, SQL("Select Valor from "~DBO~".OPERACIONESBITS where NrOperacion='"~Val(a:FAC)~"' and NrBit=70 "))
+  if Val(av:FAC)=0
+    ACN(aw:fac, SQL("Select Count(*) from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Val(a:FAC)~"' and NrSaldo=100 "))
+    if Val(aw:fac)=0
+      ACN(ax:FAC, 1)
+    else
+      ACN(ax:FAC, 2)
+    endif
+  endif
+
+  ****************
+  * Primer Control
+  ****************
+  if Val(ax:fac)=0 y Val(ay:fac)=0
+    if fbn['FechaOp']=DIalogo.Fecha1
+      ACN(o:FAC, 1)
+    endif
+    if fbn['FechaVto']=DIalogo.Fecha1 o fbn['FechaPrecan']=DIalogo.Fecha1
+      ACN(p:FAC, 1)
+    endif
+***---Ahora puede vencer o precancelar el mismo dia del alta.
+***---    if Val(o:FAC)+Val(p:FAC)>1
+***---      ACT(at:FAC, 'Error 1')
+***---      ACN(ay:fac, 1)
+***---    endif
+  endif
+  ****************
+  * Segundo Control
+  ****************
+  if Val(ax:fac)=0 y Val(ay:fac)=0
+    ACN(q:FAC, fbn['PrecioMer'])
+    ACD(r:FAC, fbn['FechaUltCupon'])
+    ACN(s:FAC, fbn['PrecioEj'])
+    ACD(t:FAC, fbn['FechaEj'])
+    ACT(x:fac, fbn['ObsErrorMAE'])
+    ACT(y:fac, Copy(fbn['ObsErrorMAE'],1,1))
+    ACT(z:fac, Copy(fbn['ObsErrorMAE'],2,5))
+    ACT(aa:fac, Copy(fbn['ObsErrorMAE'],7,7))
+    ACN(v:FAC, fbn['MB1'])
+    if EqStr(Val(d:FAC),'USD')
+      if Val(v:FAC)=0
+        ACT(au:FAC, 'E')
+      else
+        if Val(v:FAC)=1
+          ACT(au:FAC, 'A')
+        endif
+      endif
+    endif
+    ******************************************
+    * Falta definir Fixing para otras especies
+    ******************************************
+*    ACT(u:FAC, SQL("Select EspecieDestino2 from "~DBO~".EQUIVALENCIA_ESPECIES where TipoCotizacion='O' and EspecieDestino1='"~Val(d:FAC)~"' and TipoNegociacion='"~Val(y:FAC)~"' and EspecieOrigen='"~Val(z:FAC)~"' "))
+    ACT(u:FAC, fbn['EnteCus1'])
+
+    if Vacio(Val(u:FAC))
+      ACT(at:FAC, 'Error 2')
+      ACN(ay:fac, 1)
+    endif
+  endif
+  *****************
+  * Tercer Control
+  *****************
+  if Val(ax:fac)=0 y Val(ay:fac)=0
+*    ACT(w:FAC, SQL("Select EspecieDestino2 from "~DBO~".EQUIVALENCIA_ESPECIES where TipoCotizacion='F' and TipoNegociacion='"~Val(y:FAC)~"' and Metodo='"~Val(au:FAC)~"' "))
+    ACT(w:FAC, fbn['ContraEspecie2'])
+    if Vacio(Val(w:FAC))
+      ACT(at:FAC, 'Error 3')
+      ACN(ay:fac, 1)
+    endif
+  endif
+  *****************
+  * Cuarto Control
+  *****************
+  if Val(ax:fac)=0 y Val(ay:fac)=0
+    if Dialogo.Fecha1<fbn('FechaEj')
+      ACT(at:FAC, 'Error 4')
+      ACN(ay:fac, 1)
+    endif
+  endif
+  *****************
+  * Quinto Control
+  *****************
+  if Val(ax:fac)=0 y Val(ay:fac)=0
+    if Dialogo.Fecha1=fbn('FechaEj')
+      * Reproceso
+      ACN(ar:FAC, 1)
+      ACN(ab:FAC, fbn['PrecioMer'])
+      if Val(o:FAC)=0
+        * No es ALTA
+        ACD(ac:FAC, fbn['FechaUltCupon'])
+      endif
+    else
+      if Val(o:FAC)=1
+        * Dia de Alta de Operacion
+        ACN(ab:FAC, fbn['Precio1'])
+      else
+        if fbn['FechaEj']>0
+          ACN(ab:FAC, fbn['PrecioEj'])
+          ACD(ac:FAC, fbn['FechaEj'])
+        else
+          ACN(ab:FAC, fbn['Precio1'])
+        endif
+      endif
+    endif
+    if Val(p:FAC)=1
+      * Fixing o Precan
+      ACN(ad:FAC, CotizacionC(Val(w:FAC),,,,Dialogo.Fecha1,1,,fbn['ContraEspecie']))
+    else
+      ACN(ad:FAC, CotizacionC(Val(u:FAC),'FUT',fbn['FechaVto'],,Dialogo.Fecha1,1,,fbn['ContraEspecie']))
+    endif
+    ACD(ae:FAC, Dialogo.Fecha1)
+    if EqStr(fbn('TipoOp'),'FXOCTC')
+      ACN(af:FAC, Val(e:FAC)*(Val(ad:FAC)-Val(ab:FAC)))
+    else
+      ACN(af:FAC, Val(e:FAC)*(Val(ab:FAC)-Val(ad:FAC)))
+    endif
+
+    ACN(ag:FAC, Val(ae:FAC)-Val(k:FAC)+1)
+
+    SQL.ADD("Select Cantidad from "~DBO~".MOVEJECUTADOS ")
+    SQL.ADD(" Where NrOperacion = '"~Val(a:fac)~"' ")
+    SQL.ADD("   and FechaMov    = "~IdxDate2(Val(ae:FAC))~" ")
+    SQL.ADD("   and NrSaldo     = 100 ")
+    recorrer SQL
+      DFA
+      SCN(ai:FAC, 1)
+      SCN(ak:FAC, fbn('Cantidad'))
+    proximo
+
+    SQL.ADD("Select Cantidad from "~DBO~".MOVPENDIENTES ")
+    SQL.ADD(" Where NrOperacion = '"~Val(a:fac)~"' ")
+    SQL.ADD("   and FechaMov    = "~IdxDate2(Val(ae:FAC))~" ")
+    SQL.ADD("   and NrSaldo     = 100 ")
+    recorrer SQL
+      DFA
+      SCN(aj:FAC, 1)
+      SCN(ak:FAC, fbn('Cantidad'))
+    proximo
+    ACN(am:fac, fbn['TotalAux1'])
+    ACN(an:fac, fbn['TotalAux3'])
+    ACN(ao:FAC, Val(am:FAC)-Val(ak:FAC)+Val(af:FAC))
+
+    if EQstr(fbn('TipoOp'),'FXOCTC')
+      ACN(ap:FAC, Val(e:FAC)*(Val(ad:FAC)-Val(f:FAC)))
+    else
+      ACN(ap:FAC, Val(e:FAC)*(Val(f:FAC)-Val(ad:FAC)))
+    endif
+    if Val(ar:FAC)=1
+      * Reproceso
+      if Val(af:FAC)-Val(ak:FAC)>=0.01 o Val(af:FAC)-Val(ak:FAC)<=-0.01
+        * MTM Distinto Anterior
+        ACN(as:FAC, 1)
+        ACN(az:2, 1)
+      endif
+    else
+      * NO Reproceso
+      ACN(as:FAC, 1)
+      ACN(az:2, 1)
+    endif
+    ****************
+    * Resumen de MTM
+    ****************
+    ACN(bi:2, 0)
+    if Val(bi:1)>0
+      recorrer&i 1,Val(bi:1)
+        if EqStr(fbn['Cliente1'],Val(ba:&i)) y EqStr(fbn['Especie'],Val(bb:&i)) y fbn['FechaVto']=Val(bc:&i) y EqStr(Copy(fbn['ObsErrorMAE'],1,12),Copy(Val(bd:&i),1,12))
+          ACN(bi:2, &i)
+          Break
+        endif
+      proximo
+    endif
+    if Val(bi:2)=0
+      SCN(bi:1, 1)
+      ACN(bi:2, Val(bi:1))
+    endif
+    ACT(ba:Val(bi:2), fbn['Cliente1'])
+    ACT(bb:Val(bi:2), fbn['Especie'])
+    ACD(bc:Val(bi:2), fbn['FechaVto'])
+    ACT(bd:Val(bi:2), fbn['ObsErrorMAE'])
+    ACT(be:Val(bi:2), Copy(Val(x:FAC),1,1))
+    ACT(bf:Val(bi:2), Copy(Val(x:FAC),2,5))
+    ACT(bg:Val(bi:2), Copy(Val(x:FAC),7,7))
+    SCN(bh:Val(bi:2), Val(af:FAC))
+    *******************
+    * Neto Multilateral
+    *******************
+    SCN(bj:1, Val(af:FAC))
+    **************************
+    * Neto Bilateral x Cliente
+    **************************
+    ACN(bk:4, 0)
+
+    if Val(bk:2)>0
+      recorrer&i 2,Val(bk:2)+1
+        if EqStr(Val(bm:&i),Val(c:FAC))
+          ACN(bk:4, &i)
+        endif
+      proximo
+
+      if Val(bk:4)=0
+        SCN(bk:2, 1)
+        ACN(bk:4, Val(bk:2)+1)
+        ACT(bm:Val(bk:4), Val(c:FAC))
+      endif
+    else
+      SCN(bk:2, 1)
+      ACN(bk:4, 2)
+      ACT(bm:Val(bk:4), Val(c:FAC))
+    endif
+
+    SCN(bq:Val(bk:4), 1)
+    SCN(br:Val(bk:4), Val(af:FAC))
+    *******************
+    * Posiciones Spot
+    *******************
+    * Recupero datos de la Operacion y de BOOKS
+    ACN(ca:FAC, BuscarCampo('OPERACIONES','Cartera','NrOperacion',Val(a:FAC)))
+
+    SQL.ADD("Select * from "~DBO~".BOOKS ")
+    SQL.ADD("where Vehiculo    = '"~Val(i:FAC)~"' ")
+    SQL.ADD("  and Alias2      = 'I' ")
+    SQL.ADD("  and TipoNegocio = 'SPO' ")
+    recorrer SQL
+      DFA
+      ACT(cb:FAC, fbn('Codigo'))
+    proximo
+              
+    ACN(cc:FAC, CotizacionC(Val(d:FAC),,,,Dialogo.Fecha1,1,SI,'USD'))
+    ACN(cd:FAC, Val(e:FAC)*Val(cc:FAC))
+    ACN(ce:FAC, Val(e:FAC)*Val(ad:FAC))
+    ACT(cf:FAC, iif(EqStr(Modo(Val(g:FAC),'USD'    ),'INV'),'INV','DIR'))
+    ACN(cg:FAC, iif(EqStr(Val(cf:FAC),'INV'),Val(ce:FAC)/Val(cd:FAC),Val(cd:FAC)/Val(ce:FAC)))
+    ACN(ch:FAC, 1)
+  endif
+  if Val(ax:fac)>0
+    * Operacion NO 70
+    SCN(az:4, 1)
+    if Val(ax:fac)=2
+      * Con Movs Ejecutados Saldo 100
+      SCN(az:5, 1)
+    endif
+  endif
+  if Val(ay:fac)>0
+    SCN(az:3, 1)
+    ACT(bv:Val(az:3), fbn('NrOperacion'))
+    ACT(bw:Val(az:3), Val(at:FAC))
+  endif
+proximo
+if Val(az:1)=0 y Val(cz:1)=0
+  MessageBox('No existen OCT para Valuar.')
+  if Dialogo.Check1=1
+    Cancelar('Evento Cancelado')
+  else
+    MessageBox('Evento Cancelado')
+  endif
+endif
+if Val(az:4)>0
+  if Dialogo.Check1=1
+    Cancelar('Hay operaciones que NO estan en la Instancia Terminal y NO seran incluidas en el calculo')
+  else
+    ACN(az:6, MessageBox('Hay operaciones que NO estan en la Instancia Terminal y NO fueron incluidas en el calculo',1,1))
+    if Val(az:6)=2
+      Cancelar('Evento Cancelado')
+    endif
+  endif
+endif
+if Val(az:5)>0
+  MessageBox('Hay operaciones que NO estan en Terminal y tienen MTM.')
+  recorrer&i 2,Val(az:1)+1
+    if Val(ax:&i)=2
+      MessageBox('Error Operacion '~Val(a:&i)~': No esta en Terminal y tiene MTM')
+    endif
+  proximo
+  if Dialogo.Check1=1
+    Cancelar('Evento Cancelado')
+  else
+    MessageBox('Evento Cancelado')
+  endif
+endif
+if Val(az:3)>0
+  recorrer&i 2,Val(az:1)+1
+    if Val(ay:&i)>0
+      if EqStr(Val(at:&i),'Error 1')
+        MessageBox('Error 1 Operacion '~Val(a:&i)~': Alta y Fixing')
+      endif
+      if EqStr(Val(at:&i),'Error 2')
+        MessageBox('Error 2 Operacion '~Val(a:&i)~': Falta Especie MTM')
+      endif
+      if EqStr(Val(at:&i),'Error 3')
+        MessageBox('Error 3 Operacion '~Val(a:&i)~': Falta Especie Fixing')
+      endif
+      if EqStr(Val(at:&i),'Error 4')
+        MessageBox('Error 4 Operacion '~Val(a:&i)~': Reproceso anterior a ultimo MTM')
+      endif
+    endif
+  proximo
+  if Dialogo.Check1=1
+    Cancelar('Evento Cancelado')
+  else
+    MessageBox('Evento Cancelado')
+  endif
+endif
+******************************************************************
+* Borro Movimientos que no correspondan a las operaciones Vigentes
+******************************************************************
+if Val(cz:1)>0
+  recorrer&i 1,Val(cz:1)
+    if Val(az:1)>0
+      recorrer&j 2,Val(az:1)+1
+        if EqStr(Val(a:&j),Val(da:&i))
+          ACN(dc:&i, 1)
+          Break
+        endif
+      proximo
+    endif
+    if Val(dc:&i)=0
+      ACN(az:7, 1)
+      ACT(dd:&i, 'Borra Movimiento')
+      if Dialogo.Check1=1
+        Message('Borrando Movimientos Op '~Val(da:&i))
+        SQL.ADD("DELETE "~DBO~".MOVEJECUTADOS ")
+        SQL.ADD(" Where NrOperacion = '"~Val(da:&i)~"' ")
+        SQL.ADD("   and FechaMov    = "~IdxDate2(Dialogo.Fecha1)~" ")
+        SQL.ADD("   and NrSaldo     = 100 ")
+        SQL.NEW
+        SQL.ADD("DELETE "~DBO~".MOVPENDIENTES ")
+        SQL.ADD(" Where NrOperacion = '"~Val(da:&i)~"' ")
+        SQL.ADD("   and FechaMov    = "~IdxDate2(Dialogo.Fecha1)~" ")
+        SQL.ADD("   and NrSaldo     = 100 ")
+        SQL.NEW
+        SQL.EXEC
+      endif
+    else
+      SCN(cz:3, Val(db:&i))
+    endif
+  proximo
+endif
+
+if Val(az:1)>0 y Val(az:2)=0 y Val(az:3)=0 y Val(az:5)=0 y Val(az:7)=0
+  MessageBox('No hay cambios en el reproceso de MTM')
+  if Dialogo.Check1=1
+    Cancelar('Evento Cancelado')
+  else
+    MessageBox('Evento Cancelado')
+  endif
+endif
+if [Val(az:1)>0 y Val(az:2)>0 y Val(az:3)=0 y Val(az:5)=0] o Dialogo.Check1=0
+  recorrer&i 2,Val(az:1)+1
+    if Val(ax:&i)=0
+      * Esta 70
+      ACT(at:&i, 'Primero')
+      if Val(ay:&i)=0
+        * No Error
+        ACT(at:&i, 'Casi')
+        if Val(as:&i)=1
+        * Reproceso Distinto/NO Reproceso
+          ACT(at:&i, 'Procesa')
+          SCN(bz:4, 1)
+          if Dialogo.Check1=1
+            Message('Update Operacion '~Val(a:&i))
+            SQL.ADD("DELETE "~DBO~".MOVEJECUTADOS ")
+            SQL.ADD(" Where NrOperacion = '"~Val(a:&i)~"' ")
+            SQL.ADD("   and FechaMov    = "~IdxDate2(Val(ae:&i))~" ")
+            SQL.ADD("   and NrSaldo     = 100 ")
+            SQL.NEW
+            SQL.ADD("DELETE "~DBO~".MOVPENDIENTES ")
+            SQL.ADD(" Where NrOperacion = '"~Val(a:&i)~"' ")
+            SQL.ADD("   and FechaMov    = "~IdxDate2(Val(ae:&i))~" ")
+            SQL.ADD("   and NrSaldo     = 100 ")
+            SQL.NEW
+            SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+            SQL.ADD("   Set PrecioMer     = "~Fstr(Val(ab:&i),0,8)~", ")
+            SQL.ADD("       FechaUltCupon = "~IdxDate2(Val(ac:&i))~", ")
+            if Val(p:&i)=1
+              SQL.ADD("       Precio2     = "~Fstr(Val(ad:&i),0,8)~", ")
+              SQL.ADD("       FechaVto2   = "~IdxDate2(Val(ae:&i))~", ")
+            endif
+            SQL.ADD("       PrecioEj      = "~Fstr(Val(ad:&i),0,8)~", ")
+            SQL.ADD("       FechaEj       = "~IdxDate2(Val(ae:&i))~", ")
+            SQL.ADD("       TotalAux1     = "~Fstr(Val(ap:&i),0,2)~", ")
+            SQL.ADD("       TotalAux3     = "~Fstr(Val(ap:&i),0,2)~", ")
+            SQL.ADD("       TotalAux4     = "~Fstr(Val(AF:&i),0,2)~" ")
+            SQL.ADD(" Where NrOperacion   = '"~Val(a:&i)~"' ")
+            SQL.NEW
+             if Dialogo.Fecha1>FSys
+              SQL.ADD("Insert into "~DBO~".MOVPENDIENTES (")
+            else
+              SQL.ADD("Insert into "~DBO~".MOVEJECUTADOS (")
+              SQL.ADD("FechaEje, ")
+              SQL.ADD("UsuarioEje, ")
+            endif
+            SQL.ADD("NrOperacion, ")
+            SQL.ADD("FechaMov, ")
+            SQL.ADD("Cliente, ")
+            SQL.ADD("Especie, ")
+            * CallPut
+            SQL.ADD("FechaEj, ")
+            SQL.ADD("PrecioEj, ")
+            * Mercado
+            SQL.ADD("EnteCustodia, ")
+            SQL.ADD("Cantidad, ")
+            * Formula
+            SQL.ADD("Leyenda, ")
+            SQL.ADD("Bits, ")
+            SQL.ADD("NrSaldo, ")
+            * NrGrupo
+            * Concepto
+            * FechaEje
+            * UsuarioEje
+            * Cuenta
+            * NrGrupo2
+            * Transaccion
+            SQL.ADD("NrMov ")
+            * NrLiq
+            * Status
+            * NrComprob
+            * NrInstancia
+            * Cupon
+            * NrTrans2
+            
+            SQL.ADD(") Values (")
+            
+            if Dialogo.Fecha1<=FSys
+              SQL.ADD("'"~IdxDate(Hoy)~"', ")
+              SQL.ADD("'"~UsuarioActivo~"', ")
+            endif
+            SQL.ADD(" '"~Val(a:&i)~"', ")
+            SQL.ADD(" '"~IdxDate(Val(ae:&i))~"', ")
+            SQL.ADD(" '"~Val(c:&i)~"',")
+            SQL.ADD(" '"~Val(g:&i)~"', ")
+            SQL.ADD(" '"~IdxDate(Val(l:&i))~"', ")
+            SQL.ADD(" "~FStr(Val(ad:&i),0,8)~", ")
+            SQL.ADD(" '"~Val(i:&i)~"', ")
+            SQL.ADD(" "~FStr(Val(af:&i),0,2)~", ")
+            SQL.ADD(" 'MTM OCT', ")
+            SQL.ADD(" 'AV', ")
+            SQL.ADD(" "~FStr(100,1,0)~", ")
+            SQL.ADD(" "~FStr(Val(ag:&i),1,0)~" ")
+            SQL.ADD(")")
+            SQL.NEW
+            SQL.EXEC
+            **************************
+             (.'OCTPOSICIO'.)
+            **************************
+            **************************
+            *** Genero MOVDEVENGADOS
+            **************************
+if no
+ * FO 11/01/2006 Este resultado se duplica con REVAL, TRADE y REALIZ. Saco este y dejo los otros.
+            SQL.ADD(" Delete "~DBO~".MOVDEVENGADOS ")
+            SQL.ADD(" Where Fecha = '"~IdxDate(Val(AE:&i))~"' ")
+            SQL.ADD(" AND NrOperacion = '"~Val(A:&i)~"' ")
+            SQL.ADD(" AND TipoDevengado = 'MTMOCT' ")
+            SQL.ADD(" AND NrSaldo = 140 ")
+            SQL.NEW
+            IF Val(AF:&i) <> 0
+              SQL.ADD(" Insert Into "~DBO~".MOVDEVENGADOS ")
+              SQL.ADD(" (NrOperacion, Fecha, Monto, TipoDevengado, ")
+              SQL.ADD(" Cliente, Vehiculo, NrSaldo, Especie, ")
+              SQL.ADD(" Book, EspecieRef) ")
+              SQL.ADD(" Values ")
+              SQL.ADD(" ('"~Val(A:&i)~"', '"~IdxDate(Val(AE:&i))~"', "~Fstr(Val(AF:&i),0,2)~", 'MTMOCT', ")
+              SQL.ADD(" '"~Dialogo.Vehiculo1~"', '"~Dialogo.Vehiculo1~"', 140, '"~Val(G:&i)~"', ")
+              SQL.ADD(" '"~Val(J:&i)~"', '"~Val(D:&i)~"') ")
+              SQL.NEW
+            ENDIF
+endif
+            SQL.EXEC
+          endif
+        endif
+      endif
+    else
+      if Val(ax:&i)=1
+        MessageBox('Error Operacion '~Val(a:&i)~': No esta en Terminal')
+      endif
+    endif
+  proximo
+endif
+if Val(bk:2)>0
+  recorrer&i 2,Val(bk:2)+1
+    if NoVacio(Val(bl:&i)) y [Val(bn:&i)-Val(br:&i)>0.01 o Val(bn:&i)-Val(br:&i)<-0.01]
+      ACT(71:&i, 'SI Anu')
+      ACN(bz:5, 1)
+      if Dialogo.Check1=1
+        Message('Llama evento ANLOCT para Trans. '~Val(bl:&i))
+        EjecutarEvento('ANLOCT',NrTrans1=Val(bl:&i))
+      else
+        MessageBox('Llama evento ANLOCT para Trans. '~Val(bl:&i))
+      endif
+    endif
+    if [Vacio(Val(bl:&i)) o EqStr(Val(71:&i),'SI Anu')] y Val(bq:&i)>0
+      if Dialogo.Check2=1
+        ACT(bt:&i, 'SI Gen')
+        ACN(bz:5, 1)
+        if Dialogo.Check1=1
+          Message('Llama evento LIQOCT para Cliente '~Val(bm:&i))
+          EjecutarEvento('LIQOCT',Fecha1=Dialogo.Fecha1,Vehiculo1=Dialogo.Vehiculo1,Cliente1=Val(bm:&i))
+        else
+          MessageBox('Llama evento LIQOCT para Cliente '~Val(bm:&i))
+        endif
+      endif
+    endif
+  proximo
+endif
+if Val(bz:4)>0 o Val(bz:5)>0
+  ** Proceso alguna operacion
+  ACN(bz:2, SQL("Select Cantidad From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' and Registro = 'MTMD' "))
+  ACN(bz:3, Val(bz:2)+1)
+  if Dialogo.Check1=1
+    ***---Marca de cierre realizado
+    if Val(bz:3)=1
+      Message('Insert Flag MTM')
+      SQL.ADD("Insert Into "~DBO~".FLAGSOCT ( ")
+      SQL.ADD("Fecha,    Registro, Paso,      Cantidad, ")
+      SQL.ADD("FechaMAE, HoraMAE,  Secuencia, Estado    ")
+      SQL.ADD(" ) Values ( ")
+      SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', ")
+      SQL.ADD(" 'MTMD', ")
+      SQL.ADD(" 0, ")
+      SQL.ADD(" "~FStr(Val(bz:3),1,0)~", ")
+      SQL.ADD(" '"~Val(dy:2)~"', ")
+      SQL.ADD(" '"~Val(dz:2)~"', ")
+      SQL.ADD(" Null, ")
+      SQL.ADD(" Null ")
+      SQL.ADD(" ) ")
+      SQL.NEW
+    else
+      Message('Update Flag MTM')
+      SQL.ADD(" Update "~DBO~".FLAGSOCT ")
+      SQL.ADD(" Set Cantidad   = "~FStr(Val(bz:3),1,0)~", ")
+      SQL.ADD("     FechaMAE   = '"~Val(dy:2)~"', ")
+      SQL.ADD("     HoraMAE   = '"~Val(dz:2)~"' ")
+      SQL.ADD(" where Fecha    = '"~IdxDate(Dialogo.Fecha1)~"' ")
+      SQL.ADD("   and Registro = 'MTMD' ")
+      SQL.NEW
+    endif
+    SQL.EXEC
+  else
+    MessageBox('Marca de MTM OK')
+  endif
+  if Val(bx:1)=1
+    ** Existe una Transaccion Cobro/Pago
+    if Dialogo.Check1=1
+      Message('Delete Transaccion Pago/Cobro: '~Val(bx:2))
+      SQL.ADD(" Delete "~DBO~".TRANSACCIONES2 ")
+      SQL.ADD(" where Fecha1  = '"~IdxDate(Dialogo.Fecha1)~"' ")
+      SQL.ADD("   and Precio5 = 0 ")
+      SQL.ADD("   and TipoTr2 in ('OCTDEP','OCTRET') ")
+      SQL.NEW
+      SQL.EXEC
+    else
+      MessageBox('Delete Transaccion Pago/Cobro: '~Val(bx:2))
+    endif
+  endif
+  if Vacio(Dialogo.Cliente1)
+    ACT(bj:2, 'Gen.Trans.')
+    if Val(bj:1)>=0
+      ACN(bj:3, 0)
+    else
+      ACN(bj:3, 1)
+    endif  
+    if Dialogo.Check1=1
+      Message('Ejecuta evento CONPAG paso 0')
+      EjecutarEvento('CONPAG',Fecha1=Dialogo.Fecha1,Vehiculo1=Dialogo.Vehiculo1,Radio1=0,Radio2=Val(bj:3),Check1=Dialogo.Check1,Check2=0,Cantidad1=Abs(Val(bj:1)),Precio1=0)
+    else
+      MessageBox('Ejecuta evento CONPAG paso 0')
+    endif
+    SQL.ADD("Select * From "~DBO~".FLAGSOCT ")
+    SQL.ADD(" where Fecha    = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   and Registro = '4416' ")
+    SQL.ADD("   and Paso     > 0 ")
+    SQL.ADD(" order by Paso ")
+    Recorrer SQL
+      dfa
+      SCN(fa:1, 1)
+      ACD(fb:Val(fa:1), fbn('Fecha'))
+      ACT(fc:Val(fa:1), fbn('Registro'))
+      ACN(fd:Val(fa:1), fbn('Paso'))
+    Proximo
+    if Val(fa:1)>0
+      recorrer&i 1,Val(fa:1)
+        ACN(fe:&i, SQL("Select Count(*) from "~DBO~".TRANSACCIONES2 Where TipoTr2 in ('OCTDEP','OCTRET') and Fecha1='"~IdxDate(Dialogo.Fecha1)~"' and Precio5="~Val(fd:&i)~" "))
+        if Val(fe:&i)=0
+          if Dialogo.Check1=1
+            Message('Ejecuta evento CONPAG paso '~Val(fd:&i))
+            EjecutarEvento('CONPAG',Fecha1=Dialogo.Fecha1,Vehiculo1=Var('VEHICULODE'),Radio1=0,Radio2=1,Check1=1,Check2=1,Cantidad1=0,Precio1=Val(fd:&i))
+          else
+            MessageBox('Ejecuta evento CONPAG paso '~FStr(Val(fd:&i),1,0))
+          endif
+        else
+          if Val(fe:&i)=1
+            if Dialogo.Check1=1
+              Message('Ya existe transaccion de paso '~FStr(Val(fd:&i),1,0))
+            else
+              MessageBox('Ya existe transaccion de paso '~FStr(Val(fd:&i),1,0))
+            endif
+          else
+            if Dialogo.Check1=1
+              Message('ERROR - Existe mas de una transaccion de paso '~FStr(Val(fd:&i),1,0))
+            else
+              MessageBox('ERROR - Existe mas de una transaccion de paso '~FStr(Val(fd:&i),1,0))
+            endif
+          endif
+        endif
+      proximo
+    endif
+  endif
+endif
+FormatoCeldas(e:2..h:FAC,Exe('F2'))
+FormatoCeldas(f:2..f:FAC,Exe('F9'))
+FormatoCeldas(o:2..p:FAC,Exe('F0'))
+FormatoCeldas(q:2..q:FAC,Exe('F9'))
+FormatoCeldas(s:2..s:FAC,Exe('F9'))
+FormatoCeldas(ab:2..ab:FAC,Exe('F9'))
+FormatoCeldas(ad:2..ad:FAC,Exe('F9'))
+FormatoCeldas(af:2..ak:FAC,Exe('F2'))
+FormatoCeldas(am:2..ap:FAC,Exe('F2'))
+FormatoCeldas(bh:1..bi:Val(bi:1),Exe('F2'))
+FormatoCeldas(bj:1..bj:1,Exe('F2'))
+FormatoCeldas(cc:2..cc:FAC,Exe('F9'))
+FormatoCeldas(cd:2..ce:FAC,Exe('F2'))
+FormatoCeldas(cg:2..ch:FAC,Exe('F9'))
+SetFont(a:0..cz:FAC,1)
+SetFont(a:0..az:1,2)
+SetFont(bk:0..bt:1,2)
+SetFont(ca:0..ch:1,2)
+if Val(cz:1)>0
+  SetFont(da:0..dd:Val(cz:1),1)
+  FormatoCeldas(db:1..db:Val(cz:1),Exe('F2'))
+endif
+SetFont(dy:1..dz:2,1)
+SetFont(ed:1..ee:1,1)
+if Val(ed:1)>0
+  SetFont(ea:1..eg:Val(ed:1),1)
+endif
+if Val(fa:1)>0
+  SetFont(fa:1..fe:Val(fa:1),1)
+  FormatoCeldas(fd:1..fe:Val(fa:1),Exe('F0'))
+endif
+ACO(17,10)
+ACO(18,10)
+ACO(19,10)
+ACO(20,10)
+ACO(24,12)
+ACO(39,10)
+ACO(40,10)
+ACO(41,10)
+ACO(42,10)
+ACO(56,12)

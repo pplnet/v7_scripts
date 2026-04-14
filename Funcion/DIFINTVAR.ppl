@@ -1,0 +1,111 @@
+﻿SQL.ADD(" Select SUM(Valor1) Monto ")
+SQL.ADD(" from "~DBO~".ASIENTOSCON1 A1, "~DBO~".ASIENTOSCON A, "~DBO~".MODELOSASIENTO M ")
+SQL.ADD(" Where A1.NrUnicoAsiento = A.NrUnicoAsiento ")
+SQL.ADD("  and A.Modelo = M.Codigo ")
+SQL.ADD("  and M.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIINTF'))~") ")
+SQL.ADD("  and A1.NrOperacion = '"~FBN('NrOperacion')~"' ")
+SQL.ADD("  and A1.Valor1 > 0 ")
+SQL.ADD("  and A1.DebitoCredito = 'CRE' ")
+SQL.ADD("  and A.FechaValor > '"~IdxDate(Val(FD:2))~"' ")
+SQL.ADD("  and A.Estado = 'E'  ")
+
+Recorrer SQL
+   ACN(VR:1, FBN('Monto'))
+Proximo
+
+
+SQL.ADD(" Select SUM(Monto) Monto")
+SQL.ADD(" From "~DBO~".MOVDEVENGADOS ")
+SQL.ADD(" Where NrOperacion = '"~FBN('NrOperacion')~"' ")
+SQL.ADD(" And NrSaldo = 140 ")
+SQL.ADD(" And TipoDevengado = '"~FBN('TipoDevengado')~"' ")
+SQL.ADD(" AND Fecha > '"~IdxDate(Val(FD:2))~"' ")
+SQL.ADD(" AND Fecha < '"~IdxDate(PriDeMes(Val(FV:1),SI))~"' ")
+
+Recorrer SQL
+   ACN(VR:2, FBN('Monto'))
+Proximo
+
+
+**// La operacion es pasiva
+IF Val(VR:2) < 0
+   ACN(DV:2, Val(VR:2) + Val(VR:1))
+Endif
+
+**// La operacion es activa
+IF Val(VR:2) > 0
+   ACN(DV:2, Val(VR:2) - Val(VR:1))
+Endif
+
+**//MessageBox(FSTR(Val(DV:2),0,2))
+
+**// Cargo en IV:1,2,3 El ajuste en las diferentes monedas.
+IF Eqstr(fbn('Moneda'), Val(ME:1))
+   ACN(IV:1, Val(DV:2) * CotizacionBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO))
+   IF Eqstr(fbn('MonLocalVeh'), Val(ML:1))
+      ACN(IV:2, Val(IV:1))
+   ELSE
+      ACN(IV:2, Val(DV:2) * CotizacionBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO))
+   ENDIF
+   ACN(IV:3, Val(DV:2))
+ELSE
+   IF Eqstr(fbn('Moneda'), Val(ML:1))
+      ACN(IV:1, Val(DV:2))
+      IF Eqstr(fbn('MonLocalVeh'), Val(ML:1))
+         ACN(IV:2, Val(DV:2))
+      ELSE
+         ACN(IV:2, Val(DV:2) * CotizacionBNABCU(Val(ME:1),Val(FV:1),Val(AP:1),NO,NO))
+      ENDIF
+      ACN(IV:3, Val(DV:2) / CotizacionBNA(&dolContableVh,Val(FV:1),Val(AP:1),NO,NO))
+   ELSE
+      IF Eqstr(fbn('Moneda'), Val(MU:1))
+         ACN(IV:1, Val(DV:2) / CotizacionBNABCU(Val(ME:1),Val(FV:1),Val(AP:1),NO,NO))
+         IF Eqstr(fbn('MonLocalVeh'), Val(ML:1))
+            ACN(IV:2, Val(DV:2) / CotizacionBNABCU(Val(ME:1),Val(FV:1),Val(AP:1),NO,NO))
+         ELSE
+            ACN(IV:2, Val(DV:2))
+         ENDIF
+         ACN(IV:3, Val(DV:2) / CotizacionBCU(Val(ME:1),Val(FV:1),Val(AP:1),NO,NO))
+      ENDIF
+   ENDIF
+ENDIF
+
+
+**// Si es Op. Vinculada se saca el promedio de las Cotizacion de Compra y Venta
+If EqStr(BuscarCampo('TIPOSOPERACION','ClaseOperacion','Codigo',FBN('TipoOp')),VAR('CLASEOPVIN'))
+   IF Eqstr(fbn('Moneda'), Val(ME:1))
+      ACN(CT:1, (CotizacionBNA(fbn('Moneda'),Val(FV:1),1,NO,NO) + CotizacionBNA(fbn('Moneda'),Val(FV:1),2,NO,NO))/2)
+      ACN(IV:1, Val(DV:2) * Val(CT:1))
+      IF Eqstr(fbn('MonLocalVeh'), Val(ML:1))
+         ACN(IV:2, Val(IV:1))
+      ELSE
+         ACN(CT:1, (CotizacionBCU(fbn('Moneda'),Val(FV:1),1,NO,NO) + CotizacionBCU(fbn('Moneda'),Val(FV:1),2,NO,NO))/2)
+         ACN(IV:2, Val(DV:2) * Val(CT:1))
+      ENDIF
+      ACN(IV:3, Val(DV:2))
+   ELSE
+      IF Eqstr(fbn('Moneda'), Val(ML:1))
+         ACN(IV:1, Val(DV:2))
+         IF Eqstr(fbn('MonLocalVeh'), Val(ML:1))
+            ACN(IV:2, Val(DV:2))
+         ELSE
+            ACN(CT:1, (CotizacionBNABCU(Val(ME:1),Val(FV:1),1,NO,NO) + CotizacionBNABCU(Val(ME:1),Val(FV:1),2,NO,NO))/2)
+            ACN(IV:2, Val(DV:2) * Val(CT:1))
+         ENDIF
+         ACN(CT:1, (CotizacionBNA(&dolContableVh,Val(FV:1),1,NO,NO) + CotizacionBNA(&dolContableVh,Val(FV:1),2,NO,NO))/2)
+         ACN(IV:3, Val(DV:2) / Val(CT:1))
+      ELSE
+         IF Eqstr(fbn('Moneda'), Val(MU:1))
+            ACN(CT:1, (CotizacionBNABCU(Val(ME:1),Val(FV:1),1,NO,NO) + CotizacionBNABCU(Val(ME:1),Val(FV:1),2,NO,NO))/2)
+            ACN(IV:1, Val(DV:2) / Val(CT:1))
+            IF Eqstr(fbn('MonLocalVeh'), Val(ML:1))
+               ACN(IV:2, Val(DI:1))
+            ELSE
+               ACN(IV:2, Val(DV:2))
+            ENDIF
+            ACN(CT:1, (CotizacionBCU(Val(ME:1),Val(FV:1),1,NO,NO) + CotizacionBCU(Val(ME:1),Val(FV:1),2,NO,NO))/2)
+            ACN(IV:3, Val(DV:2) / Val(CT:1))
+         ENDIF
+      ENDIF
+   ENDIF
+ENDIF

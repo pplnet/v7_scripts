@@ -1,0 +1,167 @@
+﻿HOJAVISIBLE(SI)
+CrearDialogo
+  Fecha1   : 'Fecha'       ;;;;;;Dialogo.Fecha1<=Fsys;'Fecha No debe ser superior a la Fecha del Sistema';NO;FSys
+  Especie1 : 'Especie'     ;;;;;;
+FinDialogo
+If not Ok
+   Cancelar
+Endif
+
+*** lo hacemos con reseteo mensual ****
+*** se supone que los precios estan cargados a ESA fecha, sino NO se resetean ***
+* Fin de mes del mes actual
+ACD(a1, FinDeMes(Dialogo.Fecha1,NO,'ARG'))
+
+* Fin de mes del mes anterior
+ACD(b1, FinDeMes(PriDeMes(Dialogo.Fecha1,SI)-1,NO,'ARG'))
+
+* Fin de mes del mes anterior + dias que le sumo habiles
+ACD(c1, Habiles(Val(b1),VAR('DIASREVALU'),'ARG',SI))
+
+ACT(d2, 'SI')
+IF Dialogo.Fecha1 = Val(a1)
+   ACD(d1, Dialogo.Fecha1)
+ELSE
+   IF Dialogo.Fecha1 >= Val(b1) y Dialogo.Fecha1 <= Val(c1)
+      ACD(d1, Val(b1))
+   ELSE
+      ACT(d2, 'NO')
+   ENDIF
+ENDIF
+
+IF EqStr(Val(d2),'NO')
+   Cancelar('No es posible Resetear Posicion en esta Fecha: '~Dialogo.Fecha1)
+ENDIF
+
+SQL.ADD("SELECT R.*, ")
+SQL.ADD("       C.Precio1 PrecioCotiz, E.Alias4, E.Tipo, E.Cotiza ")
+SQL.ADD("FROM "~DBO~".POSICIONES R, "~DBO~".ESPECIES E, "~DBO~".COTIZACIONES C ")
+SQL.ADD("WHERE R.TipoNegocio  = 'T' AND ")
+SQL.ADD("      R.CantidadFin  <> 0 AND ")
+SQL.ADD("      R.PrecioEj     IS NULL AND ")
+SQL.ADD("      R.Especie      = E.Codigo AND ")
+SQL.ADD("      R.Especie      = C.Codigo AND ")
+SQL.ADD("      C.Fecha        = '"~IdxDate(Val(d1))~"' AND ")
+SQL.ADD("      C.CallPut      = 'CON' AND ")
+SQL.ADD("    ((R.PrecioReset  IS NULL) OR ")
+SQL.ADD("     (R.PrecioReset  IS NOT NULL AND R.PrecioReset <> C.Precio1)) AND ")
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD("   R.Especie      = '"~Dialogo.Especie1~"' AND ")
+endif
+SQL.ADD("      R.Fecha = (SELECT MAX(R1.Fecha) ")
+SQL.ADD("                   FROM "~DBO~".POSICIONES R1 ")
+SQL.ADD("                  WHERE R1.Vehiculo    = R.Vehiculo AND ")
+SQL.ADD("                        R1.TipoNegocio = R.TipoNegocio AND ")
+SQL.ADD("                        R1.Cliente     = R.Cliente AND ")
+SQL.ADD("                        R1.Especie     = R.Especie AND ")
+SQL.ADD("                        R1.Cupon       = R.Cupon AND ")
+SQL.ADD("                        R1.PrecioEj   IS NULL AND ")
+SQL.ADD("                        R1.NrSaldo     = R.NrSaldo AND ")
+SQL.ADD("                        R1.Book        = R.Book AND ")
+SQL.ADD("                        R1.Fecha      <= '"~IdxDate(Val(d1))~"') ")
+SQL.ADD("ORDER BY R.Especie, R.Cupon, R.NrSaldo, R.Book ")
+
+Recorrer SQL
+   *** si Existe la posicion se modifica el campo de reseteo ***
+   IF FBN['Fecha'] = Val(d1)
+      SQL.ADD("UPDATE "~DBO~".POSICIONES ")
+      SQL.ADD("SET   PrecioReset = "~FStr(FBN['PrecioCotiz'],0,8)~" ")
+      SQL.ADD("WHERE Vehiculo    = '"~FBN['Vehiculo']~"' AND ")
+      SQL.ADD("      TipoNegocio = '"~FBN['TipoNegocio']~"' AND ")
+      SQL.ADD("      Cliente     = '"~FBN['Cliente']~"' AND ")
+      SQL.ADD("      Especie     = '"~FBN['Especie']~"' AND ")
+      SQL.ADD("      Cupon       = '"~FBN['Cupon']~"' AND ")
+      IF NoVacio(FBN['FechaEj'])
+         SQL.ADD("   FechaEj     = "~IdxDate2(FBN['FechaEj'])~" AND ")
+      ENDIF
+      IF NoVacio(FBN['PrecioEj'])
+         SQL.ADD("   PrecioEj    = "~FBN['PrecioEj']~" AND ")
+      ENDIF
+      SQL.ADD("      NrSaldo     = "~FStr(FBN['NrSaldo'],0,0)~" AND ")
+      SQL.ADD("      Book        = '"~FBN['Book']~"' AND ")
+      SQL.ADD("      Fecha       = '"~IdxDate(Val(d1))~"' AND ")
+      SQL.ADD("      IsNull(Unidad,'') = '"~FBN['Unidad']~"' AND ")
+      SQL.ADD("      IsNull(Centro,'') = '"~FBN['Centro']~"' AND ")
+      SQL.ADD("      IsNull(Sector,'') = '"~FBN['Sector']~"' AND ")
+      SQL.ADD("      IsNull(Sucursal,'') = '"~FBN['Sucursal']~"' AND ")
+      SQL.ADD("      IsNull(CallPut,'') = '"~FBN['CallPut']~"' AND ")
+      SQL.ADD("      IsNull(Estrategia,'') = '"~FBN['Estrategia']~"' AND ")
+      SQL.ADD("      IsNull(Cartera,'') = '"~FBN['Cartera']~"' AND ")
+      SQL.ADD("      IsNull(Trader,'') = '"~FBN['Trader']~"' AND ")
+      SQL.ADD("      IsNull(Responsable,'') = '"~FBN['Responsable']~"' AND ")
+      SQL.ADD("      IsNull(TipoPosicion,'') = '"~FBN['TipoPosicion']~"' AND ")
+      SQL.ADD("      IsNull(Producto,'') = '"~FBN['Producto']~"' AND ")
+      SQL.ADD("      IsNull(GrupoEspecie,'') = '"~FBN['GrupoEspecie']~"' AND ")
+      SQL.ADD("      IsNull(CarteraBCRA,'') = '"~FBN['CarteraBCRA']~"' ")
+      SQL.NEW
+      SQL.EXEC
+     ELSE
+      SQL.ADD("INSERT "~DBO~".POSICIONES ( ")
+      SQL.ADD("Fecha, Cliente, Vehiculo, Unidad, Centro, ")
+      SQL.ADD("Sector, Sucursal, NrSaldo, Especie, PrecioEj, ")
+      SQL.ADD("FechaEj, CallPut, Precio1, Precio2, ValorUSD, ")
+      SQL.ADD("ValorARP, Estrategia, Cartera, Book, Trader, ")
+      SQL.ADD("TipoNegocio, Cantidad1, Cantidad2, Cantidad3, Cantidad4, ")
+      SQL.ADD("Cantidad5, Precio3, Precio4, Precio5, CantidadIni, ")
+      SQL.ADD("PrecioIni, CantidadFin, PrecioFin, Cupon, Responsable, ")
+      SQL.ADD("TipoPosicion, Producto, GrupoEspecie, CarteraBCRA, ")
+      SQL.ADD("PrecioHist, PrecioReset) ")
+      SQL.ADD("Values ( ") 
+      SQL.ADD("'"~IdxDate(Val(d1))~"', '"~FBN['Cliente']~"', '"~FBN['Vehiculo']~"', '"~FBN['Unidad']~"', '"~FBN['Centro']~"', ")
+      SQL.ADD("   '"~FBN['Sector']~"', '"~FBN['Sucursal']~"', "~FStr(FBN['NrSaldo'],0,0)~", '"~FBN['Especie']~"', ")
+      IF Val(j:fac)=0
+         SQL.ADD("NULL, ")
+      ELSE
+         SQL.ADD(""~FStr(FBN['PrecioEj'],15,8)~", ")
+      ENDIF
+      IF Vacio(FBN['FechaEj'])
+         SQL.ADD("NULL, ")
+      ELSE
+         SQL.ADD("'"~IdxDate(FBN('FechaEj'))~"', ")
+      ENDIF
+      SQL.ADD("   '"~FBN['CallPut']~"', "~FStr(FBN['Precio1'],0,10)~", "~FStr(FBN['Precio2'],0,10)~", "~FStr(FBN['ValorUSD'],0,10)~", ")
+      SQL.ADD("   "~FStr(FBN['ValorARP'],0,10)~", '"~FBN['Estrategia']~"', '"~FBN['Cartera']~"', '"~FBN['Book']~"', '"~FBN['Trader']~"', ")
+      SQL.ADD("   '"~FBN['TipoNegocio']~"', "~FStr(FBN['Cantidad1'],0,10)~", "~FStr(FBN['Cantidad2'],0,10)~", "~FStr(FBN['Cantidad3'],0,10)~", "~FStr(FBN['Cantidad4'],0,10)~", ")
+      SQL.ADD("   "~FStr(FBN['Cantidad5'],0,10)~", "~FStr(FBN['Precio3'],0,10)~", "~FStr(FBN['Precio4'],0,10)~", "~FStr(FBN['Precio5'],0,10)~", "~FStr(FBN['CantidadIni'],0,10)~", ")
+      SQL.ADD("   "~FStr(FBN['PrecioIni'],0,10)~", "~FStr(FBN['CantidadFin'],0,10)~", "~FStr(FBN['PrecioFin'],0,10)~", '"~FBN['Cupon']~"', '"~FBN['Responsable']~"', ")
+      SQL.ADD("   '"~FBN['TipoPosicion']~"', '"~FBN['Producto']~"', '"~FBN['GrupoEspecie']~"', '"~FBN['CarteraBCRA']~"', ")
+      SQL.ADD("   "~FStr(FBN['PrecioHist'],0,10)~", "~FStr(FBN['PrecioCotiz'],0,10)~") ")
+      SQL.NEW
+      SQL.EXEC
+   ENDIF    
+
+   SQL.ADD("EXEC "~DBO~".RecalculaPosiciones ")
+   SQL.ADD(IdxDate2(Val(d1))~", ")
+   SQL.ADD(" '"~FBN['Cliente']~"', ")
+   SQL.ADD(" '"~FBN['Vehiculo']~"', ")
+   SQL.ADD(" '"~FBN['Unidad']~"', ")
+   SQL.ADD(" '"~FBN['Centro']~"', ")
+   SQL.ADD(" '"~FBN['Sector']~"', ")
+   SQL.ADD(" '"~FBN['Sucursal']~"', ")
+   SQL.ADD(" "~Fstr(FBN['NrSaldo'],3,0)~", ")
+   SQL.ADD(" '"~FBN['Especie']~"', ")
+   If FBN['PrecioEj']=0
+      SQL.ADD(" NULL,")
+   Else
+      SQL.ADD(" "~Fstr(FBN['PrecioEj'],15,8)~", ")
+   Endif
+   If Vacio(FBN['FechaEj'])
+      SQL.ADD(" NULL,")
+   Else
+      SQL.ADD(" "~IdxDate2(FBN['FechaEj'])~", ")
+   Endif
+   SQL.ADD(" '"~FBN['CallPut']~"', ")
+   SQL.ADD(" '"~FBN['Cupon']~"', ")
+   SQL.ADD(" '"~FBN['Estrategia']~"', ")
+   SQL.ADD(" '"~FBN['Cartera']~"', ")
+   SQL.ADD(" '"~FBN['Book']~"', ")
+   SQL.ADD(" '"~FBN['Trader']~"', ")
+   SQL.ADD(" '"~FBN['TipoNegocio']~"', ")
+   SQL.ADD(" '"~FBN['Responsable']~"', ")
+   SQL.ADD(" '"~FBN['TipoPosicion']~"', ")
+   SQL.ADD(" '"~FBN['Producto']~"', ")
+   SQL.ADD(" '"~FBN['GrupoEspecie']~"', ")
+   SQL.ADD(" '"~FBN['CarteraBCRA']~"' ")
+   SQL.NEW
+   SQL.EXEC
+Proximo

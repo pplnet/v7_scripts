@@ -1,0 +1,153 @@
+creardialogo
+fecha1: 'Fecha';1;;;;;dialogo.fecha1 >= Habiles(FSys(), -Var('FVALORMAX'), 'ARG') y dialogo.fecha1 <= FSys();'Fecha fuera de rango permitido';NO;FSys()
+nroperacion1: 'TCPCEM';;;;;;;;;;;;;;"TipoOp in ('TCPCEM')"
+lista1: 'Mercados';;;;NO;;;;;;Var('CIELICDEF');SQLSet("SELECT Codigo FROM "~Dbo()~".MERCADOS  ORDER BY Codigo ");SI
+findialogo
+if (not ok)
+Cancelar()
+endif
+
+Acn(y:1, 1)
+if (Val(y:1) = 0)
+HojaVisible(SI)
+endif
+
+Acd(fe:1, dialogo.fecha1)
+
+Sqladd("Select OD.NrOperacion1 NrTCPCEM, M.Especie, OPTCP.Cuenta1, OPTCP.Cuenta2, OPTCP.Cuenta3, OPTCP.Cuenta4, ")
+Sqladd(" OPTCP.Mercado, OPTCP.Mercado2, M.Entecustodia, M.NrSaldo,  ")
+Sqladd(" CASE WHEN  OP.Cliente1 = OP.Vehiculo1 THEN 'CP' ELSE 'Tercero' END TipoCliente, OP.Especie EspO, OPTCP.Cliente1 CliTCP,   ")
+Sqladd(" M.Book,  M.FechaMov, SUM(M.Cantidad) Cantidad, M.Concepto, M.Cupon,  M.Nrinstan, M.NrGrupo2, M.NrGrupo,      ")
+Sqladd(" IsNull(OPTCP.FormaLiquidacion1,'') FormaLiquidacion1, IsNull(OPTCP.FormaLiquidacion2,'') FormaLiquidacion2   ")
+Sqladd("From "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".OPERACIONES OP, "~Dbo()~".ORDENES OD, "~Dbo()~".OPERACIONES OPTCP           ")
+Sqladd("Where M.NrOperacion = OP.NrOperacion                                                                          ")
+Sqladd(" And  (M.NrGrupo <> 15 And  M.NrGrupo <> 16) ")
+Sqladd(" And  OP.NrOperacion = OD.NrOperacion2                                                                        ")
+Sqladd(" And  OPTCP.NrOperacion = OD.NrOperacion1                                                                     ")
+Sqladd(" And OP.TipoOp = 'TCOPRI' ")
+if (NoVacio(dialogo.nroperacion1))
+Sqladd("AND  OPTCP.NrOperacion = '"~dialogo.nroperacion1~"' ")
+endif
+if (NoVacio(dialogo.lista1))
+Sqladd("AND  OP.Mercado4 In ("~Pipe2Comillas(dialogo.lista1)~") ")
+endif
+Sqladd(" And OP.FechaOp <= "~IdxDate2(Val(fe:1))~"                                                                    ")
+Sqladd(" And OP.FechaCargaSys = "~IdxDate2(Val(fe:1))~"                                                               ")
+Sqladd(" And not exists(SELECT 1 FROM "~Dbo()~".MOVEJECUTADOS ME WHERE ME.NrOperacion=OD.NrOperacion1 )                 ")
+Sqladd(" And OP.Cliente1<>OP.Vehiculo1 and OP.Cliente1<>'"~Var('CLIBCRA')~"'                                          ")
+Sqladd("Group by OPTCP.Cuenta1, OPTCP.Cuenta2, OPTCP.Cuenta3, OPTCP.Cuenta4, M.Especie, OPTCP.Mercado, OPTCP.Mercado2, M.EnteCustodia, OD.NrOperacion1,               ")
+Sqladd(" CASE WHEN  OP.Cliente1 = OP.Vehiculo1 THEN 'CP' ELSE 'Tercero' END , OP.Especie , OPTCP.Cliente1,            ")
+Sqladd("         M.Concepto, M.Cupon,  M.Nrinstan,  M.NrSaldo, M.Book, M.FechaMov, M.NrGrupo2, M.NrGrupo,             ")
+Sqladd(" IsNull(OPTCP.FormaLiquidacion1,''), IsNull(OPTCP.FormaLiquidacion2,'') ")
+Sqladd("ORDER BY 1, 2 ")
+Watch(Sqlbatch())
+
+Acn(co:1, 0)
+Act(co:2, '')
+
+recorrer sql
+if (Val(y:1) = 1)
+Message('Generando movimientos '~Fbn('NrTCPCEM')~' '~Fbn('TipoCliente')~' '~Fbn('Especie'))
+
+if (not Eqstr(Val(co:2), Fbn()['NrTCPCEM']))
+Sqladd("DELETE "~Dbo()~".MOVPENDIENTES WHERE NrOperacion='"~Fbn()['NrTCPCEM']~"' ")
+Sqlnew()
+
+if (NO)
+endif
+
+Sqladd("UPDATE "~Dbo()~".OPERACIONES                                      ")
+Sqladd("   SET Cuenta2='"~Fbn()['Cuenta2']~"', Cuenta3='"~Fbn()['Cuenta3']~"' ")
+Sqladd(" WHERE NrOperacion in (SELECT Op.NrOperacion                      ")
+Sqladd("                         From "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".OPERACIONES OP, "~Dbo()~".ORDENES OD, "~Dbo()~".OPERACIONES OPTCP           ")
+Sqladd("                        WHERE OP.TipoOp = 'TCOPRI'                                                    ")
+Sqladd("                          and M.NrOperacion = OP.NrOperacion                                          ")
+Sqladd("                          and OP.NrOperacion = OD.NrOperacion2                                        ")
+Sqladd("                          and  OPTCP.NrOperacion = '"~Fbn()['NrTCPCEM']~"'                              ")
+Sqladd("                          and OP.FechaVto = "~IdxDate2(Val(fe:1))~"                                                                    ")
+Sqladd("                          and not exists(SELECT 1 FROM "~Dbo()~".MOVEJECUTADOS ME WHERE ME.NrOperacion=OD.NrOperacion1 )                 ")
+Sqladd("                          and OP.Cliente1<>OP.Vehiculo1 and OP.Cliente1<>'"~Fbn()['CliTCP']~"'                                          ")
+Sqladd("                        ) ")
+Sqlnew()
+
+Sqladd("UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd("   SET FechaVto="~IdxDate2(Val(fe:1))~" ")
+Sqladd(" WHERE NrOperacion='"~Fbn()['NrTCPCEM']~"' ")
+Sqlnew()
+
+Acn( in :1, Query("select NrBit from "~Dbo()~".OPERACIONESBITS where NrOperacion = '"~Fbn()['NrTCPCEM']~"' and Valor = '1' "))
+Ejecutarevento('CBOINS', 'string1', Fbn()['NrTCPCEM'], 'radio1', 0, 'radio2', 2, 'entero1', Val( in :1), 'entero2', 10)
+
+if (NO)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONESBITS ")
+Sqladd(" SET Valor = '0' ")
+Sqladd(" Where (NrOperacion = '"~Fbn()['NrTCPCEM']~"') ")
+Sqlnew()
+
+Sqladd(" UPDATE "~Dbo()~".OPERACIONESBITS ")
+Sqladd(" SET Valor = '1' ")
+Sqladd(" Where NrOperacion = '"~Fbn()['NrTCPCEM']~"' and NrBit = 10 ")
+Sqlnew()
+endif
+
+Act(co:2, Fbn()['NrTCPCEM'])
+endif
+Scn(co:1, 1)
+Acn(q:fac, Fbn('Cantidad'))
+Act(a:fac, Fbn('Especie'))
+Act(b:fac, Fbn('NrTCPCEM'))
+Act(c:fac, Fbn('Especie'))
+Act(d:fac, Query("SELECT Cliente1 FROM "~Dbo()~".OPERACIONES WHERE NrOperacion='"~Fbn('NrTCPCEM')~"'"))
+if (Eqstr(Fbn('EspO'), Fbn('Especie')))
+Act(e:fac, Fbn('Mercado'))
+else
+Act(e:fac, Fbn('Mercado2'))
+endif
+Act(f:fac, Fbn('EnteCustodia'))
+Acn(h:fac, Fbn('NrSaldo'))
+if (DesciendeDeEspecie(Fbn('Especie'), 'TITULO'))
+Act(i:fac, Fbn('Cuenta1'))
+else
+Act(i:fac, Fbn('Cuenta4'))
+endif
+Act(l:fac, Fbn('Book'))
+Acd(n:fac, Fbn('FechaMov'))
+Act(k:fac, Fbn('Concepto'))
+Act(p:fac, Fbn('Cupon'))
+Acn(r:fac, Fbn('Nrinstan'))
+Acn(s:fac, Fbn('NrGrupo2'))
+Acn(t:fac, Fbn('NrGrupo'))
+Act(u:fac, Fbn('TipoCliente'))
+
+Sqladd(" Insert into "~Dbo()~".MOVPENDIENTES           ")
+Sqladd(" (NrOperacion, Especie, Cliente, Mercado, EnteCustodia, ")
+Sqladd("  Bits, NrSaldo, Cuenta, NrMov, Status, ")
+Sqladd(" Book,  FechaMov, Cantidad, Leyenda,         ")
+Sqladd(" NrGrupo, Concepto, Cupon, NrComprob,        ")
+Sqladd(" NrGrupo2, Nrinstan)                         ")
+Sqladd(" values  (                                   ")
+Sqladd(" '"~Val(b:fac)~"'  , '"~Val(a:fac)~"', '"~Val(d:fac)~"', '"~Val(e:fac)~"', '"~Val(f:fac)~"',                  ")
+Sqladd(" 'MV'  , "~FStr(Val(h:fac), 0, 0)~",  '"~Val(i:fac)~"', "~FStr(Val(co:1), 0, 0)~", '"~Val(v:fac)~"' ,             ")
+Sqladd(" '"~Val(l:fac)~"'  ,  "~IdxDate2(Val(n:fac))~", "~FStr(Val(q:fac), 0, 2)~", '"~Val(u:fac)~" - "~Val(a:fac)~"', ")
+Sqladd(" '"~Val(t:fac)~"'  , '"~Val(k:fac)~"', '"~Val(p:fac)~"', '"~FStr(1000 + Val(co:1), 1, 0)~"',                      ")
+Sqladd(" '"~Val(s:fac)~"' , '"~Val(r:fac)~"'         ")
+Sqladd("         )                                   ")
+Sqlnew()
+else
+Messagebox('No Procesa - Generando movimientos '~Fbn('NrTCPCEM')~' '~Fbn('TipoCliente')~' '~Fbn('Especie'))
+endif
+proximo
+if (Val(y:1) = 1)
+Sqlexec()
+else
+Messagebox('No Procesa - Fin')
+endif
+
+if (NO)
+if (Val(co:1) = 0)
+Cancelar('No hay emisiones pendientes de liquidacion')
+else
+Messagebox('Movimientos de emisiones generados')
+endif
+endif
+

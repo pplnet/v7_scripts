@@ -1,0 +1,140 @@
+creardialogo
+fecha1:'Fecha';;;;NO;;dialogo.fecha1 > 0;'Fecha Inválida';NO;FSys();
+mercado1: 'Mercado';;;;;NO;;;;;;
+radio1:'Plazo|Contado|Otros';;;;;;dialogo.radio1 >= 0;'Debe elegir una Opcion';NO;-1;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+CrearFont(1, "Arial,14,B")
+CrearFont(2, "Arial,10,B")
+CrearFont(3, "Arial,8,B")
+CrearFont(4, "Arial,8,")
+agregarbmp(c1, Exe('LOGO'), 90)
+
+if (Query("Select 1 From "~Dbo()~".FLAGSMERCADO Where Fecha = "~IdxDate2(dialogo.fecha1)~" and Paso = "~FStr(dialogo.radio1, 1, 0)~" and Registro = 'CGAR' and Estado='PRO' ") = 1)
+Cancelar('El cierre de la Rueda Garantizada para el Plazo '~iif (dialogo.radio1 = 0, '-Contado-', '-Otros-')~' ya fue realizado. Debe ser anulado para volver a ejecutarlo')
+endif
+
+if (Query("Select top 1 1 From   "~Dbo()~".ORDENES O INNER JOIN "~Dbo()~".OPERACIONESBITS OB ON O.NrOrden = OB.NrOperacion Where OB.Valor='1' and NrBit = 33") = 1)
+Cancelar('Hay Ordenes con Anulacion de Ejecuciones Pendientes - El cierre de la Rueda Garantizada no puede realizarce')
+endif
+
+Sqladd("SELECT ORD.NrOrden, B.NrBit  ")
+Sqladd("  FROM "~Dbo()~".ORDENES ORD INNER JOIN "~Dbo()~".OPERACIONESBITS B ON ORD.NrOrden=B.NrOperacion")
+Sqladd("   WHERE ORD.FechaOrden="~IdxDate2(dialogo.fecha1))
+Sqladd("   AND ORD.TipoOrden in('OTIC','OTIV') ")
+Sqladd("   AND B.NrBit in( 8 ) ")
+Sqladd("   AND B.Valor=1 ")
+
+if (NoVacio(dialogo.mercado1))
+Sqladd("AND ORD.Mercado3='"~dialogo.mercado1~"' ")
+endif
+
+
+if (dialogo.radio1 = 0)
+Sqladd("AND ORD.Lotes=0 ")
+else
+Sqladd("AND ORD.Lotes<>0 ")
+endif
+
+recorrer sql
+
+
+Ejecutarevento('CBOINS', 'string1', Fbn()['NrOrden'], 'radio1', 1, 'radio2', 0, 'entero1', 8, 'entero2', 10)
+
+proximo
+
+Sqladd("SELECT ORD.NrOrden, /*B1.NrBit NrBitOrd,*/ OP.NrOperacion, B2.NrBit NrBitOp, OP.Udn2 Rueda ")
+Sqladd("  FROM "~Dbo()~".ORDENES ORD INNER JOIN "~Dbo()~".OPERACIONES OP ON ORD.NrOrden=OP.NrOrden1 INNER JOIN "~Dbo()~".OPERACIONESBITS B2 ON OP.NrOperacion=B2.NrOperacion")
+Sqladd(" WHERE  ")
+Sqladd("   ORD.TipoOrden in('OTIC','OTIV') ")
+Sqladd("   AND OP.TipoOp in('TIC','TIV') ")
+Sqladd("   AND B2.NrBit in( 13 ) ")
+Sqladd("   AND B2.Valor=1 ")
+Sqladd("   AND ORD.FechaOrden="~IdxDate2(dialogo.fecha1))
+
+if (NoVacio(dialogo.mercado1))
+Sqladd("AND ORD.Mercado3='"~dialogo.mercado1~"' ")
+endif
+
+if (dialogo.radio1 = 0)
+Sqladd("AND ORD.Lotes=0 ")
+else
+Sqladd("AND ORD.Lotes<>0 ")
+endif
+Watch(Sqlbatch())
+recorrer sql
+
+
+
+if (Eqstr(Var('INSTALACIO'), 'MLASA') y Incluido(Fbn()['Rueda'], Var('RUECPC1')))
+Ejecutarevento('CBOINS', 'string1', Fbn()['NrOperacion'], 'radio1', 1, 'radio2', 0, 'entero1', 13, 'entero2', 68)
+else
+if (Vacio(Query("SELECT 1 From "~Dbo()~".OPERACIONES WHERE NrOperacion = '"~Fbn()['NrOperacion']~"' and Cuenta1 is Null or Cuenta2 is Null or Cuenta3 is Null or Cuenta4 is Null or Cuenta5 is Null  or  Cuenta6 is Null ")))
+Ejecutarevento('CBOINS', 'string1', Fbn()['NrOperacion'], 'radio1', 1, 'radio2', 0, 'entero1', 13, 'entero2', 7)
+else
+Ejecutarevento('CBOINS', 'string1', Fbn()['NrOperacion'], 'radio1', 1, 'radio2', 0, 'entero1', 13, 'entero2', 10)
+endif
+endif
+proximo
+if (NO)
+Sqladd(" DELETE "~Dbo()~".MOVLIMITES  ")
+Sqladd(" Where NrOperacion in ")
+Sqladd(" (SELECT ORD.NrOrden FROM "~Dbo()~".ORDENES ORD  WHERE ORD.FechaOrden="~IdxDate2(dialogo.fecha1)~")")
+Sqlnew()
+Sqlexec()
+
+endif
+Sqladd("SELECT ORD.NrOrden ")
+Sqladd("  FROM "~Dbo()~".ORDENES ORD ")
+Sqladd(" WHERE ORD.FechaOrden="~IdxDate2(dialogo.fecha1))
+Sqladd("   AND ORD.CantidadTotalOrden>Cantidad1 ")
+Sqladd("   AND ORD.TipoOrden in ('OTIC','OTIV') ")
+
+if (NoVacio(dialogo.mercado1))
+Sqladd("AND ORD.Mercado3='"~dialogo.mercado1~"' ")
+endif
+
+if (dialogo.radio1 = 0)
+Sqladd("AND ORD.Lotes=0 ")
+else
+Sqladd("AND ORD.Lotes<>0 ")
+endif
+
+recorrer sql
+Sqladd("UPDATE "~Dbo()~".ORDENES ")
+Sqladd("   SET Cantidad5=CantidadTotalOrden-Cantidad1 ")
+Sqladd(" WHERE NrOrden='"~Fbn()['NrOrden']~"' ")
+Sqlnew()
+Sqlexec()
+
+modificarorden(Fbn()['NrOrden'], 0, NO, SI, SI, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, SI, NO, NO, NO)
+Sqlexec()
+
+proximo
+
+
+
+
+Acn(b:1, Query("Select Count(*) From "~Dbo()~".FLAGSMERCADO Where Fecha = "~IdxDate2(dialogo.fecha1)~" and Paso = "~FStr(dialogo.radio1, 1, 0)~" and Registro = 'CGAR' and Estado='ANU' "))
+
+if (Val(b:1) = 0)
+Sqladd("Insert Into "~Dbo()~".FLAGSMERCADO ( ")
+Sqladd(" Fecha, Registro, Cantidad, Estado, Paso ")
+Sqladd(" ) Values ( ")
+Sqladd(" '"~IdxDate(dialogo.fecha1)~"', 'CGAR', 0, 'PRO', "~FStr(dialogo.radio1, 1, 0)~" ")
+Sqladd(" ) ")
+Sqlnew()
+else
+Sqladd("Update "~Dbo()~".FLAGSMERCADO ")
+Sqladd("   Set Estado     = 'PRO' ")
+Sqladd(" where Fecha      = "~IdxDate2(dialogo.fecha1)~" ")
+Sqladd("   and Paso       = "~FStr(dialogo.radio1, 1, 0)~" ")
+Sqladd("   and Registro   = 'CGAR' ")
+Sqlnew()
+endif
+Sqlexec()
+

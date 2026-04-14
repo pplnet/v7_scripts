@@ -1,0 +1,55 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+   Fecha1: 'D.Fecha' ;;;;;;;;;FSYS
+   Fecha2: 'H.Fecha' ;;;;;;;;;FSYS
+***---   Vehiculo1: 'Vehiculo' ;;;;;;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+   Lista2:  'Vehiculos'   ;4;1;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+   Lista1: 'Tipos de Asientos' ;-2;2;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".TIPOSASIENTO ");
+   ListaTabla1: 'Operaciones'  ;0;1;;;;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES' 
+FinDialogo
+If Not Ok
+  Cancelar
+Endif
+
+Message('--- Anulacion de Asientos ---')
+
+SQL.ADD(" Select A.NrUnicoAsiento, MA.Codigo CodAsi, A.NrAsiento, A.Estado ")
+SQL.ADD(" From "~DBO~".ASIENTOSCON A, "~DBO~".MODELOSASIENTO MA,"~DBO~".ASIENTOSCON1 A1 ")
+SQL.ADD(" Where MA.Codigo = A.Modelo ")
+SQL.ADD(" AND   A.NrUnicoAsiento = A1.NrUnicoAsiento  ")
+***---SQL.ADD(" AND   A.Vehiculo = '"~Dialogo.Vehiculo1~"'  ")
+SQL.ADD(" AND   A.Fecha1 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND   A.Fecha1 <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" AND   (A.Estado IS NULL OR A.Estado = '' OR A.Estado = ' ' OR A.Estado = 'COT' OR A.Estado = 'NC' OR A.Estado = 'REV' OR A.Estado = 'CI') ")
+
+If NoVAcio(Dialogo.Lista2)
+   SQL.ADD(" AND (A.Vehiculo IN ("~Pipe2Comillas(Dialogo.Lista2)~") OR A.Vehiculo is null OR A.Vehiculo = '' OR A.Vehiculo = ' ' ) ")
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      SQL.ADD(" AND A.Vehiculo IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+   Endif
+Endif
+
+If NoVacio(Dialogo.Lista1)
+  SQL.ADD(" AND  MA.TipoAsiento IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+If NoVacio(Dialogo.ListaTabla1)
+  SQL.ADD(" AND  A.NrOperacion IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+Endif
+
+SQL.ADD(" Order By 2 ")
+Recorrer SQL
+    Message('Borrando Asientos Previos - Modelo '~fbn('CodAsi'))
+    SQL.ADD(" Delete "~DBO~".ASIENTOSCON1 ")
+    SQL.ADD(" Where NrUnicoAsiento = '"~fbn('NrUnicoAsiento')~"' ")
+    SQL.NEW
+    SQL.ADD(" Delete "~DBO~".ASIENTOSCON ")
+    SQL.ADD(" Where NrUnicoAsiento = '"~fbn('NrUnicoAsiento')~"' ")
+    SQL.NEW
+    IF Incluido(fbn('Estado'), 'COT|NC|REV')
+        SQL.ADD(" Update "~DBO~".ASIENTOSCON ")
+        SQL.ADD(" Set NrAsiento = Null ")
+        SQL.ADD(" Where NrAsiento = '"~fbn('NrUnicoAsiento')~"' ")
+    ENDIF
+    SQL.EXEC
+Proximo

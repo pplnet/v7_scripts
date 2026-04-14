@@ -1,0 +1,156 @@
+﻿CrearDialogo
+  Vehiculo1: "Vehiculo" ;1;1;1;;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar el Vehiculo';NO;Var('VEHICULODE')
+  Fecha1   : "Fecha"    ;2;1;1;;;Dialogo.Fecha1<>0 y Dialogo.Fecha1<=FSYS;'Debe Ingresar la Fecha';NO;FSys
+  Check1   : 'Ciego'    ;1;1;1;NO;NO;;;;0
+  NrOperacion1: 'NrOperacion';;;;NO;NO;;;;
+FinDialogo
+
+
+If Not Ok
+   Cancelar
+Endif
+
+SetFilaActual(2)
+ACN(zz3,0)
+Message('Buscando Cotizaciones...')
+SQL.ADD(" Select 'Orig' Tipo, O.Especie, C1.Precio1 PrecioCartera, C1.Fecha, O.ContraEspecie ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".COTIZACIONES C1 ")
+SQL.ADD(" Where C1.Codigo = O.Especie ")
+SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'  ")
+SQL.ADD(" and O.FechaVto  = '"~IdxDate(habiles(Dialogo.Fecha1,1,'ARG'))~"'  and O.FechaVto2 is null ")
+SQL.ADD(" and O.TipoOp In ('TICO','TICT','TIDE','TIPO') AND (O.CB8 Is Null or O.CB8='' or O.CB8='0') ")
+If NoVacio(Dialogo.NrOperacion1)
+    SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Endif 
+SQL.ADD(" and C1.Fecha = (SELECT MAX(Fecha)  FROM "~DBO~".COTIZACIONES C2  ")
+SQL.ADD("                 WHERE C2.Codigo = C1.Codigo                      ")
+SQL.ADD("                 AND   (C2.Precio1 is not null AND C2.Precio1<>0)  ")
+SQL.ADD("                 AND   C2.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ") 
+SQL.ADD(" Union ")
+SQL.ADD(" Select 'Prec' Tipo, O.Especie, C1.Precio1 PrecioCartera, C1.Fecha, O.ContraEspecie ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".COTIZACIONES C1 ")
+SQL.ADD(" Where C1.Codigo = O.Especie ")
+SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'  ")
+SQL.ADD(" and O.FechaVto  = '"~IdxDate(Dialogo.Fecha1)~"' and O.FechaVto2 > O.FechaVto and  CB2=1 ")
+SQL.ADD(" and O.TipoOp In ('TICO','TICT','TIDE','TIPO') AND (O.CB8 Is Null or O.CB8='' or O.CB8='0') ")
+If NoVacio(Dialogo.NrOperacion1)
+    SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Endif 
+SQL.ADD(" and C1.Fecha = (SELECT MAX(Fecha)  FROM "~DBO~".COTIZACIONES C2  ")
+SQL.ADD("                 WHERE C2.Codigo = C1.Codigo                      ")
+SQL.ADD("                 AND   (C2.Precio1 is not null AND C2.Precio1<>0)  ")
+SQL.ADD("                 AND   C2.Fecha <= '"~IdxDate(Dialogo.Fecha1-1)~"') ")
+SQL.ADD(" Union ")
+SQL.ADD(" Select 'Cuot' Tipo, O.Especie, C1.Precio1 PrecioCartera, C1.Fecha, O.ContraEspecie ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".COTIZACIONES C1, "~DBO~".CUOTAS CU ")
+SQL.ADD(" Where CU.NrOperacion = O.NrOperacion ")
+SQL.ADD(" and C1.Codigo        = O.Especie ")
+SQL.ADD(" and O.Vehiculo1      = '"~Dialogo.Vehiculo1~"'       ")
+SQL.ADD(" and CU.Fecha1        = '"~IdxDate(habiles(Dialogo.Fecha1,1,'ARG'))~"' ")
+SQL.ADD(" and O.TipoOp In ('TICO','TIPO')  and (CU.Precio1=0 or CU.Precio1 Is Null) AND (O.CB8 Is Null or O.CB8='' or O.CB8='0') ")
+If NoVacio(Dialogo.NrOperacion1)
+    SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Endif 
+SQL.ADD(" and C1.Fecha         = (SELECT MAX(Fecha) FROM "~DBO~".COTIZACIONES C2     ")
+SQL.ADD("                          WHERE C2.Codigo  = C1.Codigo                      ")
+SQL.ADD("                          AND   (C2.Precio1 is not null AND C2.Precio1<>0) ")
+SQL.ADD("                          AND    C2.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD("  Order by Tipo,O.Especie ")
+watch(sql.batch())
+Recorrer SQL
+   If Not EqStr(FBN['Tipo']~FBN['Especie'],Val(es1))
+       ACT(u:fac, FBN['Especie'] )
+* FO 23/01/2006      ACN(v:fac, FBN['PrecioCartera'] )
+* La cotizacion para valuar los intereses debe ser en pesos, dirty o clean segun como cotice
+* la especie por eso se usa Precio1.
+       *ACN(v:fac, COTIZACIONC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,fbn('ContraEspecie')) )
+       if Eqstr(var('CIEINTCOT'),'NO')
+           ACN(v:fac, COTIZACIONC(FBN['Especie'],,,,FBN['Fecha'],1,SI,fbn('ContraEspecie')) )
+       else
+          *ACN(v:fac,CotizacionDirecta(especie, callPut, fechaCotizacion,  nrocotizacion, moneda, mercado, plazo))
+          ACN(v:fac,CotizacionDirecta(FBN['Especie'], , Dialogo.fecha1,  1, fbn('ContraEspecie'),'BYMA' , 0))
+          if val(v:fac) = 0
+            ACN(v:fac,CotizacionDirecta(FBN['Especie'], , Dialogo.fecha1,  1, fbn('ContraEspecie'),Var('AMBMAE') , 0))
+              if val(v:fac) = 0
+                 ACN(v:fac,CotizacionDirecta(FBN['Especie'], , Dialogo.fecha1,  1, fbn('ContraEspecie'),'BYMA' , 24))
+                 if val(v:fac) = 0
+                     ACN(v:fac,CotizacionDirecta(FBN['Especie'], , Dialogo.fecha1,  1, fbn('ContraEspecie'),'BYMA' , 48))
+                     if val(v:fac) = 0
+                        ACN(v:fac,CotizacionDirecta(FBN['Especie'], , Dialogo.fecha1,  1, fbn('ContraEspecie'),Var('AMBMAE'), 24))
+                        if val(v:fac) = 0
+                           ACN(v:fac,CotizacionDirecta(FBN['Especie'], , Dialogo.fecha1,  1, fbn('ContraEspecie'), Var('AMBMAE') , 48))
+                        endif
+                     endif
+                 endif
+              endif
+          endif
+       endif 
+       ACN(w:fac, FBN['Fecha'] )
+       ACT(x:fac, FBN['Tipo'] )
+       SCN(zz3,1)
+       ACT(es1,FBN['Tipo']~FBN['Especie'])
+   else
+       dfa
+   endif
+Proximo
+
+If Val(zz3) > 0
+   If Dialogo.Check1=0
+        CrearListBox;'Arial,8,';'Cotizaciones'
+            'Especie'      ;u:3..u:fac;NO;;; 70;STRING;;RGB(250,250,193)
+            'Cotizacion'   ;v:3..v:fac;SI;;; 90;NUMERO;'####.#######';RGB(250,250,193)
+            'Fecha Cotiz.' ;w:3..w:fac;NO;;; 110;FECHA;;RGB(250,250,193)
+            'Tipo'         ;x:3..x:fac;NO;;; 70;STRING;;RGB(250,250,193)
+        FinListBox
+    Endif
+   **AA 16-10-2020 se agrega la cancelacion por not Ok al listbox
+   If Not Ok
+      Cancelar
+   Endif   
+else
+   If Dialogo.Check1=0
+      MessageBox('No se encontraron Prestamos para valorizar intereses.')
+   endif
+endif
+
+SetFilaActual(2)
+Message('Buscando Operaciones...')
+SQL.ADD("Select 'Orig' Tipo,Especie,NrOperacion from "~DBO~".OPERACIONES ")
+SQL.ADD("Where Vehiculo1 = '"~Dialogo.Vehiculo1~"'  ")
+SQL.ADD("  and FechaVto  = '"~IdxDate(habiles(Dialogo.Fecha1,1,'ARG'))~"'  and FechaVto2 is null ")
+SQL.ADD("  and TipoOp In ('TICO','TICT','TIDE','TIPO') AND (CB8 Is Null or CB8='' or CB8='0') ")
+If NoVacio(Dialogo.NrOperacion1)
+    SQL.ADD(" and NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Endif 
+SQL.ADD("Union All")
+SQL.ADD("Select 'Prec' Tipo,Especie,NrOperacion from "~DBO~".OPERACIONES ")
+SQL.ADD("Where Vehiculo1 = '"~Dialogo.Vehiculo1~"'  ")
+SQL.ADD(" and FechaVto  = '"~IdxDate(Dialogo.Fecha1)~"' and FechaVto2 > FechaVto and  CB2=1 ")
+SQL.ADD(" and TipoOp In ('TICO','TICT','TIDE','TIPO') AND (CB8 Is Null or CB8='' or CB8='0') ")
+If NoVacio(Dialogo.NrOperacion1)
+    SQL.ADD(" and NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Endif 
+SQL.ADD("Union All")
+SQL.ADD("Select 'Cuot' Tipo,O.Especie,O.NrOperacion from "~DBO~".OPERACIONES O,"~DBO~".CUOTAS CU ")
+SQL.ADD("Where O.NrOperacion=CU.NrOperacion and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'  ")
+SQL.ADD("and CU.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD("and TipoOp In ('TICO','TIPO') and (CU.Precio1=0 or CU.Precio1 Is Null) AND (O.CB8 Is Null or O.CB8='' or O.CB8='0') ")
+If NoVacio(Dialogo.NrOperacion1)
+    SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Endif 
+SQL.ADD("Order by Especie,NrOperacion ")
+watch(sql.batch())
+Recorrer SQL 
+   ** Busco la cotizacion de la Especie y Tipo (la del listbox)
+   Recorrer&i 3,Val(zz3)+2
+   If EqStr(Val(x:&i)~Val(u:&i),FBN['Tipo']~FBN['Especie'])
+         ACN(b:fac, Val(v:&i) )
+         break
+     endif
+   Proximo
+   Message('Generando intereses Operacion '~FBN['NrOperacion'])
+   EjecutarEvento('GENINT',NrOperacion1=FBN['NrOperacion'],Precio1=Val(b:fac),Fecha1=Dialogo.Fecha1 )
+proximo
+
+ACT(r1,'SI')
+*(*.*'CIERRESTAT'.)

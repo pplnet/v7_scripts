@@ -1,0 +1,177 @@
+﻿
+ACD(x1, SQL("Select Max(FechaVto2) from "~DBO~".OPERACIONES where TipoOp in ('FXCF','FXVF')  "))
+if Val(x1)<1
+  ACD(x1, FSys)
+endif
+
+CrearDialogo
+  Fecha1    : 'D.Fecha.vto :'    ;1;1;;;;Dialogo.Fecha1 <> 0;'Fecha Desde Invalida';NO;Fsys
+  Fecha2    : 'H.Fecha.vto :'    ;1;2;;;;Dialogo.Fecha2 <> 0;'Fecha Hasta Invalida';NO;Fsys
+  Vehiculo1 : 'Vehiculo'   ;2;1;;NO;NO;NoVacio(DIalogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+  Lista1    : 'Fixing'     ;3;1;;;;;;;;;SQLSet("Select Codigo from "~DBO~".ESPECIES where SUBSTRING(Jerarquia,7,3)<>'000' AND SUBSTRING(Jerarquia,1,6)= (Select SUBSTRING(Jerarquia,1,6) from "~DBO~".ESPECIES where Codigo='OCTFIX') ")  
+  Lista2    : 'Books'      ;-3;2;;;;;;;;;SQLSet("Select Codigo from "~DBO~".BOOKS  ")
+  Lista3    : 'Mercados'   ;-2;1;;;;;;;;;SQLSet("Select Codigo from "~DBO~".MERCADOS Where TipoNegocio Like '%FM%' ")
+FinDialogo
+if not Ok 
+  Cancelar
+endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+AgregarBMP(a:1,EXE('LOGO'),EXE('ESCALOGO'))
+
+SetFilaActual(5)
+
+ACT(a:fac, 'Fixing a liquidar')
+ACT(a:fac+2, 'Desde: '~Dialogo.Fecha1)
+ACT(d:fac+2, 'Hasta: '~Dialogo.Fecha2)
+ACT(a:fac+3, 'Vehiculo: '~Dialogo.Vehiculo1)
+if NoVacio(Dialogo.Lista1)
+   act(d:fac+3, 'Fixing :  ' ~Dialogo.Lista1)
+else
+   act(d:fac+3, 'Fixing :  Todos')
+endif
+if NoVacio(Dialogo.Lista2)
+   act(d:fac+4, 'Books :  ' ~Dialogo.Lista2)
+else
+   act(d:fac+4, 'Books :  Todos')
+endif
+if NoVacio(Dialogo.Lista3)
+   act(a:fac+4, 'Mercados :  ' ~Dialogo.Lista3)
+else
+   act(a:fac+4, 'Mercados :  Todos')
+endif
+SetFont(a:fac, 3)
+SetFont(a:fac+2..d:fac+4, 2)
+
+SetFilaActual(fac+6)
+ACT(a:fac, 'Operacion')
+ACT(b:fac, 'TipoOp')
+ACT(c:fac, 'Cliente')
+ACT(d:fac, 'Book')
+ACT(e:fac, 'Mercado')
+ACT(f:fac, 'FechaOp')
+ACT(g:fac, 'FechaPrecan')
+ACT(h:fac, 'FechaVto')
+ACT(i:fac, 'Cot. fix')
+ACT(j:fac, 'Cantidad')
+ACT(k:fac, 'PrecioOp')
+ACT(l:fac, 'Precio fixing')
+ACT(m:fac, 'Fixing')
+AlinearCeldas(a:fac..m:fac, 'C')
+SetFont(a:fac..m:fac, 2)
+AgregarMarco(a:fac..m:fac, 0, 0, Exe('COLOR'))
+
+
+ACN(FI:1, fac+2)
+ACN(FI:2, fac+1)
+ACT(tp:1,'OPERACION')
+
+SQL.ADD(" Select O.NrOperacion, O.TipoOp, O.Cliente1, O.FechaOp, O.Cantidad, O.CB6, O.Precio1, O.PrecioEj, O.ContraEspecie, ")
+SQL.ADD(" Case When O.CB6 = '1' Then O.FechaPrecan Else O.FechaVto END As FechaVto, O.FechaPrecan, O.FechaVto2, ")
+SQL.ADD(" O.TotalAux1, O.FechaEj, O.ContraEspecie2, O.Book1, O.Mercado4, RazonSocial")
+SQL.ADD("   From "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS OB, "~DBO~".CLIENTES C  ")
+SQL.ADD("  Where O.NrOperacion = OB.NrOperacion AND Codigo = O.Cliente1 ")
+SQL.ADD("    and OB.NrBit = 30 ")
+SQL.ADD("    and OB.Valor <> '1' ")
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD("and O.ContraEspecie2 In ("~Pipe2Comillas(Dialogo.Lista1)~")")
+EndIf
+If NoVacio(Dialogo.Lista2)
+   SQL.ADD("and O.Book1 In ("~Pipe2Comillas(Dialogo.Lista2)~")")
+Endif
+If NoVacio(Dialogo.Lista3)
+   SQL.ADD("and O.Mercado4 In ("~Pipe2Comillas(Dialogo.Lista3)~")")
+Endif
+SQL.ADD("    and O.TipoOp IN ('FXCF','FXVF') ")
+SQL.ADD("    and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("    and O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("    and O.FechaVto <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("  Order By O.Mercado4, O.Cliente1, O.FechaVto, O.TipoOp, O.NrOperacion ")
+watch(SQL.Batch)
+
+ACN(me:1, 0)  
+* Acumulador de mercados
+ACT(me:2,'sin mercado')
+* Acumulador de cantidad de registros
+ACN(rg:1, 0)
+
+Recorrer SQL
+ACN(rg:1, 1)
+  If Not EqStr(fbn('Mercado4'), Val(me:2))
+     If EqStr(Val(me:2),'sin mercado')
+        ACT(me:2,fbn('Mercado4'))
+     Else
+        SetFilaActual(fac+1)    
+        ACT(h:fac, 'Total de Mercado '~val(me:2))
+        ACN(m:fac, val(me:1))
+        SetFont(h:fac..m:fac, 2)
+        AgregarMarco(h:fac..m:fac, 0, 0, Exe('COLOR6'))
+        SetFilaActual(fac+1)
+        ACN(me:1, 0)
+        ACT(me:2,fbn('Mercado4'))
+        IFA
+     EndIf
+  Endif
+ 
+
+  * Imprimir detalles de la operación
+  ACT(A:fac, fbn('NrOperacion'))
+  ACLO(A:fac, fbn('NrOperacion'))
+  ACT(B:fac, fbn('TipoOp'))
+  ACT(C:fac, fbn('Cliente1')~' - '~Copy(fbn('RazonSocial'),1,25))
+  ACT(d:fac, fbn('Book1'))
+  ACT(e:fac, fbn('Mercado4'))
+  ACD(f:fac, fbn('FechaOp'))
+  ACD(g:fac, fbn('FechaPrecan'))
+  ACD(h:fac, fbn('FechaVto'))
+  ACT(i:fac, fbn('ContraEspecie2'))
+  ACN(j:fac, fbn('Cantidad'))
+  ACN(k:fac, fbn('Precio1'))
+  ACN(l:fac, SQL("Select PrecioHoy from "~DBO~".MTMDiario where  NrOperacion = '"~val(a:fac)~"' and TipoMTM = 'FIX' and Fecha = '"~IdxDate(val(h:fac))~"'"))
+  ACN(m:fac, SQL("Select MTM from "~DBO~".MTMDiario where  NrOperacion = '"~val(a:fac)~"' and TipoMTM = 'FIX' and Fecha = '"~IdxDate(val(h:fac))~"'"))
+  SCN(me:1, val(m:fac))  
+  
+Proximo
+IFA
+SetFilaActual(fac+1)
+If Val(rg:1) = 0   
+   ACT(h:fac,'Sin informacion para estas fechas')
+Else
+* Imprimir totales finales
+ACT(h:fac, 'Total de Mercado '~val(me:2))
+ACN(m:fac, val(me:1))
+Endif
+SetFont(h:fac..m:fac, 2)
+AgregarMarco(h:fac..m:fac, 0, 0, Exe('COLOR6'))
+SetFilaActual(fac+1)
+
+
+*SetFont(A:Val(FI:1)..m:fac, 1)
+FormatoCeldas(k:Val(FI:2)..m:fac, Exe('F9'))
+FormatoCeldas(l:Val(FI:2)..m:fac, Exe('F2'))
+FormatoCeldas(j:Val(FI:2)..j:fac, Exe('F2'))
+
+SetFilaActual(fac+2)
+ACT(A:fac, 'Fin del Informe')
+SetFont(A:fac, 2)
+IFA
+
+Impresion(1,2)
+Impresion(2,1)
+Impresion(3,1)
+Impresion(4,1)
+SetPrintFit(3,90)
+
+ACO(1, 10)
+ACO(3, 23)
+ACO(7, 8)
+ACO(9, 6)
+
+ACO(10, 10)
+ACO(11, 9)
+ACO(12, 10)
+
+LimitesVision(m:fac-3)

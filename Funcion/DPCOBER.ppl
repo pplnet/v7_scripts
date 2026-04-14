@@ -1,0 +1,484 @@
+﻿   act(z8,FBN['MB1'])
+   acn(z9,FBN['PrecioEj'])
+   act(z10,FBN['MB3'])
+   acn(z11,FBN['PrecioMer'])
+   acn(z12,FBN['TipoCambio2'])
+   acn(z13,FBN['TipoCambio3'])
+   act(z14,FBN['MB4'])
+   act(z15,Val(z15))
+   act(aa3,FBN['PrecioRef'])
+
+   *- Operaciones Con Cuotas
+   If Incluido(fbn('TipoOp'),'DPBOA|DPBOD|DPDSO|DPDSS|DPOA|DPOAV|DPOD|DPOGA|DPOGD|DPRC|DPRRS|DPRS|DPS|DPSV')
+      *- Recupero las cuotas vigentes para el periodo
+      SQL.ADD("Select * from "~DBO~".CUOTAS C ")
+      SQL.ADD("where C.NrOperacion = '"~FBN['NrOperacion']~"' ")
+      SQL.ADD("and C.Fecha2 >'"~IdxDate(Dialogo.Fecha1)~"' AND NrCuota = ")
+      SQL.ADD("(Select Min(NrCuota) from "~DBO~".CUOTAS  ")
+      SQL.ADD("where NrOperacion = '"~FBN['NrOperacion']~"' ")
+      SQL.ADD("and Fecha1 >'"~IdxDate(Dialogo.Fecha1)~"') ")
+
+      Recorrer SQL
+         dfa
+
+         *- Recorro el Rango de Valores
+         Recorrer&j 11,val(pc1)
+
+            If Val(&j:val(lc1))<>0
+
+               *- Precio del Rango
+               acn(pc2,Val(&j:val(lc1)))
+               acn(&j:fac,1)
+
+               If Incluido(val(z7),'DPOA|DPOAV')
+                  *- &j  :fac= Factor a Multiplicar por el Volumen
+                  *- &j+1:fac= Precio
+   
+                  acn(&j+1:fac,0)
+
+                  *- Precio2: Es Pasado y Hay Resultado: Se Ejercio -> Al Precio de Ejercicio
+                  If NoVacio(FBN['Precio2']) y FBN['Precio2']<>0
+                     acn(&j+1:fac,val(z9))
+                  EndIf
+
+                  *- Futuro
+                  If FBN['Precio1']=0 
+
+                     If Dialogo.Fecha1<=Fsys
+                        *- Verifico si es pasado y no hay resultado -> Calculo el Floating Price con la curva
+                        ACD(aa1,FBN['Fecha1'])
+                        ACD(aa2,FBN['Fecha2'])       
+
+                        ACT(aa4,Dialogo.Especie1)
+
+                        (.'DCCURVA'.)
+
+                        *- El Floating Price Calculado pasa a ser el precio del rango
+                        ACN(pc2,val(ab1))
+                     EndIf
+
+                     IF [EqStr(val(z8),'0') y val(pc2)>=val(z9)] o [EqStr(val(z8),'1') y val(pc2)<=val(z9) ]
+                        *- Call y Precio Real>=PrecioEj o Put Precio Real<=PrecioEj -> Strike
+                        acn(&j+1:fac,val(z9))            
+                     EndIf
+                  EndIf     
+               EndIf     
+   
+        
+               If Incluido(val(z7),'DPOD')
+                  *- &j  :fac= Factor a Multiplicar por el Volumen
+                  *- &j+1:fac= Precio
+   
+                  acn(&j+1:fac,0)
+
+                  *- Precio2: Es Pasado y Hay Resultado: Se Ejercio -> Al Precio de Ejercicio
+                  If NoVacio(FBN['Precio2']) y FBN['Precio2']<>0
+                     acn(&j+1:fac,val(z9))
+                  EndIf
+
+                  *- Futuro
+                  If FBN['Precio1']=0 
+                     If Dialogo.Fecha1<=Fsys
+                        *- Verifico si es pasado y no hay resultado -> Calculo el Floating Price con la curva
+                        ACD(aa1,FBN['Fecha1'])
+                        ACD(aa2,FBN['Fecha2'])       
+                        ACT(aa4,Dialogo.Especie1)
+
+                        *- ab1: Precio Promedio ab2: Cantidad de Dias 
+                        (.'DCREODIA'.)
+
+                        *- El Floating Price Calculado pasa a ser el precio del rango
+                        ACN(pc2,val(ab1))
+                     EndIf
+
+                     IF [EqStr(val(z8),'0') y val(pc2)>=val(z9)] o [EqStr(val(z8),'1') y val(pc2)<=val(z9) ]
+                        *- Call y Precio Real>=PrecioEj o Put Precio Real<=PrecioEj -> Strike
+                        acn(&j+1:fac,val(z9))            
+                     EndIf
+                  EndIf     
+               EndIf     
+
+               *- Opciones Digitales
+               If Incluido(val(z7),'DPOGD')
+                  acn(&j+1:fac,0)
+  
+                  *- Precio2: Es Pasado y Hay Resultado: Se Ejercio->Floating Price + Resultado 
+                  If NoVacio(FBN['Precio2']) y FBN['Precio2']<>0
+                     acn(&j+1:fac,val(pc2)+FBN['Precio2'])
+                  EndIf
+
+                  *- Futuro
+                  If FBN['Precio1']=0 
+
+                     If Dialogo.Fecha1<=Fsys
+                        *- Verifico si es pasado y no hay resultado -> Calculo el Floating Price con la curva
+                        ACD(aa1,FBN['Fecha1'])
+                        ACD(aa2,FBN['Fecha2'])       
+                        ACT(aa4,Dialogo.Especie1)
+
+                        *- ab1: Precio Promedio ab2: Cantidad de Dias 
+                        (.'DCREODIA'.)
+
+                        *- El Floating Price Calculado pasa a ser el precio del rango
+                        ACN(pc2,val(ab1))
+                     EndIf
+
+                     IF [EqStr(VAL(z8),'0') y val(pc2)>=val(z9)] o [EqStr(VAL(z8),'1') y val(pc2)<=val(z9)]
+                        *- Call y Precio Real>=PrecioEj o Put Precio Real<=PrecioEj -> Strike
+                        *- El PayOff se suma si: Compra de Put o Vta. de Call 
+                        acn(&j+1:fac,val(pc2)+IIF(EqStr(val(z8),val(z10)),-val(z11),val(z11)) )
+                     EndIf
+                  EndIf       
+               EndIf     
+
+   
+               *- Opciones Digitales
+               If Incluido(val(z7),'DPOGA')
+                  acn(&j+1:fac,0)
+  
+                  *- Precio2: Es Pasado y Hay Resultado: Se Ejercio->Floating Price + Resultado 
+                  If NoVacio(FBN['Precio2']) y FBN['Precio2']<>0
+                     acn(&j+1:fac,val(pc2)+FBN['Precio2'])
+                  EndIf
+
+                  *- Futuro
+                  If FBN['Precio1']=0 
+
+                     If Dialogo.Fecha1<=Fsys
+                        *- Verifico si es pasado y no hay resultado -> Calculo el Floating Price con la curva
+                        ACD(aa1,FBN['Fecha1'])
+                        ACD(aa2,FBN['Fecha2'])       
+                        ACT(aa4,Dialogo.Especie1)
+
+                        (.'DCCURVA'.)
+
+                        *- El Floating Price Calculado pasa a ser el precio del rango
+                        ACN(pc2,val(ab1))
+                     EndIf
+
+                     IF [EqStr(VAL(z8),'0') y val(pc2)>=val(z9)] o [EqStr(VAL(z8),'1') y val(pc2)<=val(z9)]
+                        *- Call y Precio Real>=PrecioEj o Put Precio Real<=PrecioEj -> Strike
+                        *- El PayOff se suma si: Compra de Put o Vta. de Call 
+                        acn(&j+1:fac,val(pc2)+IIF(EqStr(val(z8),val(z10)),-val(z11),val(z11)) )
+                     EndIf
+                  EndIf       
+               EndIf     
+
+               *-----
+               If Incluido(val(z7),'DPBOA|')
+                  acn(&j+1:fac,0)
+
+                  *- Precio2: Es Pasado y Hay Resultado: Se Ejercio 
+                  If NoVacio(FBN['Precio2']) y FBN['Precio2']<>0
+                     acn(&j+1:fac,val(z9))
+                  EndIf
+           
+                  *- Futuro 
+                  If FBN['Precio1']=0 
+                     If Dialogo.Fecha1<=Fsys
+                        *- Verifico si es pasado y no hay resultado -> Calculo el Floating Price con la curva
+                        ACD(aa1,FBN['Fecha1'])
+                        ACD(aa2,FBN['Fecha2'])       
+                        ACT(aa4,Dialogo.Especie1)
+
+                        (.'DCCURVA'.)
+
+                        *- El Floating Price Calculado pasa a ser el precio del rango
+                        ACN(pc2,val(ab1))
+                     EndIf
+
+                     *- Futuro
+                     IF [EqStr(val(z8),'0') y val(pc2)>=val(z9)] o [EqStr(val(z8),'1') y val(pc2)<=val(z9) ]                  
+                        (.'DPCOBER1'.)
+                     EndIf  
+                  EndIf     
+               EndIf      
+               *-----
+               If Incluido(val(z7),'DPBOD')
+                  acn(&j+1:fac,0)
+
+                  *- Precio2: Es Pasado y Hay Resultado: Se Ejercio 
+                  If NoVacio(FBN['Precio2']) y FBN['Precio2']<>0
+                     acn(&j+1:fac,val(z9))
+                  EndIf
+           
+                  *- Futuro 
+                  If FBN['Precio1']=0 
+                     If Dialogo.Fecha1<=Fsys
+                        *- Verifico si es pasado y no hay resultado -> Calculo el Floating Price con la curva
+                        ACD(aa1,FBN['Fecha1'])
+                        ACD(aa2,FBN['Fecha2'])       
+                        ACT(aa4,Dialogo.Especie1)
+
+                        *- ab1: Precio Promedio ab2: Cantidad de Dias 
+                        (.'DCREODIA'.)
+
+                        *- El Floating Price Calculado pasa a ser el precio del rango
+                        ACN(pc2,val(ab1))
+                     EndIf
+
+                     *- Futuro
+                     IF [EqStr(val(z8),'0') y val(pc2)>=val(z9)] o [EqStr(val(z8),'1') y val(pc2)<=val(z9) ]                  
+                        (.'DPCOBER1'.)
+                     EndIf  
+                  EndIf     
+               EndIf      
+
+               *-----
+               If Incluido(val(z7),'DPDSO')
+                  acn(&j+1:fac,0)
+                  *- Precio2: Resultado
+                  If NoVacio(FBN['Precio2']) y FBN['Precio2']<>0
+                     ACN(&j:fac,1)
+                     acn(&j+1:fac,val(z9))
+                  EndIf
+
+                  *- Futuro 
+                  If FBN['Precio1']=0 
+
+                     If Dialogo.Fecha1<=Fsys
+                        *- Verifico si es pasado y no hay resultado -> Calculo el Floating Price con la curva
+                        ACD(aa1,FBN['Fecha1'])
+                        ACD(aa2,FBN['Fecha2'])       
+                        ACT(aa4,Dialogo.Especie1)
+
+                        (.'DCCURVA'.)
+
+                        *- El Floating Price Calculado pasa a ser el precio del rango
+                        ACN(pc2,val(ab1))
+                     EndIf
+
+                     *- Factor para Multiplicar el Monto
+                     acn(&j:fac,0)
+                     IF EqStr(VAL(Z8),'0')
+                        ACN(&j:fac,1)
+                        IF val(pc2)<val(z9)
+                           ACN(&j:fac,2)
+                        ENDIF 
+                     ELSE 
+                        ACN(&j:fac,1)
+                        IF val(pc2)>val(z9)
+                           ACN(&j:fac,2)
+                        ENDIF 
+                     ENDIF 
+                     acn(&j+1:fac,val(z9))
+                  EndIf     
+               EndIf      
+   
+               *-----
+               If Incluido(val(z7),'DPDSS')
+                  acn(&j+1:fac,0)
+                  *- Precio2: Resultado
+                  If EqStr(Val(z15),'1') 
+                     ACN(&j:fac,1)
+                     acn(&j+1:fac,val(z9))
+                  EndIf
+
+                  *- Futuro 
+                  If Vacio(Val(z15)) o EqStr(Val(z15),'0') 
+
+                     If Dialogo.Fecha1<=Fsys
+                        *- Verifico si es pasado y no hay resultado -> Calculo el Floating Price con la curva
+                        ACD(aa1,FBN['Fecha1'])
+                        ACD(aa2,FBN['Fecha2'])       
+                        ACT(aa4,Dialogo.Especie1)
+
+                        (.'DCCURVA'.)
+
+                        *- El Floating Price Calculado pasa a ser el precio del rango
+                        ACN(pc2,val(ab1))
+                     EndIf
+
+                     IF [EqStr(VAL(Z8),'0') y val(pc2)>val(z9)] o [EqStr(VAL(Z8),'1') y val(pc2)<=val(z9)]
+                        ACN(&j:fac,2)
+                        acn(&j+1:fac,val(z9))
+                     ENDIF 
+                  ENDIF 
+               EndIf 
+
+               *--- 
+               If Incluido(val(z7),'DPRC')                  
+                  If Dialogo.Fecha1<=Fsys
+                     (.'DCRECOLLAR'.)
+                  Else 
+                     (.'DPCOBER2'.)
+                  EndIf
+               EndIf
+   
+               *--- 
+               If Incluido(val(z7),'DPRS')
+                  acn(&j+1:fac,0)
+     
+                  *- Precio2: Resultado -> FadeOut
+                  If NoVacio(FBN['Precio2']) y FBN['Precio2']<>0
+                     acn(&j+1:fac,val(z12))
+                  EndIf
+  
+                  *- Futuro 
+                  If Vacio(FBN['Precio2']) o FBN['Precio2']=0
+
+                     If Dialogo.Fecha1<=Fsys
+                        (.'DCRERANGES'.)
+
+                        *- El Floating Price Calculado pasa a ser el precio del rango
+                        ACN(pc2,val(ab1))
+                     EndIf
+
+                     IF [val(pc2)>=val(z9) y val(z8)=1] o [val(pc2)<=val(z9) y val(z8)=0]
+                        acn(&j+1:fac,val(z12))
+                     ENDIF 
+                  ENDIF 
+               EndIf
+ 
+               *--- 
+               If Incluido(val(z7),'DPRRS')
+                  acn(&j+1:fac,0)
+  
+                  If Dialogo.Fecha1<=Fsys
+                     (.'DCRERESETR'.)
+                  Else 
+                     *- Futuro 
+                     If [Vacio(FBN['Precio2']) o FBN['Precio2']=0] y [Vacio(FBN['Precio3']) o FBN['Precio3']=0]
+                        IF [val(pc2)>=val(z9) y EqStr(val(z8),'1')] o [val(pc2)<=val(z9) y EqStr(val(z8),'0')]
+                           acn(&j+1:fac,val(z12))
+                        Else 
+                           If [val(pc2)<Val(z9) y EqStr(val(z8),'1')] o [val(pc2)>Val(z9) y EqStr(val(z8),'0')]
+                              acn(&j+1:fac,val(z9))
+                            EndIf
+                        ENDIF 
+                     ENDIF 
+                  EndIf
+               EndIf
+               *--- 
+               If Incluido(val(z7),'DPS|DPSV')
+                  *- Siempre se ejerce a Precio Ejercicio 
+                  acn(&j+1:fac,val(z9))
+               EndIf 
+
+
+               *-------------
+               *- Calculo el Volumen Diario
+               If val(&j+1:fac)<>0
+                  acn(&j:fac,val(&j:fac)*val(f:fac))
+
+                  IF Incluido(val(g:fac),'BBLSM|TN/MES') y Dialogo.Radio1=1      
+                     *- Divido por la Cantidad de Dias del Mes
+                     acn(&j:fac,val(&j:fac)/(Dialogo.Fecha2-Dialogo.Fecha1+1))
+                  EndIf
+                  IF Incluido(val(g:fac),'BBLSD') y Dialogo.Radio1=0      
+                     *- Divido por la Cantidad de Dias del Mes
+                     acn(&j:fac,val(&j:fac)*(Dialogo.Fecha2-Dialogo.Fecha1+1))
+                  EndIf
+
+                  *- lc3: Calculo de Sumatoria de Vol. y Vol*Precio por TipoOp
+                  scn(&j  :val(lc3),val(&j:fac))
+                  scn(&j+1:val(lc3),val(&j:fac)*val(&j+1:fac))
+
+                  *- lc2: Calculo de Sumatoria de Vol. y Vol*Precio por Empresa
+                  scn(&j  :val(lc2),val(&j:fac))
+                  scn(&j+1:val(lc2),val(&j:fac)*val(&j+1:fac))
+               Else 
+                  acn(&j:fac,0)
+               EndIf                             
+            EndIf
+         Proximo
+
+      Proximo   
+   Else 
+
+      *- Recorro el Rango de Valores
+      Recorrer&j 11,val(pc1)
+
+         If Val(&j:val(lc1))<>0
+            *- Precio del Rango
+            acn(pc2,Val(&j:val(lc1)))
+            acn(&j:fac,1)
+         
+
+            *-----
+            If Incluido(val(z7),'DPFW')
+               acn(&j+1:fac,0)
+               *- CB8: Ejercida
+               If EqStr(Val(z15),'1')
+                  acn(&j+1:fac,val(z9))
+               EndIf
+               *- Futuro 
+               If Vacio(Val(z15)) o EqStr(Val(z15),'0') 
+                  acn(&j+1:fac,val(z9))
+               ENDIF 
+            EndIf
+            *-----
+
+            If Incluido(fbn('TipoOp'),'DPBOS')
+               acn(&j+1:fac,0)
+               *- Se Ejercio 
+               If EqStr(Val(z15),'1')
+                  acn(&j+1:fac,val(z9))
+               EndIf       
+               *- Futuro 
+               If EqStr(Val(z15),'0') o Vacio(Val(z15))
+                  IF [EqStr(val(z8),'0') y val(pc2)>=val(z9)] o [EqStr(val(z8),'1') y val(pc2)<=val(z9) ]
+                     (.'DPCOBER1'.)
+                  EndIf     
+               EndIf     
+            EndIf      
+            *-----
+            If Incluido(fbn('TipoOp'),'DPOS')
+               acn(&j+1:fac,0)
+               *- Se Ejercio 
+               If EqStr(Val(z15),'1')
+                  acn(&j+1:fac,val(z9))
+               EndIf       
+               *- Futuro 
+               If EqStr(Val(z15),'0') o Vacio(Val(z15))
+                  IF [EqStr(val(z8),'0') y val(pc2)>=val(z9)] o [EqStr(val(z8),'1') y val(pc2)<=val(z9) ]
+                     *- Call y Precio Real>=PrecioEj o Put Precio Real<=PrecioEj -> Strike
+                     acn(&j+1:fac,val(z9))            
+                  EndIf     
+               EndIf     
+            EndIf      
+
+            *-----
+            If Incluido(fbn('TipoOp'),'DPOGS')
+               acn(&j+1:fac,0)
+               *- Se Ejercio 
+               If EqStr(Val(z15),'1')
+                  acn(&j+1:fac,val(pc2)+FBN['Precio3'])
+               EndIf     
+               *- Futuro 
+               If EqStr(Val(z15),'0') o Vacio(Val(z15))
+                  IF [EqStr(val(z8),'0') y val(pc2)>=val(z9)] o [EqStr(val(z8),'1') y val(pc2)<=val(z9) ]
+                     *- Call y Precio Real>=PrecioEj o Put Precio Real<=PrecioEj -> Strike
+                     *- El PayOff se suma si: Compra de Put o Vta. de Call
+                     acn(&j+1:fac,val(pc2)+IIF(EqStr(val(z8),val(z10)),-val(z11),val(z11)) )
+                  EndIf     
+               EndIf     
+            EndIf      
+
+            *-------------
+            *- Calculo el Volumen 
+            If val(&j+1:fac)<>0
+               acn(&j:fac,val(&j:fac)*val(f:fac))
+
+               IF Incluido(val(g:fac),'BBLSM|TN/MES') y Dialogo.Radio1=1      
+                  *- Divido por la Cantidad de Dias del Mes
+                  acn(&j:fac,val(&j:fac)/(Dialogo.Fecha2-Dialogo.Fecha1+1))
+               EndIf
+               IF Incluido(val(g:fac),'BBLSD') y Dialogo.Radio1=0      
+                  *- Divido por la Cantidad de Dias del Mes
+                  acn(&j:fac,val(&j:fac)*(Dialogo.Fecha2-Dialogo.Fecha1+1))
+               EndIf
+
+               *- lc3: Calculo de Sumatoria de Vol. y Vol*Precio
+               scn(&j  :val(lc3),val(&j:fac))
+               scn(&j+1:val(lc3),val(&j:fac)*val(&j+1:fac))
+
+               *- lc2: Calculo de Sumatoria de Vol. y Vol*Precio por Empresa
+               scn(&j  :val(lc2),val(&j:fac))
+               scn(&j+1:val(lc2),val(&j:fac)*val(&j+1:fac))
+            Else 
+               acn(&j:fac,0)
+            EndIf                             
+         EndIf
+      Proximo
+   EndIf 

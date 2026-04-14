@@ -1,0 +1,492 @@
+﻿Mostrarcuadrodemensajes
+ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1       :'FechaDesde'  ;1 ;1;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys
+  Fecha2       :'FechaHasta'  ;2 ;1;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys
+  Radio1       :'Oper|Todos|Operac Bonos|MAV|Operac fut'; ;;;;;                   ;                         ;  ;0
+  nroperacion1 :'Nr Operacion Bonos'                     ; ;;;;Dialogo.radio1=0 o Dialogo.radio1=1;;;;;;;;;"nroperacion not in (select movej.nroperacion from dbo.movejecutados movej) and nroperacion in (select movp.nroperacion from dbo.movpendientes movp where nrmov = 11) and tipoop in ('TIC','TIV','TCOPRI') and fechaop >= '"~idxdate(dialogo.fecha1)~"' and fechaop <= '"~idxdate(dialogo.fecha2)~"' "
+  nroperacion2 :'Nr Operacion Fut'                       ; ;;;;Dialogo.radio1=0 o Dialogo.radio1=3;;;;;;;;;"nroperacion not in (select movej.nroperacion from dbo.movejecutados movej) and nroperacion in (select movp.nroperacion from dbo.movpendientes movp where nrmov = 11) and tipoop in ('FXCF','FXVF') and fechaop >= '"~idxdate(dialogo.fecha1)~"' and fechaop <= '"~idxdate(dialogo.fecha2)~"' "
+  nroperacion3 :'Nr Operacion Mav'                       ; ;;;;Dialogo.radio1=0 o Dialogo.radio1=2;;;;;;;;;"nroperacion not in (select movej.nroperacion from dbo.movejecutados movej) and nroperacion in (select movp.nroperacion from dbo.movpendientes movp where nrmov = 11) and tipoop in ('DDC','DDV') and fechaop >= '"~idxdate(dialogo.fecha1)~"' and fechaop <= '"~idxdate(dialogo.fecha2)~"' "
+  cliente1     :'Cliente Bonos'                          ; ;;;;Dialogo.radio1=0 o Dialogo.radio1=1;;;;;;;;;"codigo in (Select Distinct op.cliente1 from "~DBO~".operaciones op INNER join "~dbo~".movpendientes movp on op.nroperacion = movp.nroperacion where op.tipoop in ('TIC','TCOPRI','TIV') and op.fechaop >= '"~idxdate(dialogo.fecha1)~"' and op.fechaop <= '"~idxdate(dialogo.fecha2)~"')"
+  cliente3     :'Cliente Futuro'                         ; ;;;;Dialogo.radio1=0 o Dialogo.radio1=3;;;;;;;;;"codigo in (Select Distinct op.cliente1 from "~DBO~".operaciones op INNER join "~dbo~".movpendientes movp on op.nroperacion = movp.nroperacion where op.tipoop in ('FXCF','FXVF') and op.fechaop >= '"~idxdate(dialogo.fecha1)~"' and op.fechaop <= '"~idxdate(dialogo.fecha2)~"')"
+FinDialogo
+
+If Not OK
+  Cancelar
+EndIf
+ 
+*Operaciones de bonos
+if dialogo.radio1=0 o dialogo.radio1=1
+   sql.add("select 'OPB' tipo,")
+   sql.add("op.nroperacion,op.tipoop,op.cliente1,op.fechaop,op.fechavto,op.plazo,op.especie,op.cantidad,op.precio1,op.TotalAux2 totalcomisiones,op.totalnetocli1, movp.nrmov, op.TotalGastos TotalDerechos, op.TotalIvaAdi ivaderechos ")
+   sql.add(",op.totaliva,op.totalaux4 val_iva,")
+   sql.add("case movp.nrmov when 11 then 'Comision' when 13 then 'Derechos' else 'Otros' end  tipomov,op.totalbrutocli1,op.mercado4")
+   sql.add("from "~DBO~".operaciones op INNER join "~dbo~".movpendientes movp on op.nroperacion = movp.nroperacion ")
+   sql.add("where op.fechaop >= '"~idxdate(dialogo.fecha1)~"' ")
+   sql.add("and op.fechaop <= '"~idxdate(dialogo.fecha2)~"' ")
+   sql.add("and not exists (select 1 from "~DBO~".movejecutados movej where movej.nroperacion= op.nroperacion) ")
+   sql.add("and op.tipoop in ('TIC','TIV','TCOPRI') ")
+   sql.add("and movp.nrmov in ('11','13') ")
+   if novacio(dialogo.nroperacion1)
+      sql.add("and op.nroperacion = '"~Dialogo.nroperacion1~"' ")
+   endif
+   if novacio(dialogo.cliente1)
+      sql.add("and op.cliente1 = '"~Dialogo.Cliente1~"' ")
+   endif
+endif
+
+*Operaciones de MAV
+if dialogo.radio1=0 o dialogo.radio1=2
+   if dialogo.radio1=0
+       sql.add("union all")
+   endif
+   SQL.ADD("select 'MAV' tipo,                                                                                                                                                                ")
+   SQL.ADD("op.nroperacion,op.tipoop,op.cliente1,op.fechaop,op.fechavto,op.plazo,op.especie,op.cantidad,op.precio1,op.ImpGastos1 totalcomisiones,OP.Totalbrutocli1 totalnetocli1, movp.nrmov, op.Totalderechos TotalDerechos, op.TotalIva ivaderechos  ")
+   SQL.ADD(",op.ImpGastos2 totaliva,"~var('IVA')~"/100 val_iva,")
+   sql.add("case movp.nrmov when 11 then 'Comision' when 15 then 'Derechos' else 'Otros' end  tipomov, op.totalbrutocli1,op.mercado4")
+   SQL.ADD("from "~DBO~".operaciones op left join "~DBO~".movpendientes movp on op.nroperacion = movp.nroperacion                                                                                     ")
+   SQL.ADD("where op.fechaop >= '"~idxdate(dialogo.fecha1)~"'                                                                                                                                                  ")
+   SQL.ADD("and op.fechaop <= '"~idxdate(dialogo.fecha2)~"'                                                                                                                                                    ")
+   SQL.ADD("and not exists (select 1 from "~DBO~".movejecutados movej where movej.nroperacion= op.nroperacion)                                                                                    ")
+   SQL.ADD("and op.tipoop in ('DDC','DDV')                                                                                                                                                    ")
+   if novacio(dialogo.nroperacion3)
+       sql.add("and op.nroperacion = '"~Dialogo.nroperacion3~"' ")
+   endif 
+   sql.add("and movp.nrmov in ('11','15') ")
+endif
+
+*Operaciones de futuros
+if dialogo.radio1=0 o dialogo.radio1=3
+   if dialogo.radio1=0
+       sql.add("union all")
+   endif
+   sql.add("select 'OPEFUT' tipo,                                                                                                                                                          ")
+   sql.add("op.nroperacion,op.tipoop,op.cliente1,op.fechaop,op.fechavto,op.plazo,op.especie,op.cantidad,op.precio1,op.TotalAux1 totalcomisiones,OP.Totalbrutocli1 totalnetocli1, movp.nrmov, op.TotalGastos TotalDerechos, op.TotalIvaAdi ivaderechos")
+   sql.add(",op.totaliva,op.totalaux4 val_iva,")
+   sql.add("case movp.nrmov when 11 then 'Comision' when 13 then 'Derechos' else 'Otros' end  tipomov,op.totalbrutocli1,op.mercado4")
+   sql.add("from "~DBO~".operaciones op left join "~DBO~".movpendientes movp on op.nroperacion = movp.nroperacion                                                                                  ")
+   sql.add("where op.fechaop >= '"~idxdate(dialogo.fecha1)~"'                                                                                                                                               ")
+   sql.add("and op.fechaop <= '"~idxdate(dialogo.fecha2)~"'                                                                                                                                                ")
+   sql.add("and not exists (select 1 from "~DBO~".movejecutados movej where movej.nroperacion= op.nroperacion)                                                                                 ")
+   sql.add("and op.tipoop in ('FXCF','FXVF') ")
+   if novacio(dialogo.nroperacion2)
+      sql.add("and op.nroperacion = '"~Dialogo.nroperacion2~"' ")
+   endif
+   if novacio(dialogo.cliente3)
+      sql.add("and ord.cliente = '"~Dialogo.Cliente3~"' ")
+   endif
+   sql.add("and movp.nrmov in ('11','13') ")
+endif
+
+sql.add("order by 2")
+
+
+Recorrer SQL
+    acn(a:fac,0)
+    act(b:fac,fbn('nroperacion'))
+    act(c:fac,fbn('tipoop'))
+    act(d:fac,fbn('cliente1'))
+    acd(e:fac,fbn('fechaop'))
+    acd(f:fac,fbn('fechavto'))
+    act(g:fac,fbn('plazo'))
+    act(h:fac,fbn('especie'))
+    acn(i:fac,fbn('cantidad'))
+    acn(j:fac,fbn('precio1'))
+    acn(k:fac,fbn('totalcomisiones'))
+    acn(l:fac,fbn('totalnetocli1'))
+    act(m:fac,fbn('nrmov'))
+    act(n:fac,fbn('tipo'))
+    if Eqstr(fbn('tipomov'),'Comision')
+       acn(o:fac,fbn('totalcomisiones'))
+       acn(p:fac,fbn('totaliva'))
+    else
+       if Eqstr(fbn('tipomov'),'Derechos')
+          acn(o:fac,fbn('totalderechos'))
+          acn(p:fac,fbn('ivaderechos'))
+       endif
+    endif
+    acn(q:fac,fbn('val_iva'))
+    act(r:fac,fbn('tipomov'))
+    acn(s:fac,fbn('totalderechos'))
+    acn(t:fac,fbn('ivaderechos'))
+    acn(u:fac,fbn('totaliva'))
+    acn(v:fac,fbn('totalbrutocli1'))
+    *w ivagastos
+    IF fbn('totalbrutocli1')<>0
+        acn(w:fac,IvaGastos(fbn('tipoop'),fbn('especie'),var('VEHICULODE'),'DMERC',0,,fbn('mercado4')))
+    else
+        acn(w:fac,0)
+    endif
+    acn(x:fac,fbn('mercado4'))
+    acn(y:fac,fbn('ivaderechos'))
+    scn(z1,1)     
+Proximo
+
+CrearListBox;'Arial,8,';'Modifica Comisiones '~Dialogo.fecha1
+   'Marca'              ;a1..a:Val(z1)  ;SI;;; 30;CHECK ;RGB(160,160,193)
+   'Nr Operacion'       ;b1..b:Val(z1)  ;NO;;; 80;STRING;;RGB(250,250,193)
+   'Tipo Operacion'     ;c1..c:Val(z1)  ;NO;  ;; 60;STRING;;RGB(250,250,193)
+   'Tipo Mov'           ;r1..r:Val(z1)  ;NO;  ;; 60;STRING;;RGB(250,250,193)
+   'Cliente'            ;d1..d:Val(z1)  ;NO;  ;; 60;STRING;;RGB(250,250,193)
+   'Fecha Concert'      ;e1..e:Val(z1)  ;NO;;; 80;FECHA;RGB(250,250,193)
+   'Fecha Vto'          ;f1..f:Val(z1)  ;NO;;; 80;FECHA;RGB(250,250,193)
+   'Plazo'              ;g1..g:Val(z1)  ;NO;;; 60;STRING;;RGB(250,250,193)
+   'Especie'            ;h1..h:Val(z1)  ;NO;;; 80;STRING;;RGB(250,250,193)
+   'Cantidad'           ;i1..i:Val(z1)  ;NO;;; 80;NUMERO;'##,###,###.##';RGB(250,250,193)
+   'Precio'             ;j1..j:Val(z1)  ;NO;;; 80;NUMERO;'##,###,###.##';RGB(250,250,193)
+   'Comision '          ;k1..k:Val(z1)  ;NO;;; 150;NUMERO;'##,###,###.##';RGB(250,250,193)
+   'Derechos '          ;s1..s:Val(z1)  ;NO;;; 150;NUMERO;'##,###,###.##';RGB(250,250,193)
+   'Actual'             ;o1..o:Val(z1)  ;SI;val(o:flb)>=0;'La operacion '~val(b:flb)~' el valor '~val(o:flb)~' tiene que ser >= Cero'; 150;NUMERO;'##,###,###.##';RGB(160,160,193)
+   'Importe'            ;l1..l:Val(z1)  ;NO;;; 100;NUMERO;'##,###,###.##';RGB(250,250,193);;
+   'Iva'                ;p1..p:Val(z1)  ;NO;;; 100;NUMERO;'##,###,###.##';RGB(250,250,193);iif(Eqstr(val(r:flb),'Derechos'),iif(Val(t:FLB)<>0,Val(o:FLB)*Val(q:flb),0),iif(Eqstr(val(r:flb),'Comision'),iif(Val(u:FLB)<>0,Val(o:FLB)*Val(q:flb),0)));
+   * ---------------------------------------------------------------- *
+FinListBox
+
+If Not OK
+   Cancelar
+Endif
+     
+acn(er1,0)
+acn(z96,0)
+Recorrer&j 1,Val(z1)
+     if val(a:&j)=1
+         if Eqstr(val(n:&j),'OPB')
+               *Comision de bonos
+               if eqstr(val(r:&j),'Comision')
+                   try
+                      acn(l:&j,sql("select totalnetocli1 from "~DBO~".operaciones where nroperacion = '"~val(b:&j)~"'"))
+                      if val(u:&j) <> 0
+                         if Incluido(val(c:&j),'TIC|TCOPRI|')
+                            acn(to:&j,val(l:&j)-val(k:&j)+val(o:&j)-val(u:&j)+(val(o:&j)*val(q:&j)))
+                         else
+                            if eqstr(val(c:&j),'TIV')
+                               acn(to:&j,val(l:&j)+val(k:&j)-val(o:&j)+val(u:&j)-(val(o:&j)*val(q:&j)))
+                            endif
+                         endif
+                         acn(ti:&j,val(o:&j)* val(q:&j))
+                      else
+                         if Incluido(val(c:&j),'TIC|TCOPRI|')
+                            acn(to:&j,val(l:&j)-val(k:&j)+val(o:&j)) 
+                         else
+                            if eqstr(val(c:&j),'TIV')
+                            acn(to:&j,val(l:&j)+val(k:&j)-val(o:&j)) 
+                            endif
+                         endif
+                         acn(ti:&j,0)
+                      endif
+                      sql.add("UPDATE "~DBO~".operaciones SET totalaux2 = "~val(o:&j)~" ")
+                      sql.add(", totalnetocli1 = "~val(to:&j)~" ")
+                      sql.add(", totaliva = "~val(ti:&j)~" ")
+                      sql.add("where nroperacion= '"~val(b:&j)~"' ")
+                      sql.new
+                   catch
+                     act(z95,"UPDATE "~DBO~".operaciones SET totalaux2 = "~val(o:&j)~" , totalnetocli1 = "~val(to:&j)~" , totaliva = "~val(ti:&j)~" where nroperacion= '"~val(b:&j)~"' ")
+                      MESSAGE("***Error modificando operacion UPDATE from dbo.operaciones where where nroperacion= '"~val(b:&j)~"' ")
+                      act(er2,Reemplazar(GetError(),"'"," "))
+                      SCN(er1,1)
+                      SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD COM BO OP detalle Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                      if Eqstr(var('BCSLOG'),'SI')
+                          LogWrite("Error UPD COM BO OP nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                          LogWrite("Error UPD COM BO OP "~val(z95))
+                      endif
+                  end
+                  try 
+                      *Movimiento Bonos de Comision
+                      sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"'")
+                      sql.new
+                      *Movimiento Bonos de IVA Comision
+                      sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(ti:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = 12")
+                      sql.new
+                  catch
+                      act(z95,"UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"'")
+                      MESSAGE("***Error uPDATE dbo.movpendientes SET monto = "~val(l:&j)~" WHERE where nroperacion= '"~val(b:&j)~"' ")
+                      act(er2,Reemplazar(GetError(),"'"," "))
+                      SCN(er1,1)
+                      SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD COM BO MOVPEN Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                      if Eqstr(var('BCSLOG'),'SI')
+                         LogWrite("Error UPD COM BO MOVPEN nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                         LogWrite("Error UPD MOVPEN "~val(z95))
+                      endif
+                   end
+               else
+                   *Derechos de bonos
+                   if eqstr(val(r:&j),'Derechos')
+                      try
+                         *if(VCan29=1,IF([CB4=1 o [CB4=0 y TIPOOP='TCOPRI'] o EqStr(CLIENTE1,VEHICULO1)] y TOTALBRUTOCLI1<>0,TotalGastos*TotalAux4,0),0)
+                         *if val(w:&j) = 1
+                         acn(l:&j,sql("select totalnetocli1 from "~DBO~".operaciones where nroperacion = '"~val(b:&j)~"'"))
+                         if val(t:&j) <> 0
+                             if Incluido(val(c:&j),'TIC|TCOPRI|')
+                                acn(to:&j,val(l:&j)-val(s:&j)+val(o:&j)-val(t:&j)+(val(o:&j)*val(q:&j)))
+                             else
+                                if Eqstr(val(c:&j),'TIV')
+                                   acn(to:&j,val(l:&j)+val(s:&j)-val(o:&j)+val(t:&j)-(val(o:&j)*val(q:&j)))
+                                endif
+                             endif
+                             acn(ti:&j,val(o:&j)* val(q:&j))
+                         else
+                             if Incluido(val(c:&j),'TIC|TCOPRI|')
+                                acn(to:&j,val(l:&j)-val(s:&j)+val(o:&j)) 
+                             else
+                                if Eqstr(val(c:&j),'TIV')
+                                   acn(to:&j,val(l:&j)+val(s:&j)-val(o:&j)) 
+                                endif
+                             endif
+                             acn(ti:&j,0)
+                         endif
+                         sql.add("UPDATE "~DBO~".operaciones SET TotalGastos = "~val(o:&j)~" ")
+                         sql.add(", totalnetocli1 = "~val(to:&j)~" ")
+                         sql.add(", TotalIvaAdi = "~val(ti:&j)~" ")
+                         sql.add("where nroperacion= '"~val(b:&j)~"' ")
+                         sql.new
+                      catch
+                         act(z95,"UPDATE "~DBO~".operaciones SET TotalGastos = "~val(o:&j)~" , totalnetocli1 = "~val(to:&j)~" , TotalIvaAdi = "~val(ti:&j)~" where nroperacion= '"~val(b:&j)~"' ")
+                         MESSAGE("***Error modificando operacion UPDATE from dbo.operaciones where where nroperacion= '"~val(b:&j)~"' ")
+                         act(er2,Reemplazar(GetError(),"'"," "))
+                         SCN(er1,1)
+                         SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD DER BO OP detalle Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                         if Eqstr(var('BCSLOG'),'SI')
+                            LogWrite("Error UPD DER OP nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                            LogWrite("Error borr cab "~val(z95))
+                         endif
+                     end
+                     try
+                        *Movimiento Bonos de Derechos
+                        sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"'")
+                        sql.new
+                        *Movimiento Bonos de IVA de derechos
+                        sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(ti:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = 14")
+                        sql.new
+                     catch
+                        act(z95,"UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"' and nrmov = '"~val(m:&j)~"'")
+                        MESSAGE("***Error uPDATE dbo.movpendientes SET cantidad = "~val(l:&j)~" WHERE where nroperacion= '"~val(b:&j)~"' ")
+                        act(er2,Reemplazar(GetError(),"'"," "))
+                        SCN(er1,1)
+                        SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD DER BO MOVPEN Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                        if Eqstr(var('BCSLOG'),'SI')
+                           LogWrite("Error UPD DER BO MOVPEN nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                           LogWrite("Error UPD MOVPEN "~val(z95))
+                        endif
+                     end
+                   endif
+               endif
+               try
+                   sql.exec
+                   SCN(z96,1)
+               catch
+                   act(z95,"sql.exec")
+                   MESSAGE("***Error sql.exec ")
+                   act(er2,Reemplazar(GetError(),"'"," "))
+                   SCN(er1,1)
+                   SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error sql.exec "~val(r:&j)~" BO MOVPEN Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                   if Eqstr(var('BCSLOG'),'SI')
+                      LogWrite("Error sql.exec "~val(r:&j)~" BO  nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                      LogWrite("Error sql.exec  "~val(z95))
+                   endif
+               end
+         else
+            if Eqstr(val(n:&j),'MAV')
+               *Comision de MAV
+               if eqstr(val(r:&j),'Comision')
+                  try
+                     acn(ti:&j,val(o:&j)*Var('IVA')/100)
+                     sql.add("UPDATE "~DBO~".operaciones SET ImpGastos1 = "~val(o:&j)~" ")
+                     sql.add(", ImpGastos2 = "~val(ti:&j)~" ")
+                     sql.add("where nroperacion= '"~val(b:&j)~"' ")
+                     sql.new
+                  catch
+                     act(z95,"UPDATE "~DBO~".operaciones SET ImpGastos1 = "~val(o:&j)~" , ImpGastos2 = "~val(ti:&j)~"  where nroperacion= '"~val(b:&j)~"' ")
+                     MESSAGE("***Error modificando operacion UPDATE from dbo.operaciones where where nroperacion= '"~val(b:&j)~"' ")
+                     act(er2,Reemplazar(GetError(),"'"," "))
+                     SCN(er1,1)
+                     SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD MAV OP detalle Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                     if Eqstr(var('BCSLOG'),'SI')
+                         LogWrite("Error UPD MAV OP nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                         LogWrite("Error borr cab "~val(z95))
+                     endif
+                  end
+                  try
+                     *Movimiento MAV de comision
+                     sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"'")
+                     sql.new
+                     *Movimiento MAV de IVA comision
+                     sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(ti:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = 12")
+                     sql.new
+                  catch
+                     act(z95,"UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"'")
+                     MESSAGE("***Error uPDATE dbo.movpendientes SET monto = "~val(l:&j)~" WHERE where nroperacion= '"~val(b:&j)~"' ")
+                     act(er2,Reemplazar(GetError(),"'"," "))
+                     SCN(er1,1)
+                     SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD MOVPEN Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                     if Eqstr(var('BCSLOG'),'SI')
+                        LogWrite("Error UPD MOVPEN nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                        LogWrite("Error UPD MOVPEN "~val(z95))
+                     endif
+                  end
+               else
+                  *Derechos de MAV
+                  if eqstr(val(r:&j),'Derechos')
+                      try
+                         if val(t:&j) <> 0
+                             acn(ti:&j,val(o:&j)* val(q:&j))
+                         else
+                             acn(ti:&j,0)
+                         endif
+                         sql.add("UPDATE "~DBO~".operaciones SET TotalDerechos = "~val(o:&j)~" ")
+                         sql.add(", TotalIva = "~val(ti:&j)~" ")
+                         sql.add("where nroperacion= '"~val(b:&j)~"' ")
+                         sql.new
+                      catch
+                         act(z95,"UPDATE "~DBO~".operaciones SET TotalGastos = "~val(o:&j)~" , totalnetocli1 = "~val(to:&j)~" , TotalIvaAdi = "~val(ti:&j)~" where nroperacion= '"~val(b:&j)~"' ")
+                         MESSAGE("***Error modificando operacion UPDATE from dbo.operaciones where where nroperacion= '"~val(b:&j)~"' ")
+                         act(er2,Reemplazar(GetError(),"'"," "))
+                         SCN(er1,1)
+                         SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD DER BO OP detalle Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                         if Eqstr(var('BCSLOG'),'SI')
+                            LogWrite("Error UPD DER OP nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                            LogWrite("Error borr cab "~val(z95))
+                         endif
+                     end
+                     try
+                        *Movimiento MAV de derechos
+                        sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"'")
+                        sql.new
+                        *Movimiento MAV de IVA derechos
+                        sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(ti:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = 16")
+                        sql.new
+                     catch
+                        act(z95,"UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"' and nrmov = '"~val(m:&j)~"'")
+                        MESSAGE("***Error uPDATE dbo.movpendientes SET cantidad = "~val(l:&j)~" WHERE where nroperacion= '"~val(b:&j)~"' ")
+                        act(er2,Reemplazar(GetError(),"'"," "))
+                        SCN(er1,1)
+                        SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD DER BO MOVPEN Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                        if Eqstr(var('BCSLOG'),'SI')
+                           LogWrite("Error UPD DER BO MOVPEN nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                           LogWrite("Error UPD MOVPEN "~val(z95))
+                        endif
+                     end
+                  endif
+               endif
+               try
+                  sql.exec
+                  SCN(z96,1)
+               catch
+                   act(z95,"sql.exec")
+                   MESSAGE("***Error sql.exec ")
+                   act(er2,Reemplazar(GetError(),"'"," "))
+                   SCN(er1,1)
+                   SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error sql.exec "~val(r:&j)~" OP MAV  Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                   if Eqstr(var('BCSLOG'),'SI')
+                      LogWrite("Error sql.exec "~val(r:&j)~" OP MAV  nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                      LogWrite("Error sql.exec  "~val(z95))
+                   endif
+               end
+            else
+                 if Eqstr(val(n:&j),'OPEFUT')
+                    *Comision de Futuros
+                    if eqstr(val(r:&j),'Comision')
+                        try
+                             *acn(to:&j,val(l:&j)-val(k:&j)+val(o:&j)-val(u:&j)+(val(o:&j)*val(q:&j)))
+                             acn(ti:&j,val(o:&j)* val(q:&j))
+                             sql.add("UPDATE "~DBO~".operaciones SET totalaux1 = "~val(o:&j)~" ")
+                             sql.add(", totaliva = "~val(ti:&j)~" ")
+                             sql.add("where nroperacion= '"~val(b:&j)~"' ")
+                             sql.new
+                        catch
+                             act(z95,"UPDATE "~DBO~".operaciones SET totalaux1 = "~val(o:&j)~" , totaliva = "~val(ti:&j)~" where nroperacion= '"~val(b:&j)~"' ")
+                             MESSAGE("***Error modificando operacion UPDATE from dbo.operaciones where where nroperacion= '"~val(b:&j)~"' ")
+                             act(er2,Reemplazar(GetError(),"'"," "))
+                             SCN(er1,1)
+                             SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD COM fut OP detalle Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                             if Eqstr(var('BCSLOG'),'SI')
+                                 LogWrite("Error UPD COM fut OP nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                                 LogWrite("Error borr cab "~val(z95))
+                             endif
+                        end
+                        try 
+                            *Movimiento Futuros de comision
+                            sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"'")
+                            sql.new
+                            *Movimiento Futuros de IVA comision
+                            sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(ti:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = 12")
+                            sql.new
+                        catch
+                            act(z95,"UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"'")
+                            MESSAGE("***Error uPDATE dbo.movpendientes SET cantidad = "~val(l:&j)~" WHERE where nroperacion= '"~val(b:&j)~"' ")
+                            act(er2,Reemplazar(GetError(),"'"," "))
+                            SCN(er1,1)
+                            SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD COM fut MOVPEN Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                            if Eqstr(var('BCSLOG'),'SI')
+                               LogWrite("Error UPD COM fut MOVPEN nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                               LogWrite("Error UPD MOVPEN "~val(z95))
+                            endif
+                        end
+                    else
+                        *Derechos de Futuros
+                        if eqstr(val(r:&j),'Derechos')
+                            try
+                                *acn(ti:&j,val(o:&j)*val(q:&j))
+                                *if val(w:&j) = 1
+                                if val(t:&j) <> 0
+                                     acn(ti:&j,val(o:&j)* val(q:&j))
+                                else 
+                                     acn(ti:&j,0)
+                                endif
+                                sql.add("UPDATE "~DBO~".operaciones SET TotalGastos = "~val(o:&j)~" ")
+                                sql.add(", TotalIvaAdi = "~val(ti:&j)~" ")
+                                sql.add("where nroperacion= '"~val(b:&j)~"' ")
+                            catch
+                                act(z95,"UPDATE "~DBO~".operaciones SET TotalGastos = "~val(o:&j)~" , TotalIvaAdi = "~val(ti:&j)~" where nroperacion= '"~val(b:&j)~"' ")
+                                MESSAGE("***Error modificando operacion UPDATE from dbo.operaciones where where nroperacion= '"~val(b:&j)~"' ")
+                                act(er2,Reemplazar(GetError(),"'"," "))
+                                SCN(er1,1)
+                                SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD DER FUT OP detalle Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                                if Eqstr(var('BCSLOG'),'SI')
+                                   LogWrite("Error UPD DER FUT OP nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                                   LogWrite("Error DET FUT  "~val(z95))
+                                endif
+                            end
+                            try
+                                *Movimiento Futuros de Derechos
+                                sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"'")
+                                sql.new
+                                *Movimiento Futuros de IVA Derechos
+                                sql.add("UPDATE "~DBO~".movpendientes SET cantidad = "~val(ti:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = 14")
+                                sql.new
+                            catch
+                                act(z95,"UPDATE "~DBO~".movpendientes SET cantidad = -"~val(o:&j)~" where nroperacion= '"~val(b:&j) ~"' and nrmov = '"~val(m:&j)~"'")
+                                MESSAGE("***Error uPDATE "~DBO~".movpendientes SET cantidad = "~val(l:&j)~" WHERE where nroperacion= '"~val(b:&j)~"' ")
+                                act(er2,Reemplazar(GetError(),"'"," "))
+                                SCN(er1,1)
+                                SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error UPD DER FUT MOVPEN Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                                if Eqstr(var('BCSLOG'),'SI')
+                                   LogWrite("Error UPD DER FUT MOVPEN nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                                   LogWrite("Error UPD DER MOVPEN "~val(z95))
+                                endif
+                            end
+                        endif
+                    endif
+                    try   
+                       sql.exec
+                       SCN(z96,1)
+                    catch
+                       act(z95,"sql.exec")
+                       MESSAGE("***Error sql.exec ")
+                       act(er2,Reemplazar(GetError(),"'"," "))
+                       SCN(er1,1)
+                       SQL("Insert into "~DBO~".LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','MOCOMI',substring('Error sql.exec "~val(r:&j)~" FUT MOVPEN Err: " ~ Reemplazar(val(er2),"'"," ")~ "',1,200))")
+                       if Eqstr(var('BCSLOG'),'SI')
+                          LogWrite("Error sql.exec "~val(r:&j)~" FUT  nro :"~val(b:&j)~" fecha proc: "~val(e:&j)~" Err: " ~ Reemplazar(val(er2),"'"," "))
+                          LogWrite("Error sql.exec FUT "~val(z95))
+                       endif
+                    end
+                 endif
+            endif
+         endif
+     endif 
+Proximo
+if val(er1)=0
+   Messagebox("Se modifico exitosamente "~fstr(val(z96),0,0)~" operaciones")
+else
+   Messagebox("Se modifico con errores "~ fstr(val(er1),0,0)~" operaciones Err:"~val(er2))
+endif

@@ -1,0 +1,192 @@
+﻿CrearDialogo
+   Fecha1       : "Fecha"       ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;FSys
+   NrOperacion1 : "NrOperacion" ;;;;;;;
+FinDialogo
+
+*HojaVisible(SI)
+
+Message('Re-estructurando Cap.Int. '~Dialogo.NrOperacion1)
+
+SQL.ADD(" Select O.NrOperacion, O.TipoOp, C.NrCuota, C.Cantidad1, C.Cantidad2, C.Cantidad3, C.Cantidad5, C.Cantidad6, C.Cantidad9, C.Cantidad10, ")
+SQL.ADD(" C.Tasa1, C.Tasa2, C.Tasa6, C.Tasa7, C.Tasa8, C.Precio2, C.Precio4, C.Fecha1, C.Fecha2, C.Plazo1, C.Total5, ")
+SQL.ADD(" C.Total6, C.Total7, C.Total9, O.Precio2 Precio2OP, O.RB5, O.RB6, O.RB8, O.DeltaTasa, O.MB1, ")
+SQL.ADD(" O.Cantidad, O.TotalComisiones, O.TasaImp1, O.ImpGastos2, O.TotalAux1, O.Cuotas1, O.CantidadOri, C.Cantidad1Ori, C.Cantidad2Ori, C.Coeficiente  ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C")
+SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Endif
+SQL.ADD("   and O.TipoOp in ('MMPOSM','MMPCLM') ")
+SQL.ADD("   and O.CB2 = 1 ")
+SQL.ADD("   and C.Fecha3 >= (Select Fecha3 From "~DBO~".CUOTAS S ")
+SQL.ADD("                Where S.NrOperacion = O.NrOperacion ")
+SQL.ADD("                AND S.Fecha3 = '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD(" Order by 1, 3 ")
+
+ifa
+ifa
+ACT(a:fac, 'NrCuota')
+ACT(b:fac, 'Tasa Amort')
+ACT(c:fac, 'Imp Amort')
+ACT(d:fac, 'Valor Nominal')
+ACT(e:fac, 'Interes')
+ACT(f:fac, 'Interes Capitalizado')
+ACT(g:fac, 'Interes Total')
+ACT(h:fac, 'Imp Interes')
+ACT(i:fac, 'Monto')
+ACT(j:fac, 'Monto Total')
+ACT(k:fac, 'Importe IVA')
+ACT(l:fac, 'Importe WHT')
+ACT(m:fac, 'CEN Variable')
+ACT(n:fac, 'MOD Imp al Interes')
+
+ACT(o:fac, 'Imp.Var._CEC')
+ACT(p:fac, 'Imp.Tot._CEC')
+ACT(q:fac, 'Imp_Cs_Fin_CEC')
+ACT(r:fac, 'ImpAmor Orig')
+ACT(s:fac, 'VN Orig')
+ACT(t:fac, 'Resultado')
+
+Recorrer SQL  
+   If Eqstr(Val(z:1), FBN('NrOperacion'))
+      ACT(z:1, FBN('NrOperacion'))
+      SCN(z:2, 1)
+
+      *+V. Nominal (CANTIDAD2)
+      ACN(d:fac,  Val(d:fac-1) - Val(c:fac-1) + Val(f:fac-1))
+      *+Interes (CANTIDAD3)
+      ACN(e:fac, Val(d:fac) * ((FBN('Precio4') + FBN('Precio2')) / 100) * FACTORDIAS(FBN('Fecha1'),FBN('Fecha2'),FBN('RB8')+1))
+      *+Interes Capitalizado (CANTIDAD9)
+      ACN(f:fac, Val(e:fac) * FBN('Tasa6') /100)
+      *+Imp Amort (CANTIDAD1)
+      ACN(c:fac, Val(d:fac) * FBN('Tasa1') /100)
+
+      If Eqstr(FBN('TipoOp'),'MMPOSM')
+         *+Imp al Interes (TOTAL9)
+         If FBN('RB6')=0
+            ACN(h:fac, Val(e:fac)*FBN('TASAIMP1')/100)
+         Else
+            ACN(h:fac,0)
+         Endif
+         *+Importe IVA (TOTAL4)
+         ACN(k:fac, Val(d:fac) * FBN('TASA2') / 100 * FACTORDIAS(FBN('Fecha1'),FBN('Fecha2'),FBN('RB8')+1) * (FBN('ImpGastos2')/100) )
+         *+Importe WH (TOTAL7)
+         ACN(l:fac, Val(d:fac) * FBN('TOTAL6') / 100 * FACTORDIAS(FBN('Fecha1'),FBN('Fecha2'),FBN('RB8')+1) * (FBN('TotalAux1')/100) )
+         *+CEN Variable (CANTIDAD4)
+         If FBN('RB6')=0
+            ACN(m:fac, (Val(d:fac) * FBN('Precio2OP') * FBN('Plazo1') )/IIF(FBN('RB5') = 0, 36000, 36500) )
+         Else
+            ACN(m:fac,0)
+         Endif
+         *+Interes Total (TOTAL3)
+         ACN(g:fac, Val(h:fac) + Val(l:fac) + Val(e:fac) + FBN('Cantidad6'))
+         *+MOD WHT (PRECIO7) = Importe WH (TOTAL7)
+         *+MOD VAR CEN (PRECIO8) = CEN Variable (CANTIDAD4)
+      Else
+         *+Imp al Interes (TOTAL9)
+         ACN(X:1, VAR('DEFAINT')*Val(e:fac)/100)
+         ACN(X:2, (Val(d:fac)*VAR('TASAIMPINT')/100*FBN('Plazo1'))/365)
+         If FBN('TASAIMP1') <> 0
+            If Val(X:1) > Val(X:2)
+               ACN(h:fac, Val(X:2))
+            Else
+               ACN(h:fac, Val(e:fac)*FBN('TASAIMP1')/100)
+            Endif
+         Else
+            ACN(h:fac,0)
+         Endif
+         *+Imp.Var._CEC (CANTIDAD4)
+         ACN(o:fac, IIF( FBN('RB6')=1,Val(d:fac)*FBN('Total5')*FBN('Plazo1')/IIF(FBN('MB1')=0,36000,365000),0) ) 
+         *+Imp.Tot._CEC (CANTIDAD6)
+         ACN(p:fac, IIF(FBN('RB6')=1,FBN('Cantidad5')+Val(o:fac),0))
+         *+Imp_Cs_Fin_CEC (CANTIDAD7)
+         ACN(q:fac, IIF(FBN('RB6')=1,Val(p:fac)*FBN('DeltaTasa')/100,0))
+         *+Importe IVA (TOTAL4)
+         If FBN('RB6')=1
+            ACN(k:fac, (Val(d:fac) * FBN('TASA2') / 100 * FACTORDIAS(FBN('Fecha1'),FBN('Fecha2'),FBN('RB8')+1) + Val(p:fac)) * (FBN('ImpGastos2')/100))
+         Else
+            ACN(k:fac, Val(d:fac) * (FBN('Precio2') + FBN('Precio4')) / 100 * FACTORDIAS(FBN('Fecha1'),FBN('Fecha2'),FBN('RB8')+1) * (FBN('ImpGastos2')/100) )
+         Endif
+         *+Interes Total (TOTAL3)
+         ACN(g:fac, Val(q:fac) + Val(h:fac) + Val(e:fac) + IIF(FBN('RB6')=1,Val(p:fac),0))
+         If FBN('Coeficiente')=1
+            *+Imp Amort Orig (CANTIDAD1ORI)
+            ACN(r:fac, Val(c:fac))
+            *+VN ORig (CANTIDAD2ORI)  
+            ACN(s:fac, Val(d:fac))
+         Else
+            *+Imp Amort Orig (CANTIDAD1ORI)
+            ACN(r:fac, FBN('Cantidad1Ori'))
+            *+VN ORig (CANTIDAD2ORI)  
+            ACN(s:fac, FBN('Cantidad2Ori'))
+         Endif
+         *+Resultado (RESULTADOINDICE)
+         ACN(t:fac, Val(c:fac) - Val(r:fac))
+         *+Imp_Cs_Fin_CEC (CANTIDAD8) = Imp_Cs_Fin_CEC (CANTIDAD7)
+         *+MOD VAR CEC (PRECIO7) = Imp.Var._CEC (CANTIDAD4)
+      Endif
+
+      *+Monto (TOTAL2)
+      ACN(i:fac, Val(c:fac) + Val(e:fac))
+      *+Monto Total (TOTAL1)
+      ACN(j:fac, Val(c:fac) + Val(g:fac))
+      *+MOD Imp al Interes (PRECIOREF1)
+      ACT(n:fac, Fstr(Val(e:fac)*FBN('TASAIMP1')/100,0,2))
+      *+MOD INT (PRECIO5) = Interes (CANTIDAD3)
+      *+MOD IVA (PRECIO6) = Importe IVA (TOTAL4)
+
+      SQL.ADD(" Update "~DBO~".CUOTAS ") 
+      SQL.ADD(" Set Cantidad3 = "~Val(e:fac)~", ")
+      SQL.ADD("     Cantidad2 = "~Val(d:fac)~", ")
+      SQL.ADD("     Cantidad9 = "~Val(f:fac)~", ")
+      SQL.ADD("     Cantidad1 = "~Val(c:fac)~", ")
+      SQL.ADD("     Total3 = "~Val(g:fac)~", ")
+      SQL.ADD("     Total4 = "~Val(k:fac)~", ")
+      SQL.ADD("     Total9 = "~Val(h:fac)~", ")
+      If Eqstr(FBN('TipoOp'),'MMPOSM')
+         SQL.ADD("     Total7 = "~Val(l:fac)~", ")
+         SQL.ADD("     Cantidad4 = "~Val(m:fac)~", ")
+         SQL.ADD("     Precio7 = "~Val(l:fac)~", ")
+         SQL.ADD("     Precio8 = "~Val(m:fac)~", ")
+      Else
+         SQL.ADD("     Cantidad4 = "~Val(o:fac)~", ")
+         SQL.ADD("     Cantidad6 = "~Val(p:fac)~", ")
+         SQL.ADD("     Cantidad7 = "~Val(q:fac)~", ")
+         SQL.ADD("     Cantidad8 = "~Val(q:fac)~", ")
+         SQL.ADD("     Precio7 = "~Val(o:fac)~", ")
+         SQL.ADD("     Cantidad1Ori = "~Val(r:fac)~", ")
+         SQL.ADD("     Cantidad2Ori = "~Val(s:fac)~", ")
+         SQL.ADD("     ResultadoIndice = "~Val(t:fac)~", ")
+      Endif
+      SQL.ADD("     Total2 = "~Val(i:fac)~", ")
+      SQL.ADD("     Total1 = "~Val(j:fac)~", ")
+      SQL.ADD("     PrecioRef1 = '"~Val(n:fac)~"', ")
+      SQL.ADD("     Precio5 = "~Val(e:fac)~", ")
+      SQL.ADD("     Precio6 = "~Val(k:fac)~" ")
+      SQL.ADD(" Where NrOperacion = '"~FBN('NrOperacion')~"' ")
+      SQL.ADD("     and NrCuota = "~FBN('NrCuota')~" ")
+      SQL.NEW
+      SQL.EXEC
+
+      If FBN('NrCuota') = FBN('Cuotas1')
+         SQL.ActualizarMovimientos2(FBN['NrOperacion'],SI,NO,NO,SI)
+         SQL.EXEC
+      Endif
+   Else
+      *+Imp Amort
+      ACN(c:fac, FBN('Cantidad1'))
+      *+V. Nominal
+      ACN(d:fac, FBN('Cantidad2'))
+      *+Interes Capitalizado
+      ACN(f:fac, FBN('Cantidad3')*FBN('Tasa6')/100)
+
+      SQL.ADD(" Update "~DBO~".CUOTAS ") 
+      SQL.ADD(" Set Cantidad9 = "~Val(f:fac)~" ")
+      SQL.ADD(" Where NrOperacion = '"~FBN('NrOperacion')~"' ")
+      SQL.ADD("    and NrCuota = "~FBN('NrCuota')~" ")
+      SQL.NEW
+      SQL.EXEC
+
+      ACT(z:1, FBN('NrOperacion'))
+   Endif
+Proximo

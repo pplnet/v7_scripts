@@ -1,0 +1,94 @@
+﻿SQL.ADD(" SELECT P.* FROM "~DBO~".MOVPOSEJE P, "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS B ")
+SQL.ADD(" WHERE  T.NrTrans  = P.NrOperacion ")
+SQL.ADD(" AND B.NrOperacion = T.NrTrans ")
+SQL.ADD(" AND B.NrBit <> 40 ")
+SQL.ADD(" AND B.Valor = '1' ")
+SQL.ADD(" AND    P.Especie  = '"~Val(aa:1)~"' ")
+SQL.ADD(" AND    P.Cupon    = '"~FStr(Val(aa:2),1,0)~"' ")
+SQL.ADD(" AND    P.Vehiculo = '"~Val(aa:4)~"' ")
+SQL.ADD(" AND    T.CB4      = '1' ")
+SQL.ADD(" AND    T.TipoTr2  = 'CUPON' ")
+SQL.ADD(" ORDER BY NrTrans ")
+
+SetFilaActual(99)
+ACN(zz:1, 0)
+
+Recorrer SQL
+   ACN(zz:1, 1)
+   ACT(aa:fac, fbn('Cliente'))
+   ACN(ak:fac, 1)
+   ACN(ad:fac, fbn('Cantidad'))
+   ACN(ae:fac, fbn('Precio'))
+   ACT(af:fac, fbn('Vehiculo'))
+   ACT(ag:fac, fbn('Trader'))
+   ACT(ah:fac, fbn('TipoNegocio'))
+   ACN(ai:fac, fbn('NrSaldo'))
+   ACD(an:fac, fbn('FechaMov'))
+   ACT(al:fac, fbn('Vehiculo'))
+   IF fbn('Cantidad')>0
+      ACT(am:fac, 'CCUPON')
+   ELSE
+      ACT(am:fac, 'PCUPON')
+   ENDIF
+Proximo
+
+IF Val(zz:1)<>0
+   IF NO
+     CrearListBox ; 'Arial,8,';'Corte de Posicion de Clientes sin Saldo.'
+       'OK'          ;ak:100..ak:fac;SI;;; 40;CHECK ;RGB(255,255,193)
+       'Cliente'     ;aa:100..aa:FAC;NO;;; 70;STRING;;RGB(220,220,193)
+       'Saldo'       ;ad:100..ad:FAC;NO;;;100;NUMERO;'##,###,###.##';RGB(220,220,193)
+       'PPP'         ;ae:100..ae:FAC;NO;;;100;NUMERO;'##,###,###.##';RGB(220,220,193)
+       'PPP Act.'    ;aj:100..aj:FAC;NO;;;100;NUMERO;'##,###,###.##';RGB(220,220,193)
+       'Estado'      ;am:100..am:FAC;NO;;; 90;STRING;;RGB(220,220,193)
+     FinListBox
+   ENDIF
+
+   IF OK
+      Recorrer&i 100,fac
+        IF Val(ak:&i)=1
+           ACT(Y1,GetNumerador(20))
+
+           *--------------- insertar una transaccion para actualizar el saldo
+   
+           ***---ACT(Y1,GetNumerador(20))
+           ACT(Y:1, GetNumerador(BuscarCampo('VEHICULOS','Alias3','Codigo', Val(AA:4))))
+           SQL.ADD("INSERT INTO "~DBO~".TRANSACCIONES2 (")
+           SQL.ADD(" Especie, Cupon1 , Fecha1, ")
+           SQL.ADD(" Cliente1, Cantidad1, ")
+           SQL.ADD(" Vehiculo1, TipoTr2, NrTrans, ")
+           SQL.ADD(" FechaCarga, FechaCargaSys, UsrInput, CB2, CB4, PrecioEj ")
+           SQL.ADD(" ) VALUES ( ")
+           SQL.ADD(" '"~Val(aa:1)~"', '"~Val(aa:2)~"', '"~IdxDate(Val(x5))~"',")
+           SQL.ADD(" '"~Val(aa:&i)~"', "~FStr(ABS(Val(ad:&i)),1,2)~", ")
+           SQL.ADD(" '"~Val(aa:4)~"', '"~Val(am:&i)~"', '"~Val(Y1)~"', ")
+           SQL.ADD(" "~SQLAhora~", '"~IdxDate(Fsys)~"', '"~UsuarioActivo~"', '0', '1', "~Fstr(Val(CB:1), 0, 7)~" ) ")
+           SQL.NEW         
+           SQL.EXEC
+
+           SQL.ADD("INSERT INTO "~DBO~".OPERACIONESBITS ")
+           SQL.ADD("(NrBit, NrOperacion, Valor) ")
+           SQL.ADD(" VALUES ")
+           SQL.ADD("(70, '"~Val(y1)~"', '1') ")
+           SQL.NEW
+           SQL.EXEC
+
+           * Actualizar movimientos de posicion para el cupon
+           SQL.ADD(" INSERT INTO "~DBO~".MOVPOSEJE ")   
+           SQL.ADD(" ( Especie, Cantidad, NrOperacion, ")
+           SQL.ADD(" FechaMov, Cliente, Vehiculo, ")
+           SQL.ADD(" NrSaldo, Precio,  ")
+           SQL.ADD(" Cupon, Tipo, TipoNegocio, Trader ")
+           SQL.ADD(" ) Values ( ")
+           SQL.ADD(" '"~Val(aa:1)~"', "~Fstr(Val(ad:&i)*(-1),1,2)~", '"~Val(Y1)~"', ")
+           SQL.ADD(" '"~IdxDate(Val(x5))~"', ")
+           SQL.ADD(" '"~Val(aa:&i)~"', '"~Val(aa:4)~"', ")
+           SQL.ADD(" "~FStr(Val(ai:&i),1,0)~", "~FStr(Val(ae:&i),1,8)~", ")
+           SQL.ADD(" '"~FStr(Val(aa:2),1,0)~"', '1', '"~Val(ah:&i)~"', '"~Val(ag:&i)~"' ) ")
+           SQL.NEW
+
+           SQL.EXEC
+        ENDIF
+      Proximo
+   ENDIF
+ENDIF

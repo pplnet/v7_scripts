@@ -1,0 +1,404 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1     : "Fecha Vigencia"    ;1;1;;;;Dialogo.Fecha1 <> 0 Y Dialogo.Fecha1 <= Fsys;'Fecha Vigencia Invalida';NO;Fsys;
+  Especie1   : "Especie"           ;;;;;;;;;;;;;
+  Cliente1   : "Entidad"           ;1;2;;;;;;;;;;;
+  Radio1     : "Expresado|ARP|USD" ;2;2;;;;;;;1
+*  Radio4     : "Consolidado|NO|SI" ;3;2;;;;;;;0
+  NrOperacion1: "Operacion"        ; ; ;;;;;;;;;;;;" TipoOp In ('MMONM','MMON','MMSIMV','MMPSI','MMSCMV','MMPSC')"
+  Lista1     : "Vehiculo"          ;5;1;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') "))
+  Lista2     : "TipoOp"            ;6;1;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo In ('MMON','MMONM','MMPSI','MMSIMV','MMSCMV','MMPSC') ")
+  Radio3      : "Consolidado|SI|NO";7;2;;SI;SI;;
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(2)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,2)
+
+ACT(a:FAC  ,"Detalle de Obligaciones Negociables y Prestamos Sindicados ")
+ACT(a:FAC+1,"Vigentes al "~Dialogo.Fecha1~" "~IIf(Dialogo.Radio3=1,' Por Vehiculo','Consolidado')  )
+SetFont(a:fac..a:fac+1,3)
+
+SetFilaActual(4)
+
+If Dialogo.Radio3=1
+   *- Corte de control por Vehiculo,NrOperacion
+*   ACT(aa1,"Concat(O.Vehiculo1,O.NrOperacion) as Clave")
+    ACT(aa1,'O.Vehiculo1+O.NrOperacion as Clave')
+Else
+   *- Corte de control por Vehiculo,NrOperacion
+   ACT(aa1,"O.NrOperacion as Clave")
+EndIf
+
+ACT(mo1,VAR('MONEEXTR'))
+If Dialogo.Radio1=0
+   ACT(mo1,VAR('MONELOCA'))
+EndIf
+
+if NoVacio(Dialogo.Cliente1)
+  ACT(a:FAC+1, 'Entidad : '~Dialogo.Cliente1~'  '~BuscarCampo('Clientes','RazonSocial','Codigo',Dialogo.Cliente1))
+else
+  ACT(a:FAC+1, 'Entidad : Todos')
+endif
+if NoVacio(Dialogo.Lista1)
+  ACT(a:FAC+2, 'Vehiculo : '~Dialogo.Lista1)
+else
+  ACT(a:FAC+2, 'Vehiculo : '~IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")))
+endif
+if NoVacio(Dialogo.Especie1)
+  ACT(a:FAC+3, 'Especie : '~Dialogo.Especie1~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie1))
+else
+  ACT(a:FAC+3, 'Especie : Todas')
+endif
+if NoVacio(Dialogo.Lista2)
+  ACT(a:FAC+4, 'Tipo Op.: '~Dialogo.Lista2)
+else
+  ACT(a:FAC+4, 'Tipo Op.: Todas')
+endif
+if NoVacio(Dialogo.NrOperacion1)
+  ACT(a:FAC+5, 'NrOperacion: '~Dialogo.NrOperacion1)
+else
+  ACT(a:FAC+5, 'NrOperacion: Todas')
+endif
+
+act(a:fac+6,'Expresado en  '~IIF(Dialogo.Radio1=0, Var('MONELOCA'), Var('MONEEXTR')))
+SetFont(a:fac..N:FAC+6,2)
+SetFilaActual(FAC+7)
+
+*- Select de Operaciones
+*- Llamo a la funcion pidiendo Todos los settlements vigentes vi1: Vigentes=1 , Todos los Settements=0
+ACN(vi1,0)
+(.'PFONPSI'.)
+SQL.ADD("order by 1,5")
+
+*** b:400 valor de la columna ***
+acn(z:400,2)
+ACT(x:400,' ')
+ACN(lv1,0)
+
+Recorrer SQL
+
+     Message(fbn['Clave']~' '~fbn['FechaVto']~'  '~FBN['VResidual']~' '~fbn['TipoOp'])
+
+     * Corte de Control por Cliente o Vehiculo
+     if Not EqStr(val(x:400),fbn['Clave']) y val(lv1)<>0
+        ACT(a:fac  , 'Totales ')
+        SetFont(a:fac..v:fac,2)
+        AgregarMarco(a:fac,0,0,Exe('COLOR8'))
+
+        Ifa 
+        *- V.Residual Original y Swapeado
+        ACN(a:fac,val(a:val(lv1)))        
+        ACN(b:fac,val(b:val(lv1)))
+
+        *- Cuota Amortizacion 
+        ACN(c:fac,val(c:val(lv1)))
+        ACN(d:fac,val(d:val(lv1)))
+
+        *- Intereses Mon.Original
+        ACN(j:fac,val(j:val(lv1)))
+
+        *- Imp.Endeudamiento Mon.Original
+        ACN(k:fac,val(k:val(lv1)))
+        FormatoCeldas(k:fac,EXE('F5')) 
+        ACN(l:fac,val(l:val(lv1)))
+
+        *- Imp.Endeudamiento por el TIPO DE CAMBIO DEL DIA
+        ACN(m:fac,val(m:val(lv1)))
+
+        ACN(o:fac, val(o:val(lv1)))
+        ACN(p:fac, val(p:val(lv1)))
+
+        ACN(r:fac, val(r:val(lv1)))
+        ACN(s:fac, val(s:val(lv1)))
+        ACN(t:fac, val(t:val(lv1)))
+        ACN(u:fac, val(u:val(lv1)))
+        ACN(v:fac, val(v:val(lv1)))
+  
+        FormatoCeldas(n:fac,EXE('F5'))    
+        SetFont(a:fac..v:fac,2)
+        AgregarMarco(a:fac..v:fac,0,0,Exe('COLOR8'))
+        Ifa
+     EndIf
+
+     * Corte de Control por Cliente o Vehiculo
+     if Not EqStr(val(x:400),fbn['Clave'])
+        Ifa
+        acn(y:400,2)
+        act(x:400,fbn['Clave'])
+
+        *- fi1: Fila Actual del Encabezado
+        ACN(fi1,fac)
+
+        
+        *- Encabezado operacion
+        ACT(a:fac  , 'Vehiculo: '~FBN['Vehiculo1'])
+        ACT(a:fac+1, 'Cantidad: '~PYC(FBN['Cantidad'],0,2) )
+
+        ACT(c:fac  , 'TipoOp: '~FBN['TipoOp'])
+        ACT(c:fac+1, 'Numero: '~FBN['NrOperacion'])
+        ACLO(c:fac+1, FBN['NrOperacion'])
+
+        ACT(e:fac  , 'Especie: '~FBN['Especie'])
+        ACT(e:fac+1, 'Entidad: '~FBN['Cliente1'])
+
+        ACT(g:fac  , 'Origen: '~FBN['FechaOp'])
+        ACT(g:fac+1, 'Vto: '~FBN['FechaVto'])
+
+        ACN(ab:fac  , CotizacionC(fbn['Especie'],,,,Dialogo.Fecha1,1,SI,val(mo1)) )
+        ACT(i:fac  , 'TC HOY: '~PYC(val(ab:fac),0,8) )
+        ACT(i:fac+1, 'TC Conc: '~PYC(FBN['Cotizacion1'],0,8) )
+
+        ACT(k:fac  , 'TipoTasa: '~FBN['TipoTasa'])
+        ACT(k:fac+1, 'DayCount: '~IIF(FBN['RB8']=0,'ActAct', IIF(FBN['RB8']=1,'Act365F', IIf(FBN['RB8']=2,'Act360',IIF(FBN['RB8']=3,'360360','30E360')))) )
+        AgregarMarco(a:fac..l:fac+1,0,0,Exe('COLOR6'))
+        ACN(nu1,13)
+
+        *- Recupero todas las operaciones asociadas
+        SQL.ADD("SELECT * FROM  "~DBO~".OPERACIONES WHERE OperacionRef='"~FBN['NrOperacion']~"' Order By FechaOp")
+
+        Recorrer SQL
+           ACT(13:fac -1 , 'Op.Relacionadas ... ')
+           dfa
+           ACT(val(nu1) :fac+1, FBN['NrOperacion'])
+           ACLO(val(nu1):fac+1, FBN['NrOperacion'])
+           SCN(nu1,1)
+        Proximo
+
+        SetFont(a:fac..val(nu1):fac+1,2)
+        SetFilaActual(fac+3)
+
+        *- Titulos del Informe
+        ACT(a:fac  ,'Capital Residual')
+        ACT(a:fac+1,'Mon.Orig')
+        ACT(b:fac+1,'Swap')
+        AgregarMarco(a:fac..b:fac,1,0)
+        AgregarMarco(a:fac+1..b:fac+1,1,2)
+        SetFont(a:fac..b:fac+1,2)
+
+        ACT(c:fac  ,'Amortizacion')
+        ACT(c:fac+1,'Mon.Orig')
+        ACT(d:fac+1,'Swap')
+        AgregarMarco(c:fac..d:fac,1,0)
+        AgregarMarco(c:fac+1..d:fac+1,1,2)
+        SetFont(c:fac..d:fac+1,2)
+
+        ACT(e:fac  ,'Periodo Interes')
+        ACT(e:fac+1,'Inicio')
+        ACT(f:fac+1,'Fin')
+        AgregarMarco(e:fac..f:fac,1,0)
+        AgregarMarco(e:fac+1..f:fac+1,1,2)
+        SetFont(e:fac..f:fac+1,2)
+
+
+        ACT(g:fac  ,'Tasa')
+        ACT(g:fac+1,'Tipo')
+        ACT(h:fac+1,'Spread')
+        ACT(i:fac+1,'Total')
+        AgregarMarco(g:fac..i:fac,1,0)
+        AgregarMarco(g:fac+1..i:fac+1,1,2)
+        SetFont(g:fac..i:fac+1,2)
+
+        ACT(j:fac  ,'Intereses')
+        ACT(j:fac+1,' En Mon.Or')
+        AgregarMarco(j:fac..j:fac+1,1,0)
+        SetFont(j:fac..j:fac+1,2)
+
+        ACT(k:fac  ,' Imp.Endeudamiento ')
+        ACT(k:fac+1,' Tasa ')
+        ACT(l:fac+1,'Mon.Or')
+        ACT(m:fac+1,val(mo1)) 
+        AgregarMarco(k:fac..m:fac,1,0)
+        AgregarMarco(k:fac+1..m:fac+1,1,2)
+        SetFont(k:fac..m:fac+1,2)
+
+        ACT(n:fac  ,' Imp.WH ')
+        ACT(n:fac+1,' Tasa ')
+        ACT(o:fac+1,'Mon.Or')
+        ACT(p:fac+1,val(mo1)) 
+        AgregarMarco(n:fac..p:fac,1,0)
+        AgregarMarco(n:fac+1..p:fac+1,1,2)
+        SetFont(n:fac..p:fac+1,2)
+
+        ACT(q:fac  ,' Dias')
+        ACT(q:fac+1,' Trans ')
+        AgregarMarco(q:fac..q:fac+1,1,0)
+        SetFont(q:fac..q:fac+1,2)
+
+        ACT(r:fac  ,' Devengamiento ')
+        ACT(r:fac+1,' Interes MOr')
+        ACT(s:fac+1,' Imp.End MOr')
+        ACT(t:fac+1,' Imp.End '~val(mo1))
+        ACT(u:fac+1,' Imp.WH MOr')
+        ACT(v:fac+1,' Imp.WH '~val(mo1))
+        AgregarMarco(r:fac..v:fac,1,0)
+        AgregarMarco(r:fac+1..v:fac+1,1,2)
+        SetFont(r:fac..v:fac+1,2)
+        SetFilaActual(fac+2)
+     EndIf
+
+     *- Detalle de las OPeraciones
+     ACT(no1,FBN['NrOperacion'])
+     ACD(fe1,FBN['FechaOp'])
+     ACD(fe2,FBN['FechaVto'])
+     ACD(fe3,Dialogo.Fecha1)
+
+     *- Periodo Interes
+     ACD(e:fac,val(fe1))        
+     ACD(f:fac,val(fe2))
+
+     *- lv1: Linea de Cuota Vigente
+     If val(e:fac)<=Dialogo.Fecha1 y val(f:fac)>Dialogo.Fecha1
+        ACN(lv1,fac)
+     EndIf
+
+     *- V.Residual y Cuota Amortizacion 
+     ACN(a:fac,FBN['VResidual'])        
+     ACN(c:fac,FBN['ImpAmort'])        
+
+     ACN(ta1,0)
+     ACN(sp1,0)
+
+     ACN(nc2,val(a:fac)*val(ab:val(fi1)))        
+     ACN(na2,val(c:fac)*val(ab:val(fi1)))        
+
+     (.'DETOPSWAP'.)
+
+     ACN(b:fac,val(nc2))
+     ACN(d:fac,val(na2))
+
+     *- Tasa
+     ACN(g:fac,FBN['Tasa'])        
+     ACN(h:fac,FBN['Spread'])
+
+     If val(ta1)<>0
+        ACN(g:fac,val(ta1))        
+        ACN(h:fac,val(sp1))
+     EndIf
+
+     *- Intereses Mon.Original
+     ACN(j:fac,FBN['TotalIntereses'])        
+
+     *- Tasa + Spread
+     ACN(i:fac,val(g:fac)+val(h:fac))
+     FormatoCeldas(g:fac..i:fac,EXE('F5'))    
+
+     *- Imp.Endeudamiento Mon.Original
+     ACN(k:fac,FBN['TasaImpInt'])
+     FormatoCeldas(k:fac,EXE('F5'))    
+
+     ACN(l:fac,FBN['ImpInt'])
+
+     *- Imp.Endeudamiento por el TIPO DE CAMBIO DEL DIA
+     ACN(m:fac,val(ab:val(fi1))*val(l:fac))
+
+     *- WH
+     ACN(n:fac,FBN['TasaWH'])
+     FormatoCeldas(n:fac,EXE('F5'))    
+
+     ACN(o:fac,FBN['ImpWH'])
+     ACN(p:fac,val(ab:val(fi1))*val(o:fac))
+
+     *- Dias Transcurridos
+     If val(e:fac)<Dialogo.Fecha1
+        ACN(q:fac,Dialogo.Fecha1-val(e:fac)+1)
+     Else
+        ACN(q:fac,0)
+     EndIf
+
+     *- Devengamientos
+     ACN(r:fac, 0)
+     ACN(s:fac, 0)
+     ACN(t:fac, 0)
+     ACN(u:fac, 0)
+     ACN(v:fac, 0)
+
+     *- Int. Mon.Original
+     If val(fe1)<=Dialogo.Fecha1 y Dialogo.Fecha1<=val(fe2)
+        ACN(r:fac, ((FBN['VResidual']*(val(g:fac)+val(h:fac)))/100)*FACTORDIAS(val(fe1),Dialogo.Fecha1+1,FBN['RB8']+1) )
+
+        *- Imp.Endeudamiento Mon.Original
+        ACN(s:fac, val(k:fac)*val(r:fac)/100)
+
+        *- Imp.Endeudamiento Moneda Consulta 
+        ACN(t:fac, val(ab:val(fi1))*val(s:fac))
+
+        *- Imp.WH Mon.Original
+        ACN(u:fac, val(n:fac)*val(r:fac)/100)
+
+        *- Imp.WH Moneda Consulta 
+        ACN(v:fac, val(ab:val(fi1))*val(u:fac))
+     EndIf
+
+     If Dialogo.Fecha1>val(fe2)
+        *- El devengado es el total 
+        ACN(r:fac, val(j:fac))
+        ACN(s:fac, val(l:fac))
+        ACN(t:fac, val(m:fac))
+        ACN(u:fac, val(n:fac))
+        ACN(v:fac, val(o:fac))
+     EndIf
+
+     FormatoCeldas(q:fac,"0")
+     
+     BorrarCeldas(nc1..nc2)
+     BorrarCeldas(id1..id3)
+     BorrarCeldas(na1..na2)
+     SetFont(a:fac..v:fac,1)
+Proximo
+Ifa
+ACT(a:fac  , 'Totales ')
+SetFont(a:fac..v:fac,2)
+AgregarMarco(a:fac,0,0,Exe('COLOR8'))
+
+Ifa 
+*- V.Residual Original y Swapeado
+ACN(a:fac,val(a:val(lv1)))
+ACN(b:fac,val(b:val(lv1)))
+
+*- Cuota Amortizacion 
+ACN(c:fac,val(c:val(lv1)))
+ACN(d:fac,val(d:val(lv1)))
+
+*- Intereses Mon.Original
+ACN(j:fac,val(j:val(lv1)))
+
+*- Imp.Endeudamiento Mon.Original
+ACN(k:fac,val(k:val(lv1)))
+FormatoCeldas(k:fac,EXE('F5'))    
+
+ACN(l:fac,val(l:val(lv1)))
+
+*- Imp.Endeudamiento por el TIPO DE CAMBIO DEL DIA
+ACN(m:fac,val(m:val(lv1)))
+
+ACN(o:fac, val(o:val(lv1)))
+ACN(p:fac, val(p:val(lv1)))
+
+ACN(r:fac, val(r:val(lv1)))
+ACN(s:fac, val(s:val(lv1)))
+ACN(t:fac, val(t:val(lv1)))
+ACN(u:fac, val(u:val(lv1)))
+ACN(v:fac, val(v:val(lv1)))
+   
+FormatoCeldas(n:fac,EXE('F5'))    
+SetFont(a:fac..v:fac,2)
+AgregarMarco(a:fac..v:fac,0,0,Exe('COLOR8'))
+Ifa
+
+Recorrer&j 1,22
+   ACO(&j,8)
+Proximo
+
+LimitesVision(v:fac+1)
+Impresion(1,2)
+

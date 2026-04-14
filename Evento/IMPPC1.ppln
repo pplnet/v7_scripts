@@ -1,0 +1,77 @@
+MostrarCuadroDeMensajes()
+creardialogo
+directorio1: 'Ruta';;;;;;NoVacio(dialogo.directorio1);'Debe indicar una ruta';NO;Var('PATHPLCTA')
+string1: 'Archivo';;;;;;NoVacio(dialogo.string1);'Debe indicar el archivo a importar';NO;Var('FILEPLCTA')
+vehiculo1: 'Vehiculo';;;;;;NoVacio(dialogo.vehiculo1);'Debe indicar un vehiculo';NO;Var('VEHICULODE')
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+let(&archivo, dialogo.string1)
+if (existedirectorio(dialogo.directorio1))
+if (Eqstr(Copy(dialogo.directorio1, Longitud(dialogo.directorio1), 1), '\'))
+let(&pathcompleto, dialogo.directorio1~&archivo)
+else
+let(&pathcompleto, dialogo.directorio1~'\'~&archivo)
+endif
+if (not existearchivo(&pathcompleto))
+Cancelar('El Archivo '~&archivo~' no existe en el directorio: '~dialogo.directorio1)
+endif
+
+else
+Cancelar('El directorio '~dialogo.directorio1~' no existe')
+endif
+
+importarxls(a:2..b:1000, a:1..b:1000, &pathcompleto)
+if (not ok)
+Cancelar('Error al cargar el archivo '~&pathcompleto)
+endif
+Act(jq:1, '003000000000000')
+
+if (Vacio(Query("SELECT 1 FROM "~Dbo()~".CONTABILIDAD WHERE Jerarquia = '"~Val(jq:1)~"'")))
+Sqladd("INSERT INTO "~Dbo()~".CONTABILIDAD (Jerarquia,Codigo,Nombre) VALUES ('"~Val(jq:1)~"','"~Var('VEHICULODE')~"','Cuentas '~'"~Var('VEHICULODE')~"')")
+Sqlnew()
+Sqlexec()
+endif
+
+Sqladd("ALTER TABLE  "~Dbo()~".CONTABILIDAD DISABLE TRIGGER dl_contabilidad")
+Sqlnew()
+Sqlexec()
+
+Message("Importando cuentas contables")
+recorrer&i 1, 1000
+if (NoVacio(Val(a:&i)))
+Message(Val(a:&i))
+Act(a:&i, Trim(Val(a:&i)))
+Act(c:&i, generarjerarquiabyref('CONTABILIDAD', Val(jq:1), true))
+if (Vacio(Query("SELECT 1 FROM "~Dbo()~".CONTABILIDAD WHERE Codigo = '"~FStr(Val(a:&i), 0, 0)~"'")))
+Sqladd("INSERT INTO "~Dbo()~".CONTABILIDAD (Jerarquia,Codigo,Nombre,Cliente) VALUES ")
+Sqladd("('"~Val(c:&i)~"','"~FStr(Val(a:&i), 0, 0)~"','"~Copy(Val(b:&i), 1, 60)~"','"~Var('VEHICULODE')~"')")
+Sqlnew()
+Sqlexec()
+else
+if (NoVacio(Query("SELECT 1 FROM "~Dbo()~".CONTABILIDAD WHERE Codigo = '"~FStr(Val(a:&i), 0, 0)~"' and Cliente = '"~Var('VEHICULODE')~"'")))
+Sqladd("UPDATE "~Dbo()~".CONTABILIDAD Set Nombre = '"~Copy(Val(b:&i), 1, 60)~"' WHERE Codigo = '"~FStr(Val(a:&i), 0, 0)~"'")
+Sqlnew()
+Sqlexec()
+else
+Sqladd("DELETE FROM "~Dbo()~".CONTABILIDAD WHERE Codigo = '"~FStr(Val(a:&i), 0, 0)~"'")
+Sqlnew()
+Sqlexec()
+Sqladd("INSERT INTO "~Dbo()~".CONTABILIDAD (Jerarquia,Codigo,Nombre,Cliente) VALUES ")
+Sqladd("('"~Val(c:&i)~"','"~FStr(Val(a:&i), 0, 0)~"','"~Copy(Val(b:&i), 1, 60)~"','"~Var('VEHICULODE')~"')")
+Sqlnew()
+Sqlexec()
+endif
+endif
+else
+break
+endif
+proximo
+
+Sqladd("ALTER TABLE  "~Dbo()~".CONTABILIDAD ENABLE TRIGGER dl_contabilidad")
+Sqlnew()
+Sqlexec()
+
+

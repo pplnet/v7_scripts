@@ -1,0 +1,203 @@
+﻿CrearDialogo
+  NrOperacion1: 'Nr.Operacion'             ;1;1;;;;;;;;;;;;" TipoOp in ('PME','PMU') and RB9='1' and NrOperacion in (Select OB.NrOperacion  from "~DBO~".OPERACIONESBITS OB where OB.NrOperacion=NrOperacion  and OB.NrBit in ('10','70') and OB.Valor='1' ) and NrOperacion Not In (Select M.NrOperacion from  "~DBO~".MOVEJECUTADOS M where M.NrOperacion = NrOperacion  and M.NrSaldo in (80,81,83) )  "
+  Vehiculo1   : 'Vehiculo'                 ;1;2;;NO;NO;;;;;BuscarCampo('OPERACIONES','Vehiculo1','NrOperacion',Dialogo.NrOperacion1)
+  Fecha1      : 'Fecha'                    ;2;1;;NO;;;;;;FSys
+  Radio1      : 'Paga WHT|SI|NO'           ;3;1;;Eqstr(DIALOGO.VEHICULO1,'INGCURA');Eqstr(DIALOGO.VEHICULO1,'INGCURA');Dialogo.Radio1>=0 o not Eqstr(DIALOGO.VEHICULO1,'INGCURA');'Debe indicar si paga WHT';NO;;
+  Precio3     : 'WHT % Com.'               ;4;1;;Eqstr(DIALOGO.VEHICULO1,'INGCURA');Eqstr(DIALOGO.VEHICULO1,'INGCURA');;;;;iif(Eqstr(BuscarCampo('OPERACIONES','MB3','NrOperacion',Dialogo.NrOperacion1),'0'),MontoImpuesto('WHTNORCOM',Dialogo.Fecha1,3,''),MontoImpuesto('WHTACRCOM',Dialogo.Fecha1,3,''))
+  Precio2     : 'Tipo de Cambio'           ;5;1;;NoVacio(Dialogo.NrOperacion1) y [Eqstr(DIALOGO.VEHICULO1,'INGCURA') o Not[Eqstr(BuscarCampo('OPERACIONES','Especie','NrOperacion',Dialogo.NrOperacion1),'ARP')]];NoVacio(Dialogo.NrOperacion1) y [Eqstr(DIALOGO.VEHICULO1,'INGCURA') o Not[Eqstr(BuscarCampo('OPERACIONES','Especie','NrOperacion',Dialogo.NrOperacion1),'ARP')]];Dialogo.Precio2>0 o not Eqstr(DIALOGO.VEHICULO1,'INGCURA');'Debe ingresar el tipo de cambio';NO;;COTIZACIONC(BuscarCampo('OPERACIONES','Especie','NrOperacion',Dialogo.NrOperacion1),,,,Dialogo.Fecha1,1,SI,'ARP')
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+
+ACT(z1,Dialogo.NrOperacion1)
+ACD(z2,Dialogo.Fecha1)
+ACN(z4,Dialogo.Radio1)
+ACN(z6,Dialogo.Precio2)
+ACN(z7,Dialogo.Precio3)
+
+ACN(z3, SQL("Select 1 from "~DBO~".OPERACIONESBITS where NrOperacion='"~val(z1)~"' and NrBit in ('10','70') and Valor='1'"))
+if val(z3)<>1
+  Cancelar('La Operacion '~val(z1)~' debe estar en instancia de Liquidacion o Terminal')
+endif
+
+*** Validacion de Cancelacion unica para esa fecha ***
+SQL.ADD("Select FechaMov from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+SQL.ADD("and NrSaldo in (74,76,80,81,82,83) ")
+Recorrer SQL
+  ACD(z8,FBN['FechaMov'])
+Proximo
+
+if val(z8) > 0
+  Cancelar('Existe una Cancelacion de Comision Up-Front de '~val(z1)~' a fecha '~val(z8))
+endif
+
+SQL.ADD("Select C.CondicionIVA, C.AgPercepcionIVA, C.ExIVA, C.PorcExIVA, C.FDesdeExIVA, ") 
+SQL.ADD("C.FHastaExIVA, C.IVAPISE, O.MB3, O.Especie, O.Mercado, O.Cliente1, O.Cantidad, ")
+SQL.ADD("O.FechaOp, O.Plazo, O.FechaVto, O.TotalComisiones, O.Vehiculo1 ")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".CLIENTES C ")
+SQL.ADD("where O.NrOperacion = '"~val(z1)~"' ")
+SQL.ADD("and   C.Codigo      = O.Cliente1    ")
+
+Recorrer SQL
+  ACT(a1,FBN['Especie'])
+  ACT(b1,FBN['Cliente1'])
+  ACN(c1,FBN['Cantidad'])
+  ACD(d1,FBN['FechaOp'])
+  ACN(e1,FBN['Plazo'])
+  ACD(f1,FBN['FechaVto'])
+  ACT(q1,FBN['Mercado'])
+  ACT(j1,FBN['CondicionIVA'])
+  ACT(k1,FBN['AgPercepcionIVA'])
+  ACT(l1,FBN['ExIVA'])
+  ACN(m1,FBN['PorcExIVA'])
+  ACD(n1,FBN['FDesdeExIVA'])
+  ACD(o1,FBN['FHastaExIVA'])
+  ACT(r1,FBN['IVAPISE'])
+  ACT(p1,FBN['Vehiculo1'])
+  ACT(s1,FBN['MB3'])
+  ACN(v1,FBN['TotalComisiones'])
+Proximo
+
+if Eqstr(val(p1),'INGCURA') 
+   * WHT / COMISIONES
+   ACN(co1,Round(val(v1)*val(z7)/100*val(z6),2))
+
+   if EQSTR(val(r1),'SI')
+     * PISE / COMISIONES
+     ACN(co2,(val(v1)*val(z6)+iif(EQSTR(val(s1),'1'),val(co1),0))*MontoImpuesto('IVAPISCOM',val(z2),3,'')/100)
+   endif
+else
+   *--- IVA / COMISION
+   ACN(pm1,val(v1))
+   ACN(pf1,Dialogo.Fecha1)
+   ACT(pt1,'COM')
+   (.'CANPREIVA'.)
+endif
+ 
+CrearDialogo
+  NrOperacion1 : "Operacion"         ; 1;1;;NO;;;;;val(z1)
+  Cliente1     : "Cliente"           ; 2;1;;NO;;;;;val(b1)
+  Especie1     : "Moneda"            ; 3;1;;NO;;;;;val(a1)
+  Cantidad1    : "Cantidad"          ; 4;1;;NO;;;;;val(c1)
+  Fecha1       : "F.Concer."         ; 1;2;;NO;;;;;val(d1)
+  Entero3      : "Pl.Original"       ; 2;2;;NO;;;;;val(e1)
+  Fecha2       : "F.Vto.Original"    ; 3;2;;NO;;;;;val(f1)
+  Cantidad2    : "Comision"          ; 6;1;;NO;;;;;val(v1)
+  Cantidad3    : "Impuestos"         ; 7;1;;Not[Eqstr(val(p1),'INGCURA')];;;;;val(pr1)+val(pr2)+val(pr3)
+  Cantidad4    : "Monto Total"       ; 8;1;;NO;;;;;val(v1)+Dialogo.Cantidad3
+  Check1       : 'Procesa'           ; 9;1;;NO;NO;;;;1
+FinDialogo
+
+if Not ok
+    Cancelar
+endif
+
+if Messagebox('Confirma Cancelacion Comision Up-Front Prestamo '~val(z1)~' ?',3,1) = 1
+ *** Generacion del MOVPENDIENTE 
+ ACN(ss1, 80)
+ ACN(ss2, -val(v1))
+ ACT(ss3, 'Comisiones Up-Front')
+ ACN(ss4,1)
+ ACT(ss5, val(a1))
+ ACT(ss6, val(q1))
+ (.'CANPME6'.)
+
+ *** Generacion del MOVEJECUTADO
+ ACN(ss1,80)
+ ACN(ss2,val(v1))
+ ACT(ss3,'Comisiones Up-Front cobradas')
+ (.'CANPME4'.)
+
+ if Eqstr(val(p1),'INGCURA') 
+    if val(co1)>0
+        ACN(ss1,74)
+        ACN(ss2,val(co1))
+        ACT(ss3,'WHT sobre Comisiones Up-Front')
+        (.'CANPME4'.)
+
+        if val(z4)=0
+          ACN(ss2, -val(co1)*val(z6))
+          ACT(ss5, 'ARP')
+          ACT(ss6, val(me2))
+          (.'CANPME6'.)
+        endif
+     endif
+
+   if EQSTR(val(r1),'SI')
+     if val(co2)>0
+        ACN(ss1,76)
+        ACN(ss2,val(co2))
+        ACT(ss3,' PISE sobre Comisiones Up-Front')
+        (.'CANPME4'.)
+
+        if val(z4)=0
+          ACN(ss2, -val(co2)*val(z6))
+          ACT(ss5, 'ARP')
+          ACT(ss6, val(me2))
+          (.'CANPME6'.)
+        endif
+     endif
+   endif
+  
+ else
+   if Not[Eqstr(val(a1),'ARP')]
+     ACT(ss5, 'ARP')
+     ACT(ss6, 'BCRA')
+     ACN(pr1,val(pr1)*val(z6))
+     ACN(pr2,val(pr2)*val(z6))
+     ACN(pr3,val(pr3)*val(z6))
+   else
+     ACT(ss5, val(a1))
+     ACT(ss6, val(q1))
+   endif
+
+   if val(pr3)>0
+     ACN(ss1,83)
+     ACN(ss2,val(pr3)/Val(Z6))
+     ACT(ss3,'IVA Percepcion Comisiones Up-Front')
+     (.'CANPME4'.)
+    
+     ACN(ss2, -val(pr3) )
+     (.'CANPME6'.)
+   endif
+
+   if val(pr2)>0
+     ACN(ss1,82)
+     ACN(ss2,val(pr2)/Val(Z6))
+     ACT(ss3,'IVA Adicional Comisiones Up-Front')
+     (.'CANPME4'.)
+
+     ACN(ss2, -val(pr2))
+     (.'CANPME6'.)
+   endif
+
+   if val(pr1)>0
+     ACN(ss1,81)
+     ACN(ss2,val(pr1)/Val(Z6))
+     ACT(ss3,'IVA Normal Comisiones Up-Front')
+     (.'CANPME4'.)
+
+     ACN(ss2, -val(pr1) )
+     (.'CANPME6'.)
+   endif
+
+******************************************************************************************************
+************************ OJO ESTO ESTA AGREGADO PARA QUE NO COBRE LA COMISION UP-FRONT DE NUEVO
+****************************************************************************************************
+
+    SQL.ADD("Update "~DBO~".OPERACIONES set ")
+    SQL.ADD("  TotalAux8   = "~FStr(0,1,2)~"  ")
+    SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"'")
+    SQL.NEW
+*******************************************************************************************************
+*******************************************************************************************************            
+
+ endif
+ SQL.EXEC
+
+ ACT(pc1,'1')
+ ACN(x3,Dialogo.Cantidad4)
+ (.'CANPRE14'.)
+endif

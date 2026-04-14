@@ -1,0 +1,148 @@
+﻿* Convertir Movimientos Pendientes que sean de saldo 1
+* que no sean de ARP y que correspondan a IVA o WHT
+* de una fecha dada y de saldo 1
+* tambien convierte los ejecutados automaticos
+CrearDialogo
+   Vehiculo1   :'Vehiculo' ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+   Fecha1      :'Fecha'    ;;;;;;;;NO;FSYS
+   NrOperacion1:'NrOperacion'  ;;;;;;;;
+FinDialogo
+
+If Not OK
+   Cancelar
+endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+endif
+
+MostrarCuadroDeMensajes
+
+If NoVacio(Dialogo.NrOperacion1)
+   *- Control de vehiculo habilitado para el usuario
+   *- vh1: vehiculo de la operacion o transaccion
+   *- Cancela si el vehiculo no esta habilitado para el usuario activo
+    
+   ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+   
+   (.'CONTROLVH'.)
+Endif
+
+* Vehiculos permitidos por el usuario
+ACT(z1,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+
+SetFilaActual(0)
+
+*- ta1: Tabla a actualizar
+ACT(ta1,'MOVPENDIENTES')
+
+if NoVacio(Dialogo.Vehiculo1) y Not Incluido(Dialogo.Vehiculo1,VAR('VLIQUIDA')~Var('VLIQUIDA2'))
+   ACT(ta1,'MOVEJECUTADOS')
+EndIf
+
+
+SQL.ADD("Select * from  "~DBO~"."~val(ta1)~"  ")
+SQL.ADD("where FechaMov <='"~IdxDate(Dialogo.Fecha1)~"' and NrSaldo =1 ")
+SQL.ADD("and Especie<>'"~VAR('MONELOCA')~"' and ")
+SQL.ADD(" (Leyenda like '%IVA %' or Leyenda like '%WH %' or Leyenda like  '%Impto.Int %' or Leyenda like '%Imp_Cs_Fin%' or Leyenda like '%Imp.DB%') ")
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("and EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      SQL.ADD(" and EnteCustodia IN ("~Pipe2Comillas(val(z1))~") ")
+   EndIf
+endif
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD("and NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+endif
+SQL.ADD("Order By NrOperacion")
+
+Recorrer SQL
+   Message(' Operacion '~FBN['NrOperacion']~' '~FBN['Leyenda']~' ...')
+
+   ACT(a:fac, FBN['NrOperacion'])
+   ACD(b:fac, FBN['FechaMov'])
+   ACT(c:fac, FBN['Cliente'])
+   ACT(d:fac, FBN['Especie'])
+   ACN(e:fac, -FBN['Cantidad'])
+   ACT(f:fac, BuscarCampo('OPERACIONES','TipoOp','NrOperacion',val(a:fac)) )
+   ACT(g:fac, FBN['Leyenda'])
+   ACN(h:fac, CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1-1,1,,VAR('MONELOCA')) )
+   ACN(i:fac, val(h:fac))   
+   ACN(j:fac, BuscarCampo('OPERACIONES','Precio1','NrOperacion',val(a:fac)))
+   ACN(k:fac, 1 )
+   ACN(p:fac, FBN['NrMov'])
+   ACN(o:fac,fbn('NrGrupo2'))
+   ACT(q:fac, FBN['Concepto'])
+Proximo
+
+If fac>0
+
+   CrearListBox;'Arial,8,B'
+     'Liquida'                  ; k1..k:fac; SI; SI;;60; COMBO; 'Si|No|'
+     '# Operacion'              ; a1..a:fac; NO; SI;;80; STRING
+     'TipoOp'                   ; f1..f:fac; NO; SI;;80; STRING
+     'Fecha'                    ; b1..b:fac; NO; SI;;70; FECHA
+     'Entidad'                  ; c1..c:fac; NO; SI;;70; STRING
+     'Especie'                  ; d1..d:fac; NO; SI;;70; STRING
+     'Cantidad'                 ; e1..e:fac; NO; SI;;100; NUMERO;'###,###,###.##p'
+     'Leyenda'                  ; g1..g:fac; NO; SI;;150; STRING
+     'Cotizacion'               ; h1..h:fac; SI; Val(k:FLB)=1 o [Val(h:FLB)<=Val(i:FLB)*(1+VAR('RPRECIO2')/100) Y Val(h:FLB)>=Val(i:FLB)*(1-VAR('RPRECIO2')/100)];'Rango de Precio Excedido '~PYC(Val(i:FLB)*(1-VAR('RPRECIO2')/100),0,2)~' '~PYC(Val(i:FLB)*(1+VAR('RPRECIO2')/100),0,2);100; NUMERO;'###,###,###.##p'
+   FinListBox
+
+   If Ok 
+      Recorrer&i 1,fac
+
+         If Val(k:&i)=0
+            Message('Actualizando Operacion Nro. '~val(a:&i))
+            * Grabo en la Operacion del Movimiento el Tipo de Cambio de Conversion de IVA/WH
+            If Not Incluido(val(q:&i),'CUOTAS|COMISI') 
+               SQL.ADD("Update "~DBO~".OPERACIONES Set ")
+               SQL.ADD("IntDevengados2 ="~FStr(val(h:&i),0,2)~" ")
+               SQL.ADD("where NrOperacion='"~val(a:&i)~"' and (IntDevengados2<=0 or IntDevengados2 Is Null) ")
+               SQL.NEW     
+            Else 
+               If Incluido(val(q:&i),'CUOTAS') 
+                  SQL.ADD("Update "~DBO~".CUOTAS Set ")            
+                  SQL.ADD("Cotizacion1 ="~FStr(val(h:&i),0,2)~" ")
+                  SQL.ADD("where NrOperacion='"~val(a:&i)~"' and Cotizacion1<0 ")
+                  SQL.ADD("and NrCuota="~Fstr(val(o:&i),0,0)~" ")
+                  SQL.NEW     
+               Else 
+                  SQL.ADD("Update "~DBO~".COMISIONES2 Set ")            
+                  If EqStr(val(d:&i),BuscarCampo('OPERACIONES','Especie','NrOperacion',val(a:&i))) 
+                     *- Movimiento del IVA se controla contra cotizacion1
+                     SQL.ADD("Cotizacion1 ="~FStr(val(h:&i),0,2)~" ")
+                     SQL.ADD("where NrOperacion='"~val(a:&i)~"' and (Cotizacion1<=0 or Cotizacion1 Is NUll) ")
+                  Else
+                     *- Movimiento del WH se controla contra cotizacion2
+                     SQL.ADD("Cotizacion2 ="~FStr(val(h:&i),0,2)~" ")
+                     SQL.ADD("where NrOperacion='"~val(a:&i)~"' and (Cotizacion2<=0 or Cotizacion2 Is NUll) ")
+                  EndIf
+                  SQL.ADD("and NrComision="~Fstr(val(o:&i),0,0)~" ")
+                  SQL.NEW        
+               EndIf
+            EndIf
+
+            SQL.ADD("Update "~DBO~"."~val(ta1)~" Set ")
+            SQL.ADD("Especie = '"~VAR('MONELOCA')~"', Cantidad="~FStr(-val(e:&i)*val(h:&i),0,2)~" ")
+            SQL.ADD("where NrOperacion='"~val(a:&i)~"' and NrMov="~val(p:&i)~" ")
+            SQL.ADD("and NrGrupo2="~val(o:&i)~" ")
+            If NoVacio(val(q:&i))
+               SQL.ADD("and Concepto='"~val(q:&i)~"'  ")
+            EndIf
+            SQL.ADD("and Leyenda='"~val(g:&i)~"' and FechaMov='"~IdxDate(val(b:&i))~"' ")    
+            if NoVacio(Dialogo.Vehiculo1)
+               SQL.ADD("and EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+            endif
+            SQL.NEW
+            SQL.EXEC
+         endif
+      Proximo
+   EndIf
+Else
+   MessageBox('No existen movimientos para convertir ....')
+
+EndIf

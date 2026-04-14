@@ -1,0 +1,197 @@
+﻿* INT001 - Calculo Interese Corridos
+ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1   : 'Fecha'  ; ; ; ;  ;  ;NoVacio(Dialogo.Fecha1);'Debe Ingresar una Fecha';NO;FSys
+  Especie1 : 'Especie'; ; ; ;  ;  ;;;;
+FinDialogo
+If Not Ok
+   Cancelar
+Endif
+
+***---Hojavisible(SI)
+
+
+
+SetFilaActual(1)
+SetFilaActual(FAC+2)
+ACN(x1, FAC)
+
+*SQL.ADD(" Select Codigo, DiasAnio, DiasMes, 0 TasaIntPIKsVigente, 0 TasaPIKsVigente, 'NO' DDPIKs ")
+*SQL.ADD(" from "~DBO~".ESPECIES ")
+*SQL.ADD(" where Codigo in ("~Pipe2Comillas(Descendientes('ESPECIES','TITULO'))~") and Cupon is not NULL and (EsCupon='NO' OR EsCupon Is Null) ")
+
+SQL.ADD("SELECT Distinct E.Codigo, E.DiasAnio, E.DiasMes, 0 TasaIntPIKsVigente, 0 TasaPIKsVigente, 'NO' DDPIKs ")
+SQL.ADD(" from "~DBO~".POSICIONES2 P, "~DBO~".ESPECIES E ") 
+SQL.ADD(" WHERE P.Especie = E.Codigo and P.NrSaldo = 2  ")
+SQL.ADD(" and P.Fecha = (Select MAX(Fecha) from "~DBO~".POSICIONES2 where Especie = P.Especie AND P.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD(" and P.CantidadFin <> 0 ")
+SQL.ADD(" and E.Cupon is not NULL and (E.EsCupon='NO' OR E.EsCupon Is Null) ")
+
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" AND Codigo = '"~Dialogo.Especie1~"' ")
+endif
+
+***---PL:1 = Plazo a fin de mes para interes diario
+***---PL:2 = Plazo al viernes para interes diario
+recorrer SQL
+  SCN(x1, 1)
+  ACT(a:FAC, fbn('Codigo'))
+  *en c:fac deberian ir los intereses capitalizados, pongo 1 por el momento
+  ACN(c:fac, 1)
+  if EqStr(fbn('DDPIKs'), 'SI')
+    if fbn('DiasAnio')=360 y fbn('DiasMes')=30
+      ***---IF Dialogo.Fecha1 = FinDeMes(Dialogo.Fecha1, NO, 'ARG') Y Dialogo.Fecha1 < FinDeMes(Dialogo.Fecha1, SI)
+      IF Dialogo.Fecha1 = FinDeMes(Dialogo.Fecha1, NO) Y Dialogo.Fecha1 < FinDeMes(Dialogo.Fecha1, SI)
+          ***---Si es el ultimo dia habil del mes y no es el ultimo dia del mes => se calculan intereses hasta el ultimo dia del mes
+          ACN(d:fac, Dif360(UltCupon2(val(a:fac),Dialogo.Fecha1),Min(FinDeMes(Dialogo.Fecha1,SI), Habiles(Dialogo.Fecha1, 1, 'ARG', SI)-1),4))
+          ACN(PL:1, Dif360(Dialogo.Fecha1, Min(FinDeMes(Dialogo.Fecha1,SI), Habiles(Dialogo.Fecha1, 1, 'ARG', SI)-1),4))
+      ELSE
+          ACN(d:fac, Dif360(UltCupon2(val(a:fac),Dialogo.Fecha1),Dialogo.Fecha1,4))
+          ACN(PL:1, 1)
+      ENDIF
+      ACN(ID:fac, Dif360(UltCupon2(val(a:fac),Dialogo.Fecha1),Dialogo.Fecha1,4))
+      ACN(PL:2, 1)
+      IF Val(D:fac) > Dif360(UltCupon2(val(a:fac),Dialogo.Fecha1),Dialogo.Fecha1,4)
+          ***---Procesa porque cambia plazo para 360. Ver planilla Dias360 celdas en rojo.
+          ACN(BD:1, 0)
+      ELSE
+          ***---No procesa
+          ACN(BD:1, 1)
+      ENDIF
+    else
+      ACN(BD:1, 0)
+      ***---IF Dialogo.Fecha1 = FinDeMes(Dialogo.Fecha1, NO, 'ARG') Y Dialogo.Fecha1 < FinDeMes(Dialogo.Fecha1, SI)
+      IF Dialogo.Fecha1 = FinDeMes(Dialogo.Fecha1, NO) Y Dialogo.Fecha1 < FinDeMes(Dialogo.Fecha1, SI)
+          ACN(d:fac, DifDias(UltCupon2(val(a:fac),Dialogo.Fecha1),Min(FinDeMes(Dialogo.Fecha1,SI), Habiles(Dialogo.Fecha1, 1, 'ARG', SI)-1),'USA',NO))
+          ACN(PL:1, DifDias(Dialogo.Fecha1, Min(FinDeMes(Dialogo.Fecha1,SI), Habiles(Dialogo.Fecha1, 1, 'ARG', SI)-1),'USA',NO))
+      ELSE
+          ACN(d:fac, DifDias(UltCupon2(val(a:fac),Dialogo.Fecha1),Dialogo.Fecha1,'USA',NO))
+          ACN(PL:1, 1)
+      ENDIF
+      ACN(ID:fac, DifDias(UltCupon2(val(a:fac),Dialogo.Fecha1),Dialogo.Fecha1,'USA',NO))
+      ACN(PL:2, 1)
+    endif
+    ACN(e:fac, Cotizacion(val(a:fac),,,,Dialogo.Fecha1,1,SI))
+    IF fbn('DiasAnio') = 360
+        ACN(DA:1, 0)
+    ELSE
+        IF fbn('DiasAnio') = 365
+            ACN(DA:1, 1)
+        ELSE
+            ACN(DA:1, 2)
+        ENDIF
+    ENDIF
+    ACN(b:fac, fbn('TasaIntPIKsVigente') * (Val(D:fac)/DIASA(Val(DA:1), Dialogo.Fecha1)) + fbn('TasaPIKsVigente') * Val(E:fac) * (Val(D:fac)/DIASA(Val(DA:1), Dialogo.Fecha1)))
+    ACN(DI:fac, fbn('TasaIntPIKsVigente') * (Val(D:fac)/DIASA(Val(DA:1), Dialogo.Fecha1)) + fbn('TasaPIKsVigente') * Val(E:fac) * (Val(ID:fac)/DIASA(Val(DA:1), Dialogo.Fecha1)))
+    ***---Interes Diario
+    ACN(ID:1, fbn('TasaIntPIKsVigente') * (Val(D:fac)/DIASA(Val(DA:1), Dialogo.Fecha1)) + fbn('TasaPIKsVigente') * Val(E:fac) * (Val(PL:1)/DIASA(Val(DA:1), Dialogo.Fecha1)))
+    ACN(ID:2, fbn('TasaIntPIKsVigente') * (Val(D:fac)/DIASA(Val(DA:1), Dialogo.Fecha1)) + fbn('TasaPIKsVigente') * Val(E:fac) * (Val(PL:2)/DIASA(Val(DA:1), Dialogo.Fecha1)))
+  else
+    ***---IF Dialogo.Fecha1 = FinDeMes(Dialogo.Fecha1, NO, 'ARG') Y Dialogo.Fecha1 < FinDeMes(Dialogo.Fecha1, SI)
+    IF Dialogo.Fecha1 = FinDeMes(Dialogo.Fecha1, NO) Y Dialogo.Fecha1 < FinDeMes(Dialogo.Fecha1, SI)
+        ***---Si es el ultimo dia habil del mes y no es el ultimo dia del mes => se calculan intereses hasta el ultimo dia del mes
+        ***---ACN(b:fac, InteresEspecie(Val(a:fac), Min(FinDeMes(Dialogo.Fecha1,SI), Habiles(Dialogo.Fecha1, 1, 'ARG', SI)-1), Val(c:fac),,4))
+        ***---acaACN(b:fac, InteresEspecie(Val(a:fac), Min(FinDeMes(Dialogo.Fecha1,SI), Habiles(Dialogo.Fecha1, 1, 'ARG', SI)-1), Val(c:fac),,4))
+        ***---Reemplazar con linea de arriba cuando esté desarrollado el último parámetro
+        ACN(b:fac, InteresEspecie(Val(a:fac), Min(FinDeMes(Dialogo.Fecha1,SI), Habiles(Dialogo.Fecha1, 1, 'ARG', SI)-1), Val(c:fac),))
+    ELSE
+        ***---acaACN(b:fac, InteresEspecie(Val(a:fac), Dialogo.Fecha1, Val(c:fac),,4))
+        ***---Reemplazar con linea de arriba cuando esté desarrollado el último parámetro
+        ACN(b:fac, InteresEspecie(Val(a:fac), Dialogo.Fecha1, Val(c:fac),))
+    ENDIF
+        ***---acaACN(DI:fac, InteresEspecie(Val(a:fac), Dialogo.Fecha1, Val(c:fac),,4))
+        ***---Reemplazar con linea de arriba cuando esté desarrollado el último parámetro
+        ACN(DI:fac, InteresEspecie(Val(a:fac), Dialogo.Fecha1, Val(c:fac),))
+  endif
+  if Val(b:fac)>0
+    if 0=SQL("Select Count(*) from "~DBO~".INTERESESCORRIDOS where Especie = '"~Val(a:fac)~"' and Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+      SQL.ADD("Insert into "~DBO~".INTERESESCORRIDOS ( ")
+      SQL.ADD("   Fecha, Especie, Intereses, Cantidad ")
+      SQL.ADD("   ) values ( ")
+      SQL.ADD("   '"~IdxDate(Dialogo.Fecha1)~"', ")
+      SQL.ADD("   '"~Val(a:fac)~"', ")
+      SQL.ADD("   "~FStr(Val(b:fac),1,8)~", ")
+      SQL.ADD("   "~FStr(Val(DI:fac),1,8)~" ")
+      SQL.ADD("   ) ")
+      SQL.NEW
+      SQL.EXEC
+    else
+      SQL.ADD("Update "~DBO~".INTERESESCORRIDOS ")
+      SQL.ADD("   Set Intereses = "~FStr(Val(b:fac),1,8)~", ")
+      SQL.ADD("       Cantidad = "~FStr(Val(DI:fac),1,8)~" ")
+      SQL.ADD(" where Especie = '"~Val(a:fac)~"' ")
+      SQL.ADD("   and Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+      SQL.NEW
+      SQL.EXEC
+    endif
+  endif
+proximo
+
+
+*************** ESTO NO SE EJECUTA ********************
+if Val(x1)>0 y 1=2
+  ** Calculo de Intereses correidos por Especie
+  recorrer&i 4, Val(x1)+3
+    ACN(e:&i, ValorTeorico2(Val(a:&i),Dialogo.Fecha1))
+    ACN(f:&i, EspecieDiasAnio(Val(a:&i)))
+    ACN(g:&i, EspecieDiasMes(Val(a:&i)))
+    * CuponFeriado
+    ACT(h:&i, BuscarCampo('ESPECIES','CuponFeriado','Codigo',Val(a:&i)))
+    * UltCupon2
+    ACD(i:&i, UltCupon2(Val(a:&i),Dialogo.Fecha1))
+    * FechaUltCupon
+    if EsHabil(Val(i:&i),'USA')
+      ACD(j:&i, Val(i:&i))
+    else
+      ACD(j:&i, Habiles(Val(i:&i),iif(EqStr(Val(h:&i),'SIG'),1,iif(EqStr(Val(h:&i),'ANT'),-1,0)),'USA'))
+    endif
+    * FechaCambioTasa
+    ACD(k:&i, BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',Val(a:&i)))
+    * tasaInteresCupon
+    if Val(k:&i)>Val(j:&i) y Val(k:&i)<Dialogo.Fecha1
+      ACT(l:&i, 'Mix')
+      ACN(m:&i, BuscarCampo('ESPECIES','TasaIntVigente','Codigo',Val(a:&i)))
+    else
+      ACT(l:&i, 'Vigente')
+      ACN(m:&i, BuscarCampo('ESPECIES','TasaIntVigente','Codigo',Val(a:&i)))
+    endif
+    ACN(m:&i, Val(m:&i)*100)
+    * Divisor
+    ACN(n:&i, DIASA(Val(f:&i),Dialogo.Fecha1))
+    ACN(o:&i, Val(m:&i)/Val(n:&i)/100)
+    if Val(o:&i)>0
+      ACN(p:&i, SQL("Select Count(*) from "~DBO~".INTERESESCORRIDOS where Especie = '"~Val(a:&i)~"' and Fecha = '"~IdxDate(Dialogo.Fecha1)~"' "))
+      if Val(p:&i)=0
+        ACT(q:&i, 'Insert')
+        if Dialogo.Check1=1
+          SQL.ADD("Insert into "~DBO~".INTERESESCORRIDOS ( ")
+          SQL.ADD("   Fecha, Especie, Intereses ")
+          SQL.ADD("   ) values ( ")
+          SQL.ADD("   '"~IdxDate(Dialogo.Fecha1)~"', ")
+          SQL.ADD("   '"~Val(a:&i)~"', ")
+          SQL.ADD("   "~FStr(Val(o:&i),1,8)~" ")
+          SQL.ADD("   ) ")
+          SQL.NEW
+          SQL.EXEC
+        endif
+      else
+        if Val(p:&i)=1
+          ACT(q:&i, 'Update')
+          if Dialogo.Check1=1
+            SQL.ADD("Update "~DBO~".INTERESESCORRIDOS ")
+            SQL.ADD("   Set Intereses = "~FStr(Val(o:&i),1,8)~" ")
+            SQL.ADD(" where Especie = '"~Val(a:&i)~"' ")
+            SQL.ADD("   and Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+            SQL.NEW
+            SQL.EXEC
+          endif
+        else
+          ACT(q:&i, 'Error - Mas de un registro')
+        endif
+      endif
+    else
+      ACT(q:&i, 'Error - Intereses cero')
+    endif
+  proximo
+endif
+

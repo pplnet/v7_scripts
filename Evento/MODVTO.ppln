@@ -1,0 +1,120 @@
+creardialogo
+fecha1:'Fecha Op D';1;1;;;;;;;FSys() - 30;
+fecha2:'Fecha Op H';1;2;;;;;;;FSys();
+fecha3:'Fecha Vto D';2;1;;;;dialogo.fecha3 <> 0 y dialogo.fecha3 >= FSys();'Debe Ingresar Fecha Vto Desde Valida';NO;FSys();
+fecha4:'Fecha Vto H';2;2;;;;dialogo.fecha4 <> 0 y dialogo.fecha4 >= dialogo.fecha3;'Debe Ingresar Fecha Vto Hasta Valida';NO;FSys() + 30;
+mercado1: 'Mercado';;1;;;;;;;;
+check1: 'Marca todas'
+fecha5:'Reemplaza por';;;;;dialogo.check1 = 1;dialogo.fecha5 > dialogo.fecha3 o dialogo.check1 = 0;'Fecha Inválida';NO;;dialogo.fecha3;
+
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Act(ls:1, Var('MONNDF'))
+
+Sqladd("SELECT O.NrOperacion, O.Cliente1, O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto, O.TasaEspecie, ")
+Sqladd("       O.Arancel4, O.FechaAltaSisExterno, O.Mercado4, O.MercadoRB ")
+Sqladd("  FROM "~Dbo()~".OPERACIONES O, "~Dbo()~".MERCADOS M ")
+Sqladd(" WHERE O.Tipoop in('FXCF','FXVF')")
+Sqladd("   AND O.Mercado4=M.Codigo ")
+Sqladd("   AND M.Regulado='SI' ")
+if (not (dialogo.fecha1 = 0 y dialogo.fecha2 = 0))
+Sqladd("   AND (O.FechaOp>="~IdxDate2(dialogo.fecha1)~" and O.FechaOp<="~IdxDate2(dialogo.fecha2)~")  ")
+endif
+Sqladd("   AND (O.FechaVto>="~IdxDate2(dialogo.fecha3)~" and O.FechaVto<="~IdxDate2(dialogo.fecha4)~")  ")
+if (NoVacio(dialogo.mercado1))
+Sqladd("   AND Mercado4='"~dialogo.mercado1~"'")
+endif
+Watch(Sqlbatch())
+Acn(ca:1, 0)
+
+recorrer sql
+if (dialogo.check1 = 1)
+Acn(a:fac, 1)
+Acd(ag:fac, dialogo.fecha5)
+else
+Acn(a:fac, 0)
+Acd(ag:fac, Fbn()['FechaVto'])
+endif
+Act(b:fac, Fbn()['NrOperacion'])
+Act(c:fac, Fbn()['Cliente1'])
+Act(d:fac, Fbn()['Especie'])
+Act(e:fac, Fbn()['ContraEspecie'])
+Act(f:fac, Fbn()['FechaOp'])
+Acd(g:fac, Fbn()['FechaVto'])
+Act(h:fac, Fbn()['ContraEspecie'])
+Act(i:fac, Fbn()['Mercado4'])
+if (Eqstr(Fbn()['MercadoRB'], '1'))
+Acd(bg:fac, Fbn()['FechaAltaSisExterno'])
+endif
+Scn(ca:1, 1)
+proximo
+
+if (Val(ca:1) > 0)
+recorrer&k 1, Val(ca:1)
+crearlistbox;'Arial,8,';'Modificacion Futuros Regulados'
+'OK';a:1..a:fac;SI;;;40;check
+'Operacion';b:1..b:fac;NO;;;70;string;;
+'Cliente';c:1..c:fac;NO;;;70;string;;
+'Mercado';i:1..i:fac;NO;;;60;string;;
+'Especie';d:1..d:fac;NO;;;70;string;;
+'ContraEspecie';e:1..e:fac;NO;;;70;string;;
+'Fecha Op';f:1..f:fac;NO;;;80;string;;
+'Fecha Vto Original';g:1..g:fac;NO;;;80;fecha;
+'Moneda Liquid';h:1..h:fac;NO;;;60;string;;
+'Nueva F.V.';ag:1..ag:fac;SI;Val(a:fac) = 0 o EsHabil(Val(ag:fac));'Fecha es Feriado';80;fecha;RGB(180, 180, 193)
+'Pendiente F.V.';bg:1..bg:fac;NO;;;80;fecha;RGB(180, 170, 193)
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+
+Acn(cz:1, 0)
+recorrer&j 1, Val(ca:1)
+if (Val(a:&j) = 1)
+if (Val(ag:&j) < FSys())
+Scn(cz:1, 1)
+Messagebox('ALERTA! la Fecha '~Val(ag:&j)~' de la operacion '~Val(b:&j)~' es menor a Fecha de Proceso ')
+else
+Acn(pz:&j, Query("Select 1 From "~Dbo()~".PLAZOSMERCADO Where MercadoNegociacion = '"~Val(i:&j)~"' and FechaVto = "~IdxDate2(Val(ag:&j))~" and Especie = '"~Val(d:&j)~"' "))
+Acn(me:&j, Query("Select  1 from "~Dbo()~".MTM where Mercado = '"~Val(i:&j)~"' and Fecha >= "~IdxDate2(Val(ag:&j))~"  and TipoMTM = 'MTM' "))
+if (Val(pz:&j) <> 1)
+Scn(cz:1, 1)
+Messagebox('ALERTA! la Fecha '~Val(ag:&j)~' de la operacion '~Val(b:&j)~' no Corresponde al Mercado '~Val(i:&j)~'!!!')
+else
+if (Val(me:&j) = 1)
+Scn(cz:1, 1)
+Messagebox('ALERTA! la operacion '~Val(b:&j)~' Tiene MTM posteriores a la nueva Fecha de Vencimiento '~Val(ag:&j)~'!!!')
+endif
+endif
+endif
+endif
+proximo
+
+if (Val(cz:1) = 0)
+if (1 = Messagebox('Confirma datos Ingresados???', 3, 1))
+break
+endif
+endif
+proximo
+
+recorrer&i 1, Fac()
+if (Val(a:&i) = 1)
+Sqladd("UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd("   SET FechaAltaSisExterno="~IdxDate2(Val(ag:&i))~", ")
+Sqladd("       FechaUltCupon="~IdxDate2(Val(ag:&i))~", ")
+Sqladd("       MercadoRB='1' ")
+Sqladd(" WHERE NrOperacion='"~Val(b:&i)~"'  ")
+Sqlnew()
+endif
+proximo
+Sqlexec()
+Messagebox('Fin modificacion futuros regulados')
+else
+Messagebox('No se encontraron operaciones para modificar')
+endif
+

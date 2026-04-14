@@ -1,0 +1,224 @@
+creardialogo
+nrorden: 'NrOrden';1;1;;;;
+findialogo
+
+
+if (not ok)
+Cancelar()
+endif
+
+
+Sqladd(" Update "~Dbo()~".OPERACIONESBITS Set ")
+Sqladd("  Valor = '0' ")
+Sqladd(" Where NrOperacion='"~dialogo.nrorden~"' and NrBit=1 ")
+Sqlnew()
+Sqlexec()
+
+Sqladd(" Update "~Dbo()~".OPERACIONESBITS Set ")
+Sqladd("  Valor = '1' ")
+Sqladd(" Where NrOperacion='"~dialogo.nrorden~"' and NrBit=9 ")
+Sqlnew()
+Sqlexec()
+
+Sqladd(" Select Cliente, CantidadTotalOrden, Especie, ContraEspecie, ")
+Sqladd("        Mercado, Mercado2, Mercado3, Mercado4, ")
+Sqladd("        Vehiculo, Operador, RB9, RB10, Book1, Lotes Plazo, RB5, ")
+Sqladd("        Cuotas1, CB10, Cupon1, AfectaLS,  ")
+Sqladd("        Cuenta1, Cuenta4, Cuenta5, MB2, RuedaMAE, FechaAltaMAE, ")
+Sqladd("        TipoOrden, FechaOrden, Cantidad1, Cantidad4, NroAltaMae")
+Sqladd("   From "~Dbo()~".ORDENES Where NrOrden='"~dialogo.nrorden~"' ")
+
+
+recorrer sql
+
+if (Eqstr(Fbn()['TipoOrden'], 'OTIC'))
+Act( to :1, 'TIC')
+else
+Act( to :1, 'TIV')
+endif
+
+if (Fbn()['Cuotas1'] = 0)
+Act(ca:1, Fbn()['CantidadTotalOrden'] - Fbn()['Cantidad1'])
+Sqladd(" Update "~Dbo()~".ORDENES Set ")
+Sqladd("  Cantidad1   = "~FStr(Fbn()['Cantidad1'], 0, 2)~", ")
+Sqladd("  Cantidad4   = "~FStr(Fbn()['Cantidad4'], 0, 8)~", ")
+Sqladd("  Cantidad5   = "~FStr(Val(ca:1), 0, 2)~" ")
+Sqladd(" Where NrOrden = '"~dialogo.nrorden~"' ")
+Sqlnew()
+Sqlexec()
+endif
+
+
+Acd(fv:1, Habiles(Fbn()['FechaOrden'], (Fbn()['Plazo']), 'ARG', SI))
+
+Acn(z:3, (Fbn()['Cantidad1'] * Fbn()['Cantidad4']) * CotizacionC(Fbn()['ContraEspecie'], null, null, null, FSys(), 1, SI, Var('MONEEXTR')))
+Acn(z:4, CotizacionC(Fbn()['ContraEspecie'], null, null, null, Fbn()['FechaOrden'], 1, SI, Var('MONEEXTR')))
+Acn(z:5, CotizacionC(Fbn()['ContraEspecie'], null, null, null, Fbn()['FechaOrden'], 1, SI, Var('MONELOCA')))
+if (Eqstr(Modo(Fbn()['ContraEspecie'], Var('MONEEXTR')), 'INV'))
+Acn(z:6, 1 / Val(z:4))
+else
+Acn(z:6, Val(z:4))
+endif
+
+if (Eqstr(Modo(Fbn()['ContraEspecie'], Var('MONELOCA')), 'INV'))
+Acn(z:7, 1 / Val(z:5))
+else
+Acn(z:7, Val(z:5))
+endif
+
+if (Eqstr(Modo(Fbn()['ContraEspecie'], BuscarCampo('ESPECIES', 'MonedaEmision', 'Codigo', Fbn()['Especie'])), 'INV'))
+Acn(z:8, 1 / CotizacionC(Fbn()['ContraEspecie'], null, null, null, Fbn()['FechaOrden'], 1, SI, BuscarCampo('ESPECIES', 'MonedaEmision', 'Codigo', Fbn()['Especie'])))
+else
+Acn(z:8, CotizacionC(Fbn()['ContraEspecie'], null, null, null, Fbn()['FechaOrden'], 1, SI, BuscarCampo('ESPECIES', 'MonedaEmision', 'Codigo', Fbn()['Especie'])))
+endif
+
+Acn(z:9, CotizacionC(Var('MONEEXTR'), null, null, null, Fbn()['FechaOrden'], 1, SI, Var('MONELOCA')))
+
+Act(z:12, Query(" Select CodOperador from "~Dbo()~".OPERADORESSIOPEL where AgenteMAE = '"~Fbn()['Cliente']~"' and Estado='DEF' "))
+
+
+
+Acn(z:15, CotizacionC(Fbn()['Especie'], null, null, null, Fbn()['FechaOrden'], 1, SI, Fbn()['ContraEspecie']))
+Acn(z:16, MontoGastos(Val( to :1), Fbn()['Especie'], Fbn()['Vehiculo'], 'DMERC', 0, 4))
+
+
+
+
+Act(z:26, BuscarCampo('ESPECIES', 'ZeroCoupon', 'Codigo', Fbn()['Especie']))
+if (Eqstr(Val(z:26), 'SI'))
+Act(z:25, FStr(BuscarCampo('ESPECIES', 'Cupon', 'Codigo', Fbn()['Especie']), 1, 0))
+else
+Act(z:25, Val(t:4))
+endif
+Act(z:27, iif (Eqstr(Fbn()['Cliente'], Fbn()['Vehiculo']), '0', '1'))
+
+Act(ss:1, Query(" Select SenebiSistaco from "~Dbo()~".UDNS where Codigo = '"~Fbn()['RuedaMAE']~"' "))
+Act(ss:2, Query(" Select NrSecuencia from "~Dbo()~".EJECUCIONES where NrEjecucion= 1 and NrOrden = '"~dialogo.nrorden~"' "))
+Act(ss:3, Fecha(Fbn()['FechaAltaMAE'], 'yyyy-mm-dd hh:mm:ss'))
+
+Act(z:2, getnumerador(1))
+
+if (Eqstr(Fbn()['Mercado3'], Var('AMBBYMA')))
+Act(yx:1, getnumerador(96))
+else
+Act(yx:1, getnumerador(98))
+endif
+
+Sqladd("Insert Into "~Dbo()~".OPERACIONES ( ")
+Sqladd("  TipoOp, NrOperacion, Especie, Cliente1, FechaOp, ")
+Sqladd("  Plazo, FechaVto, FechaPago, Cantidad, Precio1, ")
+Sqladd("  ContraEspecie, Mercado, Mercado2, Vehiculo1, ")
+Sqladd("  Operador, TablaFeriados1, FormaLiquidacion1, FormaLiquidacion2,  ")
+Sqladd("  RB5, ")
+Sqladd("  UsrInput, FechaCarga, FechaCargaSys, Numerador, PaseCB, ")
+Sqladd("  CB5, OpSIOPEL, ")
+Sqladd("  Cuenta1, Cuenta4, Cuenta5, ")
+Sqladd("  NrOrden1, Mercado4, UDN2, NroAltaMAE, FechaAltaMAE,NumOpeSENEBI,NrOrdenAux, ")
+Sqladd("  Cupon1, AfectaLS, ")
+Sqladd("  Book1, MB2, ")
+
+
+Sqladd("  Direccion, RB6, CB10, CB4, NrBoleto ")
+
+Sqladd(" ) Values ( ")
+Sqladd("  '"~Val( to :1)~"', ")
+Sqladd("  '"~Val(z:2)~"', ")
+Sqladd("  '"~Fbn()['Especie']~"', ")
+Sqladd("  '"~Fbn()['Cliente']~"', ")
+Sqladd("  '"~IdxDate(Fbn()['FechaOrden'])~"', ")
+Sqladd("  '"~Fbn()['Plazo']~"', ")
+Sqladd("  '"~IdxDate(Val(fv:1))~"', ")
+Sqladd("  '"~IdxDate(Val(fv:1))~"', ")
+Sqladd("  '"~FStr(Fbn()['Cantidad1'], 0, 2)~"', ")
+Sqladd("  '"~FStr(Fbn()['Cantidad4'], 0, 8)~"', ")
+Sqladd("  '"~Fbn()['ContraEspecie']~"', ")
+Sqladd("  '"~Fbn()['Mercado']~"', ")
+Sqladd("  '"~Fbn()['Mercado2']~"', ")
+Sqladd("  '"~Fbn()['Vehiculo']~"', ")
+Sqladd("  '"~Fbn()['Operador']~"', ")
+Sqladd("  '"~Var('FERIDEF')~"', ")
+Sqladd("  '"~Fbn()['RB9']~"', ")
+Sqladd("  '"~Fbn()['RB10']~"', ")
+Sqladd("  '"~Fbn()['RB5']~"', ")
+Sqladd("  '"~UsuarioActivo()~"', ")
+Sqladd("  "~SQLAhora()~", ")
+Sqladd("  '"~IdxDate(FSys())~"', ")
+Sqladd("  1, ")
+Sqladd("  '0', ")
+Sqladd("  '0', ")
+Sqladd("  '"~Val(z:12)~"', ")
+Sqladd("  '"~Fbn()['Cuenta1']~"',  ")
+Sqladd("  '"~Fbn()['Cuenta4']~"',  ")
+Sqladd("  '"~Fbn()['Cuenta5']~"',  ")
+Sqladd("  '"~dialogo.nrorden~"', ")
+Sqladd("  '"~Fbn()['Mercado3']~"', ")
+Sqladd("  '"~Fbn()['RuedaMAE']~"', ")
+Sqladd("  '"~Val(ss:2)~"', ")
+Sqladd("  Convert(datetime,'"~Val(ss:3)~"',120), ")
+Sqladd("  '"~iif (Eqstr(Val(ss:1), 'SI'), Val(ss:2), '')~"', ")
+Sqladd("  '"~iif (Eqstr(Val(ss:1), 'NO'), Val(ss:2), '')~"', ")
+Sqladd("  '"~Fbn()['Cupon1']~"', ")
+Sqladd("  '"~Fbn()['AfectaLS']~"', ")
+Sqladd("  '"~Fbn()['Book1']~"', ")
+Sqladd("  '"~Fbn()['MB2']~"', ")
+Sqladd("  2, ")
+Sqladd("  4, ")
+Sqladd("  1, ")
+Sqladd("  '"~Val(z:27)~"', ")
+Sqladd("  '"~Val(yx:1)~"' ")
+Sqladd(" )")
+Sqlnew()
+
+
+if (Fbn()['Cuotas1'] = 0)
+Acn(ne:1, Query(" Select IsNull(Max(NrEjecucion),0)+1 From "~Dbo()~".EJECUCIONES Where NrOrden='"~dialogo.nrorden~"' "))
+Sqladd(" Insert Into "~Dbo()~".EJECUCIONES (NrOrden, NrOperacion, NrEjecucion, NrSecuencia, Fecha, Cantidad, Precio) ")
+Sqladd(" Values ('"~dialogo.nrorden~"', '"~Val(z:2)~"', '"~FStr(Val(ne:1), 0, 0)~"', '"~Fbn()['NroAltaMae']~"', "~SQLAhora()~", '"~FStr(Fbn()['Cantidad1'], 0, 2)~"', '"~FStr(Fbn()['Cantidad4'], 0, 8)~"') ")
+Sqlnew()
+Sqladd(" Update "~Dbo()~".ORDENES Set ")
+Sqladd("  Cuotas1 = 1 ")
+Sqladd(" Where NrOrden='"~dialogo.nrorden~"'")
+Sqlnew()
+else
+Sqladd(" Update "~Dbo()~".EJECUCIONES Set ")
+Sqladd("  Fecha = "~SQLAhora()~", ")
+Sqladd("  NrOperacion= '"~Val(z:2)~"' ")
+Sqladd(" Where NrOrden = '"~dialogo.nrorden~"' ")
+Sqlnew()
+endif
+
+Sqladd(" Update "~Dbo()~".ORDENES Set ")
+Sqladd("  NrOperacion2 = '"~Val(z:2)~"' ")
+Sqladd(" Where NrOrden = '"~dialogo.nrorden~"' ")
+Sqlnew()
+Sqlexec()
+
+modificaroperacion(Val(z:2), 0, SI, SI, SI, NO, SI, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, SI, NO, NO, NO, SI, NO, SI, NO, 0, NO, NO)
+
+SqlActualizarmovimientoso4(dialogo.nrorden, SI, SI, NO, NO, NO, NO)
+Sqlexec()
+
+Acn(x:1, 10)
+Acn(x:2, Query("SELECT 1 FROM "~Dbo()~".OPERACIONES WHERE NrOperacion='"~Val(z:2)~"' and (ISNULL(Cuenta1,'')='' or ISNULL(Cuenta2,'')='' or ISNULL(Cuenta3,'')='' or ISNULL(Cuenta4,'')='' or (TipoOp in ('TIC','TIV') and CB4=1 and (ISNULL(Cuenta5,'')='' or ISNULL(Cuenta6,'')='')))"))
+if (Val(x:2) = 1)
+Acn(x:1, 7)
+endif
+if (Eqstr(Var('INSTALACIO'), 'MLASA'))
+Acn(x:1, 68)
+endif
+
+Sqladd("Update "~Dbo()~".OPERACIONESBITS  ")
+Sqladd("   Set Valor       = '0'  ")
+Sqladd(" where NrOperacion = '"~Val(z:2)~"' ")
+Sqladd("   and Valor       = '1' ")
+Sqlnew()
+
+Sqladd("Update "~Dbo()~".OPERACIONESBITS  ")
+Sqladd("   Set Valor       = '1'  ")
+Sqladd(" where NrOperacion = '"~Val(z:2)~"' ")
+
+Sqladd("   and Nrbit       = "~FStr(Val(x:1), 1, 0)~" ")
+Sqlnew()
+Sqlexec()
+proximo
+

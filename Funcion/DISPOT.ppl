@@ -1,0 +1,218 @@
+﻿** DISPOT 
+*** Toma los Spot no vencidos a la fecha de corte y calcula el monto
+*** de dividendo
+
+Message('Procesando Spot ...')
+
+SQL.ADD("SELECT SUM(Cantidad) as Cantidad,Vehiculo1,Cliente1,Mercado, ")
+SQL.ADD("CASE TipoOp WHEN 'TIC' THEN 'C' ELSE 'V' END Tip ")
+SQL.ADD("from  "~DBO~".OPERACIONES O ")
+SQL.ADD("Where O.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD("and O.TipoOp In ('TIC','TIV') ")
+SQL.ADD("and O.FechaOp <='"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD("and O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD("group by Vehiculo1,Cliente1,Mercado,TipoOp")
+SQL.ADD("order by Vehiculo1,Cliente1,Mercado,TipoOp")
+
+Recorrer SQL
+
+   Message('Spots :'~FBN['Vehiculo1']~' '~FBN['Cliente1']~' '~Fstr(fac,0,0))   
+   ACN(y:2, 0)
+
+   ACN(z:2,Iif(EqStr(FBN['Tip'],'V'),-FBN['Cantidad'],FBN['Cantidad']))
+   ACN(aa:fac,0)
+
+
+   IF EqStr(VAL(S1),FBN['Vehiculo1']~FBN['Cliente1']~FBN['Tip'])
+      DFA
+   Else
+      ACT(s1,FBN['Vehiculo1']~FBN['Cliente1']~FBN['Tip'])
+   EndIf
+
+   ACT(a:fac, Dialogo.Especie1)
+   ACN(c:fac, 1)
+   act(d:fac,fbn['Vehiculo1'])
+   act(e:fac,fbn['Mercado'])
+   act(g:fac,fbn['Cliente1'])
+   act(m:fac, FBN['RecibePreaviso'])
+
+   IF Dialogo.Check1=1
+      *- Cuenta de Efectivo 
+      ACT(h:fac, SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(g:fac)~"' AND Estado = 'HAB' AND TipoCuenta IN ('CC', 'CA') AND Especies LIKE '%"~Dialogo.Especie2~"%'  "))
+      IF CeldaVacia(h:fac)
+         ACT(h:fac, SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(g:fac)~"' AND Estado = 'HAB'  AND TipoCuenta IN ('CC', 'CA') AND Especies LIKE '%MONEDA%' "))
+      ENDIF
+      ACT(z:3, 'CC|CA')
+   EndIf
+
+   IF Dialogo.Check2=1
+      *- Cuenta de Custodia
+      ACT(j:fac, FBN['Cuenta'])
+      IF CeldaVacia(j:fac)
+         ACT(j:fac, SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(g:fac)~"' AND Estado = 'HAB'  AND TipoCuenta = 'CUS' AND (Especies LIKE '%"~Val(a:fac)~"%' OR Especies LIKE '%TITULO%') "))
+         IF CeldaVacia(j:fac)
+            ACT(j:fac, SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(g:fac)~"' AND Estado = 'HAB'  AND TipoCuenta = 'CUS' AND Especies LIKE '%PRIVA%'"))
+         ENDIF
+      ENDIF
+      ACT(z:3, 'CUS')
+   ENDIF 
+
+   ACN(i:fac, Val(z:2))
+
+   *- k: % Efectivo l: Monto Efectivo n: % Acciones s: Monto Acciones
+   If Dialogo.Check1 = 1
+      *- Efectivo
+      ACN(k:fac, Dialogo.Precio1)
+      ACN(l:fac, Val(z:2)*Dialogo.Precio1/100)
+   EndIf
+
+   If Dialogo.Check2 = 1
+      *- Acciones 
+      ACN(n:fac, Dialogo.Precio2)        
+      acn(s:fac, Val(z:2)*(Dialogo.Precio2/100))
+   Endif
+
+   If Dialogo.Check3 = 1
+      *- Revaluo
+      acn(w:fac, Val(z:2)*(Dialogo.Precio9/100))
+   Endif
+
+   *-- Saldo + Dividendo en Acciones + Revaluo
+   acn(ba:fac, Val(z:2)+val(s:fac)+val(w:fac))
+
+   If Dialogo.Check4 = 1
+      *-- Canje 
+      acn(bb:fac, val(ba:fac)*(Dialogo.Precio10/100))
+      acn(ba:fac, val(bb:fac))
+   EndIf
+
+   *-- Calcula la fraccion 
+   acn(bc:fac, val(ba:fac)/Dialogo.Precio3)
+   acn(bd:fac, Trunc2(val(ba:fac)/Dialogo.Precio3))
+   acn(be:fac, (Val(bc:fac)-Val(bd:fac))*Dialogo.Precio3)
+   acn(bf:fac, val(be:fac))
+   acn(bg:fac, Round(val(bf:fac)*Dialogo.Precio4/0.01)*0.01)
+
+   *- Monto en Efectivo 
+   acn(l:fac, val(l:fac) + val(bg:fac) )
+
+   *- Monto en Acciones
+   acn(s:fac, (val(s:fac)+val(w:fac)+val(bb:fac))-val(be:fac))
+ 
+   ACT(o:fac, fbn('CallPut'))
+   ACD(p:fac, fbn('FechaEj'))
+   ACN(q:fac, fbn('PrecioEj'))
+   ACN(r:fac, fbn('TamanioLote'))
+
+   IF Not Incluido(Val(o:fac), 'CAL|PUT')
+      ACN(r:fac, 1)
+   ENDIF
+
+   ACN(x:fac, 1)
+   SCN(z:1, 1)
+
+   ACT(y:1, GetNumerador(20))   
+
+   acn(sa:3,0 )
+   acn(sa:4,0 )
+   acn(ci:2,0 )
+   acn(ci:1,0 )
+   act(ch:1,' ' )
+
+   *- Solamente para Saldo 101 
+   If val(c:&i)=val(sl1)
+      *---Calculo de Comisiones por DIVIDENDOS
+      *- cl1: Cliente ce1: Especie Original del Saldo *- cv1: Vehiculo cy1: Mercado ct1: Tipo de Comision
+      *- da: CallPut db: FechaEj dc: PrecioEj de:Cuenta sa2: Ultimo nro. de cuota para insertar comisiones
+      *- sa3: Acumulador de Comisiones
+      act(cl1, Val(g:&i))
+      act(cv1, Val(d:&i))
+      act(cy1, Val(e:&i))
+      act(da1, Val(o:&i))
+      acd(db1, Val(p:&i))
+      acn(dc1, Val(q:&i))
+      act(de1, Val(h:&i))
+      act(ce1, Dialogo.Especie1)
+      acn(sa2,0)
+
+      IF Dialogo.Check1=1
+         act(ct1, VAR('COMDIVEFE'))
+         acn(cj:1,Val(l:&i))
+ 
+         *- Funcion que recupera los montos de comisiones
+         (.'CACOMISION'.)
+
+         *- sa4: Monto en Efectivo Separado del de Acciones
+         acn(sa:4,val(sa:3))
+      ENDIF
+ 
+      IF Dialogo.Check2=1
+         act(ct1, VAR('COMDIVACC'))
+
+         *- cj1: Calculo del Monto 
+         acn(g:fac,val(pp1))
+
+         *- ci:3 Cotizacion
+         acn(ci:3,Cotizacion(val(ce1),,,,Dialogo.Fecha2,1))
+  
+         *- Resolucion 1585
+         ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', Val(ce1)))
+
+         If Not EqStr(BuscarCampo('ESPECIES','InteresesC','Codigo',val(ce1)),'DIR' ) 
+            *** calcula precio sucio ***
+            act(ca:fac,val(ce1))
+            acd(ck:fac,Dialogo.Fecha2)
+            (."SUCIO".)
+
+            IF Incluido(Val(al4), '1585')
+               acn(ci:3,(val(ci:3)+(val(cj:fac)*val(ci3)))*val(ci:fac) ) 
+            Else
+               acn(ci:3,(val(ci:3)+val(cj:fac))*val(ci:fac) )
+            Endif
+         EndIf
+
+         *- cj:1 Monto
+         acn(cj:1,Val(l:&i)*val(ci:3))
+
+         *- Funcion que recupera los montos de comisiones
+         (.'CACOMISION'.)
+      EndIf
+
+      *- ci2: Calculo del % del Iva sobre comisiones
+      acn(ci:2, Var('IVA')+IIF(EQSTR(BUSCARCAMPO('CLIENTES','CondicionIVA','Codigo',val(cl:1)),'NOI'),VAR('RNI'),IIF(EQSTR(BUSCARCAMPO('CLIENTES','Res3125','Codigo',val(cl:1)),'SI'),Var('RG3337'),0)))
+
+      *- ci:1 Monto de Iva
+      acn(ci:1,ROUND(Abs(val(sa:3))*Val(ci:2)/100,2)  )
+   EndIf
+
+   * Actualizo los Movimientos de Posicion 
+   *- bB9: Tipo SALDO fi1: Fila a Insertar
+
+   *- Blanqueo Variables de Comisiones 
+   acn(sa:3,0 )
+   acn(sa:4,0 )
+   acn(ci:2,0 )
+   acn(ci:1,0 )
+   act(ch:1,' ' )
+
+   ACT(bb9,'2')
+   ACN(fi1,&i)
+
+   Message('Generando Transaccion Nro. '~Val(y:1)~' .... ')       
+   (."GENDIVIDE".)
+
+   IF EqStr(Val(m:&i),'SI')
+      *- Chequeo que la carta no se haya emitido con anterioridad en SALDOS
+      IF Dialogo.Check1=1
+         ACN(y:5, SQL(" SELECT COUNT(*) FROM "~DBO~".TRANSACCIONES2 WHERE Cliente1 = '"~Val(g:fac)~"' AND Especie = '"~Val(a:fac)~"' AND Mercado1 = '"~Val(e:fac)~"' AND Fecha2 = '"~Idxdate(dialogo.Fecha1)~"' AND Vehiculo1 = '"~Val(d:fac)~"' AND TipoTr2 = 'PDIVID' AND CB2='1' AND Cambio1 = "~FStr(Val(c:fac),0,0)~" AND RB9='0' "))
+      EndIf
+
+      IF Dialogo.Check2=1 y val(y5)=0
+         ACN(y:5, SQL(" SELECT COUNT(*) FROM "~DBO~".TRANSACCIONES2 WHERE Cliente1 = '"~Val(g:fac)~"' AND Especie = '"~Val(a:fac)~"' AND Mercado1 = '"~Val(e:fac)~"' AND Fecha2 = '"~Idxdate(dialogo.Fecha1)~"' AND Vehiculo1 = '"~Val(d:fac)~"' AND TipoTr2 = 'PDIVID' AND CB3='1' AND Cambio1 = "~FStr(Val(c:fac),0,0)~" AND RB9='0' "))
+      ENDIF
+
+      If val(y5)=0
+         LinkearHoja('EMICAR', 1, Especie1=Dialogo.Especie1, Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha2, Mercado1=Dialogo.Mercado1, Check1=Dialogo.Check1,Precio1=Dialogo.Precio1,Especie2=Dialogo.Especie2,Check2=Dialogo.Check2,Precio2=Dialogo.Precio2,Cliente1 = Val(g:&i), Check10 = 0)
+      EndIf
+   ENDIF
+Proximo

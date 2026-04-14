@@ -1,0 +1,117 @@
+﻿*- DPEJCF: Ejercicio de Caption y Floortion -PC-
+CrearDialogo
+  NrOperacion1 : "Operacion"                ;1;1;;;;NoVacio(Dialogo.NrOperacion1);'Debe Ingresar una Operacion';NO;
+  Fecha1       : "F Real Ej."               ;;;;NO;;;;;Fsys
+  Precio2      : "Precio_Ref"               ;;;;;;[Dialogo.Radio2=0 y Dialogo.Precio2>=Dialogo.Precio3] o [Dialogo.Radio2=1 y Dialogo.Precio2<=Dialogo.Precio3];'Con este Precio de Referencia la Operacion no sera Ejercida';;
+  Fecha2       : "Liq. Prima_Ej"            ;;;;;;ESHABIL(Dialogo.Fecha2,'ARG');'La Fecha de Liquidacion Final NO ES HABIL en Argentina';;;HABILES(Dialogo.Fecha1,5,BuscarCampo('Operaciones','TablaFeriados1','NrOperacion',Dialogo.NrOperacion1),SI)
+  Radio1       : "Opcion|Europea|Americana" ;;;;NO;;;;;;BuscarCampo('Operaciones','TipoOpcion','NrOperacion',Dialogo.NrOperacion1)
+  Especie1     : "Commodity"                ;1;2;;NO;;;;;;BuscarCampo('Operaciones','Especie','NrOperacion',Dialogo.NrOperacion1)
+  Fecha4       : "Fecha Ej"                 ;2;2;;NO;;;;;;BuscarCampo('Operaciones','FechaEx1','NrOperacion',Dialogo.NrOperacion1)
+  Precio3      : "Precio Ej"                ;;;;NO;;;;;;BuscarCampo('Operaciones','PrecioEj','NrOperacion',Dialogo.NrOperacion1)
+  Radio2       : "Tipo|Call|Put"            ;;;;NO;;;;;;BuscarCampo('Operaciones','MB1','NrOperacion',Dialogo.NrOperacion1)
+  Radio3       : "    |Compra|Venta"        ;;;;NO;;;;;;BuscarCampo('Operaciones','MB3','NrOperacion',Dialogo.NrOperacion1)
+  Radio4       : "    |Asiatico|Diario|Simple"  ;;;;NO;;;;;;BuscarCampo('Operaciones','MB2','NrOperacion',Dialogo.NrOperacion1)
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+
+If Not Incluido(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'DPC|DPF')
+   Cancelar('La operacion No '~Dialogo.NrOperacion1~' No es un Caption o Floortion de Commodities')
+endif
+
+* Verifico que se encuentre en Back Office o Terminal
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+
+If VAL(X1)<>20 y VAL(X1)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+* Verifico que no se haya pasado la fecha de liquidacion
+(."DCFMODI".)
+
+If Dialogo.Fecha1>VAL(D1)
+   Cancelar('La Operacion ya fue Liquidada, No se puede Modificar !!!')
+EndIf
+
+
+If Ok
+   * X1: Recupero la Operacion
+   acn(x1,0)
+
+   SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+   SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   SQL.ADD("and ((TipoOpcion='0' and FechaEx1 = '"~IdxDate(Dialogo.Fecha1)~"') ")
+   SQL.ADD(" or (TipoOpcion='1' and FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+   SQL.ADD(" and FechaEx1>= '"~IdxDate(Dialogo.Fecha1)~"')) ")
+
+*   SQL.ADD("and (CB8='0' or CB8 is Null) ")
+*   SQL.ADD(" and (FechaVto2 IS NULL or FechaVto2='"~IdxDate(0)~"' )")
+
+   Recorrer SQL
+
+     acn(x1,1)
+     ACT(x12,FBN['UMedida'])
+
+     IF [Dialogo.Radio2=0 y Dialogo.Precio2>=Dialogo.Precio3] o [Dialogo.Radio2=1 y Dialogo.Precio2<=Dialogo.Precio3] 
+        * En estas condiciones de Ejerce 
+
+        *-- Verifico que la Fecha de Liquidacion Final
+        *-- sea habil en la tabla de Feriados de la operacion
+        IF [NOT ESHABIL(Dialogo.Fecha2,FBN['TablaFeriados1'])]
+           MESSAGEBOX('La Fecha de Liquidacion Final NO ES Doa Habil en la Tabla de Feriados '~FBN['TablaFeriados1'] )        
+           Break     
+        ENDIF
+
+        Message('Obteniendo los Nros. de Operaciones a Generar .... ')          
+
+        *** Z3 Nro. Operacion Contado
+        ACT(z3,GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',FBN['Vehiculo1'])))
+
+        *-- Monto a Pagar o Cobrar por Prima de Ejercicio
+        ACN(Z4,FBN['TotalAux2']*FBN['TipoCambio'])
+
+        Message('Actualizando la Operacion  .... ')                  
+
+        *** Marca la operacion como ejercida ***
+        SQL.ADD("Update "~DBO~".OPERACIONES ")
+        SQL.ADD("Set CB8 = '1', ")
+        SQL.ADD("OperacionRef = '"~VAL(z3)~"', ")
+        SQL.ADD("FechaEx2  = '"~IdxDate(Dialogo.Fecha2)~"', ")
+        SQL.ADD("FechaVto2 = '"~IdxDate(Dialogo.Fecha1)~"', ")
+        SQL.ADD("Precio2   = "~Fstr(Dialogo.Precio2,0,7)~", ")
+        SQL.ADD("TotalNetoCli2 = "~Fstr(VAL(Z4),0,2)~" ")
+        SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+        SQL.NEW
+
+        **-- Genero la Operacion Asociada
+        acn(x1,1)
+ 
+        *** Determina los tipos de operacion a utilizar ***
+        IF FBN['MB2']=0 
+           *- Asiatico
+           ACT(z1,'DPOA')        
+        ELSE 
+           IF FBN['MB2']=1
+              *- Diario
+              ACT(z1,'DPOD')
+           ELSE
+              *- Simple
+              ACT(z1,'DPOS')
+           ENDIF
+        ENDIF
+
+     ENDIF
+   Proximo
+EndIf

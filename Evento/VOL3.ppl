@@ -1,0 +1,118 @@
+﻿*
+CrearDialogo
+   Especie1    : 'Especie' ;;;;;;NoVacio(Dialogo.Especie);;;
+   Entero1     : 'Ruedas Min';;;;;; 
+   Entero2     : 'Ruedas Max';;;;;;;;;
+   Fecha1    : 'Fecha'    ;;;;;;Dialogo.Fecha1<>0 ;'Fecha Incorrecta';NO;FSys; 
+   Check1    : 'Visible';;;;;;;;;
+FinDialogo
+
+IF NOT OK
+   Cancelar
+Endif
+
+If Dialogo.Check1=1
+   HojaVisible(SI)
+EndIf
+
+ACT(RU:1,FSTR(Dialogo.Entero2,0,0))
+
+ACT(CO:1,BuscarCampo('ESPECIES','Cotiza','Codigo',Dialogo.Especie1))
+
+SQL.ADD("  Select Count(*) as Total  From                                                          ")
+SQL.ADD("  (Select  Top  "~Val(RU:1)~" * from "~DBO~".COTIZACIONES where CallPut='CON' And Moneda='"~Val(CO:1)~"'   and  Codigo='"~Dialogo.Especie1~"' and Fecha<='"~IdxDate(Dialogo.Fecha1)~"' order by Fecha desc) ")
+SQL.ADD("  as ORDENADA                                                             ")
+SQL.ADD("                                                            ")
+SQL.ADD("                                                            ")
+Recorrer SQL
+   ACN(B:2,FBN['Total']-1)
+Proximo
+
+If Val(B:2)<Dialogo.Entero1
+   Cancelar('No se encontraron la cantidad minima de ruedas para el Calculo para la Especie '~Dialogo.Especie1)
+EndIf
+
+SetFilaActual(6)
+ACT(A:Fac,'Fecha')
+ACT(B:Fac,'Precio')
+ACT(C:Fac,'Diferencial')
+ACT(D:Fac,'Ruedas')
+ACT(E:Fac,'Probabilidad (1/Ruedas)')
+ACT(F:Fac,'Valor Esperado (Diferencial*Probalidad)')
+ACT(G:Fac,'Desvio (Diferencial-SUM(ValorEsperado))')
+ACT(H:Fac,'Desvio Cuadrado (Desvio al Cuadrado)')
+ACT(I:Fac,'Varianza (Probabilidad*Desvio Cuadrado)')
+SQL.ADD("  Select * From                                                          ")
+SQL.ADD("  (Select  Top  "~Val(RU:1)~" C.*,T2.TipoTr2 from "~DBO~".COTIZACIONES C LEFT JOIN "~DBO~".TRANSACCIONES2 T2 ON T2.Especie = C.Codigo and  C.Fecha=T2.Fecha3 and T2.TipoTr2='ACUPON' where C.CallPut='CON'  and  C.Codigo='"~Dialogo.Especie1~"' and C.Fecha<='"~IdxDate(Dialogo.Fecha1)~"' and C.Moneda='"~Val(CO:1)~"'  order by Fecha desc) ")
+SQL.ADD("  as ORDENADA order by Fecha                                                            ")
+SQL.ADD("                                                            ")
+SQL.ADD("                                                            ")
+Recorrer SQL
+   ACD(A:Fac,FBN['Fecha'])
+   ACN(B:Fac,FBN['Precio1'])
+   IF Val(VR:1)=1
+      If FBN['Precio1']=0
+         ACN(C:Fac,0)   
+      Else
+         IF Val(B:Fac-1)=0
+            ACN(C:Fac,0)  
+         Else
+            ACN(C:Fac,LogN(Val(B:Fac)/Val(B:Fac-1)))  
+         EndIf 
+      EndIf
+      IF EqStr(FBN['TipoTr2'],'ACUPON')
+      **Se cerea por Actualizacion de Cupon
+         ACN(C:Fac,0)  
+      EndIf
+      SCN(DD:1,1)
+      ACN(D:fac, Val(DD:1))
+      ACN(E:Fac,1/Val(B:2))
+      ACN(F:Fac,Val(C:Fac)*Val(E:Fac))
+      SCN(FF:1,Val(F:Fac))
+   EndIf
+   ACN(VR:1,1)
+Proximo
+Recorrer&i 1,Val(DD:1)+1
+   IF Val(VR:2)=1
+      ACN(G:&i+6,Val(C:&i+6)-Val(FF:1))
+      ACN(H:&i+6,Val(G:&i+6)^2)
+      ACN(I:&i+6,Val(H:&i+6)*Val(E:&i+6))
+      SCN(II:1,Val(I:&i+6))
+
+   EndIf
+   ACN(VR:2,1)
+Proximo
+FormatoCeldas(II:1,EXE('F10'))
+ACN(AA:1,Val(II:1)^0.5)
+FormatoCeldas(AA:1,EXE('F10'))
+
+ACT(A:1,'Volatilidad:')
+ACT(B:1,'Ruedas:')
+ACN(A:2,Val(AA:1)*100)
+
+SQL.ADD(" DELETE  "~DBO~".VOLATILIDADESPECIE ")
+SQL.ADD(" Where Especie='"~Dialogo.Especie1~"' and Fecha='"~IdxDate(Dialogo.Fecha1)~"' and Metodo='AUT' ")
+SQL.NEW
+SQL.EXEC
+
+SQL.ADD(" Insert  "~DBO~".VOLATILIDADESPECIE ")
+SQL.ADD(" (Fecha,Especie,Tipo,Metodo,Modo,FechaActualizacion,Volatilidad,VolatilidadOriginal,RuedasMax,RuedasMin,EspecieRef,Zona,RuedasUtil) ")
+SQL.ADD("  Values  ")
+SQL.ADD("  ('"~IdxDate(Dialogo.Fecha1)~"','"~Dialogo.Especie1~"','STD','AUT','','"~IdxDate(SQLAHORA)~' '~Hora(Ahora)~"',"~Val(A:2)~",0,"~FSTR(Dialogo.Entero2,0,0)~","~FSTR(Dialogo.Entero1,0,0)~",'',0,"~FSTR(Val(B:2),0,0)~" ) ")
+SQL.NEW
+SQL.EXEC
+
+FormatoCeldas(A:2,EXE('F10'))
+FormatoCeldas(B:4..I:Fac,EXE('F10'))
+LimitesVision(I:Fac+2)
+
+
+ACO(1,8)
+ACO(2,8)
+ACO(3,8)
+ACO(4,8)
+ACO(5,25)
+ACO(6,25)
+ACO(7,25)
+ACO(8,25)
+ACO(9,25)

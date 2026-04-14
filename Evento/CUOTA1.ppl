@@ -1,0 +1,93 @@
+﻿*HojaVisible(SI)
+CrearDialogo
+  Fecha1     : 'F_Operacion'       ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;HABILES(Fsys,-1,'ARG',SI);
+***--  Fecha2     :'F_Cotizacion'  ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSYS;
+  Fecha2     : 'F_Cotizacion'      ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;HABILES(Fsys,-1,'ARG',SI);
+  Lista1     : 'Vehiculos'         ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"'"))
+FinDialogo
+
+If Not Ok
+  Cancelar
+EndIf
+
+* Vehiculos permitidos por el usuario
+ACT(Z:2, SQLSET(" Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+
+ACN(Z:1, 0)
+
+*-- Valida que esten cargadas todas las cuotapartes ***
+SQL.ADD(" Select Distinct Especie FROM "~DBO~".OPERACIONES ")
+SQL.ADD(" Where FechaOp = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" And TipoOp In ('FCR', 'FCS') ")
+If NoVacio(Dialogo.Lista1)
+  SQL.ADD(" And Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+EndIf
+If NoVacio(UsrVehiculos(UsuarioActivo))
+  SQL.ADD(" And Vehiculo1 IN ("~Pipe2Comillas(val(z2))~") ")
+EndIf
+Recorrer SQL
+
+  ACT(A:1, fbn['Especie'])   
+
+  SQL.ADD(" Select Count(*) Cuantos FROM "~DBO~".COTIZACIONES ")
+  SQL.ADD(" Where Codigo = '"~fbn['Especie']~"' ")
+  SQL.ADD(" And Fecha = '"~IdxDate(Dialogo.Fecha2)~"' ")
+  Recorrer SQL
+    
+    If fbn['Cuantos'] = 0
+      MessageBox('La Especie '~val(a1)~' NO tiene Cotizacion para la Fecha: '~Dialogo.Fecha2)
+      ACN(Z:1, 1)
+    EndIf 
+
+  Proximo
+
+Proximo
+
+If Val(Z:1) > 0
+  Cancelar('Se Cancela el Proceso por falta de Cotizaciones')
+Endif
+
+SQL.ADD(" Select NrOperacion, Especie, Precio1, RB7, Cantidad, TotalNetoCli1, FechaOp, Vehiculo1 ")
+SQL.ADD(" From "~DBO~".OPERACIONES ")
+SQL.ADD(" Where FechaOp = '"~IdxDate(Dialogo.Fecha1)~"' ")
+***---Se permite actualizar si tiene precio para poder ajustar por la diferencia entre el precio ingresado y el de mercado
+***---SQL.ADD(" and TipoOp In ('FCR', 'FCS') and Precio1 = 0 ")
+SQL.ADD(" And TipoOp In ('FCR', 'FCS') ")
+SQL.ADD(" Order by Especie ")
+
+ACT(A:2, ' ')
+
+Recorrer SQL
+
+  If Not EqStr(Val(A:2), fbn['Especie'])
+    SQL.ADD(" Select Precio1 FROM "~DBO~".COTIZACIONES ")
+    SQL.ADD(" Where Codigo = '"~fbn['Especie']~"' ")
+    SQL.ADD(" And Fecha = '"~IdxDate(Dialogo.Fecha2)~"' ")
+    Recorrer SQL
+      ACN(A:3, fbn['Precio1'])
+    Proximo
+    ACT(A:2, fbn['Especie'])
+  Endif
+
+  SQL.ADD(" Update "~DBO~".OPERACIONES ")
+  SQL.ADD(" Set Precio1 = "~Fstr(val(A:3), 0, 10)~", ")
+  If fbn['RB7'] = 0
+    *** Actualiza el efectivo ***
+    SQL.ADD(" TotalNetoCli1 = "~Fstr(fbn['Cantidad'] * Val(A:3), 0, 2)~" ")
+  Else
+    *** Actualiza la cuotaparte ***
+    ACN(A:4, BuscarCampo('ESPECIES', 'Valor2', 'Codigo', fbn('Especie')))
+    ACN(A:5, Trunc2(fbn['TotalNetoCli1'] / Val(A:3), Val(A:4)))
+    SQL.ADD(" Cantidad = "~Fstr(Val(A:5), 0, Val(A:4))~" ")
+  EndIf
+  SQL.ADD(" Where NrOperacion = '"~fbn['NrOperacion']~"' ")
+  SQL.NEW
+  SQL.EXEC
+
+  *** Graba los movimientos de la operacion ***
+  SQL.ActualizarMovimientos2(FBN['NrOperacion'], SI, NO, NO, SI)
+  SQL.EXEC
+
+  EjecutarEvento('REGPOS', Fecha1=FBN['FechaOp'], Fecha2=FBN['FechaOp'], Vehiculo1=FBN['Vehiculo1'], Especie1=FBN['Especie'])
+
+Proximo

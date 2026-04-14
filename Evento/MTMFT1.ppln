@@ -1,0 +1,200 @@
+MostrarCuadroDeMensajes()
+
+creardialogo
+fecha1:'Fecha';1;1;;;;EsHabil(dialogo.fecha1, 'ARG') y dialogo.fecha1 <= FSys();'Fecha Invalida';NO;FSys();
+fecha2:'Fecha Futura';2;1;;;;EsHabil(dialogo.fecha2, 'ARG') y dialogo.fecha2 <= FSys();'Fecha Invalida';NO;FSys();
+vehiculo1:'Vehiculo';3;1;;;;;;;;;;
+
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Act(ml:1, Var('MONELOCA'))
+Act(ml:2, Var('MONEEXTR'))
+
+Sqladd(" Select TOP 1 O.NrOperacion ")
+Sqladd(" from "~Dbo()~".OPERACIONES O, "~Dbo()~".OPERACIONESBITS B ")
+Sqladd(" Where O.NrOperacion = B.NrOperacion ")
+if (NoVacio(dialogo.vehiculo1))
+Sqladd(" AND O.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+endif
+if (NoVacio(dialogo.fecha2))
+Sqladd(" AND O.FechaVto = '"~IdxDate(dialogo.fecha2)~"' ")
+endif
+Sqladd(" AND B.NrBit   < 19 ")
+Sqladd(" AND B.Valor   = '1' ")
+Sqladd(" AND O.TipoOp IN ('FXCF','FXVF') ")
+
+recorrer sql
+Cancelar('Existen operaciones sin confirmar para el vehiculo '~dialogo.vehiculo1~', el dia '~dialogo.fecha1~' y el futuro '~dialogo.fecha2)
+proximo
+
+if (dialogo.fecha1 = dialogo.fecha2)
+if (Query("Select 1 FROM "~Dbo()~".COTIZACIONES where Codigo = '"~Var('USDFUT')~"' AND CallPut = 'CON' AND Fecha = '"~IdxDate(dialogo.fecha1)~"' ") <> 1)
+Cancelar('No hay cotizaciones cargadas para la especie '~Var('USDFUT')~' del dia '~dialogo.fecha1)
+endif
+else
+if (Query("Select 1 FROM "~Dbo()~".COTIZACIONES where Codigo = '"~Val(ml:2)~"' AND CallPut = 'FUT' AND Fecha = '"~IdxDate(dialogo.fecha1)~"' AND FechaEj = '"~IdxDate(dialogo.fecha2)~"' ") <> 1)
+Cancelar('No hay cotizaciones cargadas para la especie '~Val(ml:2)~' el dia '~dialogo.fecha1~' y el futuro '~dialogo.fecha2)
+endif
+endif
+
+Sqladd(" Select O.NrOperacion,   O.TipoOp,        O.Cliente1,       O.Especie,     O.Cantidad,     ")
+Sqladd("       O.Precio1,       O.ContraEspecie, O.TotalBrutoCli1, O.Vehiculo1,   O.Book1,        ")
+Sqladd("       O.FechaOp,       O.FechaVto,      O.FechaPago,      O.FechaPrecan, O.PrecioMer,    ")
+Sqladd("       O.FechaUltCupon, O.PrecioEj,      O.FechaEj,        O.MB1,         ")
+Sqladd("       O.TotalAux1,     O.TotalAux3,     O.ContraEspecie2, O.Mercado, 1 as Tipo ")
+Sqladd(" from "~Dbo()~".OPERACIONES O, "~Dbo()~".CLIENTES C , "~Dbo()~".OPERACIONESBITS B ")
+Sqladd(" Where C.Codigo    = O.Cliente1 ")
+Sqladd(" AND O.NrOperacion = B.NrOperacion ")
+if (NoVacio(dialogo.vehiculo1))
+Sqladd(" AND O.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+endif
+Sqladd(" AND O.FechaOp  <= '"~IdxDate(dialogo.fecha1)~"' ")
+if (NoVacio(dialogo.fecha2))
+Sqladd(" AND O.FechaVto = '"~IdxDate(dialogo.fecha2)~"' ")
+endif
+Sqladd("   and B.NrBit   >= 19 ")
+Sqladd("   and B.Valor   = '1' ")
+Sqladd(" AND O.TipoOp IN ('FXCF','FXVF','SECF','SEVF') ")
+
+Sqladd(" UNION ALL")
+
+Sqladd(" Select O.NrOperacion,   O.TipoOp,        O.Cliente1,       O.Especie,     O.Cantidad,     ")
+Sqladd("       O.Precio1,       O.ContraEspecie, O.TotalBrutoCli1, O.Vehiculo1,   O.Book1,        ")
+Sqladd("       O.FechaOp,       O.FechaVto,      O.FechaPago,      O.FechaPrecan, O.PrecioMer,    ")
+Sqladd("       O.FechaUltCupon, O.PrecioEj,      O.FechaEj,        O.MB1,          ")
+Sqladd("       O.TotalAux1,     O.TotalAux3,     O.ContraEspecie2, O.Mercado, 2 as Tipo ")
+Sqladd(" from "~Dbo()~".OPERACIONES O, "~Dbo()~".CLIENTES C , "~Dbo()~".OPERACIONESBITS B ")
+Sqladd(" Where C.Codigo    = O.Cliente1 ")
+Sqladd(" AND O.NrOperacion = B.NrOperacion ")
+if (NoVacio(dialogo.vehiculo1))
+Sqladd(" AND O.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+endif
+Sqladd(" AND O.FechaOp  < '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND O.FechaCargaSys  = '"~IdxDate(dialogo.fecha1)~"' ")
+if (NoVacio(dialogo.fecha2))
+Sqladd(" AND O.FechaVto = '"~IdxDate(dialogo.fecha2)~"' ")
+endif
+Sqladd(" AND B.NrBit   >= 19 ")
+Sqladd(" AND B.Valor   = '1' ")
+Sqladd(" AND O.TipoOp IN ('FXCF','FXVF','SECF','SEVF') ")
+Sqladd(" Order By O.FechaVto, O.NrOperacion ")
+
+Acn(op:1, 0)
+recorrer sql
+if (Fbn('Tipo') = 1)
+Acd(fe:2, dialogo.fecha1)
+Acd(fe:3, dialogo.fecha1)
+else
+Acd(fe:2, Fbn('FechaOp'))
+Acd(fe:3, Habiles(dialogo.fecha1, -1, 'ARG'))
+endif
+recorrer&i Val(fe:2), Val(fe:3)
+Acn(fe:1, &i)
+if (Query(" Select 1 From "~Dbo()~".CUOTAS Where Fecha1 = '"~IdxDate(Val(fe:1))~"' AND NrOperacion = '"~Fbn('NrOperacion')~"'") <> 1)
+Message('Operacion: '~Fbn('NrOperacion'))
+Acn(ct:1, CotizacionC(Val(ml:2), 'FUT', dialogo.fecha2, null, Val(fe:1), 1, null, Val(ml:1)))
+Acn(ct:2, CotizacionC(Val(ml:2), 'FUT', dialogo.fecha2, null, Val(fe:1) - 1, 1, null, Val(ml:1)))
+
+
+if (Fbn('FechaOp') = Val(fe:1))
+Acn(ct:2, Fbn('Precio1'))
+else
+if (dialogo.fecha2 = Val(fe:1))
+Acn(ct:1, CotizacionC(Var('USDFUT'), 'CON', null, null, Val(fe:1), 1, null, Val(ml:1)))
+Sqladd(" Update "~Dbo()~".OPERACIONES ")
+Sqladd(" Set FechaEj = '"~IdxDate(FSys())~"', Precio2 = "~FStr(Val(ct:1), 0, 2)~" ")
+Sqladd(" Where NrOperacion = '"~Fbn('NrOperacion')~"' ")
+Sqlnew()
+Sqlexec()
+else
+endif
+endif
+
+Acn(df:1, Val(ct:1) - Val(ct:2))
+
+if (Val(ct:1) <> 0 y Val(ct:2) <> 0)
+if (Incluido(Fbn('TipoOp'), 'FXCF|SECF'))
+Acn(mm:1, Fbn('Cantidad') * Val(df:1))
+else
+Acn(mm:1, -Fbn('Cantidad') * Val(df:1))
+endif
+
+if (Incluido(Fbn('TipoOp'), 'FXCF|FXVF'))
+Acn(cu:1, Query("Select Max(NrCuota)+1 From "~Dbo()~".CUOTAS Where NrOperacion = '"~Fbn('NrOperacion')~"'"))
+if (Vacio(Val(cu:1)) o Eqstr(Val(cu:1), '') o Val(cu:1) = 0)
+Acn(cu:1, 1)
+endif
+
+if (Incluido(Fbn('Cliente1'), Var('BRLIQMTM')))
+Acd(fe:3, Habiles(Val(fe:1), 1, 'ARG'))
+else
+Acd(fe:3, Val(fe:1))
+endif
+if (Val(fe:1) = Fbn('FechaOp'))
+Acd(fe:9, Fbn('FechaOp'))
+else
+Acd(fe:9, Habiles(Val(fe:1), -1, 'ARG'))
+endif
+if (Query(" Select 1 From "~Dbo()~".CUOTAS Where Fecha1 = '"~IdxDate(Val(fe:1))~"' AND NrOperacion = '"~Fbn('NrOperacion')~"'") = 1)
+Sqladd(" Update "~Dbo()~".CUOTAS ")
+Sqladd(" Set Precio1 = "~FStr(Val(mm:1), 0, 2)~", ")
+Sqladd(" Cotizacion1 = "~FStr(Val(ct:1), 0, 8)~", Cotizacion2 = "~FStr(Val(ct:2), 0, 8)~" ")
+Sqladd(" Where Fecha1 = '"~IdxDate(Val(fe:1))~"' ")
+Sqladd(" AND NrOperacion = '"~Fbn('NrOperacion')~"' ")
+Sqlnew()
+Sqlexec()
+else
+Sqladd(" Insert Into "~Dbo()~".CUOTAS ")
+Sqladd(" (NrCuota, NrOperacion, Fecha1, Fecha2, Fecha3, ")
+Sqladd(" Precio1, Cotizacion1, Cotizacion2) ")
+Sqladd(" Values ")
+Sqladd(" ("~FStr(Val(cu:1), 0, 0)~", '"~Fbn('NrOperacion')~"', '"~IdxDate(Val(fe:1))~"', '"~IdxDate(Val(fe:9))~"', '"~IdxDate(Val(fe:3))~"', ")
+Sqladd(" "~FStr(Val(mm:1), 0, 2)~", "~FStr(Val(ct:1), 0, 8)~", "~FStr(Val(ct:2), 0, 8)~") ")
+Sqladd("  ")
+Sqlnew()
+Sqladd(" Update "~Dbo()~".OPERACIONES ")
+Sqladd(" Set Cuotas1 = "~FStr(Val(cu:1), 0, 0)~", CB5 = 1 ")
+Sqladd(" Where NrOperacion = '"~Fbn('NrOperacion')~"' ")
+Sqlnew()
+Sqlexec()
+endif
+else
+if (Query(" Select 1 From "~Dbo()~".MTMDIARIO Where Fecha = '"~IdxDate(Val(fe:1))~"' AND NrOperacion = '"~Fbn('NrOperacion')~"'") = 1)
+Sqladd(" Update "~Dbo()~".MTMDIARIO ")
+Sqladd(" Set MTM = "~FStr(Val(mm:1), 0, 2)~", ")
+Sqladd(" PrecioHoy = "~FStr(Val(ct:1), 0, 8)~", PrecioAyer = "~FStr(Val(ct:2), 0, 8)~" ")
+Sqladd(" Where Fecha = '"~IdxDate(Val(fe:1))~"' ")
+Sqladd(" AND NrOperacion = '"~Fbn('NrOperacion')~"' ")
+Sqlnew()
+Sqlexec()
+else
+Sqladd(" Insert Into "~Dbo()~".MTMDIARIO ")
+Sqladd(" (NrOperacion, Fecha, PrecioHoy, ")
+Sqladd(" PrecioAyer, MTM) ")
+Sqladd(" Values ")
+Sqladd(" ('"~Fbn('NrOperacion')~"', '"~IdxDate(Val(fe:1))~"', "~FStr(Val(ct:1), 0, 8)~", ")
+Sqladd(" "~FStr(Val(ct:2), 0, 8)~", "~FStr(Val(mm:1), 0, 2)~") ")
+Sqlnew()
+Sqlexec()
+endif
+endif
+Sqladd(" Update "~Dbo()~".OPERACIONES ")
+Sqladd(" Set TotalAux3 = TotalAux3 + "~FStr(Val(mm:1), 0, 2)~" ")
+Sqladd(" Where NrOperacion = '"~Fbn('NrOperacion')~"' ")
+Sqlnew()
+Sqlexec()
+
+SqlActualizarmovimientos3(Fbn('NrOperacion'), SI, SI, NO, SI, SI)
+Sqlexec()
+else
+endif
+
+
+endif
+proximo
+proximo
+

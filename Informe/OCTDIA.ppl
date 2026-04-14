@@ -1,0 +1,121 @@
+﻿*ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha2  :  'Fecha'    ;;;;;;Dialogo.Fecha2 >= Dialogo.Fecha1;'Fecha Hasta Invalida';NO;FSys
+  Fecha1  :  'D.Fecha'  ;;;;NO;NO;Dialogo.Fecha1 <> 0;'Fecha Desde Invalida';NO;FSys;Dialogo.Fecha2
+  Cliente1 : 'Agente'   ;;;;;;;;;;;;;;" NrMAE Is Not Null AND NrMAE <> '0' ";
+  Vehiculo1: 'Vehiculo' ;;;;NO;;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+FinDialogo
+if not Ok 
+  Cancelar
+endif
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+CrearFont(3, 'Arial,10,B')
+
+**AgregarBMP(A:1, Exe('LOGO'), 60)
+ACT(A:2, CodigoInforme)
+SetFilaActual(3)
+ACT(E:Fac, 'Liquidaciones OCT')
+SetFont(E:fac, 3)
+SetFilaActual(fac+2)
+*ACT(A:fac, 'Desde: '~Dialogo.Fecha1)
+*ifa
+*ACT(A:fac, 'Hasta: '~Dialogo.Fecha2)
+ACT(A:fac, 'Fecha: '~Dialogo.Fecha2)
+IF NoVacio(Dialogo.Cliente1)
+    ifa
+    ACT(A:fac, 'Agente: '~Dialogo.Cliente1)
+ENDIF
+ifa
+ACT(A:fac, 'Vehiculo: '~Dialogo.Vehiculo1)
+SetFont(A:fac-3..A:fac, 1)
+SetFilaActual(fac+2)
+ACT(A:fac, 'NrTrans')
+ACT(B:fac, 'TipoTr')
+ACT(C:fac, 'Fecha')
+ACT(D:fac, 'Cliente')
+ACT(E:fac, 'Moneda')
+ACT(F:fac, 'Cantidad')
+ACT(G:fac, 'Cta. Propia')
+***ACT(H:fac, 'Cta. Cliente')
+ACT(H:fac, 'Mercado')
+ACT(I:fac, 'Paso')
+ACT(J:fac, 'Estado')
+ACT(K:fac, 'Voucher')
+SetFont(A:fac..k:fac, 1)
+AlinearCeldas(A:fac..k:fac, 'C')
+AgregarMarco(A:fac..k:fac, 0, 0, Exe('COLOR'))
+
+ACN(FI:1, fac+1)
+SQL.ADD(" Select T.NrTrans, T.Fecha1, T.Cambio1, T.TipoTr2, T.Cliente1, T.Especie, T.Cantidad1, T.Cuenta1, T.Cuenta2, ")
+SQL.ADD(" T.Cambio1, T.Mercado1 ")
+SQL.ADD(" From "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD(" Where T.TipoTr2 = 'LIQOCT' ")
+SQL.ADD(" AND T.Fecha1 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND T.Fecha1 <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" AND T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+IF NoVacio(Dialogo.Cliente1)
+    SQL.ADD(" AND T.Cliente1 = '"~Dialogo.Cliente1~"' ")
+ENDIF
+SQL.ADD(" Order By T.Cliente1, T.Fecha1, T.Cambio1 ")
+
+Recorrer SQL
+    ACT(A:fac, fbn('NrTrans'))
+    ACLT(A:fac, fbn('NrTrans'))
+    ACT(B:fac, fbn('TipoTr2'))
+    ACD(C:fac, fbn('Fecha1'))
+    ACT(D:fac, fbn('Cliente1'))
+    ACT(E:fac, fbn('Especie'))
+    ACN(F:fac, fbn('Cantidad1'))
+    ACT(G:fac, fbn('Cuenta2'))
+****    ACT(H:fac, fbn('Cuenta1'))
+    ACT(h:fac, fbn('Mercado1'))
+    ACN(i:fac, fbn('Cambio1'))
+    ACL(F:fac, 'DETOCT', Fecha1 = fbn('Fecha1'), NrTrans1 = fbn('NrTrans'), Vehiculo1 = Dialogo.Vehiculo1, Cliente1 = fbn('Cliente1'), Especie1 = '', Fecha2 = 0, Radio1 = 0)
+    IF Val(F:fac) <> 0 Y fbn('Cambio1') = 0
+        ***---Solo tienen movimientos para liquidar las LIQOCT paso cero.
+        ACT(k:fac, SQL(" Select NrTrans2 From "~DBO~".MOVEJECUTADOS Where NrOperacion = '"~fbn('NrTrans')~"' AND NrSaldo = 1 "))
+        IF Not CeldaVacia(k:fac)
+            ACT(j:fac, 'Liquidado')
+            ACLT(k:fac, Val(k:fac))
+            ColorCeldas(j:fac..j:fac, Exe('COLOR5'))
+            SCN(TL:1, Val(F:fac))
+        ELSE
+            ACT(j:fac, 'Pendiente')
+            ColorCeldas(j:fac, Exe('COLOR9'))
+            SCN(TP:1, Val(F:fac))
+        ENDIF
+    ENDIF
+Proximo
+SetFont(A:Val(FI:1)..L:fac, 2)
+FormatoCeldas(i:Val(FI:1)..i:fac, Exe('F0'))
+
+SetFilaActual(fac+2)
+ACT(D:fac, 'Total Neto')
+ACN(F:fac, Sum(F:Val(FI:1)..F:fac))
+ACL(F:fac, 'DETOCT', Fecha1 = Dialogo.Fecha1, NrTrans1 = '', Vehiculo1 = Dialogo.Vehiculo1, Cliente1 = '', Especie1 = '', Fecha2 = 0, Radio1 = 3)
+
+SetFont(A:fac..F:fac, 1)
+FormatoCeldas(F:Val(FI:1)..F:fac, Exe('F2'))
+AgregarMarco(A:fac..k:fac, 0, 0, Exe('COLOR'))
+
+SetFilaActual(fac+2)
+ACT(I:fac, 'Total Liquidado')
+ACN(k:fac, Val(TL:1))
+ColorCeldas(I:fac..k:fac, Exe('COLOR5'))
+
+ifa
+ACT(I:fac, 'Total Pendiente')
+ACN(k:fac, Val(TP:1))
+
+ACO(7,10)
+
+FormatoCeldas(I:fac-1..k:fac, Exe('F2'))
+ColorCeldas(I:fac..k:fac, Exe('COLOR9'))
+SetFont(I:fac-1..k:fac, 1)
+SetFilaActual(fac+2)
+ACT(A:fac, 'Fin del Informe')
+SetFont(A:fac, 1)
+SetPrintFit(3,95)
+LimitesVision(k:fac+1)

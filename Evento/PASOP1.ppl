@@ -1,0 +1,66 @@
+﻿ACT(z1,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+if NoVacio(Val(z1))
+  ACT(z1, Pipe2Comillas(Val(z1)))
+  CrearDialogo
+    NrOperacion1 : 'Nr.Operacion';;;;;;;;;;;;;;"Vehiculo1 in ("~Val(z1)~")"
+  FinDialogo
+else
+  CrearDialogo
+    NrOperacion1 : 'Nr.Operacion';;;;;;;;;
+  FinDialogo
+endif
+
+if Not OK
+    Cancelar
+EndIf
+
+ACT(z2, SQLSet("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+
+SQL.ADD("Select Vehiculo1, RB3 from "~DBO~".OPERACIONES where NrOperacion = '"~Dialogo.NrOperacion1~"'")
+recorrer SQL
+  if Incluido(fbn('Vehiculo1'), Var('VLIQUIDA')~Var('VLIQUIDA2'))
+    Cancelar('La operacion pertenece a un Vehiculo que liquida')
+  endif
+  if [Not Incluido(fbn('Vehiculo1'), Val(z2))] y NoVacio(Val(z2))
+    Cancelar('La operacion pertebnece a un Vehiculo no autorizado para el Usuario')
+  endif
+
+
+  ACT(f1, SQLSet("Select TipoOp from "~DBO~".OPERACIONES where NrOperacion = '"~Dialogo.NrOperacion1~"'"))
+  If Buscar('AJUCOB',VAL(F1)) O Buscar('AJUCON',VAL(F1)) O Buscar('AJUCOR',VAL(F1)) O Buscar('AJUDEV',val(f1)) O Buscar('AJULIM',VAL(F1)) O Buscar('AJUSCF',VAL(F1)) O Buscar('AJUSMV',VAL(F1)) O Buscar('AJUSTE',VAL(F1))
+    Cancelar ('No se puede utilizar para Operaciones de Ajuste, Utilizar la Flecha de Retroceso')
+  endif
+
+
+  ACN(z1, SQL("Select count(*) from "~DBO~".OPERACIONESBITS where NrOperacion='"~Dialogo.NrOperacion1~"' and (NrBit=20 or NrBit=50) and Valor='1'"))
+  if Val(z1)=0
+     Cancelar('La Operacion no esta en BackOffice ni Terminal')
+  endif
+  ACN(z4, fbn('RB3'))
+proximo
+
+SQL.ADD("Update "~DBO~".OPERACIONES")
+SQL.ADD("Set Direccion=1 where NrOperacion='"~Dialogo.NrOperacion1~"'")
+SQL.NEW
+SQL.EXEC
+SQL.ADD(" Select NrBit from "~DBO~".OPERACIONESBITS where NrOperacion = '"~Dialogo.NrOperacion1~"' and Valor = '1' ")
+Recorrer SQL
+    DFA
+    IF fbn('NrBit') = 50
+        ***---Si esta en terminal verifico si estan las instancias
+        IF SQL(" Select Count(*) From "~DBO~".OPERACIONESBITS Where NrOperacion = '"~Dialogo.NrOperacion1~"' ") = 1
+            ***---No estan las otras instancias => las inserto
+            EjecutarEvento('INSBIT', String1 = 'OPERACIONES', Entero1 = 50, NrOperacion1=Dialogo.NrOperacion1)
+        ENDIF
+    ENDIF
+Proximo
+SQL.ADD("Update "~DBO~".OPERACIONESBITS")
+SQL.ADD("Set Valor='0' where NrOperacion='"~Dialogo.NrOperacion1~"' and NrBit in (20, 50)")
+SQL.NEW
+if Val(z4) > 0
+   SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='1' where NrOperacion='"~Dialogo.NrOperacion1~"' and NrBit=10")
+else
+   SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='1' where NrOperacion='"~Dialogo.NrOperacion1~"' and NrBit=12")
+endif
+SQL.NEW
+SQL.EXEC

@@ -1,0 +1,316 @@
+﻿MostrarCuadroDeMensajes
+ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1:       'Fecha'       ; 1;;;;;;;;fsys
+  Lista1:       'Vehiculos'   ; 3;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+  ListaTabla1: 'Operaciones'  ;-3;2;;;;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES' 
+  Check1:      'Contab.Procesada' ;;;;NO;NO;
+FinDialogo
+If Not Ok
+   Cancelar
+Endif
+
+ACN(x1, SQL("Select 1 from "~DBO~".VARIABLES where Codigo = 'DIASCONT' "))
+if Val(x1)=1
+  ACN(x1, Trunc(Var('DIASCONT'),0))
+endif
+if Val(x1)<1
+  ACN(x1, 1)
+endif
+ACD(x2, Habiles(PriDeMes(Dialogo.Fecha1,SI)-1,Val(x1),'ARG'))
+ACD(x3, Habiles(Val(x2),1,'ARG'))
+
+* Fecha Proceso - 07/02/08
+ACD(v:1, Dialogo.Fecha1)
+
+* Ultimo Dia Habil mes anterior - 31/01/08
+ACD(v:2, Habiles(PriDeMes(Dialogo.Fecha1),-1,'ARG'))
+
+***---31/12/07
+ACD(v:3, Habiles(PriDeMes(Val(v:2)),-1,'ARG'))
+
+ACT(ML:1, Var('MONELOCA'))
+
+ACD(FE:1, PriDeMes(Val(V:2), SI))
+ACD(FE:2, PriDeMes(Dialogo.Fecha1, SI))
+
+Message('--- Asientos Dif. Cambio Prestamos ---')
+
+*** Asientos al Vencimiento ***
+SQL.ADD(" SELECT O.NrOperacion, O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto, O.Cliente1, O.Vehiculo1, ")
+SQL.ADD(" O.TipoOp, O.Cantidad, O.Precio1, C.CUIT, V.Valor1, V.Valor2, 'Vto' TipoRes, M.Codigo CodAsi, E.Tipo, E.Cotiza, ")
+SQL.ADD(" O.Especie Moneda, O.Plazo, O.Observaciones, CU.NrCuota, O.MB3, E.Alias8 ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".CLIENTES C, "~DBO~".VEHICULOS V, "~DBO~".CUOTAS CU, ")
+SQL.ADD("      "~DBO~".MODELOSASIENTO M, "~DBO~".ESPECIES E ")
+SQL.ADD(" WHERE O.Cliente1    = C.Codigo ")
+SQL.ADD(" AND   O.Vehiculo1   = V.Codigo ")
+SQL.ADD(" AND   O.Especie     = E.Codigo ")
+SQL.ADD(" AND   O.NrOperacion = CU.NrOperacion ")
+SQL.ADD(" AND   CU.Fecha2    = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND   O.TipoOp IN ('MMPCLM','MMPEM','MMPIM','MMPOSM','MMSCMV','MMFCMV','MMPCCM') ")
+SQL.ADD(" AND   O.Vehiculo1   IN ("~Pipe2Comillas(Var('VLIQUIDA')~Var('VLIQUIDA2'))~") ")
+SQL.ADD(" AND   O.Especie  <> '"~Val(ML:1)~"' ")
+SQL.ADD(" and   M.TipoAsiento IN ("~Pipe2Comillas(Var('TIASDICAPR'))~") ")
+If NoVacio(Dialogo.ListaTabla1)
+  SQL.ADD(" AND O.NrOperacion IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+Endif
+If NoVAcio(Dialogo.Lista1)
+  SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND O.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+  Endif
+Endif
+SQL.ADD(" ORDER BY O.NrOperacion ")
+Recorrer SQL
+    ACN(CK:1, 0)
+    IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+        ACN(CK:1, 1)
+        IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrOperacion = '"~fbn('NrOperacion')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado = 'E' AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Dialogo.Fecha1)~"' AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+            ACN(CK:1, 0)
+        ENDIF
+    ENDIF
+    IF Val(CK:1) = 0
+        ACN(RS:1, 0)
+        ACN(RS:2, 0)
+        ACN(RS:3, 0)
+        ACN(RS:4, 0)
+        ACT(TO:1, fbn('TipoOp'))
+        ***---Cotizacion BNA al Vto
+        ACN(CT:1, CotizacionBNA(fbn('Especie'),Dialogo.Fecha1,2,NO,NO))
+        IF fbn('NrCuota') = 1
+            ***---Cotizacion BNA al mes anterior o a FechaOp
+            IF Val(V:2) > fbn('FechaOp')
+                ACN(CT:2, CotizacionBNA(fbn('Especie'),Val(V:2),2,NO,NO))
+            ELSE
+                ACN(CT:2, CotizacionBNA(fbn('Especie'),fbn('FechaOp'),2,NO,NO))
+            ENDIF
+        ELSE
+            ***---Busco el vto. de la cuota anterior
+            ACD(FE:3, SQL(" Select Fecha2 From "~DBO~".CUOTAS Where NrOperacion = '"~fbn('NrOperacion')~"' AND NrCuota = "~Fstr(fbn('NrCuota')-1, 0, 0)~" "))
+            ***---Cotizacion BNA al mes anterior o a Vto. Anterior
+            IF Val(V:2) > Val(FE:3)
+                ACN(CT:2, CotizacionBNA(fbn('Especie'),Val(V:2),2,NO,NO))
+            ELSE
+                ACN(CT:2, CotizacionBNA(fbn('Especie'),Val(FE:3),2,NO,NO))
+            ENDIF
+        ENDIF
+        ***---Obtengo Capital Adeudado Cte.
+        SQL.ADD(" Select Sum(Cantidad1) Capital, Sum(Cantidad3) Interes, Sum(Total7) Total7, Sum(Precio3) Precio3 ")
+        SQL.ADD(" From "~DBO~".CUOTAS ")
+        SQL.ADD(" Where NrOperacion = '"~fbn('NrOperacion')~"' ")
+        SQL.ADD(" AND Fecha2 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD(" AND Fecha2 <= '"~IdxDate(Dialogo.Fecha1+365)~"' ")
+        Recorrer SQL
+            DFA
+            ACN(CP:1, fbn('Capital'))
+            IF Incluido(Val(TO:1), 'MMPCCM|MMPEM|MMPIM|MMPOSM')
+                ACN(WH:1, fbn('Total7'))
+            ELSE
+                IF Incluido(Val(TO:1), 'MMSCMV|')
+                    ACN(WH:1, fbn('Precio3'))
+                ELSE
+                    ACN(WH:1, 0)
+                ENDIF
+            ENDIF
+        Proximo
+        ***---Resultado por Dif de Cambio Capital Cte.
+        ACN(RS:1, Val(CP:1) * (Val(CT:1) - Val(CT:2)))
+        ACD(FV:1, Dialogo.Fecha1)
+        ACN(CT:3, Val(CT:1))
+        Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+        SQL.GenerarAsientoOp(fbn('CodAsi'),fbn('NrOperacion'),'','',810,Dialogo.Fecha1,fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+        SQL.EXEC    
+***************************************************************************
+        ***---Obtengo Capital Adeudado NO Cte.
+        SQL.ADD(" Select Sum(Cantidad1) Capital, Sum(Cantidad3) Interes, Sum(Total7) Total7, Sum(Precio3) Precio3 ")
+        SQL.ADD(" From "~DBO~".CUOTAS ")
+        SQL.ADD(" Where NrOperacion = '"~fbn('NrOperacion')~"' ")
+        SQL.ADD(" AND Fecha2 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD(" AND Fecha2 > '"~IdxDate(Dialogo.Fecha1+365)~"' ")
+        Recorrer SQL
+            DFA
+            ACN(CP:2, fbn('Capital'))
+            IF Incluido(Val(TO:1), 'MMPCCM|MMPEM|MMPIM|MMPOSM')
+                ACN(WH:1, fbn('Total7'))
+            ELSE
+                IF Incluido(Val(TO:1), 'MMSCMV|')
+                    ACN(WH:1, fbn('Precio3'))
+                ELSE
+                    ACN(WH:1, 0)
+                ENDIF
+            ENDIF
+        Proximo
+        ACN(RS:1, 0)
+        ***---Resultado por Dif de Cambio Capital NO Cte.
+        ACN(RS:3, Val(CP:2) * (Val(CT:1) - Val(CT:2)))
+        ACD(FV:1, Dialogo.Fecha1)
+        Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+        SQL.GenerarAsientoOp(fbn('CodAsi'),fbn('NrOperacion'),'','',810,Dialogo.Fecha1,fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+        SQL.EXEC    
+***************************************************************************
+        ***---Obtengo Fecha vto. anterior
+        ACD(FE:9, SQL(" Select Max(Fecha2) From "~DBO~".CUOTAS Where NrOperacion = '"~fbn('NrOperacion')~"' AND Fecha2 < '"~IdxDate(Dialogo.Fecha1)~"' "))
+        ***---Intereses a Devengados desde el Vto anterior a la fecha de valuacion
+        ACN(ID:1, SQL(" Select Sum(Abs(Monto)) From "~DBO~".MOVDEVENGADOS Where NrOperacion = '"~fbn('NrOperacion')~"' AND TipoDevengado = 'INTLEN' AND Fecha <= '"~IdxDate(Dialogo.Fecha1)~"' AND Fecha > '"~IdxDate(Val(FE:9))~"' "))
+        ACN(RS:1, 0)
+        ACN(RS:3, 0)
+        ***---Resultado por Dif de Cambio Interes Devengados
+        ACN(RS:2, Val(ID:1) * (Val(CT:1) - Val(CT:2)))
+        Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+        SQL.GenerarAsientoOp(fbn('CodAsi'),fbn('NrOperacion'),'','',810,Dialogo.Fecha1,fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+        SQL.EXEC    
+        ***---WHT
+        ***---WHT Devengados desde el Vto anterior a la fecha de valuacion
+        ACN(WH:1, SQL(" Select Sum(Abs(Monto)) From "~DBO~".MOVDEVENGADOS Where NrOperacion = '"~fbn('NrOperacion')~"' AND TipoDevengado = 'INTWHT' AND Fecha <= '"~IdxDate(Dialogo.Fecha1)~"' AND Fecha > '"~IdxDate(Val(FE:9))~"' "))
+        ACN(RS:1, 0)
+        ACN(RS:2, 0)
+        ACN(RS:3, 0)
+        ***---Resultado por Dif de Cambio WHT
+        ACN(RS:4, Val(WH:1) * (Val(CT:1) - Val(CT:2)))
+        Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+        SQL.GenerarAsientoOp(fbn('CodAsi'),fbn('NrOperacion'),'','',810,Dialogo.Fecha1,fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+        SQL.EXEC    
+    ENDIF
+proximo
+
+*************************
+*** Asientos Fin de Mes
+*************************
+IF Dialogo.Fecha1 = Val(x2)
+    SQL.ADD(" SELECT O.NrOperacion,  O.Especie, O.ContraEspecie, ")
+    SQL.ADD("        O.FechaOp, O.FechaVto, O.Cliente1, ")
+    SQL.ADD("        O.Vehiculo1, ")
+    SQL.ADD("        O.TipoOp, O.Cantidad, O.Precio1, ")
+    SQL.ADD("        C.CUIT, V.Valor1, V.Valor2, ")
+    SQL.ADD("        M.Codigo CodAsi, E.Tipo, E.Cotiza, O.Especie Moneda, 'Fin' TipoRes, O.Plazo, O.Observaciones, O.MB3, E.Alias8 ")
+    SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".CLIENTES C, "~DBO~".VEHICULOS V, ")
+    SQL.ADD("      "~DBO~".MODELOSASIENTO M, "~DBO~".ESPECIES E ")
+    SQL.ADD(" WHERE O.Cliente1    = C.Codigo ")
+    SQL.ADD(" AND   O.Vehiculo1   = V.Codigo ")
+    SQL.ADD(" AND   O.Especie     = E.Codigo ")
+    SQL.ADD(" AND   O.FechaOp     <= '"~IdxDate(Val(v:2))~"' ")
+    SQL.ADD(" AND   O.FechaVto    > '"~IdxDate(Val(v:2))~"' ")
+    SQL.ADD(" AND   O.TipoOp IN ('MMPCLM','MMPEM','MMPIM','MMPOSM','MMSCMV','MMFCMV','MMPCCM') ")
+    SQL.ADD(" AND   O.Vehiculo1   IN ("~Pipe2Comillas(Var('VLIQUIDA')~Var('VLIQUIDA2'))~") ")
+    SQL.ADD(" AND   O.Especie  <> '"~Val(ML:1)~"' ")
+    SQL.ADD(" and   M.TipoAsiento IN ("~Pipe2Comillas(Var('TIASDICAPR'))~") ")
+    If NoVacio(Dialogo.ListaTabla1)
+      SQL.ADD(" AND O.NrOperacion IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+    Endif
+    If NoVAcio(Dialogo.Lista1)
+      SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+    Else
+      If NoVacio(UsrVehiculos(UsuarioActivo))
+        SQL.ADD(" AND O.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+      Endif
+    Endif
+    SQL.ADD(" ORDER BY O.NrOperacion ")
+    Recorrer SQL
+        ACN(CK:1, 0)
+        IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+           ACN(CK:1, 1)
+            IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrOperacion = '"~fbn('NrOperacion')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado = 'E' AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(V:2))~"' AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+              ACN(CK:1, 0)
+           ENDIF
+        ENDIF
+        IF Val(CK:1) = 0
+            ACN(RS:1, 0)
+            ACN(RS:2, 0)
+            ACN(RS:3, 0)
+            ACN(RS:4, 0)
+            ***---Obtengo Fecha vto. anterior
+            ACD(FE:9, SQL(" Select Max(Fecha2) From "~DBO~".CUOTAS Where NrOperacion = '"~fbn('NrOperacion')~"' AND Fecha2 < '"~IdxDate(Val(V:2))~"' "))
+            ***---Cotizacion BNA al momento de la valuacion
+            ACN(CT:1, CotizacionBNA(fbn('Especie'),Val(V:2),2,NO,NO))
+            ***---Cotizacion BNA al mes anterior o a FechaOp o al vto anterior
+            IF fbn('FechaOp') > Val(FE:9)
+                ***---No Hubo un vto. anterior
+                IF Val(V:3) > fbn('FechaOp')
+                    ACN(CT:2, CotizacionBNA(fbn('Especie'),Val(V:3),2,NO,NO))
+                ELSE
+                    ACN(CT:2, CotizacionBNA(fbn('Especie'),fbn('FechaOp'),2,NO,NO))
+                ENDIF
+            ELSE
+                IF Val(V:3) > Val(FE:9)
+                    ACN(CT:2, CotizacionBNA(fbn('Especie'),Val(V:3),2,NO,NO))
+                ELSE
+                    ACN(CT:2, CotizacionBNA(fbn('Especie'),Val(FE:9),2,NO,NO))
+                ENDIF
+            ENDIF
+            ***---Obtengo Capital Cte. Adeudado
+            SQL.ADD(" Select Sum(Cantidad1) Capital, Sum(Cantidad3) Interes, Sum(Total7) Total7, Sum(Precio3) Precio3 ")
+            SQL.ADD(" From "~DBO~".CUOTAS ")
+            SQL.ADD(" Where NrOperacion = '"~fbn('NrOperacion')~"' ")
+            SQL.ADD(" AND Fecha2 >= '"~IdxDate(Val(V:2))~"' ")
+            SQL.ADD(" AND Fecha2 <= '"~IdxDate(Val(V:2)+365)~"' ")
+            Recorrer SQL
+                DFA
+                ACN(CP:1, fbn('Capital'))
+                IF Incluido(Val(TO:1), 'MMPCCM|MMPEM|MMPIM|MMPOSM')
+                    ACN(WH:1, fbn('Total7'))
+                ELSE
+                    IF Incluido(Val(TO:1), 'MMSCMV|')
+                        ACN(WH:1, fbn('Precio3'))
+                    ELSE
+                        ACN(WH:1, 0)
+                    ENDIF
+                ENDIF
+            Proximo
+            ACN(CT:3, Val(CT:1))
+            ***---Resultado por Dif de Cambio Capital Cte.
+            ACN(RS:1, Val(CP:1) * (Val(CT:1) - Val(CT:2)))
+            ACD(FV:1, Dialogo.Fecha1)
+            Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+            SQL.GenerarAsientoOp(fbn('CodAsi'),fbn('NrOperacion'),'','',810,Val(V:2),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+            SQL.EXEC
+            ***---Obtengo Capital NO Cte. Adeudado
+            SQL.ADD(" Select Sum(Cantidad1) Capital, Sum(Cantidad3) Interes, Sum(Total7) Total7, Sum(Precio3) Precio3 ")
+            SQL.ADD(" From "~DBO~".CUOTAS ")
+            SQL.ADD(" Where NrOperacion = '"~fbn('NrOperacion')~"' ")
+            SQL.ADD(" AND Fecha2 >= '"~IdxDate(Val(V:2))~"' ")
+            SQL.ADD(" AND Fecha2 > '"~IdxDate(Val(V:2)+365)~"' ")
+            Recorrer SQL
+                DFA
+                ACN(CP:2, fbn('Capital'))
+                IF Incluido(Val(TO:1), 'MMPCCM|MMPEM|MMPIM|MMPOSM')
+                    ACN(WH:1, fbn('Total7'))
+                ELSE
+                    IF Incluido(Val(TO:1), 'MMSCMV|')
+                        ACN(WH:1, fbn('Precio3'))
+                    ELSE
+                        ACN(WH:1, 0)
+                    ENDIF
+                ENDIF
+            Proximo
+            ACN(RS:1, 0)
+            ***---Resultado por Dif de Cambio Capital NO Cte.
+            ACN(RS:3, Val(CP:2) * (Val(CT:1) - Val(CT:2)))
+            ACD(FV:1, Dialogo.Fecha1)
+            Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+            SQL.GenerarAsientoOp(fbn('CodAsi'),fbn('NrOperacion'),'','',810,Val(V:2),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+            SQL.EXEC
+            ***---Intereses Devengados del mes desde el Vto anterior a la fecha de valuacion
+***---        ACN(ID:1, SQL(" Select Sum(Abs(Monto)) From "~DBO~".MOVDEVENGADOS Where NrOperacion = '"~fbn('NrOperacion')~"' AND TipoDevengado = 'INTLEN' AND Fecha <= '"~IdxDate(Val(V:2))~"' AND Fecha >= '"~IdxDate(Val(FE:9))~"' AND Fecha > '"~IdxDate(Val(V:3))~"' "))
+            ACN(ID:1, SQL(" Select Sum(Abs(Monto)) From "~DBO~".MOVDEVENGADOS Where NrOperacion = '"~fbn('NrOperacion')~"' AND TipoDevengado = 'INTLEN' AND Fecha <= '"~IdxDate(Val(V:2))~"' AND Fecha > '"~IdxDate(Val(FE:9))~"' "))
+            ACN(RS:1, 0)
+            ACN(RS:3, 0)
+            ***---Resultado por Dif de Cambio Interes a Devengar
+            ACN(RS:2, Val(ID:1) * (Val(CT:1) - Val(CT:2)))
+            Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+            SQL.GenerarAsientoOp(fbn('CodAsi'),fbn('NrOperacion'),'','',810,Val(V:2),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+            SQL.EXEC
+            ***---WHT Devengados del mes desde el Vto anterior a la fecha de valuacion
+***---        ACN(WH:1, SQL(" Select Sum(Abs(Monto)) From "~DBO~".MOVDEVENGADOS Where NrOperacion = '"~fbn('NrOperacion')~"' AND TipoDevengado = 'INTWHT' AND Fecha <= '"~IdxDate(Val(V:2))~"' AND Fecha >= '"~IdxDate(Val(FE:9))~"' AND Fecha > '"~IdxDate(Val(V:3))~"' "))
+            ACN(WH:1, SQL(" Select Sum(Abs(Monto)) From "~DBO~".MOVDEVENGADOS Where NrOperacion = '"~fbn('NrOperacion')~"' AND TipoDevengado = 'INTWHT' AND Fecha <= '"~IdxDate(Val(V:2))~"' AND Fecha > '"~IdxDate(Val(FE:9))~"' "))
+            ACN(RS:1, 0)
+            ACN(RS:2, 0)
+            ACN(RS:3, 0)
+            ***---Resultado por Dif de Cambio WHT
+            ACN(RS:4, Val(WH:1) * (Val(CT:1) - Val(CT:2)))
+            Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+            SQL.GenerarAsientoOp(fbn('CodAsi'),fbn('NrOperacion'),'','',810,Val(V:2),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+            SQL.EXEC
+        ENDIF
+    proximo
+ENDIF

@@ -1,0 +1,938 @@
+HojaVisible(NO)
+MostrarCuadroDeMensajes()
+Act(vh:1, SQLSet(" Select Codigo From "~Dbo()~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') AND Codigo Not in ("~Pipe2Comillas(Var('VLIQUIDAA'))~") "))
+Act(vh:2, SQLSet(" Select U.Vehiculo From "~Dbo()~".USRVEHICULO U, "~Dbo()~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo()~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') AND V.Codigo Not in ("~Pipe2Comillas(Var('VLIQUIDAA'))~") "))
+creardialogo
+fecha2:"F.Desde";1;;;;;Vacio(dialogo.fecha2) o dialogo.fecha2 <= dialogo.fecha1;'Fecha Desde Vacia o Inferior a Fecha Hasta';NO;;
+fecha1:"F.Hasta";;;;;;dialogo.fecha1 > 0 y dialogo.fecha1 <= FSys();'Fecha Hasta Invalida';NO;FSys();
+especie1:"Especie";;;;;;
+cliente1:"Entidad";;;;;;
+check1:'Netea Partidas';;;;NO;NO;;;;1;
+lista1:'Vehiculo';6;1;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), Val(vh: 1), Val(vh: 2))
+lista2:'Tipo Op.';0;2;;;;;;;;;SQLSet(" Select Codigo From "~Dbo()~".TIPOSOPERACION Where Nombre not like '%Back%' ");
+
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+CrearFont(1, "Arial,8,B")
+
+if (NoVacio(dialogo.lista1))
+Act(vh:1, dialogo.lista1)
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+Act(vh:1, Val(vh:2))
+endif
+endif
+
+MostrarCuadroDeMensajes()
+
+Act(ls:2, 'MMPCCM|MMPCCV|MMPCL|MMPCLM|MMPCOS|MMPE|MMPEM|MMPI|MMPIM|MMPIMO|MMPOSM')
+Sqladd("SELECT /*+ RULE */ M.NrOperacion, M.FechaMov, M.Cliente, M.Especie, M.Cupon, M.Cantidad, ")
+Sqladd(" M.Transaccion, M.Cuenta, M.Leyenda, M.NrMov, O.TipoOp, M.EnteCustodia Vehiculo, M.NrLiq, O.Book1 ")
+Sqladd(" FROM "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".OPERACIONESBITS B, "~Dbo()~".OPERACIONES O ")
+Sqladd(" Where O.NrOperacion = B.NrOperacion ")
+Sqladd("       and M.NrOperacion = B.NrOperacion ")
+Sqladd("       and M.FechaMov <= '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd("       and M.EnteCustodia in ("~Pipe2Comillas(Val(vh:1))~") ")
+Sqladd("       and M.Bits = 'MV' ")
+if (dialogo.fecha2 > 0)
+Sqladd("       and M.FechaMov >= '"~IdxDate(dialogo.fecha2)~"' ")
+endif
+Sqladd(" AND M.NrSaldo = 1 ")
+if (dialogo.check1 = 1)
+Sqladd(" AND (((O.OperacionRef Is Null OR O.OperacionRef = '') ")
+Sqladd("        AND O.TipoOp IN ("~Pipe2Comillas(Val(ls:2))~")) ")
+Sqladd("        OR O.TipoOp Not IN ("~Pipe2Comillas(Val(ls:2))~")) ")
+else
+endif
+if (NoVacio(dialogo.lista2))
+Sqladd("       and O.TipoOp IN ("~Pipe2Comillas(dialogo.lista2)~") ")
+endif
+if (NoVacio(dialogo.especie1))
+Sqladd("       and M.Especie = '"~dialogo.especie1~"' ")
+endif
+if (NoVacio(dialogo.cliente1))
+Sqladd("       and M.Cliente = '"~dialogo.cliente1~"' ")
+endif
+Sqladd("       and ((B.NrBit = 20 and B.Valor = '1') or (B.NrBit = 50 and B.Valor = '1')) ")
+Sqladd(" UNION ")
+Sqladd("SELECT /*+ RULE */ M.NrOperacion, M.FechaMov, M.Cliente, M.Especie, M.Cupon, M.Cantidad, ")
+Sqladd(" M.Transaccion, M.Cuenta, M.Leyenda, M.NrMov, O.TipoTr2 TipoOp, M.EnteCustodia Vehiculo, M.NrLiq,O.Book1 ")
+Sqladd(" FROM "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".TRANSACCIONES2 O ")
+Sqladd(" Where O.NrTrans = M.NrOperacion ")
+Sqladd("       and M.FechaMov <= '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd("       and M.EnteCustodia in ("~Pipe2Comillas(Val(vh:1))~") ")
+Sqladd("       and M.Bits = 'MV' ")
+if (dialogo.fecha2 > 0)
+Sqladd("       and M.FechaMov >= '"~IdxDate(dialogo.fecha2)~"' ")
+endif
+Sqladd(" AND M.NrSaldo = 1 ")
+if (NoVacio(dialogo.lista2))
+if (Incluido('SECAT', dialogo.lista2))
+Sqladd(" and O.TipoTr2 IN ('INTGAR') ")
+endif
+endif
+if (NoVacio(dialogo.especie1))
+Sqladd("       and M.Especie = '"~dialogo.especie1~"' ")
+endif
+if (NoVacio(dialogo.cliente1))
+Sqladd("       and M.Cliente = '"~dialogo.cliente1~"' ")
+endif
+
+
+
+Sqladd(" ORDER BY 1, 2, 3, 4 ")
+
+recorrer sql
+
+Act(tp:99, Fbn('TipoOp'))
+if (Eqstr(Fbn('TipoOp'), 'MMP'))
+
+Act(ls:1, SQLSet(" Select NrOperacion From "~Dbo()~".OPERACIONES Where OperacionRef = '"~Fbn('NrOperacion')~"' "))
+Act(z:1, SQLSet(" Select TipoOp From "~Dbo()~".OPERACIONES Where NrOperacion IN ("~Pipe2Comillas(Val(ls:1))~") "))
+else
+if (Eqstr(Fbn('TipoOp'), 'INTGAR'))
+Act(z:1, Fbn('TipoOp'))
+else
+Act(z1, BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', Fbn('NrOperacion')))
+endif
+Act(ls:1, Fbn('NrOperacion'))
+endif
+if (Incluido(Val(z1), Exe('CARTA1C')) o Incluido(Val(z1), Exe('CARTA1V')) o Incluido(Val(z1), Exe('CARTA2')) o Eqstr(Val(z:1), 'INTGAR'))
+Acn(bd:5, 0)
+
+if (Incluido(Fbn('TipoOp'), Var('OPEIMPUEST')))
+if (Query(" Select 1 From "~Dbo()~".IMPUESTOS Where NrOperacion = '"~Fbn('NrOperacion')~"' AND Plazo4 = "~FStr(Fbn('NrMov'), 0, 0)~" ") = 1 o (Fbn('NrMov') > 8000 y Fbn('NrMov') < 9000) o (Fbn('NrMov') > 7000 y Fbn('NrMov') < 7100))
+Acn(bd:5, 0)
+else
+if (Fbn('NrMov') = 1)
+Acn(bd:5, 0)
+else
+if (Eqstr(Fbn('TipoOp'), 'MMONM'))
+if (BuscarCampo('OPERACIONES', 'MB3', 'NrOperacion', Fbn('NrOperacion')) <= 0)
+Acn(bd:5, 0)
+else
+Acn(bd:5, 1)
+endif
+else
+if (Eqstr(Fbn('TipoOp'), 'MMSELN'))
+if (BuscarCampo('OPERACIONES', 'MB3', 'NrOperacion', Fbn('NrOperacion')) = 1)
+Acn(bd:5, 0)
+else
+Acn(bd:5, 1)
+endif
+else
+if (Incluido(Fbn('TipoOp'), 'MMPCCM|MMPRCO|MMPREC'))
+if (BuscarCampo('OPERACIONES', 'MB3', 'NrOperacion', Fbn('NrOperacion')) = 1)
+if (Query(" Select 1 From "~Dbo()~".SOLFAC Where NrOperacion = '"~Fbn('NrOperacion')~"' AND NrMov = "~FStr(Fbn('NrMov'), 0, 0)~" AND Tipo = 'FC' AND Estado = 'C' ") = 1)
+Acn(bd:5, 0)
+else
+Acn(bd:5, 1)
+endif
+else
+Acn(bd:5, 1)
+endif
+else
+Acn(bd:5, 1)
+endif
+endif
+endif
+endif
+endif
+else
+Acn(bd:5, 0)
+endif
+
+
+if (Val(bd:5) = 0)
+Message(" Operacion Nro. "~Fbn()['NrOperacion'])
+Act(bo:fac, Fbn()['Book1'])
+Act(a:fac, Fbn()['NrOperacion'])
+Acd(b:fac, Fbn()['FechaMov'])
+Act(c:fac, Fbn()['Cliente'])
+Act(d:fac, Fbn()['Especie']~' '~Fbn()['Cupon'])
+Acn(e:fac, -Fbn()['Cantidad'])
+Act(g:fac, Fbn()['Transaccion'])
+Act(f:fac, Fbn()['Cuenta'])
+Act(i:fac, Fbn()['Leyenda'])
+Acn(k:fac, 0)
+Acn(p:fac, Fbn()['NrMov'])
+Act(r:fac, Fbn()['Especie'])
+Act(s:fac, Fbn()['Cupon'])
+Act(u:fac, Fbn()['Cuenta'])
+Act(vl:fac, Fbn()['Vehiculo'])
+Act(tp:fac, Fbn('TipoOp'))
+Act(tc:1, BuscarCampo('CUENTAS', 'TipoCuenta', 'Codigo', Fbn('Cuenta')))
+Acn(aa:fac, Fbn('NrLiq'))
+Act(yy:fac, Var('VIAPAGODEF'))
+else
+Dfa()
+endif
+else
+Dfa()
+endif
+proximo
+if (Fac() > 0)
+Acn(z3, Fac())
+recorrer&i 1, Val(z3)
+if (Eqstr(Val(tp:&i), 'MMP'))
+Act(ls:&i, SQLSet(" Select NrOperacion From "~Dbo()~".OPERACIONES Where OperacionRef = '"~Val(a:&i)~"' "))
+else
+Act(ls:&i, Val(a:&i))
+endif
+Act(q:&i, Ascendientes('ESPECIES', Val(r:&i)))
+
+Act(zz1, BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(f:&i)))
+
+if (Vacio(Val(f:&i)) o Vacio(Val(zz1)))
+Sqladd("Select Codigo, Especies, Transacciones from "~Dbo()~".CUENTAS where Cliente = '"~Val(vl:&i)~"' and Comitente = '"~Val(c:&i)~"'  and Permanente = 'SI' and Estado = 'HAB' and Numero is Not NULL")
+recorrer sql
+Dfa()
+if (EspecieCuenta(Val(r:&i), Fbn()['Codigo']))
+Act(f:&i, Fbn()['Codigo'])
+Act(l:&i, 'Perm.')
+if (Val(e:&i) > 0)
+Act(g:&i, 'CREDIT')
+else
+Act(g:&i, 'DEBITO')
+endif
+Act(zz1, BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(f:&i)))
+break
+endif
+proximo
+
+else
+Sqladd("Select Permanente,Comitente,Cliente,Codigo, Especies, Transacciones from "~Dbo()~".CUENTAS where Codigo = '"~Val(f:&i)~"' ")
+recorrer sql
+Dfa()
+Act(l:&i, iif (Eqstr(Fbn()['Permanente'], 'SI'), 'Perm.', ''))
+if (Val(e:&i) > 0)
+Act(g:&i, 'CREDIT')
+else
+Act(g:&i, 'DEBITO')
+endif
+Act(zz1, BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(f:&i)))
+proximo
+endif
+
+
+if (Vacio(Val(f:&i)) o Vacio(Val(zz1)))
+Sqladd("Select Codigo, Especies, Transacciones from "~Dbo()~".CUENTAS where Cliente = '"~Val(vl:&i)~"' and Comitente = '"~Val(c:&i)~"' and Estado = 'HAB' and Numero is Not NULL")
+recorrer sql
+Dfa()
+if (EspecieCuenta(Val(r:&i), Fbn()['Codigo']))
+Act(f:&i, Fbn()['Codigo'])
+if (Val(e:&i) > 0)
+Act(g:&i, 'CREDIT')
+else
+Act(g:&i, 'DEBITO')
+endif
+Act(zz1, BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(f:&i)))
+break
+endif
+proximo
+endif
+
+
+if (Vacio(Val(f:&i)) o Vacio(Val(zz1)))
+Sqladd("Select Codigo, Especies, Transacciones from "~Dbo()~".CUENTAS where Cliente = '"~Val(vl:&i)~"' and Permanente = 'SI' and Estado = 'HAB' and Numero is Not NULL")
+recorrer sql
+Dfa()
+if (EspecieCuenta(Val(r:&i), Fbn()['Codigo']))
+Act(f:&i, Fbn()['Codigo'])
+Act(l:&i, 'Perm.')
+Act(g:&i, 'TRANSF')
+break
+Act(zz1, BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(f:&i)))
+endif
+proximo
+if (Vacio(Val(f:&i)) o Vacio(Val(zz1)))
+Sqladd("Select Codigo, Especies, Transacciones from "~Dbo()~".CUENTAS where Cliente = '"~Val(vl:&i)~"' and Estado = 'HAB' and Numero is Not NULL")
+recorrer sql
+Dfa()
+if (EspecieCuenta(Val(r:&i), Fbn()['Codigo']))
+Act(f:&i, Fbn()['Codigo'])
+Act(g:&i, 'TRANSF')
+break
+Act(zz1, BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(f:&i)))
+endif
+proximo
+endif
+if (NoVacio(Val(f:&i)))
+Sqladd("Select Codigo, Especies, Transacciones from "~Dbo()~".CUENTAS where Cliente = '"~Val(c:&i)~"' and Permanente = 'SI' and Estado = 'HAB'  and Numero is Not NULL")
+recorrer sql
+Dfa()
+if (EspecieCuenta(Val(r:&i), Fbn()['Codigo']))
+Act(h:&i, Fbn()['Codigo'])
+break
+endif
+proximo
+if (Vacio(Val(h:&i)))
+Sqladd("Select Codigo, Especies, Transacciones from "~Dbo()~".CUENTAS where Cliente = '"~Val(c:&i)~"' and Estado = 'HAB'  and Numero is Not NULL")
+recorrer sql
+Dfa()
+if (EspecieCuenta(Val(r:&i), Fbn()['Codigo']))
+Act(h:&i, Fbn()['Codigo'])
+break
+endif
+proximo
+endif
+endif
+endif
+proximo
+recorrer&j 1, 100
+crearlistbox;'Arial,8,B'
+'Liquida';k1..k:fac;SI;SI;;60;combo;'Si|No|'
+'# Operacion';a1..a:fac;NO;SI;;100;string
+'Fecha';b1..b:fac;NO;SI;;100;fecha
+'Vehiculo';vl1..vl:fac;NO;SI;;80;string
+'Entidad';c1..c:fac;NO;SI;;90;string
+'Especie';d1..d:fac;NO;SI;;70;string
+'Cantidad';e1..e:fac;NO;SI;;100;numero;'###,###,###,###.##p'
+'Cuenta '~Val(vl:fac);f1..f:fac;SI;(NoVacio(Val(clb:fac)) y (Eqstr(Val(vl:fac), BuscarCampo('CUENTAS', 'Cliente', 'Codigo', Val(clb:fac))))) o Val(k:fac) = 1;"Error Cuenta "~Val(vl:fac);150;tabla;'Cuentas';'Codigo';'Codigo;Nombre;Cliente';
+'Transaccion';g1..g:fac;SI;NoVacio(Val(clb:fac)) o Val(k:fac) = 1;"Error Transaccion";90;tabla;'TiposTransaccion';'Codigo';'Codigo;Descripcion';
+'ViasPago';yy:1..yy:fac;Val(k:fac) = 0;(NoVacio(Val(yy:fac)) y Eqstr(BuscarCampo('VIASPAGO', 'Codigo', 'Codigo', Val(yy:fac)), Val(yy:fac))) o Val(k:fac) = 1;"Vias de Pago Invalido";70;string;RGB(255, 255, 193)
+'Cuenta Entidad';h1..h:fac;SI;Eqstr(Val(tc:fac), 'PUE') o (Incluido(Val(g:fac), 'CREDIT|DEBITO|EMI_CH|COMP') y Vacio(Val(clb:fac))) o (Incluido(Val(g:fac), 'TRANSF|C_4090') y ((Val(e:fac) < 0 y NoVacio(Val(clb:fac)) y Eqstr(Val(c:fac), BuscarCampo('CUENTAS', 'Cliente', 'Codigo', Val(clb:fac)))) o (Val(e:fac) > 0 y (Vacio(Val(clb:fac)) o Eqstr(Val(c:fac), BuscarCampo('CUENTAS', 'Cliente', 'Codigo', Val(clb:fac))))))) o Val(k:fac) = 1;"Error Cuenta Entidad "~Val(c:fac);90;tabla;'Cuentas';'Codigo';'Codigo;Nombre';
+'Leyenda';i1..i:fac;NO;SI;;300;string
+'Cta Movimiento';u1..u:fac;NO;SI;;100;string
+'Observaciones';w1..w:fac;SI;SI;;350;string;57
+finlistbox
+if (ok)
+
+Acn(ab3, 0)
+Acn(ab5, 0)
+
+recorrer&i 1, Fac()
+if (Val(k:&i) = 0)
+if (Incluido(Val(g:&i), 'CREDIT|DEBITO'))
+Act(h:&i, '')
+endif
+if (not Eqstr(Val(g:&i), 'EMI_CH'))
+Act(j:&i, '')
+endif
+Act(x1, Val(q:&i))
+Act(x2, Pad(Val(g:&i), 6))
+Act(x2, Val(x2)~'|'~Pad(Val(g:&i), 6)~' I E')
+if (Val(e:&i) > 0)
+Act(x3, Val(x2)~'|'~Pad(Val(g:&i), 6)~'   E')
+Act(x2, Val(x2)~'|'~Pad(Val(g:&i), 6)~' I  ')
+endif
+if (Val(e:&i) < 0)
+Act(x3, Val(x2)~'|'~Pad(Val(g:&i), 6)~' I  ')
+Act(x2, Val(x2)~'|'~Pad(Val(g:&i), 6)~'   E')
+endif
+if (not Incluido(Val(x1), BuscarCampo('CUENTAS', 'Especies', 'Codigo', Val(f:&i)), 1))
+Acn(ab3, 1)
+Acn(ab4, 0)
+Acn(ab4, Messagebox('La especie '~Val(x1)~' no esta habilitada para la cuenta '~Val(f:&i)~', Corrige la Seleccion ? ', 2, 1))
+if (Val(ab4) = 2)
+Cancelar()
+endif
+endif
+Act(tr:1, BuscarCampo('CUENTAS', 'Transacciones', 'Codigo', Val(f:&i)))
+recorrer&k 1, Elementos(Val(tr:1))
+Act(tr:2, Val(tr:2)~Trim(ItemLista(Val(tr:1), &k))~'|')
+proximo
+if (not Incluido(Val(x2), Val(tr:2), 1))
+Acn(ab3, 1)
+Acn(ab4, 0)
+Acn(ab4, Messagebox('La Transaccion '~Val(g:&i)~' no esta habilitada para la cuenta '~Val(f:&i)~', Corrige la Seleccion ? ', 2, 1))
+if (Val(ab4) = 2)
+Cancelar()
+endif
+endif
+if (not Eqstr('HAB', BuscarCampo('CUENTAS', 'Estado', 'Codigo', Val(f:&i))))
+Acn(ab3, 1)
+Acn(ab4, 0)
+Acn(ab4, Messagebox('La cuenta '~Val(f:&i)~' no esta habilitada, Corrige la Seleccion ? ', 2, 1))
+if (Val(ab4) = 2)
+Cancelar()
+endif
+endif
+if (Vacio(BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(f:&i))))
+Acn(ab3, 1)
+Acn(ab4, 0)
+Acn(ab4, Messagebox('La cuenta '~Val(f:&i)~' no es una cuenta real correspondiente a '~Val(vl:&i)~', Corrige la Seleccion ? ', 2, 1))
+if (Val(ab4) = 2)
+Cancelar()
+endif
+endif
+if (NoVacio(Val(h:&i)))
+if (not Eqstr(Val(c:&i), BuscarCampo('CUENTAS', 'Cliente', 'Codigo', Val(h:&i))))
+Acn(ab3, 1)
+Acn(ab4, 0)
+Acn(ab4, Messagebox('La cuenta '~Val(h:&i)~' no corresponde a '~Val(c:&i)~', Corrige la Seleccion ? ', 2, 1))
+if (Val(ab4) = 2)
+Cancelar()
+endif
+endif
+if (not Incluido(Val(x1), BuscarCampo('CUENTAS', 'Especies', 'Codigo', Val(h:&i)), 1))
+Acn(ab3, 1)
+Acn(ab4, 0)
+Acn(ab4, Messagebox('La especie '~Val(x1)~' no esta habilitada para la cuenta '~Val(h:&i)~', Corrige la Seleccion ? ', 2, 1))
+if (Val(ab4) = 2)
+Cancelar()
+endif
+endif
+if (not Incluido(Val(x3), BuscarCampo('CUENTAS', 'Transacciones', 'Codigo', Val(h:&i)), 1))
+Acn(ab3, 1)
+Acn(ab4, 0)
+Acn(ab4, Messagebox('La Transaccion '~Val(g:&i)~' no esta habilitada para la cuenta '~Val(h:&i)~', Corrige la Seleccion ? ', 2, 1))
+if (Val(ab4) = 2)
+Cancelar()
+endif
+endif
+if (not Eqstr('HAB', BuscarCampo('CUENTAS', 'Estado', 'Codigo', Val(h:&i))))
+Acn(ab3, 1)
+Acn(ab4, 0)
+Acn(ab4, Messagebox('La cuenta '~Val(h:&i)~' no esta habilitada, Corrige la Seleccion ? ', 2, 1))
+if (Val(ab4) = 2)
+Cancelar()
+endif
+endif
+endif
+endif
+proximo
+if (Val(ab3) = 0)
+break
+endif
+else
+Cancelar()
+endif
+proximo
+if (Val(ab3) = 0 y Val(ab5) = 0)
+recorrer&i 1, Fac()
+if (Val(k:&i) = 0)
+if (NO)
+if (Incluido(Val(g:&i), 'CREDIT|DEBITO'))
+Act(h:&i, '')
+endif
+if (not Eqstr(Val(g:&i), 'EMI_CH'))
+Act(j:&i, '')
+endif
+Act(x1, Val(q:&i))
+Act(x2, Pad(Val(g:&i), 6)~'    ')
+Act(x2, Val(x2)~'|'~Pad(Val(g:&i), 6)~' I E')
+if (Val(e:&i) > 0)
+Act(x3, Val(x2)~'|'~Pad(Val(g:&i), 6)~'   E')
+Act(x2, Val(x2)~'|'~Pad(Val(g:&i), 6)~' I  ')
+endif
+if (Val(e:&i) < 0)
+Act(x3, Val(x2)~'|'~Pad(Val(g:&i), 6)~' I  ')
+Act(x2, Val(x2)~'|'~Pad(Val(g:&i), 6)~'   E')
+endif
+if (not Incluido(Val(x1), BuscarCampo('CUENTAS', 'Especies', 'Codigo', Val(f:&i)), 1))
+Messagebox('La especie '~Val(x1)~' no esta habilitada para la cuenta '~Val(f:&i))
+Acn(m:&i, 1)
+endif
+if (not Incluido(Val(x2), BuscarCampo('CUENTAS', 'Transacciones', 'Codigo', Val(f:&i)), 1))
+Messagebox('La Transaccion '~Val(g:&i)~' no esta habilitada para la cuenta '~Val(f:&i))
+Acn(m:&i, 1)
+endif
+if (not Eqstr('HAB', BuscarCampo('CUENTAS', 'Estado', 'Codigo', Val(f:&i))))
+Messagebox('La cuenta '~Val(f:&i)~' no esta habilitada')
+Acn(m:&i, 1)
+endif
+if (Vacio(BuscarCampo('CUENTAS', 'Numero', 'Codigo', Val(f:&i))))
+Messagebox('La cuenta '~Val(f:&i)~' no es una cuenta real correspondiente a '~Val(vl:&i))
+Acn(m:&i, 1)
+endif
+if (NoVacio(Val(h:&i)))
+if (not Eqstr(Val(c:&i), BuscarCampo('CUENTAS', 'Cliente', 'Codigo', Val(h:&i))))
+Messagebox('La cuenta '~Val(h:&i)~' no corresponde a '~Val(c:&i))
+Acn(n:&i, 1)
+endif
+if (not Incluido(Val(x1), BuscarCampo('CUENTAS', 'Especies', 'Codigo', Val(h:&i)), 1))
+Messagebox('La especie '~Val(x1)~' no esta habilitada para la cuenta '~Val(h:&i))
+Acn(n:&i, 1)
+endif
+if (not Incluido(Val(x3), BuscarCampo('CUENTAS', 'Transacciones', 'Codigo', Val(h:&i)), 1))
+Messagebox('La Transaccion '~Val(g:&i)~' no esta habilitada para la cuenta '~Val(h:&i))
+Acn(n:&i, 1)
+endif
+if (not Eqstr('HAB', BuscarCampo('CUENTAS', 'Estado', 'Codigo', Val(h:&i))))
+Messagebox('La cuenta '~Val(h:&i)~' no esta habilitada')
+Acn(n:&i, 1)
+endif
+endif
+endif
+Acn(o:&i, 1)
+Sqladd("Select 1 from "~Dbo()~".MOVPENDIENTES M where")
+Sqladd("NrSaldo=1 ")
+Sqladd("and M.FechaMov <='"~IdxDate(Val(b:&i))~"' ")
+Sqladd("and M.EnteCustodia= '"~Val(vl:&i)~"' ")
+Sqladd("and M.Bits = 'MV' ")
+Sqladd("and M.Especie = '"~Val(r:&i)~"' ")
+Sqladd("and M.Cliente = '"~Val(c:&i)~"' ")
+Sqladd("and M.NrMov      = "~FStr(Val(p:&i), 0, 0)~" ")
+if (dialogo.check1 = 1 y Eqstr(Val(tp:99), 'MMP'))
+Sqladd("and M.NrOperacion IN ("~Pipe2Comillas(Val(ls:&i))~") ")
+else
+Sqladd("and M.NrOperacion='"~Val(a:&i)~"' ")
+endif
+recorrer sql
+Message('Verifico que el Mov. no se haya liquidado Previamente '~Val(a:&i)~' '~FStr(Val(p:&i), 0, 0)~' ...')
+Acn(o:&i, 0)
+proximo
+
+if (Val(o:&i) = 1)
+Messagebox('El Mov. de la Operacion '~Val(a:&i)~' Nro. '~FStr(Val(p:&i), 0, 0)~' fue liquidado Previamente por Otro Usuario ....')
+endif
+if (Val(m:&i) = 0 y Val(n:&i) = 0 y Val(o:&i) = 0)
+Act(t:&i, getnumerador(BuscarCampo('VEHICULOS', 'Alias3', 'Codigo', Val(vl:&i))))
+if (Eqstr(Val(tp:&i), 'MMP'))
+Act(xx:&i, Copy(Val(w:&i)~' ('~Val(ls:&i)~')', 1, 200))
+else
+Act(xx:&i, Copy(Val(w:&i), 1, 200))
+endif
+Sqladd("Insert into "~Dbo()~".TRANSACCIONES2 (")
+Sqladd("Especie, ")
+Sqladd("Fecha1, ")
+Sqladd("Fecha2, ")
+Sqladd("Cliente1, ")
+Sqladd("Vehiculo1, ")
+Sqladd("NrOperacionRef1, ")
+Sqladd("TipoTr2, ")
+Sqladd("Cantidad1, ")
+Sqladd("Cantidad8, ")
+Sqladd("Cuenta1, ")
+Sqladd("Cuenta2, ")
+Sqladd("Cuenta5, ")
+Sqladd("Cuenta6, ")
+Sqladd("Cupon1, ")
+Sqladd("Ley1, ")
+Sqladd("NrTrans, ")
+Sqladd("CB2, ")
+Sqladd("CB3, ")
+Sqladd("CB4, ")
+Sqladd("CB10, ")
+Sqladd("FechaCarga, ")
+Sqladd("FechaCargaSys, ")
+Sqladd("CNFormaPago, ")
+Sqladd("Observaciones ")
+Sqladd(") Values (")
+Sqladd("'"~Val(r:&i)~"', ")
+Sqladd("'"~IdxDate(FSys())~"', ")
+Sqladd("'"~IdxDate(Val(b:&i))~"', ")
+Sqladd("'"~Val(c:&i)~"', ")
+Sqladd("'"~Val(vl:&i)~"', ")
+Sqladd("'"~Val(a:&i)~"', ")
+if (Val(e:&i) > 0)
+Sqladd("'DEP', ")
+Sqladd(""~FStr(Val(e:&i), 1, 2)~", ")
+else
+Sqladd("'RET', ")
+Sqladd(""~FStr(-Val(e:&i), 1, 2)~", ")
+endif
+Sqladd("'"~Val(aa:&i)~"', ")
+Sqladd("'"~Val(h:&i)~"', ")
+Sqladd("'"~Val(f:&i)~"', ")
+Sqladd("'"~Val(h:&i)~"', ")
+Sqladd("'"~Val(f:&i)~"', ")
+Sqladd("'"~Val(s:&i)~"', ")
+Sqladd("'"~Val(g:&i)~"', ")
+Sqladd("'"~Val(t:&i)~"', ")
+Sqladd(" "~FStr(Val(v:&i), 0, 0)~",")
+Sqladd(" "~FStr(Val(vv:&i), 0, 0)~",")
+Sqladd(" "~FStr(Val(vu:&i), 0, 0)~",")
+Sqladd(" "~FStr(Val(vw:&i), 0, 0)~",")
+Sqladd(" "~SQLAhora()~", ")
+Sqladd("'"~IdxDate(FSys())~"', ")
+Sqladd("'"~Val(yy:&i)~"', ")
+Sqladd(" '"~Val(xx:&i)~"' ")
+Sqladd(")")
+Sqlnew()
+
+
+Sqladd("Insert into "~Dbo()~".OPERACIONESBITS ")
+Sqladd("(NrBit, NrOperacion, Valor) ")
+Sqladd("Select NrInstancia, '"~Val(t:&i)~"', '0'")
+Sqladd("from "~Dbo()~".INSTANCIAS ")
+Sqladd("where Tabla = 'TRANSACCIONES2'")
+Sqlnew()
+
+if (Val(v:&i) = 0)
+Sqladd(" UPDATE /*+ RULE */ "~Dbo()~".OPERACIONESBITS ")
+Sqladd(" SET Valor = '1' ")
+Sqladd(" Where NrBit = 1 and NrOperacion = '"~Val(t:&i)~"' ")
+else
+Sqladd(" UPDATE /*+ RULE */ "~Dbo()~".OPERACIONESBITS ")
+Sqladd(" SET Valor = "~FStr(Val(v:&i), 0, 0))
+Sqladd(" Where NrBit = 17 and NrOperacion = '"~Val(t:&i)~"' ")
+endif
+Sqlnew()
+Message('Genera Voucher '~Val(t:&i))
+Message('Genera Movimientos de la Transaccion')
+if (Val(vv:&i) = 0 y Val(vu:&i) = 0)
+if (dialogo.fecha1 > FSys())
+Sqladd("Insert into "~Dbo()~".MOVPENDIENTES (")
+else
+Sqladd("Insert into "~Dbo()~".MOVEJECUTADOS (")
+Sqladd("FechaEje, ")
+Sqladd("UsuarioEje, ")
+endif
+else
+Sqladd("Insert into "~Dbo()~".MOVPENDIENTES (")
+endif
+Sqladd("NrTrans2, ")
+Sqladd("NrOperacion, ")
+Sqladd("Leyenda, ")
+Sqladd("Cantidad, ")
+Sqladd("Cliente, ")
+Sqladd("Especie, ")
+Sqladd("CallPut, ")
+Sqladd("NrSaldo, ")
+Sqladd("NrGrupo, ")
+Sqladd("NrGrupo2, ")
+Sqladd("Bits, ")
+Sqladd("Cupon, ")
+Sqladd("NrMov, ")
+Sqladd("NrInstan, ")
+Sqladd("FechaMov, ")
+Sqladd("EnteCustodia, ")
+Sqladd("Cuenta, ")
+Sqladd("Transaccion, ")
+Sqladd("Book, ")
+Sqladd("Vehiculo, ")
+Sqladd("Mercado, ")
+Sqladd("Concepto, ")
+Sqladd("Status ")
+Sqladd(") Values (")
+if (Val(vv:&i) = 0 y Val(vu:&i) = 0)
+if (dialogo.fecha1 <= FSys())
+Sqladd("'"~IdxDate(Hoy())~"', ")
+Sqladd("'"~UsuarioActivo()~"', ")
+endif
+endif
+Sqladd("'"~Val(t:&i)~"', ")
+Sqladd("'"~Val(t:&i)~"', ")
+if (Val(e:&i) > 0)
+Act(ly:1, 'Cobro - '~Val(i:&i))
+else
+Act(ly:1, 'Pago - '~Val(i:&i))
+endif
+Sqladd(" '"~Val(ly:1)~"' , ")
+Sqladd(""~FStr(Val(e:&i), 1, 2)~", ")
+Sqladd("'"~Val(vl:&i)~"',")
+Sqladd("'"~Val(r:&i)~"', ")
+Sqladd("'', ")
+if (Val(vu:&i) = 1)
+Sqladd(""~FStr(99, 1, 0)~", ")
+else
+Sqladd(""~FStr(1, 1, 0)~", ")
+endif
+Sqladd(""~FStr(0, 1, 0)~", ")
+Sqladd(""~FStr(0, 1, 0)~", ")
+if (Val(vv:&i) = 0 y Val(vu:&i) = 0)
+Sqladd("'AV', ")
+else
+Sqladd("'MV', ")
+endif
+Sqladd("'"~Val(s:&i)~"', ")
+Sqladd(""~FStr(0, 0, 0)~", ")
+Sqladd(""~FStr(0, 1, 0)~", ")
+Sqladd("'"~IdxDate(Val(b:&i))~"', ")
+Sqladd("'"~Val(vl:&i)~"', ")
+Sqladd("'"~Val(f:&i)~"', ")
+Sqladd("'"~Val(g:&i)~"', ")
+Sqladd(" '', ")
+Sqladd(" '', ")
+Sqladd(" '', ")
+Sqladd(" '', ")
+Sqladd(" '' ")
+
+
+Sqladd(")")
+Sqlnew()
+
+Sqladd("Insert into "~Dbo()~".MOVEJECUTADOS (")
+Sqladd("NrOperacion, ")
+Sqladd("FechaMov, ")
+Sqladd("Cliente, ")
+Sqladd("Especie, ")
+Sqladd("NrSaldo, ")
+Sqladd("CallPut, ")
+Sqladd("FechaEj, ")
+Sqladd("PrecioEj, ")
+Sqladd("EnteCustodia, ")
+Sqladd("Mercado, ")
+Sqladd("Formula, ")
+Sqladd("Leyenda, ")
+Sqladd("Bits, ")
+Sqladd("NrGrupo, ")
+Sqladd("Concepto, ")
+Sqladd("NrGrupo2, ")
+Sqladd("NrMov, ")
+Sqladd("NrLiq, ")
+Sqladd("Status, ")
+Sqladd("NrComprob, ")
+Sqladd("NrInstan, ")
+Sqladd("FechaEje, ")
+Sqladd("UsuarioEje, ")
+Sqladd("Cuenta, ")
+Sqladd("Transaccion, ")
+Sqladd("Cupon, ")
+Sqladd("NrTrans2, ")
+Sqladd("Cantidad, ")
+Sqladd("Book, ")
+Sqladd("Vehiculo ")
+
+Sqladd(") select ")
+
+Sqladd("NrOperacion, ")
+Sqladd("FechaMov, ")
+Sqladd("Cliente, ")
+Sqladd("Especie, ")
+Sqladd("NrSaldo, ")
+Sqladd("CallPut, ")
+Sqladd("FechaEj, ")
+Sqladd("PrecioEj, ")
+Sqladd("EnteCustodia, ")
+Sqladd("Mercado, ")
+Sqladd("Formula, ")
+Sqladd("Leyenda, ")
+Sqladd("Bits, ")
+Sqladd("NrGrupo, ")
+Sqladd("Concepto, ")
+Sqladd("NrGrupo2, ")
+Sqladd("NrMov, ")
+Sqladd("NrLiq, ")
+Sqladd("Status, ")
+Sqladd("NrComprob, ")
+Sqladd("NrInstan, ")
+Sqladd("'"~IdxDate(Hoy())~"', ")
+Sqladd("'"~UsuarioActivo()~"', ")
+Sqladd("'"~Val(f:&i)~"', ")
+Sqladd("Transaccion, ")
+Sqladd("Cupon, ")
+Sqladd("'"~Val(t:&i)~"', ")
+Sqladd("Cantidad, ")
+Sqladd("Book, ")
+Sqladd("Vehiculo ")
+Sqladd(" from "~Dbo()~".MOVPENDIENTES ")
+if (dialogo.check1 = 1 y Eqstr(Val(tp:99), 'MMP'))
+Sqladd(" Where NrOperacion IN ("~Pipe2Comillas(Val(ls:&i))~") ")
+else
+Sqladd(" Where NrOperacion='"~Val(a:&i)~"' ")
+endif
+Sqladd(" and NrMov      = "~FStr(Val(p:&i), 0, 0)~" ")
+Sqladd("and NrSaldo = 1 ")
+Sqladd("and FechaMov = '"~IdxDate(Val(b:&i))~"'")
+Sqladd("and Cliente = '"~Val(c:&i)~"'")
+Sqladd("and Especie = '"~Val(r:&i)~"' ")
+if (NoVacio(Val(s:&i)))
+Sqladd("and Cupon = '"~Val(s:&i)~"' ")
+else
+Sqladd("and (Cupon = '"~Val(s:&i)~"' or Cupon is NULL)")
+endif
+Sqlnew()
+Message(' Se Borran los Movs Pendientes de la operacion')
+Sqladd("DELETE /*+ RULE */ FROM "~Dbo()~".MOVPENDIENTES ")
+if (dialogo.check1 = 1 y Eqstr(Val(tp:99), 'MMP'))
+Sqladd(" Where NrOperacion IN ("~Pipe2Comillas(Val(ls:&i))~") ")
+else
+Sqladd(" Where NrOperacion='"~Val(a:&i)~"' ")
+endif
+Sqladd(" and NrMov      = "~FStr(Val(p:&i), 0, 0)~" ")
+Sqladd("and NrSaldo = 1 ")
+Sqladd("and FechaMov = '"~IdxDate(Val(b:&i))~"'")
+Sqladd("and Cliente = '"~Val(c:&i)~"'")
+Sqladd("and Especie = '"~Val(r:&i)~"' ")
+if (NoVacio(Val(s:&i)))
+Sqladd("and Cupon = '"~Val(s:&i)~"' ")
+else
+Sqladd("and (Cupon = '"~Val(s:&i)~"' or Cupon is NULL)")
+endif
+Sqlnew()
+Sqlexec()
+if (Query(" Select 1 From "~Dbo()~".IMPUESTOS Where NrOperacion IN ("~Pipe2Comillas(Val(ls:&i))~") AND Plazo4 = "~FStr(Val(p:&i), 0, 0)~" ") = 1)
+Sqladd(" Update "~Dbo()~".IMPUESTOS ")
+Sqladd(" Set NrTrans1 = '"~Val(t:&i)~"' ")
+Sqladd(" Where NrOperacion IN ("~Pipe2Comillas(Val(ls:&i))~") ")
+Sqladd(" AND Plazo4 = "~FStr(Val(p:&i), 0, 0)~" ")
+Sqlnew()
+Sqlexec()
+endif
+
+
+if (Eqstr(Val(tp:&i), 'TRANTI'))
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" SET CB15 = 1 ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando Movimientos ')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, NO, NO, NO)
+Sqlexec()
+endif
+
+if (not Incluido(Val(tp:&i), 'SERA|SERAV|SERP|SERPV|SEPVMV|'))
+if (Val(aa:&i) = 500)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" SET CB15 = 1 ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de POSICIONES2')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, NO, NO, SI)
+Sqlexec()
+endif
+if (Val(aa:&i) = 600)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" SET RB15 = 1 ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de LIMITES')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, SI, NO, NO)
+Sqlexec()
+endif
+if (Val(aa:&i) = 700)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" SET CB15 = 1 , RB15 = 1 ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de POSICIONES2 y LIMITES')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, SI, NO, SI)
+Sqlexec()
+endif
+endif
+
+if (Incluido(Val(tp:&i), 'SERA|SERAV|SERP|SERPV|'))
+if (Val(aa:&i) = 500)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" Set CB15 = CASE ")
+Sqladd("            WHEN CB15=1 OR CB15=2 OR CB15=3 THEN 3 ")
+Sqladd("            ELSE 1 END ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de POSICIONES2')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, NO, NO, SI)
+Sqlexec()
+endif
+if (Val(aa:&i) = 600)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" Set RB15 = CASE ")
+Sqladd("            WHEN RB15=1 OR RB15=2 OR RB15=3 THEN 3 ")
+Sqladd("            ELSE 1 END ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de LIMITES')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, SI, NO, NO)
+Sqlexec()
+endif
+if (Val(aa:&i) = 700)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" Set CB15 = CASE ")
+Sqladd("            WHEN CB15=1 OR CB15=2 OR CB15=3 THEN 3 ")
+Sqladd("            ELSE 1 END, ")
+Sqladd("     RB15 = CASE ")
+Sqladd("            WHEN RB15=1 OR RB15=2 OR RB15=3 THEN 3 ")
+Sqladd("            ELSE 1 END ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de POSICIONES2 y LIMITES')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, SI, NO, SI)
+Sqlexec()
+endif
+if (Val(aa:&i) = 550)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" Set CB15 = CASE ")
+Sqladd("            WHEN CB15=1 OR CB15=2 OR CB15=3 THEN 3 ")
+Sqladd("            ELSE 2 END ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de POSICIONES2')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, NO, NO, SI)
+Sqlexec()
+endif
+if (Val(aa:&i) = 650)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" Set RB15 = CASE ")
+Sqladd("            WHEN RB15=1 OR RB15=2 OR RB15=3 THEN 3 ")
+Sqladd("            ELSE 2 END ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de LIMITES')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, SI, NO, NO)
+Sqlexec()
+endif
+if (Val(aa:&i) = 750)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" Set CB15 = CASE ")
+Sqladd("            WHEN CB15=1 OR CB15=2 OR CB15=3 THEN 3 ")
+Sqladd("            ELSE 2 END, ")
+Sqladd("     RB15 = CASE ")
+Sqladd("            WHEN RB15=1 OR RB15=2 OR RB15=3 THEN 3 ")
+Sqladd("            ELSE 2 END ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de POSICIONES2 y LIMITES')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, SI, NO, SI)
+Sqlexec()
+endif
+endif
+
+if (Incluido(Val(tp:&i), 'SEPVMV|'))
+if (Val(aa:&i) = 550)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" Set CB15 = CASE ")
+Sqladd("            WHEN CB15=1 OR CB15=3 THEN 1 ")
+Sqladd("            ELSE 2 END ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de POSICIONES2')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, NO, NO, SI)
+Sqlexec()
+endif
+if (Val(aa:&i) = 500)
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" Set CB15 = CASE ")
+Sqladd("            WHEN CB15=1 OR CB15=2 THEN 1 ")
+Sqladd("            ELSE 3 END ")
+Sqladd(" Where NrOperacion = '"~Val(a:&i)~"' ")
+Sqlnew()
+Sqlexec()
+Message(' Actualizando movimientos de POSICIONES2')
+esperar(3)
+SqlActualizarmovimientos2(Val(a:&i), SI, NO, NO, SI)
+Sqlexec()
+endif
+endif
+
+
+endif
+endif
+proximo
+else
+Cancelar()
+endif
+else
+Cancelar("No Hay Movimientos a Liquidar")
+endif
+
+SetFont(w1..z6, 1)
+

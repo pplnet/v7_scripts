@@ -1,0 +1,194 @@
+﻿CrearDialogo
+    Radio1  : 'Filtro|Fecha|Cuenta'                        ;;;;;;NoVacio(Dialogo.Radio1);;;0;;;;;;;;;;;
+    *where: solo las cuentas que registran saldos bancarios cargados 
+    Cuenta1 : 'Cuenta'                                     ;;;;;Dialogo.Radio1=1;IF(Dialogo.Radio1=1,IF(NoVacio(BuscarCampo('SALDOSBANCARIOS','NrCuenta','NrCuenta',BuscarCampo('CUENTAS','Numero','Codigo',Dialogo.Cuenta1))),SI,NO));'La cuenta no registra saldos';NO;;;;;;"Numero IN (SELECT Distinct NrCuenta FROM SALDOSBANCARIOS)";;;;;;  
+    **VER POSIBILIDAD DE IF EN LEYENDA FECHA1/FECHA2   
+    Fecha1  : 'Fecha'                                      ;;;;;Dialogo.Radio1=0;IF(Dialogo.Radio1=0,IF(NoVacio(BuscarCampo('SALDOSBANCARIOS','NrCuenta','FechaSaldo',IdxDate(Dialogo.Fecha1))),SI,NO));'No existen saldos para la fecha indicada';NO;Habiles(FSYS, -1, 'ARG', SI);;;;;;;;;;;
+    Fecha2  : 'Fecha Desde'                                ;;;;;Dialogo.Radio1=1;IF(Dialogo.Radio1=1,NoVacio(Dialogo.Fecha2));'Debe elegir una fecha desde';NO;PriDeMes(FSYS,NO,'ARG');;;;;;;;;;;
+    Fecha3  : 'Fecha Hasta'                                ;;;;;Dialogo.Radio1=1;IF(Dialogo.Radio1=1,Dialogo.Fecha2<Dialogo.Fecha3);'Fecha Hasta debe ser mayor a Fecha Desde';NO;FSYS;;;;;;;;;;;
+FinDialogo
+
+If Not Ok
+    Cancelar
+Endif
+
+CrearFont(1, "Arial, 8,")
+CrearFont(2, "Arial, 8,B,")
+CrearFont(3, "Arial,10,B,")
+
+*************************************TITULO,HEADER Y NOMBRE COLUMNAS****************************
+IF Dialogo.Radio1=0
+    let &Filtro 'FECHA'
+    ifa
+    ifa
+    ifa
+    ACT(A:fac,'Saldos del: '~Dialogo.Fecha1)
+    SetFont(A:&fac..A:FAC,2)
+    ifa
+    ifa
+    ACT(A:fac,'Vehiculo')
+    ACO(1,15)
+    ACT(B:fac,'Book')
+    ACO(2,15)
+    ACT(C:fac,'Cuenta')
+    ACO(3,15)
+    ACT(D:fac,'NrCuenta')
+    ACO(4,10)
+    ACT(E:fac,'Nombre')
+    ACO(5,30)
+    ACT(F:fac,'Banco')
+    let &column 5
+    let &columnComienzoDatos &column
+    let &FilaActual FAC
+ELSE
+    let &bookCta ''
+    let &vehiculoCta ''
+    SQL.ADD(" Select Numero, Nombre, Comitente, Cliente, Alias1 as BookCta, Cliente as Vehiculo")
+    SQL.ADD(" From "~DBO~".CUENTAS ")
+    SQL.ADD(" Where Codigo = '"~Dialogo.Cuenta1~"' ")
+    SQL.ADD("  ")
+    Recorrer SQL
+        DFA
+        let &nroCta fbn('Numero')
+        let &nmbCta fbn('Nombre')
+        let &bcoCta fbn('Comitente')
+        let &vehiculoCta fbn('Vehiculo')
+        IF NoVacio(fbn('BookCta'))
+            let &bookCta fbn('BookCta')
+        ELSE
+            let &bookCta BuscarCampo('VEHICULOS','Alias5','Codigo', &vehiculoCta)
+        ENDIF
+    Proximo
+
+    let &Filtro 'CUENTA'
+    ifa
+    ifa
+    ifa
+    let &FilaActual FAC
+    ACT(A:fac,'Cuenta: '~Dialogo.Cuenta1)
+    ifa
+    ACT(A:fac,'NrCuenta: '~&nroCta)
+    ifa
+    ACT(A:fac,'Nombre: '~&nmbCta)
+    ifa
+    ACT(A:fac,'Banco: '~&bcoCta)
+    ifa
+    ACT(A:fac,'Vehiculo: '~&vehiculoCta)
+    ifa
+    ACT(A:fac,'Book: '~&bookCta)
+    ifa
+    ACT(A:fac,'Desde: '~Dialogo.Fecha2)
+    ifa
+    ACT(A:fac,'Hasta: '~Dialogo.Fecha3)
+    SetFont(A:&FilaActual..A:FAC,2)
+    ifa
+    ifa
+    ACT(A:fac,'Fecha Saldo')
+    let &column 2
+    let &columnComienzoDatos &column
+    let &FilaActual FAC
+ENDIF
+
+ACT(C:1,'SALDOS BANCARIOS POR '~&Filtro)
+SetFont(C:1..C:1,3)
+SetFilaActual(&FilaActual)
+let &comienzoDatos FAC
+ACT(&column:fac,'Saldo Recibido')
+ACO(&column,10)
+let &column &column+1
+ACT(&column:fac,'Ajuste')
+let &column &column+1
+ACT(&column:fac,'Nr. Ajuste')
+let &column &column+1
+ACT(&column:fac,'Saldo Final')
+let &column &column+1
+ACT(&column:fac,'Saldo Promedio')
+ACO(&column,10)
+let &column &column+1
+ACT(&column:fac,'Estado')
+let &finDatos &column
+AgregarMarco(a:fac..&column:fac,2,3,Exe('COLOR6'))
+AlinearCeldas(a:fac..&column:fac,'C')
+SetFont(a:fac..&column:fac,2)
+let &FilaActual fac
+**********************************************************QUERY**************************************
+
+SQL.ADD("SELECT SaldoContable,Ajuste,NrTransAjuste,SaldoConPromedio,Estado,SignoContable,NrCuenta,Nombre,Banco,FechaSaldo ")
+SQL.ADD("FROM "~DBO~".SALDOSBANCARIOS ")
+IF Dialogo.Radio1=0
+    SQL.ADD("WHERE FechaSaldo ='"~IdxDate(Dialogo.Fecha1)~"'")
+ELSE
+    SQL.ADD("WHERE NrCuenta='"~BuscarCampo('CUENTAS','Numero','Codigo',Dialogo.Cuenta1)~"' ")
+    SQL.ADD(" and FechaSaldo >='"~IdxDate(Dialogo.Fecha2)~"' ")
+    SQL.ADD(" and FechaSaldo <='"~IdxDate(Dialogo.Fecha3)~"' ")
+ENDIF
+SQL.ADD("ORDER BY FechaSaldo")
+
+
+*************************************************RECORRER SQL****************************************
+SetFilaActual(&FilaActual)
+
+Recorrer SQL 
+    IF Dialogo.Radio1=0
+        let &bookCta ''
+        let &vehiculoCta ''
+        SQL.ADD(" SELECT Cliente as Vehiculo, Alias1 BookCta ")
+        SQL.ADD(" From "~DBO~".CUENTAS ")
+        SQL.ADD(" Where Numero = '"~fbn('NrCuenta')~"' ")
+        Recorrer SQL
+            DFA
+            let &vehiculoCta fbn('Vehiculo')
+            IF NoVacio(fbn('BookCta'))
+                let &bookCta fbn('BookCta')
+            ELSE
+                let &bookCta BuscarCampo('VEHICULOS','Alias5','Codigo', &vehiculoCta)
+            ENDIF
+        Proximo
+        ACT(A:fac, &vehiculoCta)
+        ACT(B:fac, &bookCta)
+        ACT(C:fac,&nroCta)
+        ACT(D:fac,fbn('NrCuenta'))
+        ACT(E:fac,fbn('Nombre'))
+        ACT(F:fac,fbn('Banco'))
+        let &column 5
+    ELSE
+        ACT(A:fac, &vehiculoCta)
+        ACT(A:fac,fbn('FechaSaldo'))
+        let &column 2
+    ENDIF
+        ACN(&column:fac,fbn('SaldoContable'))
+        IF Not EqStr(fbn('SignoContable'),'C')
+        ACN(&column:fac,-(fbn('SaldoContable')))
+        ENDIF
+        let &column &column+1
+        ACN(&column:fac,fbn('Ajuste'))
+        ACN(SC:1,fbn('SaldoContable'))
+        ACN(AJ:1,fbn('Ajuste'))
+        let &column &column+1
+        ACT(&column:fac,fbn('NrTransAjuste'))
+        ACLT(&column:fac,Val(&column:fac))
+        let &column &column+1
+        ACN(&column:fac,Val(SC:1)+Val(AJ:1))
+        IF Not EqStr(fbn('SignoContable'),'C')
+        ACN(&column:fac,-(Val(SC:1)+Val(AJ:1)))
+        ENDIF
+        let &column &column+1
+        ACN(&column:fac,fbn('SaldoConPromedio'))
+        IF Not EqStr(fbn('SignoContable'),'C')
+        ACN(&column:fac,-(fbn('SaldoConPromedio')))
+        ENDIF
+        let &column &column+1
+        ACT(&column:fac,fbn('Estado'))
+        let &ultimaFila fac
+Proximo
+
+
+FormatoCeldas(e:5..e:fac, Exe('F5'))
+FormatoCeldas(&columnComienzoDatos:&comienzoDatos..&finDatos:fac,Exe('F2'))
+SetFilaActual(&ultimaFila)
+ifa
+ifa
+ACT(A:fac,'Fin del Informe')
+SetFont(a:fac..a:fac,2)
+ifa
+LimitesVision(&column+1:fac)

@@ -1,0 +1,154 @@
+﻿CrearDialogo
+  Fecha1  : 'F.Desde'       ;;;;;;;;;
+  Fecha2  : 'F.Hasta'       ;;;;;;;;;
+  Cliente1: 'Cliente'       ;;;;;;;;;
+  Especie1: 'Especie'       ;;;;;;;;;
+  Mercado1: 'Mercado Liq.'  ;;;;;;;;;
+  Radio1  : 'Filtro|Titulos|FX|MMkts|Todas';;;;;;;;;3
+FinDialogo
+
+If Not OK
+  Cancelar
+EndIf
+
+CrearFont(1,'Arial,8,')
+CrearFont(2,'Arial,8,B')
+CrearFont(3,'Arial,9,B')
+
+SetFilaActual(4)
+
+ACT(A:FAC,'Detalle de Operaciones Liquidadas por Mercado')
+SetFont(A:FAC,3)
+
+SetFilaActual(5)
+
+ACT(A:FAC+1,'Fecha Desde: '~Dialogo.Fecha1)
+ACT(A:FAC+2,'Fecha Hasta: '~Dialogo.Fecha2)
+ACT(A:FAC+3,'Cliente: '~Iif(NoVacio(Dialogo.Cliente1),Dialogo.Cliente1,'Todos'))
+ACT(A:FAC+4,'Mercado Liq.: '~Iif(NoVacio(Dialogo.Mercado1),Dialogo.Mercado1,'Todos'))
+IF Dialogo.Radio1 = 0
+   ACT(A:FAC+5,'Modulo: Titulos') 
+ENDIF
+IF Dialogo.Radio1 = 1
+   ACT(A:FAC+5,'Modulo: Foreign ExChange') 
+ENDIF
+IF Dialogo.Radio1 = 2
+   ACT(A:FAC+5,'Modulo: Money Market') 
+ENDIF
+IF Dialogo.Radio1 = 3
+   ACT(A:FAC+5,'Modulo: Todos') 
+ENDIF
+
+SetFont(A:FAC..A:FAC+5,2)
+SetFilaActual(FAC+7)
+
+ACT(A:FAC,'Tipo Tr.')
+ACT(B:FAC,'Especie')
+ACT(C:FAC,'Fecha')
+ACT(D:FAC,'Cantidad')
+ACT(E:FAC,'Cta. Cliente')
+ACT(F:FAC,'Cta. Propia')
+ACT(G:FAC,'Nr. Trans.')
+
+AlinearCeldas(A:FAC..G:FAC,'C')
+SetFont(A:FAC..G:FAC,2)
+AgregarMarco(A:FAC..G:FAC,2,0,EXE('COLOR'))
+
+let &desde fac+1
+
+SQL.ADD("Select T.NrTrans, T.TipoTr2, T.Especie, T.Fecha1, (Case When T.TipoTr2 IN ('RET','MATCH') Then -T.Cantidad1 Else T.Cantidad1 End) Cantidad, T.Cuenta1 CtaCliente, T.Cuenta2 CtaPropia ")
+SQL.ADD("From "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD("Where T.NrTrans = M.NrTrans2 ")
+SQL.ADD("  And M.NrSaldo = 1 ")
+SQL.ADD("  And (T.Fecha1 Between '"~IdxDate(Dialogo.Fecha1)~"' And '"~IdxDate(Dialogo.Fecha2)~"') ")
+SQL.ADD("  And T.TipoTr2 in ('DEP','RET','COMP','MATCH') ")
+SQL.ADD("  And T.Cantidad1 <> 0 ")
+
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD(" And T.Especie='"~Dialogo.Especie1~"' ")
+EndIf
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" And T.Cliente1='"~Dialogo.Cliente1~"' ")
+EndIf
+If NoVacio(Dialogo.Mercado1)
+   SQL.ADD(" And T.Mercado1='"~Dialogo.Mercado1~"' ")
+EndIf
+If Dialogo.Radio1 = 0
+   SQL.ADD(" And M.Concepto = 'TI' ")
+EndIf
+If Dialogo.Radio1 = 1
+   SQL.ADD(" And M.Concepto = 'FX' ")
+EndIf
+If Dialogo.Radio1 = 2
+   SQL.ADD(" And M.Concepto = 'MM' ")
+EndIf
+
+SQL.ADD(" Union ")
+
+SQL.ADD("Select T.NrTrans, T.TipoTr2, T.Especie1 Especie, T.Fecha1, -T.Cantidad2 Cantidad, T.Cuenta3 CtaCliente, T.Cuenta4 CtaPropia ")
+SQL.ADD("From "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD("Where T.NrTrans = M.NrTrans2 ")
+SQL.ADD("  And M.NrSaldo = 1 ")
+SQL.ADD("  And (T.Fecha1 Between '"~IdxDate(Dialogo.Fecha1)~"' And '"~IdxDate(Dialogo.Fecha2)~"') ")
+SQL.ADD("  And T.TipoTr2 = 'MATCH' ")
+SQL.ADD("  And T.Cantidad2 <> 0 ")
+
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD(" And T.Especie1='"~Dialogo.Especie1~"' ")
+EndIf
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" And T.Cliente1='"~Dialogo.Cliente1~"' ")
+EndIf
+If NoVacio(Dialogo.Mercado1)
+   SQL.ADD(" And T.Mercado1='"~Dialogo.Mercado1~"' ")
+EndIf
+If Dialogo.Radio1 = 0
+   SQL.ADD(" And M.Concepto = 'TI' ")
+EndIf
+If Dialogo.Radio1 = 1
+   SQL.ADD(" And M.Concepto = 'FX' ")
+EndIf
+If Dialogo.Radio1 = 2
+   SQL.ADD(" And M.Concepto = 'MM' ")
+EndIf
+
+SQL.ADD("Order by T.Fecha1 ")
+watch(sql.batch)
+
+Recorrer SQL
+  ACT(A:FAC,FBN['TipoTr2'])
+  ACT(B:FAC,FBN['Especie'])
+  ACD(C:FAC,FBN['Fecha1'])
+  ACN(D:FAC,FBN['Cantidad'])
+  ACT(E:FAC,FBN['CtaCliente'])
+  ACT(F:FAC,FBN['CtaPropia'])
+  ACT(G:FAC,FBN['NrTrans'])
+  ACLT(G:FAC,FBN['NrTrans'])
+  FormatoCeldas(D:FAC,EXE('F2'))
+  SetFont(A:FAC..G:FAC,1)
+  SCN(TT:1,FBN['Cantidad'])
+Proximo
+
+ACT(C:FAC+1,'Total')
+ACN(D:FAC+1,Val(TT:1))
+FormatoCeldas(D:FAC+1,EXE('F2'))
+SetFont(C:FAC+1..D:FAC+1, 2)
+AgregarMarco(C:FAC+1..D:FAC+1,2,0,EXE('COLOR'))
+
+let &hasta fac+1
+If FAC>=25
+   Paginar(&desde, &hasta, 25)
+EndIf
+
+SetFilaActual(FAC+3)
+ACT(A:FAC,'FIN DEL INFORME')
+SetFont(A:FAC, 2)
+
+AgregarBMP(A1,EXE('LOGO'),EXE('ESCALOGO'))
+
+ACO(4,10)
+ACO(5,8)
+ACO(6,8)
+
+Impresion(1,2)
+LimitesVision(H:FAC+1)

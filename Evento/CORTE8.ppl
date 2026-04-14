@@ -1,0 +1,70 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+   Especie1   :'Especie'      ;1;1;;;;NoVacio(Dialogo.Especie1) y DesciendeDeEspecie(Dialogo.Especie1,'TITULO') y Not DesciendeDeEspecie(Dialogo.Especie1,'CUPON');'Especie Invalida';NO;;;;;;"Status = 'HAB' "
+   Check1     :'PIKs'         ;1;2;;NO;;;;;;IIF(Eqstr(BuscarCampo('ESPECIES','PIKs','Codigo', Dialogo.Especie1), 'NO'), 0, 1);
+   Fecha1     :'F.Corte'      ;2;1;;NO;;Dialogo.Fecha1<>0 y Dialogo.Fecha1 >= Fsys;'Fecha de Corte Invalida';NO;ProxCupon2(Dialogo.Especie1, Fsys);ProxCupon2(Dialogo.Especie1, Fsys)
+   Precio1    :'TasaPIK%'     ;2;2;;;Dialogo.Check1 = 1;Dialogo.Check1 = 0 O Dialogo.Precio1 > 0;'Tasa de Pikeo Invalida';NO;;;;;'###.########'
+   Entero1    :'Nr.Cupon'     ;3;1;;NO;;Dialogo.Entero1 >= 0;'Nro de Cupon Invalido';NO;0;BuscarCampo('ESPECIES','Cupon','Codigo',Dialogo.Especie1)
+   Precio3    :'TasaIntPIK%'  ;3;2;;;Dialogo.Check1 = 1;Dialogo.Check1 = 0 O Dialogo.Precio3 > 0;'Tasa de Interes Pik Invalida';NO;;;;;'###.########'
+   Precio2    :'Tasa%'        ;5;1;;;;Dialogo.Precio2 > 0;'La Tasa de Interes debe ser Positiva';NO;;;;;'###.########'
+   Precio4    :'Spread%'      ;5;2;;;SQL(" Select 1 From "~DBO~".ESPECIES Where Codigo = '"~Dialogo.Especie1~"' AND TipoTasa Is Not Null AND TipoTasa <> 'FIJA' ") = 1;Dialogo.Precio4 > 0 O SQL(" Select 1 From "~DBO~".ESPECIES Where Codigo = '"~Dialogo.Especie1~"' AND TipoTasa Is Not Null AND TipoTasa <> 'FIJA' ") <> 1;'El Spread debe ser Positivo';NO;;SQL(" Select Spread From "~DBO~".ESPECIES Where Codigo = '"~Dialogo.Especie1~"' ");;;'###.########'
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+ACT(st1,SQL("SELECT SType FROM "~DBO~".ESPECIES WHERE Codigo='"~Dialogo.Especie1~"' "))
+
+SQL.ADD("UPDATE "~DBO~".ESPECIES ")
+SQL.ADD("SET    TasaIntAnterior = TasaIntVigente, ")
+SQL.ADD("       TasaIntVigente = "~FSTR((Dialogo.Precio2+Dialogo.Precio4)/100,1,8)~", ")
+SQL.ADD("       TasaPIKsVigente = "~FSTR(Dialogo.Precio1/100,1,8)~", ")
+SQL.ADD("       TasaIntPiksVigente = "~FSTR(Dialogo.Precio3/100,1,8)~", ")
+SQL.ADD("       FechaCambioTasa = '"~IdxDate(Fsys)~"' ")
+If Not EqStr(Mayusculas2(val(st1)),'FIJA')
+   SQL.ADD(",       Alias4 = 'TASA_REAL'  ")
+EndIf
+IF Dialogo.Precio4 > 0
+   SQL.ADD(",       Spread = "~Fstr(Dialogo.Precio4,1,8)~" ")
+ENDIF
+SQL.ADD("WHERE Codigo = '"~Dialogo.Especie1~"' ")
+SQL.NEW
+Message(' Actualizando Especie ')
+ 
+
+*---------- Actualiza Tabla AgendaCupon ------------*
+SQL.ADD(" UPDATE "~DBO~".AGENDACUPONES SET ")
+SQL.ADD(" PorRenta  = "~FSTR((Dialogo.Precio2+Dialogo.Precio4),1,8)~", ")
+SQL.ADD(" PorRentaAnterior  = PorRenta, ")
+SQL.ADD(" FechaCambioTasa = '"~IdxDate(Fsys)~"'  ")
+SQL.ADD(" WHERE Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD(" AND NrCupon = '"~FSTR(Dialogo.Entero1,0,0)~"' ")
+SQL.ADD("  AND Esquema = '0' ")
+SQL.NEW
+
+IF Dialogo.Check1 = 1
+    ***---Esquema con Piks
+    SQL.ADD(" UPDATE "~DBO~".AGENDACUPONES SET ")
+    SQL.ADD(" PorRenta  = "~FSTR(Dialogo.Precio3,1,8)~", ")
+    SQL.ADD(" PorRentaAnterior  = PorRenta, ")
+    SQL.ADD(" PorPIK = "~FSTR(Dialogo.Precio1,1,8)~", ")
+    SQL.ADD(" FechaCambioTasa = '"~IdxDate(Fsys)~"'  ")
+    SQL.ADD(" WHERE Especie = '"~Dialogo.Especie1~"' ")
+    SQL.ADD(" AND NrCupon = '"~FSTR(Dialogo.Entero1,0,0)~"' ")
+    SQL.ADD("  AND Esquema = '1' ")
+ENDIF
+SQL.NEW
+
+*---------- Actualiza Tabla AgendaCupon Para los proximos cupones
+*---------- para impactarle la tasa estimada a los siguientes
+***---SQL.ADD(" UPDATE "~DBO~".AGENDACUPONES SET ")
+***---SQL.ADD("  PorAmCapital = "~FSTR(Val(k:2),1,2)~", ")
+***---SQL.ADD("  PorRentaAnterior  = PorRenta, ")
+***---SQL.ADD("  PorRenta  = "~FSTR(Dialogo.Precio2,1,8)~", ")
+***---SQL.ADD("  FechaCambioTasa = '"~IdxDate(Fsys)~"'  ")
+***---SQL.ADD("  WHERE Especie = '"~Dialogo.Especie1~"' AND NrCupon > "~FSTR(Dialogo.Entero1,0,0)~" ")
+***---SQL.NEW
+
+Message(' Actualizando Agenda de Cupones ')
+SQL.EXEC

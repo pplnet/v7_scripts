@@ -1,0 +1,80 @@
+if (Vacio(UsrVehiculos(UsuarioActivo())))
+Act(ls:1, SQLSet(" Select Codigo from "~Dbo()~".VEHICULOS where Status = 'HAB' "))
+else
+Act(ls:1, UsrVehiculos(UsuarioActivo()))
+endif
+creardialogo
+fecha1: 'Fecha Desde';1;;;;;;;;FSys()
+fecha2: 'Fecha Hasta';2;;;;;;;;FSys()
+radio1: 'Filtra Book|SI|NO';3;;;;;;;;1;
+lista1: 'Vehiculos';4;;;;dialogo.radio1 = 1;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), Val(ls: 1), SQLSet(" Select U.Vehiculo From "~Dbo()~".USRVEHICULO U, "~Dbo()~".VEHICULOS V Where V.Codigo = U.Vehiculo AND U.Codigo = '"~UsuarioActivo()~"' AND V.Status = 'HAB' "));;
+vehiculo1: 'Vehiculo';4;;;;dialogo.radio1 = 0;dialogo.radio1 = 1 o NoVacio(dialogo.vehiculo1);'Vehiculo Invalido';NO;;;;;;;
+lista2: 'Books';5;;;;dialogo.radio1 = 0;NoVacio(dialogo.lista2) o dialogo.radio1 = 1;'Debe indicar book/s';NO;;;SQLSet(" Select Codigo From "~Dbo()~".BOOKS Where Vehiculo = '"~dialogo.vehiculo1~"' ");;
+especie1: 'Especie';;;;;;;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+if (dialogo.radio1 = 1)
+let(&vehiculo, '')
+if (Vacio(dialogo.lista1))
+let(&vehiculos, Val(ls:1))
+else
+let(&vehiculos, dialogo.lista1)
+endif
+let(&books, '')
+endif
+
+if (NoVacio(dialogo.especie1))
+Sqladd("Select Distinct Vehiculo1 as 'Vehiculo',Book1 as 'Book' from "~Dbo()~".OPERACIONES Where Especie= '"~dialogo.especie1~"'")
+Sqladd(" and FechaOp<= '"~IdxDate(dialogo.fecha2)~"' and FechaVto>='"~IdxDate(dialogo.fecha1)~"'")
+
+Sqladd("UNION")
+
+Sqladd("Select DISTINCT C.Cliente as 'Vehiculo', CASE When C.Alias1 is not null then C.Alias1 ELSE V.Alias5 END 'Book' ")
+Sqladd(" From "~Dbo()~".SALDOSBANCARIOS S, "~Dbo()~".CUENTAS C, "~Dbo()~".VEHICULOS V ")
+Sqladd(" Where S.NrCuenta = C.Numero ")
+Sqladd(" AND V.Codigo = C.Cliente ")
+Sqladd("AND C.Especies like '%"~dialogo.especie1~"%' ")
+Sqladd(" AND S.FechaSaldo >= '"~IdxDate(dialogo.fecha1)~"' ")
+
+Sqladd("UNION")
+
+Sqladd("Select DISTINCT C.Cliente as 'Vehiculo', CASE When C.Alias1 is not null then C.Alias1 ELSE V.Alias5 END 'Book' ")
+Sqladd(" From "~Dbo()~".SALDOSDIA S, "~Dbo()~".CUENTAS C, "~Dbo()~".VEHICULOS V ")
+Sqladd(" Where S.Cuenta = C.Codigo  and C.TipoCuenta IN ('CUS','INV') ")
+Sqladd(" AND S.Especie = '"~dialogo.especie1~"' ")
+Sqladd(" AND S.NrSaldo=50 ")
+Sqladd(" AND V.Codigo = C.Cliente ")
+Sqladd(" AND S.Fecha >='"~IdxDate(dialogo.fecha1)~"' ")
+
+Sqladd("UNION")
+
+Sqladd(" Select DISTINCT P.Vehiculo as 'Vehiculo', P.Book as 'Book' ")
+Sqladd(" From "~Dbo()~".POSICIONES2 P, "~Dbo()~".ESPECIES E ")
+Sqladd(" Where E.Codigo = P.Especie ")
+Sqladd(" AND P.Especie= '"~dialogo.especie1~"' ")
+Sqladd(" AND P.NrSaldo = 1 ")
+Sqladd(" AND P.Fecha >= '"~IdxDate(dialogo.fecha1)~"' ")
+
+Sqladd(" Order By Vehiculo,Book")
+recorrer sql
+if (not Eqstr(Fbn()['Vehiculo'], &vehiculo))
+if (NoVacio(&vehiculo))
+recorrer&i dialogo.fecha1, dialogo.fecha2
+if (EsHabil(Fecha(&i), 'ARG'))
+Ejecutarevento('RENTAB', 'fecha1', Fecha(&i), 'radio1', 0, 'vehiculo1', &vehiculo, 'lista2', &books, 'lista1', '')
+endif
+proximo
+endif
+let(&books, '')
+let(&vehiculo, Fbn()['Vehiculo'])
+let(&books, &books~Fbn()['Book']~'|')
+else
+let(&books, &books~Fbn()['Book']~'|')
+endif
+proximo
+endif

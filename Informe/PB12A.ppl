@@ -1,0 +1,137 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1:    'Fecha'     ;1;1;;;;;;;FSYS
+  Vehiculo1: 'Vehiculo'  ;1;2;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))] ;'Vehiculo Invalido';NO;BuscarCampo('USRVEHICULO','Vehiculo','Codigo',USUARIOACTIVO);;;;;iif(NoVacio(UsrVehiculos(UsuarioActivo)), " Codigo in (Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"') ")
+  Cliente1:  'Banco'     ;2;1;;;;VACIO(Dialogo.Cliente1) o Eqstr(BuscarCampo('CLIENTES','Sector','Codigo',Dialogo.Cliente1),'BAN');'Banco invalido';NO;;;;;;" Codigo IN ("~Pipe2Comillas(Descendientes('CLIENTES', 'BANCOS'))~") "
+  Especie1:  'Moneda'    ;3;1;;;;Vacio(Dialogo.Especie1) o Eqstr(BuscarCampo('ESPECIES','Tipo','Codigo',Dialogo.Especie1),'MON');'Moneda Invalida';NO;;;;;;" Tipo = 'MON' "
+  Radio2:  'Tipo Cuenta|Cta.Cte|Intermedia|Recaudadora|Todos' ;4;1;;;NO;;;;3
+  Lista1:    'Cuentas'   ;5;1;1;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS  WHERE Cliente = '"~Dialogo.Vehiculo1~"' "~IIF(NoVacio(Dialogo.Cliente1)," AND Comitente = '"~Dialogo.Cliente1~"' "));
+FinDialogo
+
+IF NOT OK
+  Cancelar
+ENDIF
+
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,8,BI")
+
+IF NOVACIO(Dialogo.Cliente1)
+   ACT(a:2,'Banco: '~Dialogo.Cliente1)
+ELSE
+   ACT(a:2,'Banco: Todos')
+ENDIF
+IF NOVACIO(Dialogo.Especie1)
+   ACT(a:3,'Moneda: '~Dialogo.Especie1)
+ELSE
+   ACT(a:3,'Moneda: Todas')
+ENDIF
+ACT(a:4,'Vehiculo: '~Dialogo.Vehiculo1)
+
+SetFont(a:1..z:4,2)
+ACT(b:5, 'Consulta de Saldos al '~Dialogo.Fecha1)
+SetFont(b:5, 3)
+
+SetFilaActual(7)
+
+ACT(a:fac, 'Banco')
+ACT(b:fac, 'Cuenta')
+ACT(c:fac, 'Especie')
+ACT(d:fac, 'Saldo')
+
+AlinearCeldas(a:fac..d:fac, 'C')
+SetFont(a:fac..z:fac,2)
+AgregarMarco(a:fac..d:fac,0,0,EXE('COLOR6'))
+
+SQL.ADD(" SELECT /*+ RULE */ S.Cuenta, S.Especie, E.Nombre, ")
+SQL.ADD(" C.Numero, SUM(S.Saldo) Saldo, C.Comitente EnteCustodia, B.RazonSocial ")
+SQL.ADD(" FROM "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E,  "~DBO~".CUENTAS C, "~DBO~".CLIENTES B ")
+SQL.ADD(" WHERE S.Especie = E.Codigo ")
+SQL.ADD(" AND   S.Cuenta  = C.Codigo ")
+SQL.ADD(" AND   C.Comitente = B.Codigo ")
+SQL.ADD(" AND   S.Cliente = '"~Dialogo.Vehiculo1~"' ")
+**// El cliente de la cuenta debe ser el vehiculo ingresado.
+SQL.ADD(" AND   C.Cliente = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   S.NrSaldo   = 1 ")
+SQL.ADD(" AND   S.Fecha  <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND   S.Fecha IN (SELECT MAX(Fecha) FROM "~DBO~".SALDOSDIA ") 
+SQL.ADD("                   WHERE  Cuenta  = S.Cuenta  ")
+SQL.ADD("                   AND    Cliente = S.Cliente ")
+SQL.ADD("                   AND    Especie = S.Especie ")
+SQL.ADD("                   AND    Cliente = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("                   AND    NrSaldo = 1 ")
+SQL.ADD("                   AND    Fecha  <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+IF NOVACIO(Dialogo.Especie1)
+  SQL.ADD(" AND  S.Especie = '"~Dialogo.Especie1~"'")
+ENDIF
+IF NOVACIO(Dialogo.Cliente1)
+  SQL.ADD(" AND  C.Comitente = '"~Dialogo.Cliente1~"'")
+ENDIF
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT')")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC')")
+Endif
+If Novacio(Dialogo.Lista1)
+  SQL.ADD(" AND C.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+SQL.ADD(" GROUP BY S.Cuenta, S.Especie, E.Nombre, C.Numero, S.EnteCustodia, C.Comitente, B.RazonSocial ")
+SQL.ADD(" ORDER BY C.Comitente, S.Especie, S.Cuenta ")
+
+ACT(ma:1,'')
+ACT(cl:1,'')
+ACT(cu:1,'')
+ACT(ea:1,'')
+
+ACN(fi:1, 8)
+ACN(x:1, 0)
+
+Recorrer SQL
+*MessageBox(fbn('Cuenta'))
+  ***---IF fbn('Saldo')<>0 y DesciendeDeEspecie(fbn('Especie'),'MONEDA')
+  IF fbn('Saldo')<>0
+    MESSAGE('Cuenta: '~fbn('Cuenta'))
+    If Not Eqstr(fbn('EnteCustodia'), Val(cl:1))
+      IFA
+      ACT(a:fac, fbn('EnteCustodia')~' - '~fbn('RazonSocial'))
+      SetFont(a:fac,4)
+      AgregarMarco(a:fac..d:fac,0,0)
+      ifa
+    Endif
+    ACT(b:fac, fbn('Cuenta')~' - '~fbn('Numero'))
+    ACT(c:fac, fbn('Nombre'))
+    ACN(d:fac, fbn('Saldo'))
+    AsignarLink(d:fac,'DETSAL', Fecha1=Dialogo.Fecha1, Especie1=fbn('Especie'), Vehiculo1=Dialogo.Vehiculo1, Cuenta1=fbn('Cuenta') )
+
+
+    ACT(cu:1, fbn('Cuenta'))
+    ACT(cl:1, fbn('EnteCustodia'))
+    ACT(ea:1, fbn('Especie'))
+  ELSE
+    dfa
+  ENDIF
+  AlinearCeldas(c:fac,'C')
+  SetFont(b:fac..z:fac,1)
+  FormatoCeldas(d:fac,EXE('F2'))
+Proximo
+
+ifa
+ifa
+ifa
+ACT(a:fac, 'Fin del Informe.')
+SetFont(a:fac,2)
+
+ACO(1,20)
+ACO(2,18)
+ACO(3,10)
+ACO(4,12)
+
+LimitesVision(e:fac+2)
+Impresion(4,1)
+SetMargins(0,0,0,2)

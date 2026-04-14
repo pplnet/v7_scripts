@@ -1,0 +1,124 @@
+﻿*** Toma todas las operaciones pendientes de liquidacion que sean futuros 
+*** Se incluyen los Ejercicios
+*** Estas operaciones vencen despues de hoy ***
+*** Se modifican los precios pero no se generan cupones ***
+*** ("O.Vehiculo1 = '"~Val(j2)~"' ")
+
+Message('Procesando Pendientes de Liquidacion ...')
+
+SQL.ADD("SELECT O.* ")
+SQL.ADD("from  "~DBO~".OPERACIONES O ")
+SQL.ADD("where O.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD("and   O.FechaVto > '"~IdxDate(Val(g2))~"' ")
+SQL.ADD("and   O.Cupon1  = '"~FStr(Dialogo.Entero1,0,0)~"' ")
+SQL.ADD("and O.TipoOp In ('SECT','SECTV','SEVT','SEVTV') ")
+SQL.ADD("and (O.PaseCB is Null or O.PaseCB = '0')  ")
+SQL.ADD("order by O.TipoOp, O.Especie ")
+
+SetFilaActual(10)
+
+Recorrer SQL
+   act(a:fac,fbn['NrOperacion'])
+
+   Message('Pendientes de Liquidacion Operacion:'~VAL(a:fac)~' ...')   
+
+   *** Toma los futuros que vencen despues de hoy ****
+   * b: Precio1 c: Bruto d: Neto f: Importe de Gastos
+   * g: TasaInteresesCupon h:TotalIntereses
+   * i:FechaUltCupon
+
+   ACD(i:fac,IIF(EsHabil(UltCupon(FBN['Especie'],FBN['FechaVto']),'USA'),UltCupon(FBN['Especie'],FBN['FechaVto']),Habiles(UltCupon(FBN['Especie'],FBN['FechaVto']),IIF(EqStr(BuscarCampo('ESPECIES','CuponFeriado','Codigo',FBN['Especie']),'SIG'),1,IIF(EqStr(BuscarCampo('ESPECIES','CuponFeriado','Codigo',FBN['Especie']),'ANT'),-1,0)),'USA')))
+
+
+   ACN(g:fac,IIF(BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])>Val(i:fac) y BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])<=FBN['FechaVto'],((BuscarCampo('ESPECIES','TasaIntVigente','Codigo',FBN['Especie'])*IIF(EspecieDiasAnio(FBN['Especie'])=0 y EspecieDiasMes(FBN['Especie'])=0,Dif360(Val(i:fac),BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])-1,4),DifDias(Val(i:fac),BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])-1,'USA',NO)))+(BuscarCampo('ESPECIES','TasaIntAnterior','Codigo',FBN['Especie'])*(IIF(EspecieDiasAnio(FBN['Especie'])=0 y EspecieDiasMes(FBN['Especie'])=0,Dif360(BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])-1,FBN['FechaVto'],4),DifDias(BuscarCampo('ESPECIES','FechaCambioTasa','Codigo',FBN['Especie'])-1,FBN['FechaVto'],'USA',NO)))))/(IIF(EspecieDiasAnio(FBN['Especie'])=0 y EspecieDiasMes(FBN['Especie'])=0,Dif360(Val(i:fac),FBN['FechaVto'],4),DifDias(Val(i:fac),FBN['FechaVto'],'USA',NO))),BuscarCampo('ESPECIES','TasaIntVigente','Codigo',FBN['Especie']))*100)
+
+
+   ACN(h:fac,IIF(Eqstr(BuscarCampo('ESPECIES','InteresesC','Codigo',FBN['Especie']),'CLE'),ValorTeorico(FBN['Especie'])*FBN['Cantidad']*VAL(g:fac)/DIASA(EspecieDiasAnio(FBN['Especie']),FSYS)/100*IIF(EspecieDiasAnio(FBN['Especie'])=0 y EspecieDiasMes(FBN['Especie'])=0,Dif360(Val(i:fac),FBN['FechaVto'],4),DifDias(Val(i:fac),FBN['FechaVto'],'USA',NO)),0))
+
+   acn(b:fac,fbn['Precio1']-((Val(k2)+Val(l2))/100))
+   acn(c:fac,Val(b:fac)*fbn['Cantidad']*Val(e3))
+   acn(f:fac,Val(c:fac)*(FBN['PorComCor1']/100))
+   acn(d:fac,Val(c:fac)+VAL(h:fac))
+
+   * Si es compra se suman gastos y comisiones, sino se restan
+   IF Incluido(FBN['TipoOp'],'SECS|SECT|SECTV')
+      acn(d:fac,Val(d:fac)+FBN['ImpGastos1']+IIF(FBN['RB7']=0,VAL(f:fac),0) )
+   Else 
+      acn(d:fac,Val(d:fac)-FBN['ImpGastos1']-IIF(FBN['RB7']=0,VAL(f:fac),0))
+   EndIf
+
+   *** Marca las operaciones  ****
+   *** cambia el precio y el monto ***
+   SQL.ADD("Update "~DBO~".OPERACIONES ")
+   SQL.ADD("Set Mercado3      = '"~Dialogo.ContraEspecie2~"', ")
+   SQL.ADD("    Precio1       = "~Fstr(Val(b:fac),0,7)~", ")
+   SQL.ADD("    TotalBrutoCli1= "~Fstr(Val(c:fac),0,2)~", ")
+   SQL.ADD("    TotalNetoCli1 = "~Fstr(Val(d:fac),0,2)~", ")
+   SQL.ADD("    ImpComCor1    = "~Fstr(Val(e:fac),0,2)~", ")
+   SQL.ADD("    FechaUltCupon = '"~IdxDate(Val(i:fac))~"', ")
+   SQL.ADD("    TasaInteresesCupon= "~Fstr(Val(g:fac),0,2)~", ")
+   SQL.ADD("    TotalIntereses= "~Fstr(Val(h:fac),0,2)~", ")
+   SQL.ADD("    Cupon1        = '"~Fstr(Dialogo.Entero1+1,0,0)~"' ")
+   SQL.ADD("where  NrOperacion = '"~Val(a:fac)~"' ")
+   SQL.NEW
+   SQL.EXEC
+
+   ActualizarMovimientos(Val(a:fac),SI)
+   SQL.EXEC
+Proximo
+
+
+*** Toma todas las operaciones de opciones NO Ejercidas con fecha de ejercicio mayor a hoy ***
+*** y les modifica el precio de ejercicio *******
+*** SQL.ADD("where Vehiculo1 = '"~Val(j2)~"' ")
+
+SQL.ADD("SELECT * ")
+SQL.ADD("from "~DBO~".OPERACIONES  ")
+SQL.ADD("where Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD("and   FechaEj >= '"~IdxDate(Val(g2))~"' ")
+SQL.ADD("and   Cupon1  = '"~FStr(Dialogo.Entero1,0,0)~"' ")
+SQL.ADD("and  (CB8 is Null or CB8 = '0' ) ")
+SQL.ADD("and  (RB4 is Null or RB4 = '0' ) ")
+SQL.ADD("and   TipoOp In ('DSEO') ")
+SQL.ADD("order by TipoOp, Especie ")
+
+SetFilaActual(10)
+
+Recorrer SQL
+   act(a:fac,fbn['NrOperacion'])
+
+   *** calcula el precio de ejercicio ****
+   *** e: Notional Amount  f: MontoPrima
+   acn(b:fac,fbn['PrecioEj'] - ((Val(k2)+Val(l2))/100))
+   acn(e:fac,val(b:fac)*FBN['Cantidad']*Val(e3))
+   acn(f:fac,val(e:fac)*FBN['Precio1']/100)
+
+   *** Marca las operaciones con las especies nuevas ****
+   *** cambia el precio y el monto ***
+   SQL.ADD("Update "~DBO~".OPERACIONES ")
+   SQL.ADD("Set Mercado3 = '"~Dialogo.ContraEspecie2~"', ")
+   SQL.ADD("    TotalBrutoCli1 = "~Fstr(Val(e3),0,7)~", ")
+   SQL.ADD("    TotalNetoCli1 = "~Fstr(Val(f:fac),0,2)~", ")
+   SQL.ADD("    PrecioEj  = "~Fstr(Val(b:fac),0,7)~", ")
+   SQL.ADD("    TotalAux1 = "~Fstr(Val(e:fac),0,2)~", ")
+   SQL.ADD("    Cupon1    = '"~Fstr(Dialogo.Entero1+1,0,0)~"' ")
+   SQL.ADD("where  NrOperacion = '"~Val(a:fac)~"' ")
+   SQL.NEW
+   SQL.EXEC
+
+   SQL.ADD("Update "~DBO~".MOVPENDIENTES ")
+   SQL.ADD("Set PrecioEj = "~Fstr(Val(b:fac),0,7)~" ")
+   SQL.ADD("where  NrOperacion = '"~Val(a:fac)~"' ")
+   SQL.ADD("and    Especie = '"~Dialogo.Especie1~"' ")
+   SQL.ADD("and    PrecioEj <> 0 ")
+   SQL.NEW
+
+   SQL.ADD("Update "~DBO~".MOVEJECUTADOS ")
+   SQL.ADD("Set PrecioEj = "~Fstr(Val(b:fac),0,7)~" ")
+   SQL.ADD("where  NrOperacion = '"~Val(a:fac)~"' ")
+   SQL.ADD("and    Especie = '"~Dialogo.Especie1~"' ")
+   SQL.ADD("and    PrecioEj <> 0 ")
+   SQL.NEW
+   SQL.EXEC
+Proximo
+

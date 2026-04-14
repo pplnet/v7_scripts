@@ -1,0 +1,928 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1   : 'Fecha'             ;;;;;;;;;FSys
+  Lista1   : 'Vehiculo'          ;;;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') "));
+  Especie1 : 'Especie'           ;;;;;;;;;Var('MONELOCA');;;;;"Tipo='MON' "
+  Radio2   : 'Expresado|ARP|USD' ;;;;;;;;;0;
+  Precio1  : 'Cotizacion'        ;;;;;Not EqStr(Dialogo.Especie1,Dialogo.Especie2);Dialogo.Precio1<>0 o EqStr(Dialogo.Especie1,Dialogo.Especie2);'Debe ingresar la cotizacion.';NO;0;0
+  Especie2 : 'especie '          ;;;;;NO;;;;IIF(Dialogo.Radio2=0,'ARP','USD');IIF(Dialogo.Radio2=0,'ARP','USD');
+  Radio3   : 'Tipo|Fon|DepPl|Overni|ColExt|CCR|Todo'  ;;;;NO;NO;;;;5;
+  Lista2   : 'Tipo Ops.'         ;;;;;;;;;;;'|MMCPM|MMCP|'
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+CrearFont(3, 'Arial,10,B')
+ACD(fe1,Dialogo.Fecha1)
+
+ACD(fe2,Habiles(Dialogo.Fecha1,-1,'ARG',NO) )
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,1)
+
+SetFilaActual(2)
+
+** Imprimo titulos del cuadro principal
+ACN(co3,1)
+(.'FCUADRO'.) 
+
+ACT(en1,Dialogo.Especie1)
+(.'SELCOLFON'.) 
+
+ACN(co2,0)
+ACN(zz2,0)
+ACT(zz1,'')
+ACN(fi1,0)
+ACN(sl1,0)
+ACN(sf1,0)
+ACN(sf2,0)
+ACT(fo3,'')
+ACT(fo4,'')
+ACN(fo5,0)
+ACN(co4,899)
+
+Recorrer SQL
+   ** Corte por tipo de Fondo
+   if  Not EqStr(FBN['Especie'],Val(fo3))  
+       if Val(zz2)<>0 y [Incluido(Val(fo4),'FCS|FCR|FONDO')]
+          ACT(a:fac, ' Total Fondo de inversion   '~Val(fo3))
+          ACD(d:fac, Val(io1) )
+          ACD(e:fac, Habiles(Dialogo.Fecha1,1,'ARG',SI))
+          ACN(f:fac, val(e:fac)-val(d:fac))
+
+          ACN(h:fac, Val(sf1) )
+          ACN(g:fac, Val(sf2) )
+
+          ACN(sf1,0)
+          ACN(sf2,0)
+
+          ACN(au1,fac)
+          *- TNAV: (((Cotizacion a Hoy/PPP)-1)*36500)/(FechaVto-FechaOriginal)
+          ACN(xx3,Cotizacion(Val(fo3),,,,Dialogo.Fecha1,1))
+          ACN(xx4,Cotizacion(Val(fo3),,,,Habiles(Dialogo.Fecha1,-1,'ARG',SI),1))
+*          ACN(xx5,Dialogo.Fecha1 - Habiles(Dialogo.Fecha1,-1,'ARG',SI) )
+          ACN(xx5,Dialogo.Fecha1 - SQL(" Select Max(Fecha) From "~DBO~".COTIZACIONES Where Codigo = '"~Val(FO:3)~"' AND Precio1 <> 0 AND Fecha <= '"~IdxDate(Habiles(Dialogo.Fecha1,-1,'ARG',SI))~"' "))
+
+          acn(l:fac,((val(xx3)/val(xx4))-1)*(365/val(xx5))*100 )
+
+          *- Intereses del periodo: Importe *TNAV*Dias/36500
+          ACN(n:fac,Round((val(g:fac)*val(l:fac)*val(f:fac))/36500,2))
+
+          *- Imp.Ganancias
+          ACN(o:fac,0)
+
+          *- Int.Totales al Vto
+          ACN(p:fac,val(n:fac)+val(o:fac))
+
+          *- Interes Diario
+          ACN(t:fac,Val(p:fac)/Val(f:fac))
+
+          *- Dias Transcurridos
+          If val(d:fac)>Dialogo.Fecha1
+             ACN(r:fac,0)
+          Else
+             If Dialogo.Fecha1>=val(e:fac)
+                ACN(r:fac,val(f:fac))
+             Else
+                If Dialogo.Fecha1=val(d:fac)
+                   ACN(r:fac,1)
+                Else 
+                   ACN(r:fac,Dialogo.Fecha1-val(d:fac)+1)
+                EndIf
+             EndIf
+          EndIf
+             
+          *- Dias al Vencimiento
+          If val(f:fac)-val(r:fac)=0
+             ACN(s:fac,1)
+          Else
+             ACN(s:fac,val(f:fac)-val(r:fac))
+          EndIf
+
+          *- Dias al Vto
+          ACN(q:fac, IIF((Val(f:fac)-Val(r:fac))=0,1,Val(f:fac)-Val(r:fac)+1) )
+
+          *- TEM
+          ACN(k:fac, ((Val(g:fac)+Val(p:fac))/Val(g:fac))-1)
+          ACN(k:fac, ((Val(k:fac)+1)^(30/Val(f:fac))-1)*100 )
+
+          *- TNAA
+          if Val(k:fac)>0
+             ACN(m:fac, ((Val(k:fac)/100+1)^(Val(f:fac)/30))-1 )
+             ACN(m:fac, Val(m:fac)*36500/Val(f:fac) )
+          else
+             ACN(m:fac,0)
+          endif
+
+          *- Numerales
+          ACN(v:fac, Val(s:fac)*Val(g:fac) )
+
+          *- Numerales TEM
+          ACN(w:fac, Val(v:fac)*Val(k:fac)/100 )
+
+          *- Numerales al Vto: Importe de la Op.*Dias al Vto
+          ACN(x:fac,val(g:fac)*val(q:fac))  
+          
+          *- Numerales TNA Vencida
+          ACN(y:fac,val(g:fac)*val(l:fac))  
+
+          ** Calculo intereses devengados
+          if Val(k:fac)>0
+             ACN(u:fac, Val(g:fac)*Val(r:fac)*Val(m:fac)/36500 )
+          else
+             ACN(u:fac, 0)
+          endif
+
+          ** actualizo SUBTOTALES
+          SCN(su1,Val(g:fac))
+          SCN(su2,Val(h:fac))
+          SCN(su3,Val(n:fac))
+          SCN(su4,Val(o:fac))
+          SCN(su5,Val(p:fac))
+          SCN(su6,Val(t:fac))
+          SCN(su7,Val(u:fac))
+          SCN(su8,Val(v:fac))
+          SCN(su9,Val(w:fac))
+          SCN(su10,Val(x:fac))
+          SCN(su11,Val(y:fac))
+          SCN(su12,Val(z:fac))
+
+          ** sumo TOTALES FINALES
+          SCN(su21,Val(g:fac))
+          SCN(su22,Val(h:fac))
+          SCN(su23,Val(n:fac))
+          SCN(su24,Val(o:fac))
+          SCN(su25,Val(p:fac))
+          SCN(su26,Val(t:fac))
+          SCN(su27,Val(u:fac))
+          SCN(su28,Val(v:fac))
+          SCN(su29,Val(w:fac))
+          SCN(su30,Val(x:fac))
+          SCN(su31,Val(y:fac))
+          SCN(su32,Val(z:fac))
+          SCN(su33,Val(g:fac)*Val(m:fac))
+ 
+          ** Guardo estos datos para Resumen de Vto x Fecha
+          SCN(co4,1)
+          ACD(aa:Val(co4), Val(e:fac) )
+          ACN(ab:Val(co4), Val(g:fac) )
+          ACN(ac:Val(co4), Val(p:fac) )
+          ACN(ad:Val(co4), Val(h:fac) )
+
+          ** guardo datos para vtos por entidad
+          ACT(ba:Val(co4), val(fo6)~' - '~Val(fo3) )
+          ACT(bb:Val(co4), 'FDO AHORRO' )
+          ACN(bc:Val(co4), Val(g:fac) )
+          ACN(bd:Val(co4), Val(u:fac) )
+          ACN(be:Val(co4), val(g:fac)+Val(u:fac) )
+          ACN(bf:Val(co4), Val(o:fac) )
+
+          ** sumo cantidad de filas impresas
+          SCN(co2,1)
+          ifa
+      endif
+
+      ACN(pp1,0)
+      ACN(cp1,0)
+
+      *- Recupero precio de posicion del fondo 
+      SQL.ADD(" Select  P.Fecha,P.PrecioFin ")
+      SQL.ADD(" from "~DBO~".POSICIONES P")
+      SQL.ADD(" where  P.Especie='"~FBN['Especie']~"' ")
+      SQL.ADD(" and  P.NrSaldo = 101 ")
+      SQL.ADD(" and  P.Vehiculo =  '"~FBN['Vehiculo1']~"' ")      
+      SQL.ADD(" and  P.Fecha = (Select Max(D.Fecha) from "~DBO~".POSICIONES D ")
+      SQL.ADD("      where  D.Vehiculo = P.Vehiculo ")
+      SQL.ADD("      and D.Especie = P.Especie  ")
+      SQL.ADD("      and D.Cliente = P.Cliente  ")
+      SQL.ADD("      and D.NrSaldo = 101  ")
+      SQL.ADD("      and D.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+
+      Recorrer SQL
+        dfa
+        *- PPP de fondos => pp1
+        ACN(pp1,FBN['PrecioFin'])
+      Proximo
+
+      MESSAGE('Posicion '~FBN['Especie']~' '~val(pp1))
+
+      If val(pp1)=0
+         *- h:Importe al Vto => CuotasPartes * Ultimo precio (compra o cotizacion)
+         SQL.ADD(" SELECT Precio1,Especie,FechaOp,TotalNetoCli1,Cantidad FROM "~DBO~".OPERACIONES WHERE TipoOp='FCS' and ")
+         SQL.ADD(" Especie='"~FBN['Especie']~"' and ")
+         SQL.ADD(" Vehiculo1 =  '"~FBN['Vehiculo1']~"' and ")      
+         SQL.ADD(" Precio1<>0 and FechaOp<='"~Dialogo.Fecha1~"' Order By FechaOp DESC")
+         Recorrer SQL
+           dfa
+           ACN(cp1, FBN['Precio1'])
+           ACD(cf1, FBN['FechaOp'])
+           Break
+         Proximo
+         MESSAGE('Posicion no encontrada, busca OPERACION '~FBN['Especie']~' '~val(cp1))
+
+         *- Recupero la ultima cotizacion del fondo para comparar la fecha
+         SQL.ADD(" SELECT Precio1,Fecha FROM "~DBO~".COTIZACIONES WHERE ")
+         SQL.ADD(" Codigo='"~FBN['Especie']~"' and ")
+         If NoVacio(val(cf1))
+            SQL.ADD(" Fecha>='"~IdxDate(val(cf1))~"' and ")
+         EndIf
+         SQL.ADD(" Fecha<='"~Dialogo.Fecha1~"' Order By Fecha DESC")
+         Recorrer SQL
+            dfa
+            *- Fecha de Cotizacion = Fecha de Operacion de compra => Toma la de compra
+            ACN(cp1, FBN['Precio1'])
+            ACD(cf1, FBN['Fecha'])
+            Break
+         Proximo
+         MESSAGE('Posicion no encontrada, busca op y cotizacion '~FBN['Especie']~' '~val(cp1))
+         ACN(pp1,val(cp1))
+      EndIf
+   endif
+
+   ** Corte por tipo de operacion (excepto FONDOS,SUSCRIPCIONES Y RESCATES)
+   if [Not EqStr(FBN['TipoOp'],Val(zz1))] y [Not Incluido(FBN['TipoOp'],'FCS|FCR|FONDO')]
+      if Val(zz2)<>0
+         ** me posiciono en la ultima fila impresa y dibujo los marcos
+         SetFilaActual(fac-1)
+         ** Imprimo los marcos del cuadro principal
+         ACN(co3,0)
+         (.'FCUADRO'.)
+         ifa
+         ACT(b:fac, 'SUBTOTAL')
+         ACN(g:fac,Val(su1))
+         ACN(h:fac,Val(su2))
+         ACN(n:fac,Val(su3))
+         ACN(o:fac,Val(su4))
+         ACN(p:fac,Val(su5))
+         ACN(t:fac,Val(su6))
+         ACN(u:fac,Val(su7))
+         ACN(v:fac,Val(su8))
+         ACN(w:fac,Val(su9))
+         ACN(x:fac,Val(su10))
+         ACN(y:fac,Val(su11))
+         ACN(z:fac,Val(su12))
+         SetFont(b:fac..z:fac,1)
+
+         ** inicializo variables de suma
+         ACN(co2,0)
+         ACN(su1,0)
+         ACN(su2,0)
+         ACN(su3,0)
+         ACN(su4,0)
+         ACN(su5,0)
+         ACN(su6,0)
+         ACN(su7,0)
+         ACN(su8,0)
+         ACN(su9,0)
+         ACN(su10,0)
+         ACN(su11,0)
+         ACN(su12,0)
+         ifa
+      else
+         ACN(zz2,1)
+         ** guardo la primer fila de impresion de datos
+         ACN(in1,fac)
+      endif
+   endif
+
+   ** En todos los casos se imprime esto
+   ACT(b:fac, FBN['Cliente1'])
+   ACD(d:fac, FBN['FechaOp'])
+   ACT(c:fac, FBN['Especie'])
+   ACT(a:fac, FBN['NrOperacion'])
+   ACT(j:fac, FBN['TipoOp'])
+   ACD(e:fac, FBN['FechaVto'])
+
+   ACT(i:fac, BuscarCampo('TIPOSOPERACION', 'Nombre','Codigo', FBN['TipoOp']) )
+   ACT(zz1,FBN['TipoOp']) 
+
+   IF Incluido(FBN['TipoOp'],'FONDO|FCR|FCS|')
+      ACN(zz2,1)
+      IF Incluido(FBN['TipoOp'],'FCR|FCS|')
+         ACLO(a:fac, FBN['NrOperacion']) 
+         ** Tomo la cotizacion del fondo
+         ACN(co5, Cotizacion(fbn['Especie'],,,,Habiles(Dialogo.Fecha1,-1,'ARG',SI),1))
+
+         *- g: Importe => Si tengo cantidad de cuotas Partes es CANTIDAD * PPP
+         *- Sino, calculo la cantidad de cuotas partes basandome en el monto y la cotizacion de t+1
+         ACN(cc1, FBN['Cantidad'])
+
+         *- Verifico si es suscripcion por cantidad o por monto
+         *- RB7 : '|CuotasParte|Efectivo'  
+
+         * IF BuscarCampo('OPERACIONES','RB7','NrOperacion',FBN['NrOperacion'])=1      
+         IF val(cc1)=0
+            *- OPERACIONES POR MONTO Recupero las dos ultimas cotizaciones cargadas a la fecha del informe
+            *- pc1: Primer cotizacion  anterior pc2: Segunda Cotizacion anterior
+            ACN(pc1,0)
+            ACN(pc2,0)
+
+            SQL.ADD(" SELECT Precio1,Fecha FROM "~DBO~".COTIZACIONES WHERE ")
+            SQL.ADD(" Codigo='"~FBN['Especie']~"' and ")
+            SQL.ADD(" Fecha<='"~Dialogo.Fecha1~"' Order By Fecha DESC")
+            Recorrer SQL
+               dfa
+               If val(pc1)=0
+                  ACN(pc1, FBN['Precio1'])
+               Else 
+                  ACN(pc2, FBN['Precio1'])
+                  Break
+               EndIf                              
+            Proximo
+            MESSAGE('Cotizaciones  ('~VAL(PC1)~' '~VAL(PC2)~') Ppp '~VAL(PP1))
+            If val(pc2)=0
+               ACN(pc2, val(pc1))
+            EndIf
+
+            *- No tengo cuotas partes 
+            ACN(cc1,FBN['Importe']/val(pc2))
+
+            *If val(cp1)=0 y val(pp1)<>0   
+            *   ACN(g:fac, val(cc1)*val(pp1))
+            *Else
+            *   ACN(g:fac, FBN['Importe'])
+            *EndIf
+
+            ACN(g:fac, FBN['Importe'])
+
+            ACN(h:fac, val(cc1)*val(pc1))
+         Else 
+            ACN(cp1, 0)
+            ACD(cf1, Dialogo.Fecha1)
+
+            *- OP.POR CANTIDAD 1er. Criterio: Verifico cual es mas reciente la ultima compra o la cotizacion
+            ACN(g:fac, val(cc1)*val(pp1))
+
+            *- h:Importe al Vto => CuotasPartes * Ultimo precio (compra o cotizacion)
+            SQL.ADD(" SELECT Precio1,Especie,FechaOp,TotalNetoCli1,Cantidad FROM "~DBO~".OPERACIONES WHERE TipoOp='FCS' and ")
+            SQL.ADD(" Especie='"~FBN['Especie']~"' and ")
+            SQL.ADD(" Vehiculo1 =  '"~FBN['Vehiculo1']~"' and ")      
+            SQL.ADD(" Precio1<>0 and FechaOp<='"~Dialogo.Fecha1~"' Order By FechaOp DESC")
+            Recorrer SQL
+              dfa
+              ACN(cp1, FBN['Precio1'])
+              ACD(cf1, FBN['FechaOp'])
+              Break
+            Proximo
+            *- Recupero la ultima cotizacion del fondo para comparar la fecha
+            SQL.ADD(" SELECT Precio1,Fecha FROM "~DBO~".COTIZACIONES WHERE ")
+            SQL.ADD(" Codigo='"~FBN['Especie']~"' and ")
+            If NoVacio(val(cf1))
+               SQL.ADD(" Fecha>='"~IdxDate(val(cf1))~"' and ")
+            EndIf     
+            SQL.ADD(" Fecha<='"~Dialogo.Fecha1~"' Order By Fecha DESC")
+            Recorrer SQL
+               dfa
+               *- Fecha de Cotizacion = Fecha de Operacion de compra => Toma la de compra
+               ACN(cp1, FBN['Precio1'])
+               ACD(cf1, FBN['Fecha'])
+               Break
+            Proximo
+            If val(cp1)=0
+               ACN(cp1,val(co5))
+            EndIf
+            *- CuotasPartes calculadas por la cotizacion del dia anterior a fecha de informe
+            ACN(h:fac, val(cc1)*val(cp1))
+         EndIf
+
+         ACN(f:fac, FBN['FechaVto']-FBN['FechaOp'])
+
+         *- actualizo el saldo
+         SCN(sl1, FBN['Cantidad'] )
+         
+         *- Suma total de importes : sf1 es importe; sf2 es importe al vto  
+         SCN(sf1, Round(Val(h:fac),2) )
+         SCN(sf2, Round(Val(g:fac),2) )
+         SCN(co2,1)
+      else 
+         ACT(a:fac, 'Saldo Inicial')
+         ACT(b:fac, '')
+         ACT(c:fac, '')
+         ACT(i:fac, 'Fondo de Inversion '~FBN['Especie'])
+
+         SCN(co2,1)
+
+         ** Tomo la cotizacion del fondo
+         ACN(co5, Cotizacion(fbn['Especie'],,,,Habiles(FBN['FechaOp'],1,'ARG',SI),1))
+
+         *- el importe es: cantidad de posicion * PPP de la posicion
+         * ACN(g:fac, FBN['Cantidad']*FBN['ImpInt'])
+
+         ACN(g:fac, FBN['Cantidad']*val(pp1))
+
+         *- el importe Vto 
+         * ACN(h:fac, FBN['Cantidad']*Val(co5))
+         (.'PREFONVTO'.)
+         ACN(h:fac, FBN['Cantidad']*Val(cp1))
+
+         ACN(sf1, Val(h:fac))
+         ACN(sf2, Val(g:fac))
+
+         ACN(sl1, FBN['Cantidad'])
+         ACN(AB1, FBN['Cantidad'])
+         ACN(AB4, FBN['Cantidad'])
+         ACT(fo4,FBN['TipoOp'] )
+
+         *- Para el saldo inicial de los fondos recupero la fecha de la inversion para sacar el fecha desde (Cantidad1>0)
+         *- io1: Inversion Original po1: Precio Inicial
+         SQL.ADD(" Select  P.Fecha,P.Precio1 ")
+         SQL.ADD(" from "~DBO~".POSICIONES P")
+         SQL.ADD(" where  P.Especie='"~FBN['Especie']~"' ")
+         SQL.ADD(" and  P.NrSaldo = 101 and P.Cantidad1>0 ")      
+         SQL.ADD(" and  P.Vehiculo =  '"~FBN['Vehiculo1']~"' ")      
+         SQL.ADD(" and  P.Fecha = (Select Min(D.Fecha) from "~DBO~".POSICIONES D ")
+         SQL.ADD("           where  D.Vehiculo = P.Vehiculo ")
+         SQL.ADD("           and  D.Especie = P.Especie  ")
+         SQL.ADD("           and  D.Cliente = P.Cliente  ")
+         SQL.ADD("           and  D.NrSaldo = 101 and D.Cantidad1=P.Cantidad1")
+         SQL.ADD("           and  D.Fecha <= '"~IdxDate(Val(fe2))~"') ")
+         Recorrer SQL
+           dfa
+           ACD(io1,FBN['Fecha'])
+           ACN(po1,FBN['Precio1'])
+         Proximo
+         ACD(d:fac, val(io1))
+      endif
+   else
+      Message(FBN['NrOperacion'])
+      ACLO(a:fac, FBN['NrOperacion'])
+      ACN(f:fac, FBN['FechaVto']-FBN['FechaOp'])
+      ACN(g:fac, FBN['Importe'])
+      ACN(h:fac, FBN['ImporteVto'])
+
+      ACN(o:fac, FBN['ImpInt'])
+
+      ** dias restantes para la fecha del vto
+      ACN(q:fac, FactorDias2(Dialogo.Fecha1,FBN['FechaVto'],FBN['RB8']+1) )
+
+      ** dias transcurridos desde fecha de origen
+      if Incluido(FBN['TipoOp'],'MMPCCV|MMPCCM|')
+         ACN(r:fac, FactorDias2(FBN['FechaOp'],Dialogo.Fecha1+1,FBN['RB8']+1) )
+         ACN(tt2, IIF(FBN['RB8']>1,360,365) )
+      else
+         ACN(r:fac, Dialogo.Fecha1-FBN['FechaOp']+1 )
+         ACN(tt2, IIF(FBN['RB8']=1,365,360) )
+      endif
+
+      ** dias mes 
+      if FBN['FechaOp'] < PriDeMes(Dialogo.Fecha1,SI)
+         ACN(s:fac, Dialogo.Fecha1-PriDeMes(Dialogo.Fecha1,SI)+1 )
+      else
+         ACN(s:fac, Dialogo.Fecha1-FBN['FechaOp']+1 )
+      endif
+
+      *- TNA Vencida
+      ACN(l:fac, FBN['Tasa'] )
+
+      * Intereses del periodo
+      ACN(tt2, IIF(FBN['RB8']=1,365,360) )
+      ACN(n:fac, Val(g:fac)*Val(l:fac)*Val(f:fac)/(Val(tt2)*100) )
+
+      ** Intereses Totales al vto
+      ACN(p:fac, Val(n:fac)+Val(o:fac))
+      ACN(p:fac, Round(Val(p:fac),2) )
+
+      ** Interes Diario
+       ACN(t:fac, Val(p:fac)/Val(f:fac) )
+
+      *- Numerales TNA Vencida
+      ACN(y:fac,val(g:fac)*val(l:fac))  
+
+      *- TEM
+       ACN(k:fac, ((Val(g:fac)+Val(p:fac))/Val(g:fac))-1)
+       ACN(k:fac, ((Val(k:fac)+1)^(30/Val(f:fac))-1)*100 )
+
+      *- TNAA
+      if Val(k:fac)>0
+         ACN(m:fac, ((Val(k:fac)/100+1)^(Val(f:fac)/30))-1 )
+         ACN(m:fac, Val(m:fac)*(Val(tt2)*100)/Val(f:fac) )
+      else
+         ACN(m:fac,0)
+      endif
+
+      * Calculo intereses devengados
+       if Val(k:fac)>0
+          ACN(u:fac, Val(g:fac)*Val(r:fac)*Val(m:fac)/(Val(tt2)*100))
+       else
+          ACN(u:fac, 0)
+       endif
+
+      *- Numerales Dias del mes (Importe de la Operacion por los dias transcurridos del mes)
+      ACN(v:fac,val(g:fac)*val(s:fac))
+
+      *- Numerales TEM = Numerales dias del mes * TEM
+      ACN(w:fac, val(v:fac)*val(k:fac)/100)
+
+      *- Numerales al Vto: Importe de la Op.*Dias al Vto
+      ACN(x:fac,val(g:fac)*val(q:fac))  
+
+      *- Numerales TNA Adelantada
+      **ACN(z:fac,val(g:fac)*val(m:fac))  
+   endif
+   ** guardo datos para vtos por fecha
+   IF Not Incluido(FBN['TipoOp'],'FONDO|FCR|FCS|')
+      SCN(co2,1)
+      ** sumo TOTALES PARCIALES
+      SCN(su1,Val(g:fac))
+      SCN(su2,Val(h:fac))
+      SCN(su3,Val(n:fac))
+      SCN(su4,Val(o:fac))
+      SCN(su5,Val(p:fac))
+      SCN(su6,Val(t:fac))
+      SCN(su7,Val(u:fac))
+      SCN(su8,Val(v:fac))
+      SCN(su9,Val(w:fac))
+      SCN(su10,Val(x:fac))
+      SCN(su11,Val(y:fac))
+      SCN(su12,Val(z:fac))
+      ** sumo TOTALES FINALES
+      SCN(su21,Val(g:fac))
+      SCN(su22,Val(h:fac))
+      SCN(su23,Val(n:fac))
+      SCN(su24,Val(o:fac))
+      SCN(su25,Val(p:fac))
+      SCN(su26,Val(t:fac))
+      SCN(su27,Val(u:fac))
+      SCN(su28,Val(v:fac))
+      SCN(su29,Val(w:fac))
+      SCN(su30,Val(x:fac))
+      SCN(su31,Val(y:fac))
+      SCN(su32,Val(z:fac))
+      SCN(su33,Val(g:fac)*Val(m:fac))
+      SCN(co4,1)
+      ACD(aa:Val(co4), Val(e:fac))
+      ACN(ab:Val(co4), Val(g:fac))
+      ACN(ac:Val(co4), Val(p:fac))
+      ACN(ad:Val(co4), Val(h:fac))
+      * guardo datos para vtos por entidad
+      ACT(ba:Val(co4), FBN['Cliente1'])
+      ACT(bb:Val(co4), FBN['TipoOp'])
+      ACN(bc:Val(co4), Val(g:fac))
+      ACN(bd:Val(co4), Val(u:fac))
+      ACN(be:Val(co4), FBN['Importe']+Val(u:fac))
+      ACN(bf:Val(co4), Val(o:fac))
+   endif
+   SCN(fi1,1)
+   ACT(fo3,FBN['Especie'])
+   ACT(fo4,FBN['TipoOp'])
+   ACT(fo6,FBN['Cliente1'])
+Proximo
+   Ifa
+   if Incluido(Val(fo4),'FCS|FCR|FONDO')
+      ** Si es un fondo y cambia o no es un fondo pero la ultima op. si lo fue
+      if Val(zz2)<>0
+          ACT(a:fac, ' Total Fondo   de inversion   '~Val(fo3))
+          ACD(d:fac, Val(io1) )
+          ACD(e:fac, Habiles(Dialogo.Fecha1,1,'ARG',SI))
+          ACN(f:fac, val(e:fac)-val(d:fac))
+
+          ACN(h:fac, Val(sf1) )
+          ACN(g:fac, Val(sf2) )
+
+          ACN(sf1,0)
+          ACN(sf2,0)
+
+          ACN(au1,fac)
+
+          ACN(xx3,Cotizacion(Val(fo3),,,,Dialogo.Fecha1,1))
+          ACN(xx4,Cotizacion(Val(fo3),,,,Habiles(Dialogo.Fecha1,-1,'ARG',SI),1))
+          ACN(xx5,Dialogo.Fecha1 - Habiles(Dialogo.Fecha1,-1,'ARG',SI) )
+          acn(l:fac,((val(xx3)/val(xx4))-1)*(365/val(xx5))*100 )
+
+          *- Intereses del periodo: Importe *TNAV*Dias/36500
+          ACN(n:fac,Round((val(g:fac)*val(l:fac)*val(f:fac))/36500,2))
+
+          *- Imp.Ganancias
+          ACN(o:fac,0)
+
+          *- Int.Totales al Vto
+          ACN(p:fac,val(n:fac)+val(o:fac))
+
+          *- Interes Diario
+          ACN(t:fac,Val(p:fac)/Val(f:fac))
+
+          *- Dias Transcurridos
+          If val(d:fac)>Dialogo.Fecha1
+             ACN(r:fac,0)
+          Else
+             If Dialogo.Fecha1>=val(e:fac)
+                ACN(r:fac,val(f:fac))
+             Else
+                If Dialogo.Fecha1=val(d:fac)
+                   ACN(r:fac,1)
+                Else 
+                   ACN(r:fac,Dialogo.Fecha1-val(d:fac)+1)
+                EndIf
+             EndIf
+          EndIf
+
+          *- Dias al Vencimiento
+          If val(f:fac)-val(r:fac)=0
+             ACN(s:fac,1)
+          Else
+             ACN(s:fac,val(f:fac)-val(r:fac))
+          EndIf
+
+          *- Dias al Vto
+          ACN(q:fac, IIF((Val(f:fac)-Val(r:fac))=0,1,Val(f:fac)-Val(r:fac)+1) )
+
+          *- TEM
+          ACN(k:fac, ((Val(g:fac)+Val(p:fac))/Val(g:fac))-1)
+          ACN(k:fac, ((Val(k:fac)+1)^(30/Val(f:fac))-1)*100 )
+
+          *- TNAA
+          if Val(k:fac)>0
+             ACN(m:fac, ((Val(k:fac)/100+1)^(Val(f:fac)/30))-1 )
+             ACN(m:fac, Val(m:fac)*36500/Val(f:fac) )
+          else
+             ACN(m:fac,0)
+          endif
+
+          *- Numerales
+          ACN(v:fac, Val(s:fac)*Val(g:fac) )
+
+          *- Numerales TEM
+          ACN(w:fac, Val(v:fac)*Val(k:fac)/100 )
+
+          *- Numerales al Vto: Importe de la Op.*Dias al Vto
+          ACN(x:fac,val(g:fac)*val(q:fac))  
+
+          *- Numerales TNA Vencida
+          ACN(y:fac,val(g:fac)*val(l:fac))  
+
+          * Calculo intereses devengados
+          if Val(k:fac)>0
+             ACN(u:fac, Val(g:fac)*Val(r:fac)*Val(m:fac)/36500 )
+          else
+             ACN(u:fac, 0)
+          endif
+          ** actualizo SUBTOTALES
+          SCN(su1,Val(g:fac))
+          SCN(su2,Val(h:fac))
+          SCN(su3,Val(n:fac))
+          SCN(su4,Val(o:fac))
+          SCN(su5,Val(p:fac))
+          SCN(su6,Val(t:fac))
+          SCN(su7,Val(u:fac))
+          SCN(su8,Val(v:fac))
+          SCN(su9,Val(w:fac))
+          SCN(su10,Val(x:fac))
+          SCN(su11,Val(y:fac))
+          SCN(su12,Val(z:fac))
+          ** sumo TOTALES FINALES
+          SCN(su21,Val(g:fac))
+          SCN(su22,Val(h:fac))
+          SCN(su23,Val(n:fac))
+          SCN(su24,Val(o:fac))
+          SCN(su25,Val(p:fac))
+          SCN(su26,Val(t:fac))
+          SCN(su27,Val(u:fac))
+          SCN(su28,Val(v:fac))
+          SCN(su29,Val(w:fac))
+          SCN(su30,Val(x:fac))
+          SCN(su31,Val(y:fac))
+          SCN(su32,Val(z:fac))
+          SCN(su33,Val(g:fac)*Val(m:fac))
+          ** Guardo estos datos para Resumen de Vto x Fecha
+          SCN(co4,1)
+          ACD(aa:Val(co4), Val(e:fac) )
+          ACN(ab:Val(co4), Val(g:fac) )
+          ACN(ac:Val(co4), Val(p:fac) )
+          ACN(ad:Val(co4), Val(h:fac) )
+          ** guardo datos para vtos por entidad
+          ACT(ba:Val(co4), val(fo6)~' - '~Val(fo3) )
+          ACT(bb:Val(co4), 'FDO AHORRO' )
+          ACN(bc:Val(co4), Val(g:fac) )
+          ACN(bd:Val(co4), Val(u:fac) )
+          ACN(be:Val(co4), val(g:fac)+Val(u:fac) )
+          ACN(bf:Val(co4), Val(o:fac) )
+          ** sumo cantidad de filas impresas
+          SCN(co2,1)
+          ifa
+      endif
+   Endif
+
+   ** me posiciono en la ultima fila impresa y dibujo los marcos
+   SetFilaActual(fac-1)
+   ** Imprimo los marcos del cuadro principal
+   ACN(co3,0)
+   (.'FCUADRO'.)
+   ifa
+   ACT(b:fac, 'SUBTOTAL')
+   ACN(g:fac,Val(su1))
+   ACN(h:fac,Val(su2))
+   ACN(n:fac,Val(su3))
+   ACN(o:fac,Val(su4))
+   ACN(p:fac,Val(su5))
+   ACN(t:fac,Val(su6))
+   ACN(u:fac,Val(su7))
+   ACN(v:fac,Val(su8))
+   ACN(w:fac,Val(su9))
+   ACN(x:fac,Val(su10))
+   ACN(y:fac,Val(su11))
+   ACN(z:fac,Val(su12))
+   SetFont(b:fac..z:fac,1)
+
+   ** inicializo variables de suma
+   ACN(co2,0)
+   ACN(su1,0)
+   ACN(su2,0)
+   ACN(su3,0)
+   ACN(su4,0)
+   ACN(su5,0)
+   ACN(su6,0)
+   ACN(su7,0)
+   ACN(su8,0)
+   ACN(su9,0)
+   ACN(su10,0)
+   ACN(su11,0)
+   ACN(su12,0)
+   ifa
+
+   SetFilaActual(fac+2)
+   ACT(b:fac, 'TOTAL GENERAL '~IIF(Not EqStr(Dialogo.Especie1,Dialogo.Especie2),'('~Dialogo.Especie1~')',''))
+   ACN(g:fac,Val(su21))
+   ACN(h:fac,Val(su22))
+   ACN(n:fac,Val(su23))
+   ACN(o:fac,Val(su24))
+   ACN(p:fac,Val(su25))
+   ACN(t:fac,Val(su26))
+   ACN(u:fac,Val(su27))
+   ACN(v:fac,Val(su28))
+   ACN(w:fac,Val(su29))
+   ACN(x:fac,Val(su30))
+   ACN(y:fac,Val(su31))
+   ACN(z:fac,Val(su32))
+
+   ACN(fi1,fac)
+
+   ** Si lo desea expresar en otra moneda (ARP o USD)
+   if Not EqStr(Dialogo.Especie1,Dialogo.Especie2)
+      ifa
+      ACT(b:fac, 'TOTAL GENERAL ('~Dialogo.Especie2~' TC: '~FStr(Dialogo.Precio1,1,6)~')' )
+      IF EqStr(Modo(Dialogo.Especie1,Dialogo.Especie2),'DIR')
+         ACN(g:fac,Val(su21)*Dialogo.Precio1)
+         ACN(h:fac,Val(su22)*Dialogo.Precio1)
+         ACN(n:fac,Val(su23)*Dialogo.Precio1)
+         ACN(o:fac,Val(su24)*Dialogo.Precio1)
+         ACN(p:fac,Val(su25)*Dialogo.Precio1)
+         ACN(t:fac,Val(su26)*Dialogo.Precio1)
+         ACN(u:fac,Val(su27)*Dialogo.Precio1)
+         ACN(v:fac,Val(su28)*Dialogo.Precio1)
+         ACN(w:fac,Val(su29)*Dialogo.Precio1)
+         ACN(x:fac,Val(su30)*Dialogo.Precio1)
+         ACN(y:fac,Val(su31)*Dialogo.Precio1)
+         ACN(z:fac,Val(su32)*Dialogo.Precio1)
+      else
+         ACN(g:fac,Val(su21)/Dialogo.Precio1)
+         ACN(h:fac,Val(su22)/Dialogo.Precio1)
+         ACN(n:fac,Val(su23)/Dialogo.Precio1)
+         ACN(o:fac,Val(su24)/Dialogo.Precio1)
+         ACN(p:fac,Val(su25)/Dialogo.Precio1)
+         ACN(t:fac,Val(su26)/Dialogo.Precio1)
+         ACN(u:fac,Val(su27)/Dialogo.Precio1)
+         ACN(v:fac,Val(su28)/Dialogo.Precio1)
+         ACN(w:fac,Val(su29)/Dialogo.Precio1)
+         ACN(x:fac,Val(su30)/Dialogo.Precio1)
+         ACN(y:fac,Val(su31)/Dialogo.Precio1)
+         ACN(z:fac,Val(su32)/Dialogo.Precio1)
+     endif
+   endif
+
+   *- PARA LINKEAR EL INTERES DEVENGADO DE LOS FONDOS DEL INFORME DE RESUMEN
+   *- capital
+   ACN(fo1,Val(g:FAC))
+   *- interes
+   ACN(fo2,val(u:fac))
+
+   SetFont(b:Val(fi1)..z:fac,1)
+   AgregarMarco(a:Val(fi1)..z:fac,1,1)
+   AgregarMarco(g:Val(fi1)..h:fac,1,2)
+   AgregarMarco(n:Val(fi1)..p:fac,1,2)
+   AgregarMarco(t:Val(fi1)..z:fac,1,2)
+
+   ** Realizo el formato de todas las celdas
+   FormatoCeldas(f:Val(in1)..f:fac,Exe('F0'))
+   FormatoCeldas(g:Val(in1)..h:fac,Exe('F2'))
+   FormatoCeldas(k:Val(in1)..m:fac,Exe('F6'))
+   FormatoCeldas(n:Val(in1)..p:fac,Exe('F2'))
+   FormatoCeldas(q:Val(in1)..s:fac,Exe('F0'))
+   FormatoCeldas(t:Val(in1)..u:fac,Exe('F2'))
+   FormatoCeldas(v:Val(in1)..v:fac,Exe('F0'))
+   FormatoCeldas(w:Val(in1)..w:fac,Exe('F2'))
+   FormatoCeldas(x:Val(in1)..y:fac,Exe('F0'))
+
+   SetFilaActual(fac+4)
+
+   * SECCION INDICADORES
+
+   *- Cap.Promedio: Total de Numerales Dias del Mes dividido por la Cantidad de Dias que tiene el Mes de la fecha de reporte)
+   ACT(b:fac-2, 'Capital Promedio:' )
+   ACN(g:fac-2, val(v:val(fi1))/DiasM(1,Dialogo.Fecha1) )
+
+   ACT(b:fac-1, 'Intereses Devengados:' )
+   ACN(g:fac-1, val(u:val(fi1)))
+
+   *- Total de Numerales Dias del Mes dividido el Importe Total de Colocaciones
+   ACT(b:fac, 'Dias Prom. (Transcurridos):' )
+   ACN(g:fac, val(v:val(fi1))/val(g:val(fi1)))
+
+   *- Numerales Dias al Vencimiento dividido el Importe Total de Colocaciones
+   ACT(b:fac+1, 'Dias Prom. (Al Vencimiento):' )
+   ACN(g:fac+1, val(x:val(fi1))/val(g:val(fi1)))
+
+   *- Para linkear con resumen
+   ACN(fo4, Val(g:fac+1))
+
+   *- ((1+Total de Numerales de la Tasa efectiva mensual / Total de Numerales D#as del Mes) ** (Cantidad de D#as del Mes /30))-1
+   ACT(b:fac+2, 'Tasa Promedio:' )
+   if Val(g:val(fi1))<>0
+      ACN(g:fac+2, (1+ val(w:val(fi1))/val(v:val(fi1))) )
+      ACN(g:fac+2, (val(g:fac+2) ^ (DiasM(1,Dialogo.Fecha1)/30))-1 )
+      ACN(g:fac+2, Val(g:fac+2)*100 )
+   else
+      ACN(g:fac+2, 0)
+   endif
+
+   FormatoCeldas(g:fac+2,Exe('F6'))
+
+   *- Numerales Tasa Nominal Anual Vencida dividido el Importe Total de Colocaciones
+*   ACT(b:fac+3, 'Tasa NA Prom. sin considerar Impuestos:' )
+*   ACN(g:fac+3, val(y:val(fi1))/val(g:val(fi1)) )
+
+   *- Tasa Nominal Anual Prom SIN PONDERACION DE DIAS
+   ACT(b:fac+3, 'Tasa NA Prom s/ponderac. dias: (total)' )
+   ACN(g:fac+3, Round(Val(su31)/Val(su21),5)  )
+   FormatoCeldas(g:fac+3,Exe('F6'))
+
+   *- Tasa Nominal Anual Prom SIN PONDERACION DE DIAS (con impuestos)
+   ACT(b:fac+4, 'Tasa NA Prom s/ponderac. dias: (total) con impuestos' )
+   ACN(g:fac+4, Round(Val(su33)/Val(su21),5)  )
+   FormatoCeldas(g:fac+4,Exe('F6'))
+   *- Para linkear con resumen
+   ACN(fo3, Val(g:fac+4))
+   if Dialogo.Radio2=0
+      *- Tasa Nominal Anual Prom p/Dias del Mes
+      ACT(b:fac+5, 'Tasa NA Prom. p/Dias del Mes:' )
+      ACN(g:fac+5, val(g:fac+2)*365/DiasM(1,Dialogo.Fecha1) )
+
+      *- Numerales Tasa Nominal Anual Adelantada dividido el Importe Total de Colocaciones
+* ACT(b:fac+4, 'Tasa NA Prom. considerando Impuestos:' )
+* ACN(g:fac+4, val(z:val(fi1))/val(g:val(fi1)) )
+
+      *- Tasa Nominal Anual Prom p/Dias Prom
+      *- (((Tasa prom +1)^(dias prom trans/dias del mes))-1)*365/dias prom trans.
+      ACT(b:fac+6, 'Tasa NA Prom p/Dias Prom:' )
+      ACN(g:fac+6, (((val(g:fac+2)+1)^(Val(g:fac)/DiasM(1,Dialogo.Fecha1)))-1)*365/Val(g:fac)  )
+   endif
+
+   SetFont(b:fac-2..g:fac+14,1)
+
+   ** Imprimo Resumen de vtos por entidad a partir de la columna 12 (letra l)
+   ACN(co1,12)
+   ACN(fi1,fac)
+   ACN(fi3,fac)
+   (.'RESVTOXFE'.)
+ 
+   ** Imprimo Resumen de vtos por entidad a partir de la columna 21 (letra u)
+   ACN(co1,21)
+   ACN(fi1,Val(fi3))
+   ACT(fi3,'INV')
+   (.'RESVTOXCLI'.)
+
+   if Val(co7)>Val(co8)
+      SetFilaActual(fac+Val(co7)+6)
+   else
+      SetFilaActual(fac+Val(co8)+6)
+   endif
+   if Incluido(Dialogo.Especie1,'USD|ARP')
+      ** Imprimo Resumen de Ajuste de Posicion Financiera
+      ACN(fi4,fac+2)
+      ** seccion efectivo
+      ACN(co1,12)
+      ACN(fi1,fac+2)
+      ACT(fi3,'INV')
+      ACT(tx1,'efectivo')
+      (.'RESAJPOFI'.)
+      ** seccion ctas ctes
+      ACN(co1,21)
+      ACN(fi1,Val(fi4))
+      ACT(fi3,'INV')
+      ACT(tx1,'')
+      (.'RESAJPOFI'.)
+   endif
+   if Val(co7)>Val(co8)
+      SetFilaActual(fac+Val(co7)+6)
+   else
+      SetFilaActual(fac+Val(co8)+6)
+   endif
+   ACO(24,10)
+   LimitesVision(Z:fac)
+   Impresion(1,2)
+   RangoTitulo(a1..y:8,8)
+   SetPrintFit(3,50)

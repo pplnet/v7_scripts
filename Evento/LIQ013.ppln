@@ -1,0 +1,332 @@
+Act(ba:2, SQLSet("Select Codigo FROM "~Dbo()~".MERCADOS WHERE Netea='SI'"))
+creardialogo
+especie1:'Especie';;1;;;;;;;;;;;;"Jerarquia like '"~Var('JERTITULOS')~"%'"
+cliente1:'Cliente';;1;;;;;;
+especie2:'CEspecie';;1;;;;;;
+vehiculo1: 'Vehiculo';;1;;NO;;NoVacio(dialogo.vehiculo1);'Debe ingresar un Vehiculo';NO;Var('VEHICULODE')
+nroperacion1: 'Nr.Operacion';;1;;;;;;;
+mercado1:'Mercado Actual';;1;;Vacio(dialogo.nroperacion1);;(NoVacio(dialogo.mercado1) y Incluido('T', BuscarCampo('MERCADOS', 'Observaciones', 'Codigo', dialogo.mercado1)) o NoVacio(dialogo.nroperacion1));'Debe ingresar Mercado Actual habilitado para Titulos';NO;;iif (NoVacio(dialogo.nroperacion1), BuscarCampo('OPERACIONES', 'Mercado', 'NrOperacion', dialogo.nroperacion1), dialogo.mercado1);;;;" Observaciones like '%T%' "
+mercado2:'Mercado Nuevo';;1;;;;NoVacio(dialogo.mercado2) y Incluido('T', BuscarCampo('MERCADOS', 'Observaciones', 'Codigo', dialogo.mercado2));'Debe ingresar Mercado Nuevo habilitado para Titulos';NO;;;;;;" Observaciones like '%T%' "
+mercado3:'Mercado Moneda';;1;;;;Vacio(dialogo.mercado3) o Incluido('M', BuscarCampo('MERCADOS', 'Observaciones', 'Codigo', dialogo.mercado3));'Debe ingresar Mercado de moneda habilitado';NO;;;;;;" Observaciones like '%M%' "
+
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+let(&tipoop, BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', dialogo.nroperacion1))
+let(&jerarquiatitulos, jerarquia("ESPECIES", "TITULO")~"%")
+
+Acn(a:0, 0)
+
+if (Query("SELECT IsNull(Netea,'NO') FROM "~Dbo()~".MERCADOS WHERE Codigo='"~dialogo.mercado2~"' ") = 'SI')
+Act(ba:1, 'SI')
+else
+Act(ba:1, 'NO')
+endif
+
+if (Vacio(dialogo.mercado3))
+Act(ba:3, Val(ba:1))
+else
+if (Query("SELECT IsNull(Netea,'NO') FROM "~Dbo()~".MERCADOS WHERE Codigo='"~dialogo.mercado3~"' ") = 'SI')
+Act(ba:3, 'SI')
+else
+Act(ba:3, 'NO')
+endif
+endif
+
+MostrarCuadroDeMensajes()
+
+Sqladd("Select DISTINCT O.TipoOp, O.NrOperacion, O.Mercado2, O.Mercado, O.FormaLiquidacion2, O.FormaLiquidacion1, O.FechaOp, O.FechaVto,    ")
+Sqladd("       O.Cliente1, O.Especie, O.ContraEspecie, O.Cantidad, O.TotalNetoCli1, C.RazonSocial, O.CB7, O.NrBoleto, O.Cuenta1, O.Cuenta4, ")
+Sqladd("       O.Cuenta2, O.Cuenta3, O.Vehiculo1, O.Plaza1, O.Cuenta5, O.Cuenta6 , O.CB4                 ")
+Sqladd(" from   "~Dbo()~".OPERACIONES O, "~Dbo()~".CLIENTES C, "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".OPERACIONESBITS B, "~Dbo()~".ESPECIES E            ")
+Sqladd("where  O.Cliente1 = C.Codigo                                                            ")
+Sqladd("      and  E.Jerarquia like '"~Var('JERTITULOS')~"%'                                    ")
+Sqladd("      and  M.NrOperacion = O.NrOperacion                                                ")
+Sqladd("      and  M.NrOperacion = B.NrOperacion                                                ")
+Sqladd("      and  O.TipoOp NOT In ('TIPP','TIPA')                                              ")
+Sqladd("      and  B.Valor  = '1'                                                               ")
+Sqladd("      and  B.NrBit  in (10,7)                                                           ")
+Sqladd("      and Exists (select 1 FROM "~Dbo()~".MOVPENDIENTES MP2                               ")
+Sqladd("                   where MP2.NrOperacion=M.NrOperacion                                  ")
+Sqladd("                    and MP2.Especie=M.Especie                                           ")
+Sqladd("                    group by MP2.NrOperacion, MP2.Especie                               ")
+Sqladd("                    having count(1)>=1 ) ")
+
+if (NoVacio(dialogo.nroperacion1))
+Sqladd("   and  O.NrOperacion = '"~dialogo.nroperacion1~"'                                   ")
+else
+Sqladd("      and  O.Mercado = '"~dialogo.mercado1~"'   ")
+
+if (NoVacio(dialogo.cliente1))
+Sqladd("   and  O.Cliente1 = '"~dialogo.cliente1~"'                                          ")
+endif
+if (NoVacio(dialogo.especie1))
+Sqladd("   and  O.Especie  = '"~dialogo.especie1~"'                                          ")
+endif
+if (NoVacio(dialogo.especie2))
+Sqladd("   and  O.ContraEspecie  = '"~dialogo.especie2~"'                                    ")
+endif
+endif
+Sqladd("order by O.Cliente1, O.TipoOp, O.NrOperacion                                            ")
+Watch(Sqlbatch())
+
+recorrer sql
+Scn(a:0, 1)
+Message('Operacion '~Fbn('NrOperacion'))
+
+Act(a:fac, Fbn('Cliente1'))
+Act(b:fac, Fbn('RazonSocial'))
+Act(c:fac, Fbn('TipoOp'))
+Act(d:fac, Fbn('NrOperacion'))
+if (Eqstr(Val(ba:1), 'SI'))
+Acn(e:fac, 1)
+else
+if (Eqstr(dialogo.mercado2, 'EU'))
+Acn(e:fac, 1)
+else
+if (Incluido(dialogo.mercado2, Var('MERCADOCV')))
+Acn(e:fac, Fbn('FormaLiquidacion1'))
+else
+Acn(e:fac, Fbn('FormaLiquidacion2'))
+endif
+endif
+endif
+Act(f:fac, dialogo.mercado2)
+if (Vacio(dialogo.mercado3))
+if (Eqstr(Val(ba:1), 'SI'))
+Act(g:fac, dialogo.mercado2)
+else
+if (not Incluido(dialogo.mercado2, Var('MERCADOCV')) y Fbn('FormaLiquidacion2') < 2)
+Act(g:fac, dialogo.mercado2)
+else
+Act(g:fac, MercadoDef(Fbn('ContraEspecie')))
+endif
+endif
+else
+Act(g:fac, dialogo.mercado3)
+endif
+
+if (Eqstr(Val(g:fac), 'VISTA'))
+Act(xy:fac, iif (Incluido(Val(g:fac), Var('MERNOVEHI')), Var('MERCBCRA'), 'VISTA'))
+
+else
+Act(xy:fac, Var('MERCBCRA'))
+endif
+
+Acd(h:fac, Fbn('FechaOp'))
+Acd(i:fac, Fbn('FechaVto'))
+Act(j:fac, Fbn('Especie'))
+Act(k:fac, Fbn('ContraEspecie'))
+Acn(l:fac, Fbn('Cantidad'))
+Acn(m:fac, Fbn('TotalNetoCli1'))
+Act(o:fac, Fbn('Mercado2'))
+Act(p:fac, Fbn('Mercado'))
+Acn(q:fac, 0)
+Act(v:fac, Fbn('Plaza1'))
+Act(w:fac, Fbn('Vehiculo1'))
+Acn(aq:fac, Fbn('CB4'))
+
+if (Eqstr(dialogo.mercado2, Fbn('Mercado')))
+Act(r:fac, Fbn('Cuenta1'))
+Act(t:fac, Fbn('Cuenta2'))
+else
+Act(r:fac, Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~iif (Eqstr(Val(ba:1), 'SI'), Val(w:fac), Val(a:fac))~"'  and Mercado='"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+Act(t:fac, Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado='"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+endif
+
+if (Eqstr(dialogo.mercado3, Fbn('Mercado2')))
+Act(s:fac, Fbn('Cuenta4'))
+Act(u:fac, Fbn('Cuenta3'))
+Act(as:fac, Fbn('Cuenta5'))
+Act(au:fac, Fbn('Cuenta6'))
+else
+if (Eqstr(Val(ba:1), 'SI'))
+Act(s:fac, Query("select Codigo from "~Dbo()~".CUENTAS where  Estado='HAB' and TipoCuenta IN ('CUS','CCO','CC','CA','VIS') and Cliente='"~Query("SELECT Cliente1 FROM "~Dbo()~".MERCADOS WHERE Codigo='"~Val(f:fac)~"' ")~"' and (Mercado='"~Var('MERCBCRA')~"' or Mercado='"~Var('MERCA3C')~"' or Mercado='"~Var('MERSWIFT')~"') and MercadoLiq='"~Val(g:fac)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+Act(u:fac, Query("select Codigo from "~Dbo()~".CUENTAS where  Estado='HAB' and TipoCuenta IN ('CUS','CCO','CC','CA','VIS') and Cliente='"~Query("SELECT Cliente1 FROM "~Dbo()~".MERCADOS WHERE Codigo='"~Val(f:fac)~"' ")~"' and (Mercado='"~Val(xy:fac)~"' or Mercado='"~Var('MERSWIFT')~"') and MercadoLiq='"~Val(g:fac)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+Act(as:fac, Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(a:fac)~"' and (Mercado='"~Val(g:fac)~"' ) and (MercadoLiq='"~Val(g:fac)~"' or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+Act(au:fac, Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(w:fac)~"' and (Mercado='"~Val(g:fac)~"' ) and (MercadoLiq='"~Val(g:fac)~"' or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+else
+Act(s:fac, Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(g:fac)~"' and (MercadoLiq='"~Val(g:fac)~"' or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC"))
+Act(u:fac, Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(w:fac)~"' and (Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end = Mercado) and (MercadoLiq=(Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+Act(as:fac, Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(g:fac)~"' and (MercadoLiq='"~Val(g:fac)~"' or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC"))
+Act(au:fac, Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(w:fac)~"' and (Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end = Mercado) and (MercadoLiq=(Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+endif
+endif
+
+
+
+
+proximo
+
+Ocultarcuadrodemensajes()
+
+if (Val(a:0) > 0)
+
+if (Val(aq:fac) = 1 o Eqstr(Val(a:fac), dialogo.vehiculo1))
+crearlistbox;'Arial,8,';'Cambio Mercado y Forma Liquidacion 4'
+'Mod.';q:1..q:Val(a:0);SI;;;50;check;RGB(160, 160, 193)
+'Cliente';a:1..a:Val(a:0);NO;;;80;string;;RGB(250, 250, 193)
+'Nombre';b:1..b:Val(a:0);NO;;;140;string;;RGB(250, 250, 193)
+'TipoOp';c:1..c:Val(a:0);NO;;;50;string;;RGB(250, 250, 193)
+'NrOperacion';d:1..d:Val(a:0);NO;;;70;string;;RGB(250, 250, 193)
+'F.Liquid.';e:1..e:Val(a:0);SI;;;60;combo;'STD|DVP|RVP';RGB(160, 160, 193)
+'Merc.Espec.';f:1..f:Val(a:0);NO;Val(q:fac) = 0 o (Val(q:fac) = 1 y (NoVacio(Val(f:fac))) y ((Val(e:fac) = 1) o (Val(e:fac) <> 1)));'El Mercado No Corresponde con la Liquidacion';70;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';;RGB(250, 250, 193);
+'Merc.Moned.';g:1..g:Val(a:0);SI;Val(q:fac) = 0 o (Val(q:fac) = 1 y ((Val(e:fac) = 1 y not Eqstr(Val(f:fac), Val(g:fac)))) o (Val(e:fac) <> 1 y not Eqstr(Val(f:fac), Val(g:fac))));'La Forma de Liquidacion No Corresponde con los Mercados';70;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';" Observaciones like '%M%' ";RGB(160, 160, 193);
+'FechaOp';h:1..h:Val(a:0);NO;;;75;string;;RGB(250, 250, 193)
+'FechaVto';i:1..i:Val(a:0);NO;;;75;string;;RGB(250, 250, 193)
+'Especie';j:1..j:Val(a:0);NO;;;60;string;;RGB(250, 250, 193)
+'Cantidad';l:1..l:Val(a:0);NO;;;90;numero;'##,###,###.##';RGB(250, 250, 193)
+'C.Esp.';k:1..k:Val(a:0);NO;;;60;string;;RGB(250, 250, 193)
+'Monto';m:1..m:Val(a:0);NO;;;90;numero;'##,###,###.##';RGB(250, 250, 193)
+'Cta.Titulo';r:1..r:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(r:fac));'Ingrese una Cuenta de Titulo';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(f:fac)~"' ";RGB(160, 160, 193);Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Moneda';s:1..s:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(s:fac));'Ingrese una Cuenta de Moneda';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"(Estado='HAB' and TipoCuenta IN ('CC','CA') and Cliente='"~Val(a:fac)~"' and (Mercado='"~Val(g:fac)~"' ) and (MercadoLiq='"~Val(g:fac)~"' or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ";RGB(160, 160, 193);Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA') and Cliente='"~Val(a:fac)~"' and (Mercado='"~Val(g:fac)~"' ) and (MercadoLiq='"~Val(g:fac)~"' or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta Com.Cli';as:1..as:Val(a:0);NO;;;80;string;;RGB(250, 250, 193);Val(s:fac)
+'Cta.Veh.Titulo';t:1..t:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(t:fac));'Ingrese una Cuenta de Vehiculo de Titulo';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado='"~Val(f:fac)~"' ";RGB(160, 160, 193);Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado = '"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Veh.Moneda';u:1..u:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(u:fac));'Ingrese una Cuenta de Vehiculo de Moneda';100;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO','CC','CA','VIS) and Cliente='"~iif (Eqstr(Val(ba:3), 'SI'), Query("SELECT Cliente1 FROM "~Dbo()~".MERCADOS WHERE Codigo='"~Val(g:fac)~"' "), Val(w:fac))~"' and (Case when ('"~Val(xy:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(xy:fac)~"' end = Mercado) and (MercadoLiq=(Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%') ";RGB(160, 160, 193);Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~iif (Eqstr(Val(ba:3), 'SI'), Query("SELECT Cliente1 FROM "~Dbo()~".MERCADOS WHERE Codigo='"~Val(xy:fac)~"' "), Val(w:fac))~"' and (Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end = Mercado) and (MercadoLiq=(Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+
+finlistbox
+else
+if (Eqstr(Val(ba:1), 'SI'))
+crearlistbox;'Arial,8,';'Cambio Mercado y Forma Liquidacion 1'
+'Mod.';q:1..q:Val(a:0);SI;;;50;check;RGB(160, 160, 193)
+'Cliente';a:1..a:Val(a:0);NO;;;80;string;;RGB(250, 250, 193)
+'Nombre';b:1..b:Val(a:0);NO;;;140;string;;RGB(250, 250, 193)
+'TipoOp';c:1..c:Val(a:0);NO;;;50;string;;RGB(250, 250, 193)
+'NrOperacion';d:1..d:Val(a:0);NO;;;70;string;;RGB(250, 250, 193)
+'F.Liquid.';e:1..e:Val(a:0);SI;;;60;combo;'FD&&P|DVP|FOP';RGB(160, 160, 193)
+'Merc.Espec.';f:1..f:Val(a:0);NO;Val(q:fac) = 0 o (Val(q:fac) = 1 y (NoVacio(Val(f:fac))) y ((Val(e:fac) = 1) o (Val(e:fac) <> 1)));'El Mercado No Corresponde con la Liquidacion';70;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';;RGB(250, 250, 193);
+'Merc.Moned.';g:1..g:Val(a:0);NO;Val(q:fac) = 0 o (Val(q:fac) = 1 y ((Val(e:fac) = 1 y Eqstr(Val(f:fac), Val(g:fac)) y (Incluido(Val(f:fac), Val(ba:2)))) o (Val(e:fac) <> 1 y not Eqstr(Val(f:fac), Val(g:fac)))));'La Forma de Liquidacion No Corresponde con los Mercados';70;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';;RGB(250, 250, 193);
+'FechaOp';h:1..h:Val(a:0);NO;;;75;string;;RGB(250, 250, 193)
+'FechaVto';i:1..i:Val(a:0);NO;;;75;string;;RGB(250, 250, 193)
+'Especie';j:1..j:Val(a:0);NO;;;60;string;;RGB(250, 250, 193)
+'Cantidad';l:1..l:Val(a:0);NO;;;90;numero;'##,###,###.##';RGB(250, 250, 193)
+'C.Esp.';k:1..k:Val(a:0);NO;;;60;string;;RGB(250, 250, 193)
+'Monto';m:1..m:Val(a:0);NO;;;90;numero;'##,###,###.##';RGB(250, 250, 193)
+'Cta.Titulo';r:1..r:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(r:fac));'Ingrese una Cuenta de Titulo';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~iif (Eqstr(BuscarCampo('MERCADOS', 'Netea', 'Codigo', Val(f:fac)), 'SI'), Val(w:fac), Val(a:fac))~"' and Mercado='"~Val(f:fac)~"' ";RGB(160, 160, 193);Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~iif (Eqstr(BuscarCampo('MERCADOS', 'Netea', 'Codigo', Val(f:fac)), 'SI'), dialogo.vehiculo1, Val(a:fac))~"' and Mercado = '"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Moneda';s:1..s:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(s:fac));'Ingrese una Cuenta de Moneda';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"(Estado='HAB' and TipoCuenta IN ('CUS','CCO','CC','CA') and Cliente='"~iif (Eqstr(Val(ba:3), 'SI'), Query("SELECT Cliente1 FROM "~Dbo()~".MERCADOS WHERE Codigo='"~Val(g:fac)~"' "), Val(a:fac))~"' and (Mercado='"~Val(g:fac)~"' or Mercado='"~Val(xy:fac)~"' or Mercado='"~Var('MERSWIFT')~"') and MercadoLiq='"~Val(g:fac)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ";RGB(160, 160, 193);Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CUS','CCO','CC','CA') and Cliente='"~iif (Eqstr(Val(ba:3), 'SI'), Query("SELECT Cliente1 FROM "~Dbo()~".MERCADOS WHERE Codigo='"~Val(g:fac)~"' "), Val(a:fac))~"' and (Mercado='"~Val(g:fac)~"' or Mercado='"~Val(xy:fac)~"' or Mercado='"~Var('MERSWIFT')~"') and MercadoLiq='"~Val(g:fac)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Veh.Titulo';t:1..t:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(t:fac));'Ingrese una Cuenta de Vehiculo de Titulo';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado='"~Val(f:fac)~"' ";RGB(160, 160, 193);Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado = '"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Veh.Moneda';u:1..u:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(u:fac));'Ingrese una Cuenta de Vehiculo de Moneda';100;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~iif (Eqstr(Val(ba:3), 'SI'), Query("SELECT Cliente1 FROM "~Dbo()~".MERCADOS WHERE Codigo='"~Val(g:fac)~"' "), Val(w:fac))~"' and (Case when ('"~Val(xy:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(xy:fac)~"' end = Mercado) and (MercadoLiq=(Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%') ";RGB(160, 160, 193);Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~iif (Eqstr(Val(ba:3), 'SI'), Query("SELECT Cliente1 FROM "~Dbo()~".MERCADOS WHERE Codigo='"~Val(xy:fac)~"' "), Val(w:fac))~"' and (Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end = Mercado) and (MercadoLiq=(Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+finlistbox
+else
+if (Incluido(dialogo.mercado2, Var('MLIQMATCH')))
+crearlistbox;'Arial,8,';'Cambio Mercado y Forma Liquidacion 2'
+'Mod.';q:1..q:Val(a:0);SI;;;50;check;RGB(160, 160, 193)
+'Cliente';a:1..a:Val(a:0);NO;;;80;string;;RGB(250, 250, 193)
+'Nombre';b:1..b:Val(a:0);NO;;;140;string;;RGB(250, 250, 193)
+'TipoOp';c:1..c:Val(a:0);NO;;;50;string;;RGB(250, 250, 193)
+'NrOperacion';d:1..d:Val(a:0);NO;;;70;string;;RGB(250, 250, 193)
+'F.Liquid.';e:1..e:Val(a:0);SI;;;60;combo;'FD&&P|DVP|FOP';RGB(160, 160, 193)
+'Merc.Espec.';f:1..f:Val(a:0);NO;Val(q:fac) = 0 o (Val(q:fac) = 1 y (NoVacio(Val(f:fac))) y ((Val(e:fac) = 1) o (Val(e:fac) <> 1)));'El Mercado No Corresponde con la Liquidacion';70;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';;RGB(250, 250, 193);
+'Merc.Moned.';g:1..g:Val(a:0);NO;Val(q:fac) = 0 o (Val(q:fac) = 1 y ((Val(e:fac) = 1 y not Eqstr(Val(f:fac), Val(g:fac)))) o (Val(e:fac) <> 1 y not Eqstr(Val(f:fac), Val(g:fac))));'La Forma de Liquidacion No Corresponde con los Mercados';70;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';" Observaciones like '%M%' ";RGB(160, 160, 193);
+'FechaOp';h:1..h:Val(a:0);NO;;;75;string;;RGB(250, 250, 193)
+'FechaVto';i:1..i:Val(a:0);NO;;;75;string;;RGB(250, 250, 193)
+'Especie';j:1..j:Val(a:0);NO;;;60;string;;RGB(250, 250, 193)
+'Cantidad';l:1..l:Val(a:0);NO;;;90;numero;'##,###,###.##';RGB(250, 250, 193)
+'C.Esp.';k:1..k:Val(a:0);NO;;;60;string;;RGB(250, 250, 193)
+'Monto';m:1..m:Val(a:0);NO;;;90;numero;'##,###,###.##';RGB(250, 250, 193)
+'Cta.Titulo';r:1..r:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(r:fac));'Ingrese una Cuenta de Titulo';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(f:fac)~"' ";RGB(160, 160, 193);Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Moneda';s:1..s:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(s:fac));'Ingrese una Cuenta de Moneda';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"(Estado='HAB' and TipoCuenta IN ('CUS','CCO','CC','CA') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(g:fac)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ";RGB(160, 160, 193);Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CUS','CCO','CC','CA') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(g:fac)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Veh.Titulo';t:1..t:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(t:fac));'Ingrese una Cuenta de Vehiculo de Titulo';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado='"~Val(f:fac)~"' ";RGB(160, 160, 193);Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado='"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Veh.Moneda';u:1..u:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(u:fac));'Ingrese una Cuenta de Vehiculo de Moneda';100;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(w:fac)~"' and (Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end = Mercado) and (MercadoLiq=(Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%') ";RGB(160, 160, 193);Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(w:fac)~"' and (Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end = Mercado) and (MercadoLiq=(Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+finlistbox
+else
+if (Eqstr(dialogo.mercado3, Var('MERMCMEP')))
+crearlistbox;'Arial,8,';'Cambio Mercado y Forma Liquidacion 3'
+'Mod.';q:1..q:Val(a:0);SI;;;50;check;RGB(160, 160, 193)
+'Cliente';a:1..a:Val(a:0);NO;;;80;string;;RGB(250, 250, 193)
+'Nombre';b:1..b:Val(a:0);NO;;;140;string;;RGB(250, 250, 193)
+'TipoOp';c:1..c:Val(a:0);NO;;;50;string;;RGB(250, 250, 193)
+'NrOperacion';d:1..d:Val(a:0);NO;;;70;string;;RGB(250, 250, 193)
+'F.Liquid.';e:1..e:Val(a:0);SI;;;60;combo;'STD|DVP|RVP';RGB(160, 160, 193)
+'Merc.Espec.';f:1..f:Val(a:0);NO;Val(q:fac) = 0 o (Val(q:fac) = 1 y (NoVacio(Val(f:fac))) y ((Val(e:fac) = 1) o (Val(e:fac) <> 1)));'El Mercado No Corresponde con la Liquidacion';70;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';;RGB(250, 250, 193);
+'Merc.Moned.';g:1..g:Val(a:0);SI;Val(q:fac) = 0 o (Val(q:fac) = 1 y ((Val(e:fac) = 1 y not Eqstr(Val(f:fac), Val(g:fac)))) o (Val(e:fac) <> 1 y not Eqstr(Val(f:fac), Val(g:fac))));'La Forma de Liquidacion No Corresponde con los Mercados';70;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';" Observaciones like '%M%' ";RGB(160, 160, 193);
+'FechaOp';h:1..h:Val(a:0);NO;;;75;string;;RGB(250, 250, 193)
+'FechaVto';i:1..i:Val(a:0);NO;;;75;string;;RGB(250, 250, 193)
+'Especie';j:1..j:Val(a:0);NO;;;60;string;;RGB(250, 250, 193)
+'Cantidad';l:1..l:Val(a:0);NO;;;90;numero;'##,###,###.##';RGB(250, 250, 193)
+'C.Esp.';k:1..k:Val(a:0);NO;;;60;string;;RGB(250, 250, 193)
+'Monto';m:1..m:Val(a:0);NO;;;90;numero;'##,###,###.##';RGB(250, 250, 193)
+'Cta.Titulo';r:1..r:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(r:fac));'Ingrese una Cuenta de Titulo';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(f:fac)~"' ";RGB(160, 160, 193);Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Moneda';s:1..s:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(s:fac));'Ingrese una Cuenta de Moneda';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"(Estado='HAB' and TipoCuenta IN ('CUS','CCO','CC','CA') and Cliente='"~Val(a:fac)~"' and (Mercado='"~Val(g:fac)~"' or Mercado='"~Var('MERCBCRA')~"' or Mercado='"~Var('MERSWIFT')~"') and MercadoLiq='"~Val(g:fac)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ";RGB(160, 160, 193);Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CUS','CCO','CC','CA') and Cliente='"~Val(a:fac)~"' and (Mercado='"~Val(g:fac)~"' or Mercado='"~Val(xy:fac)~"' or Mercado='"~Var('MERSWIFT')~"') and MercadoLiq='"~Val(g:fac)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Veh.Titulo';t:1..t:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(t:fac));'Ingrese una Cuenta de Vehiculo de Titulo';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado='"~Val(f:fac)~"' ";RGB(160, 160, 193);Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado='"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Veh.Moneda';u:1..u:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(u:fac));'Ingrese una Cuenta de Vehiculo de Moneda';100;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(w:fac)~"' and (Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end = Mercado) and (MercadoLiq=(Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%') ";RGB(160, 160, 193);Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(w:fac)~"' and (Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end = Mercado) and (MercadoLiq=(Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+finlistbox
+else
+crearlistbox;'Arial,8,';'Cambio Mercado y Forma Liquidacion 5'
+'Mod.';q:1..q:Val(a:0);SI;;;50;check;RGB(160, 160, 193)
+'Cliente';a:1..a:Val(a:0);NO;;;80;string;;RGB(250, 250, 193)
+'Nombre';b:1..b:Val(a:0);NO;;;140;string;;RGB(250, 250, 193)
+'TipoOp';c:1..c:Val(a:0);NO;;;50;string;;RGB(250, 250, 193)
+'NrOperacion';d:1..d:Val(a:0);NO;;;70;string;;RGB(250, 250, 193)
+'F.Liquid.';e:1..e:Val(a:0);SI;;;60;combo;'STD|DVP|RVP';RGB(160, 160, 193)
+'Merc.Espec.';f:1..f:Val(a:0);NO;Val(q:fac) = 0 o (Val(q:fac) = 1 y (NoVacio(Val(f:fac))) y ((Val(e:fac) = 1) o (Val(e:fac) <> 1)));'El Mercado No Corresponde con la Liquidacion';70;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';;RGB(250, 250, 193);
+'Merc.Moned.';g:1..g:Val(a:0);SI;Val(q:fac) = 0 o (Val(q:fac) = 1 y ((Val(e:fac) = 1 y not Eqstr(Val(f:fac), Val(g:fac)))) o (Val(e:fac) <> 1 y not Eqstr(Val(f:fac), Val(g:fac))));'La Forma de Liquidacion No Corresponde con los Mercados';70;tabla;'MERCADOS';'Codigo';'Codigo;Descripcion';" Observaciones like '%M%' ";RGB(160, 160, 193);
+'FechaOp';h:1..h:Val(a:0);NO;;;75;string;;RGB(250, 250, 193)
+'FechaVto';i:1..i:Val(a:0);NO;;;75;string;;RGB(250, 250, 193)
+'Especie';j:1..j:Val(a:0);NO;;;60;string;;RGB(250, 250, 193)
+'Cantidad';l:1..l:Val(a:0);NO;;;90;numero;'##,###,###.##';RGB(250, 250, 193)
+'C.Esp.';k:1..k:Val(a:0);NO;;;60;string;;RGB(250, 250, 193)
+'Monto';m:1..m:Val(a:0);NO;;;90;numero;'##,###,###.##';RGB(250, 250, 193)
+'Cta.Titulo';r:1..r:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(r:fac));'Ingrese una Cuenta de Titulo';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(f:fac)~"' ";RGB(160, 160, 193);Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(a:fac)~"' and Mercado='"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Moneda';s:1..s:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(s:fac));'Ingrese una Cuenta de Moneda';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"(Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(a:fac)~"' and (Mercado='"~Val(g:fac)~"' ) and (MercadoLiq='"~Val(g:fac)~"' or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ";RGB(160, 160, 193);Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(a:fac)~"' and (Mercado='"~Val(g:fac)~"' ) and (MercadoLiq='"~Val(g:fac)~"' or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Veh.Titulo';t:1..t:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(t:fac));'Ingrese una Cuenta de Vehiculo de Titulo';80;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado='"~Val(f:fac)~"' ";RGB(160, 160, 193);Query("select Codigo from "~Dbo()~".CUENTAS where Estado='HAB' and TipoCuenta IN ('CUS','CCO') and Cliente='"~Val(w:fac)~"' and Mercado='"~Val(f:fac)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+'Cta.Veh.Moneda';u:1..u:Val(a:0);;Val(q:fac) = 0 o NoVacio(Val(u:fac));'Ingrese una Cuenta de Vehiculo de Moneda';100;tabla;'Cuentas';'Codigo';'Codigo;Nombre';"Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(w:fac)~"' and ( Mercado = Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) and (MercadoLiq in (Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%') ";RGB(160, 160, 193);Query("Select Codigo from "~Dbo()~".CUENTAS where (Estado='HAB' and TipoCuenta IN ('CC','CA','VIS') and Cliente='"~Val(w:fac)~"' and (Mercado = Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA') and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end ) and (MercadoLiq = (Case when ('"~Val(g:fac)~"' in  ('MERINT','VISTA')  and '"~Val(c:fac)~"' in ('TIC','TIV','TIDE','TIPO','TCOPRI')) then Case when '"~Val(k:fac)~"' = 'ARP' then '"~Val(xy:fac)~"' Else '"~Var('MERSWIFT')~"' end else '"~Val(g:fac)~"' end) or IsNull(MercadoLiq,'')='') and (Especies Like '%MONEDA%' or Especies Like '%"~Val(k:fac)~"%')) ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC ");NO;NO;
+finlistbox
+endif
+endif
+endif
+endif
+
+if (not ok)
+Cancelar()
+endif
+
+MostrarCuadroDeMensajes()
+Message('Actualizando Operaciones...')
+
+recorrer&i 1, Val(a:0)
+if (Eqstr(Val(ba:1), 'SI'))
+Act(v:&i, Var('CTAVEHIC'))
+else
+Act(v:&i, Val(t:&i))
+endif
+
+if (Val(q:&i) = 1)
+Message(Val(d:&i))
+Sqladd("update "~Dbo()~".OPERACIONES ")
+if (Incluido(Val(f:&i), Var('MERCADOCV')))
+Sqladd(" set FormaLiquidacion1 = "~FStr(Val(e:&i), 1, 0)~", ")
+Sqladd("     FormaLiquidacion2 = "~FStr(0, 1, 0)~", ")
+else
+Sqladd(" set FormaLiquidacion2 = "~FStr(Val(e:&i), 1, 0)~", ")
+Sqladd("     FormaLiquidacion1 = "~FStr(0, 0, 0)~", ")
+endif
+Sqladd("     Cuenta1 = '"~Val(r:&i)~"', ")
+Sqladd("     Cuenta4 = '"~Val(s:&i)~"', ")
+Sqladd("     Cuenta2 = '"~Val(t:&i)~"', ")
+Sqladd("     Cuenta3 = '"~Val(u:&i)~"', ")
+Sqladd("     Cuenta5 = '"~Val(as:&i)~"', ")
+Sqladd("     Cuenta6 = '"~Val(au:&i)~"', ")
+Sqladd("     Plaza1  = '"~Val(v:&i)~"', ")
+Sqladd("     Mercado = '"~Val(f:&i)~"', ")
+Sqladd("     Mercado2 = '"~Val(g:&i)~"' ")
+Sqladd(" where NrOperacion = '"~Val(d:&i)~"' ")
+Sqlnew()
+Sqlexec()
+SqlActualizarmovimientos3(Val(d:&i), SI, NO, NO, SI, NO)
+Sqlexec()
+endif
+proximo
+Messagebox('Mercado cambiado correctamente')
+Ocultarcuadrodemensajes()
+else
+if (Vacio(dialogo.nroperacion1))
+Messagebox('No hay Operaciones sin Liquidar')
+else
+Messagebox('La Operacion '~dialogo.nroperacion1~' no puede modificarse.')
+endif
+endif
+

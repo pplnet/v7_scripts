@@ -1,0 +1,99 @@
+creardialogo
+fecha1:'F.Transf';1;1;;;;dialogo.fecha1 <= FSys();'Debe Ingresar una Fecha';NO;FSys()
+fecha2:'F.Dividendo';1;2;;;;dialogo.fecha1 <= FSys();'Debe Ingresar una Fecha';NO;FSys()
+especie1:'Especie';3;1;;;;DesciendeDeEspecie(dialogo.especie1, 'FONDOS');'Debe Ingresar una Especie de Fondos';NO;;;;;;" Codigo IN("~Pipe2Comillas(Descendientes('ESPECIES', 'FONDOS'))~") "
+vehiculo1:'De Vehiculo';5;1;;;;NoVacio(dialogo.vehiculo1) y Eqstr(BuscarCampo('Vehiculos', 'TipoVehiculo', 'Codigo', dialogo.vehiculo1), 'DIV') y not Eqstr(dialogo.vehiculo1, dialogo.vehiculo2);'Vehiculo Origen Invalido';NO;;;;;;" TipoVehiculo = 'DIV' "
+vehiculo2:'A Vehiculo';5;2;;;;NoVacio(dialogo.vehiculo2) y Eqstr(BuscarCampo('Vehiculos', 'TipoVehiculo', 'Codigo', dialogo.vehiculo2), 'DIV');'Vehiculo Destino Invalido';NO;;;;;;" TipoVehiculo = 'DIV' "
+cliente1:'De Banco';7;1;;;;Eqstr(BuscarCampo('CLIENTES', 'Status', 'Codigo', dialogo.cliente1), 'HAB');'Banco Origen Invalido';NO;;BuscarCampo('ESPECIES', 'Issuer', 'Codigo', dialogo.especie1);;;;" Codigo IN ("~Pipe2Comillas(Descendientes('CLIENTES', 'BANCOS'))~") and Status = 'HAB' ";
+cliente2:'A Banco';7;2;;;;Eqstr(BuscarCampo('CLIENTES', 'Status', 'Codigo', dialogo.cliente2), 'HAB');'Banco Destino Invalido';NO;;BuscarCampo('ESPECIES', 'Issuer', 'Codigo', dialogo.especie1);;;;" Codigo IN ("~Pipe2Comillas(Descendientes('CLIENTES', 'BANCOS'))~") and Status = 'HAB' ";
+cuenta1:'De Cuenta';9;1;;;;Eqstr(BuscarCampo('CUENTAS', 'Comitente', 'Codigo', dialogo.cuenta1), dialogo.cliente1) y Eqstr(BuscarCampo('CUENTAS', 'Cliente', 'Codigo', dialogo.cuenta1), dialogo.vehiculo1);'Cuenta Origen Invalida';NO;;;;;;" Cliente = '"~dialogo.vehiculo1~"' and Estado='HAB' and (Especies LIKE '%"~dialogo.especie1~"%' or Especies LIKE '%FONDOS%') AND Comitente = '"~dialogo.cliente1~"' ")
+cuenta2:'A Cuenta';9;2;;;;Eqstr(BuscarCampo('CUENTAS', 'Comitente', 'Codigo', dialogo.cuenta2), dialogo.cliente2) y Eqstr(BuscarCampo('CUENTAS', 'Cliente', 'Codigo', dialogo.cuenta2), dialogo.vehiculo2);'Cuenta Origen Invalida';NO;;;;;;" Cliente = '"~dialogo.vehiculo2~"' and Estado='HAB' and (Especies LIKE '%"~dialogo.especie1~"%' or Especies LIKE '%FONDOS%') AND Comitente = '"~dialogo.cliente2~"' ")
+book1: 'Book';11;1;;NO;;;;;Var('BOOKDEF');
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Sqladd(" Select NrOperacion ")
+Sqladd(" From "~Dbo()~".OPERACIONES ")
+Sqladd(" Where TipoOp = 'TRANFC' ")
+Sqladd(" AND Especie = '"~dialogo.especie1~"' ")
+Sqladd(" AND FechaOp = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+Sqladd(" AND Vehiculo2 = '"~dialogo.vehiculo2~"' ")
+Sqladd(" AND CB7 = '1' ")
+recorrer sql
+Cancelar('Ya se realizo en la fecha una transferencia de '~dialogo.especie1~' de '~dialogo.vehiculo1~' a '~dialogo.vehiculo2)
+proximo
+
+Acn(bd:1, 0)
+Sqladd(" Select O.NrOperacion, O.OperacionRef, TotalBrutoCli1 ")
+Sqladd(" From "~Dbo()~".OPERACIONES O ")
+Sqladd(" Where O.TipoOp = 'DIVIDE' ")
+Sqladd(" AND O.FechaOp = '"~IdxDate(dialogo.fecha2)~"' ")
+Sqladd(" AND O.TipoOp In ('DIVIDE') ")
+Sqladd(" AND O.MB3 = 1 ")
+Sqladd(" AND O.MB4 = 4 ")
+Sqladd(" AND O.TipoCambio3 = 101 ")
+Sqladd(" AND O.Vehiculo1 = '"~dialogo.vehiculo1~"' ")
+Sqladd(" AND O.Vehiculo2 = '"~dialogo.vehiculo2~"' ")
+Sqladd(" AND O.Especie = '"~dialogo.especie1~"' ")
+Sqladd(" AND O.Book1 = '"~dialogo.book1~"' ")
+Sqladd(" Order By O.NrOperacion ")
+recorrer sql
+Act(a:fac, Fbn('NrOperacion'))
+Act(b:fac, Fbn('OperacionRef'))
+Acn(c:fac, Fbn('TotalBrutoCli1'))
+Scn(vn:1, Val(c:fac))
+Acn(bd:1, 1)
+proximo
+
+if (Val(bd:1) = 0)
+Cancelar('No hay Dividendos por Prestamos a Transferir para los datos Ingresados')
+endif
+
+Ifa()
+Act(a:fac, 'TOTAL')
+Acn(c:fac, Val(vn:1))
+
+
+crearlistbox;'MS Sans Serif,8,';'Transferencia FCI de '~dialogo.especie1~' de '~dialogo.vehiculo1~' a '~dialogo.vehiculo2
+'NrOperacion';a:1..a:fac;NO;SI;;90;string;
+'Op Contraria';b:1..b:fac;NO;SI;;90;string;
+'Cantidad';c:1..c:fac;NO;SI;;120;numero;'###,###,###,###.##'
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+
+Acn(nm:1, BuscarCampo('VEHICULOS', 'Alias1', 'Codigo', dialogo.vehiculo1))
+Act(ce:1, CotizaEn(dialogo.especie1))
+recorrer&k Fac(), Fac()
+Act(op:1, getnumerador(Val(nm:1)))
+Sqladd(" INSERT INTO "~Dbo()~".OPERACIONES ")
+Sqladd(" (TipoOp, NrOperacion, Especie, ")
+Sqladd(" Vehiculo1, Vehiculo2, Cantidad, Numerador, ")
+Sqladd(" FechaOp, FechaCarga, FechaCargaSys, ")
+Sqladd(" UsrInput, Operador, FechaVto, Cliente1, ")
+Sqladd(" Cliente2, Cuenta4, Cuenta1, Book1, ")
+Sqladd(" Book2, MB3, ContraEspecie, FechaPago, ")
+Sqladd(" CB7 ) ")
+Sqladd(" Values ")
+Sqladd(" ('TRANFC', '"~Val(op:1)~"', '"~dialogo.especie1~"', ")
+Sqladd(" '"~dialogo.vehiculo1~"', '"~dialogo.vehiculo2~"', "~FStr(Val(c:&k), 0, 2)~", "~FStr(Val(nm:1), 0, 0)~", ")
+Sqladd(" '"~IdxDate(dialogo.fecha1)~"', "~SQLAhora()~", '"~IdxDate(FSys())~"', ")
+Sqladd(" '"~UsuarioActivo()~"', '"~UsuarioActivo()~"', '"~IdxDate(dialogo.fecha1)~"', '"~dialogo.cliente1~"', ")
+Sqladd(" '"~dialogo.cliente2~"', '"~dialogo.cuenta1~"', '"~dialogo.cuenta2~"', '"~dialogo.book1~"', ")
+Sqladd(" '"~dialogo.book1~"', 1, '"~Val(ce:1)~"', '"~IdxDate(dialogo.fecha2)~"', ")
+Sqladd(" '1' ) ")
+Sqlnew()
+Sqlexec()
+Message('Generando - Op '~Val(op:1)~' En Instancia Terminal')
+Ejecutarevento('INSBIT', 'string1', 'OPERACIONES', 'entero1', 19, 'nroperacion1', Val(op:1))
+SqlActualizarmovimientos2(Val(op:1), SI, NO, NO, SI)
+Sqlexec()
+Ejecutarevento('INVIMV', 'nroperacion1', Val(op:1), 'tipoop1', 'TRANFC', 'vehiculo1', dialogo.vehiculo2, 'vehiculo2', dialogo.vehiculo1, 'string', " MB3=0, Cuenta4=Cuenta1, Cuenta1=Cuenta4 ", 'string1', '', 'string2', '')
+proximo
+

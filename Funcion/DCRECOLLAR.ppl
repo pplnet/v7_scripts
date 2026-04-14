@@ -1,0 +1,117 @@
+﻿* Parametros Entrada: aa1: Fecha1, aa2: Fecha2, aa3: Fuente Referencia, aa4: Especie
+* Producer range collar:
+* - Si el precio esta por debajo del fade out, ese dia desaparece el put.
+* - Si el precio es igual o mayor al  fade out pero menor al put strike, el resultado por barril es = Put strike - Precio flotante
+* - Si el precio esta entre el put strike y el call strike, ese dia no hay resultado
+* - Si el precio es mayor al Call strike, el resultado por barril es = Call strike - Precio flotante
+* Consumer range collar:
+* - Si el precio esta por arriba del fade out, ese dia desaparece el call
+* - Si el precio es igual o menor al  fade out pero mayor al call strike, el resultado por barril es =  Precio flotante - Call strike
+* - Si el precio esta entre el put strike y el call strike, ese dia no hay resultado
+* - Si el precio es menor al Put strike, el resultado por barril es = Precio flotante - Put Strike
+
+Message("Calculando Resultado Range Collar "~val(aa3)~" "~VAL(aa1)~"' al "~VAL(aa2))
+  
+SQL.ADD("SELECT * FROM "~DBO~".CURVAFUTUROSCOMM Where Especie='"~VAL(aa4)~"' and ")
+SQL.ADD("Fecha>='"~IdxDate(VAL(aa1))~"' and Fecha<='"~IdxDate(VAL(aa2))~"' Order By Fecha")
+
+ACN(ab1,0)
+ACN(ab2,0)
+ACN(ab3,0)
+
+*- dp1: Cantidad de Dias que se ejercio el put
+*- dc1: Cantidad de Dias que se ejercio el call
+*- pp1: Precio Promedio de dias que se ejercio el put
+*- pl1: Precio Promedio de dias que se ejercio el call
+
+acn(dp1,0)
+acn(pp1,0)
+acn(dc1,0)
+acn(pl1,0)
+
+Recorrer SQL
+
+   dfa
+   *- Por Cada precio verifico si cumple las condiciones 
+   *-  
+   IF Not Incluido(VAL(aa3),VAR('PRECOMMFUT')) y FBN['PrecioCon']<>0 
+      ACN(ab3,FBN['PrecioCon'])
+   Else 
+      ACN(ab3,FBN['PrecioFut'])
+   EndIf
+
+   If EqStr(val(z8),'1')   
+      *- Producer 
+      IF val(ab3)>=val(z9) y val(ab3)<val(z13) 
+         * Si el precio es igual o mayor al  fade out pero menor al put strike. Se Ejerce el Put
+         * el resultado por barril es = Put strike - Precio flotante
+         scn(dp1,1)
+         scn(pp1,val(ab3))            
+      EndIf
+
+      IF val(ab3)>val(z13) 
+         * Si el precio es mayor al Call strike. Se Ejerce el Call
+         * el resultado por barril es = Call strike - Precio flotante
+         scn(dc1,1)
+         scn(pl1,val(ab3))            
+      EndIf
+   Else 
+      *- Consumer
+      IF val(ab3)<=val(z9) y val(ab3)>val(z12) 
+         * Se Ejerce el Put
+         scn(dp1,1)
+         scn(pp1,val(ab3))            
+      EndIf
+      IF val(ab3)<val(z13) 
+         *- Se ejerce el Call
+         scn(dc1,1)
+         scn(pl1,val(ab3))            
+      EndIf
+   EndIf
+Proximo 
+
+acn(pp1,Round(val(pp1)/val(dp1),2))
+acn(pl1,Round(val(pl1)/val(dc1),2))
+
+Message('Cant. Dias Call '~Fstr(val(dc1),0,2))
+Message('Cant. Dias Put  '~Fstr(val(dp1),0,2))
+Message('PP Call '~Fstr(val(pl1),0,2))
+Message('PP Put  '~Fstr(val(pp1),0,2))
+
+*- Calculo el Resultado Total 
+*-- Evaluacion del Resultado Por Unidad de Calls y Puts
+*-- Z3: Res. Unit. Puts     Z4: Res. Unit. Calls
+ACN(Z3,0)
+ACN(Z4,0)
+
+*-- Verifico las Condiciones de Ejercicio Para el Call
+**  Verifico los Floating Price con el Fade Out
+IF (val(pl1)-val(z12))>=0 y [EqStr(val(z8),'1') o val(pl1)<=val(z9)]
+   ACN(Z4,(val(pl1)-val(z12)))
+EndIF
+
+Message('Res.Unidad Call '~Fstr(val(z4),0,7))
+
+IF (VAL(z13)-VAL(pp1))>=0 y [EqStr(val(z8),'0') o VAL(pp1)>=VAL(z9)]
+    ACN(Z3,(VAL(z13)-VAL(pp1)))
+EndIf
+
+Message('Res.Unidad Put '~Fstr(val(z3),0,2))
+
+* Invierto los resultados para la parte de la venta
+IF EqStr(val(z8),'0') 
+   *-- Consumer
+   *-- Compra de Call y Venta de Put
+   ACN(Z3,-VAL(Z3))
+ELSE 
+   *-- Producer 
+   *-- Compra de Put y Venta de Call
+   ACN(Z4,-VAL(Z4))
+ENDIF
+
+*** Calculo el Resultado 
+ACN(Z2,((VAL(Z3)*val(dp1))+(VAL(Z4)*val(dc1))))
+
+Message('Resultado '~Fstr(val(z2),0,7))
+
+

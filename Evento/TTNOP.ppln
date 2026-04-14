@@ -1,0 +1,342 @@
+creardialogo
+nroperacion1: "NrOperacion";;;;;;;;;;;;;;" TipoOp Like 'MM%' "
+entero1:'CuotaOpMM';;;;;;;;;1;;;
+nroperacion2: "OpSwap";;;;;;;;;;;;;;" TipoOp Like 'DT%' "
+lista1:'CuotaOpSwap';;;;;;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+
+Sqladd(" Select O.NrOperacion,0 NrCuota,O.*,0 CPrecio2,0 CPrecio4,")
+Sqladd(" 0 CPrecio3,0 CTasa3,0 Cantidad3, 0 Capital, 0 CEC, 0 FinCEC, 0 CEN, O.FechaOp as Fecha,O.FechaVto as Fecha2")
+Sqladd(" FROM "~Dbo()~".OPERACIONES O Where ")
+Sqladd(" O.NrOperacion='"~dialogo.nroperacion1~"' and ")
+Sqladd(" O.TipoOp In ('MMCCR','MMCP','MMDCA','MMFRN','MMFRNP','MMO','MMON','MMPCCV','MMPCL','MMPCOS','MMPSC','MMPSI','MMPE','MMPI')")
+Sqladd(" Union All ")
+Sqladd(" Select O.NrOperacion,C.NrCuota,O.*,C.Precio2 CPrecio2,C.Precio4 CPrecio4,")
+Sqladd(" C.Precio3 CPrecio3,C.Tasa3 CTasa3,C.Cantidad3, C.Cantidad2 Capital, C.Cantidad6 CEC, ")
+Sqladd(" C.Cantidad7 FinCEC, C.Plazo4 CEN, C.Fecha1 as Fecha,C.Fecha2 as Fecha2 ")
+Sqladd(" FROM "~Dbo()~".OPERACIONES O,"~Dbo()~".CUOTAS C Where ")
+Sqladd(" O.NrOperacion='"~dialogo.nroperacion1~"' and O.NrOperacion=C.NrOperacion and ")
+Sqladd(" O.TipoOp In ('MMCPM','MMSCMV','MMFCMV','MMFIMV','MMONM','MMPCCM','MMPCLM','MMPOSM','MMSIMV','MMPEM','MMPIM') ")
+if (dialogo.entero1 > 0)
+Sqladd(" and C.NrCuota="~FStr(dialogo.entero1, 0, 0)~" ")
+endif
+Sqladd(" Order By 1,2 ")
+
+
+recorrer sql
+
+if (Fbn('RB8') = 2)
+Acn(da:1, 1)
+else
+Acn(da:1, 365 / 360)
+endif
+
+Acn(pl:1, Fbn('Plazo') / 360)
+if (Incluido(Fbn('TipoOp'), 'MMCP|MMDCA|MMFRNP|MMO|MMON|MMPCCV|MMPCL|MMPCOS|MMPSC|MMPSI|MMPE|MMPI'))
+Acn(mo:1, Fbn('Cantidad'))
+endif
+if (Incluido(Fbn('TipoOp'), 'MMFRN|'))
+Acn(mo:1, Fbn('PrecioEj'))
+endif
+if (Incluido(Fbn('TipoOp'), 'MMCPM|MMFCMV|MMFIMV|MMONM|MMPCCM|MMPCLM|MMPOSM|MMSCMV|MMSIMV|MMPEM|MMPIM'))
+Acn(mo:1, Fbn('Capital'))
+endif
+
+if (not Eqstr(Val(co1), Fbn()['NrOperacion']))
+Act(co1, Fbn()['NrOperacion'])
+Acn(cf:2, 0)
+Acn(ca:2, 0)
+Acn(cc:2, 0)
+Acn(ce:2, 0)
+
+Sqladd("Select * FROM "~Dbo()~".COMISIONES2 Where ")
+Sqladd("NrOperacion='"~dialogo.nroperacion1~"' ")
+Sqladd(" and (NrCuota Is Null or NrCuota=0) ")
+Sqladd(" AND Tipo Not IN ('4') ")
+Sqladd("Order By Fecha1")
+
+recorrer sql
+Dfa()
+if (Incluido(Fbn('Tipo'), '0|1|'))
+Scn(cf:2, Fbn('Importe1'))
+endif
+if (Eqstr(Fbn('Tipo'), '2'))
+Scn(ca:2, Fbn('Importe1'))
+endif
+if (Incluido(Fbn('Tipo'), '3|4'))
+Scn(cc:2, Fbn('Tasa1'))
+endif
+if (Eqstr(Fbn('Tipo'), '5'))
+Scn(ce:2, Fbn('Importe1'))
+Acn(te:1, Val(ce:2) * 100 / (Val(mo1) - Val(ce:2)))
+endif
+proximo
+
+Act(of:1, '')
+Act(of:1, BuscarCampo('OPERACIONES', 'OperacionRef', 'NrOperacion', dialogo.nroperacion1))
+
+if (NoVacio(Val(of:1)))
+
+Acn(of:2, BuscarCampo('OPERACIONES', 'Cantidad+TotalComisiones', 'NrOperacion', Val(of:1)))
+
+Acn(of:3, Fbn()['Cantidad'] + Fbn()['TotalComisiones'])
+
+Sqladd("Select * FROM "~Dbo()~".COMISIONES2 Where ")
+Sqladd(" NrOperacion='"~Val(of:1)~"' ")
+Sqladd(" and (NrCuota Is Null or NrCuota=0) ")
+Sqladd(" AND Tipo Not IN ('3','5','4') ")
+Sqladd(" Order By Fecha1")
+
+recorrer sql
+
+Dfa()
+
+if (Incluido(Fbn('Tipo'), '0|1|'))
+Scn(cf:2, (Fbn('Importe1') * Val(of:3)) / Val(of:2))
+endif
+if (Eqstr(Fbn('Tipo'), '2'))
+Scn(ca:2, (Fbn('Importe1') * Val(of:3)) / Val(of:2))
+endif
+if (Incluido(Fbn('Tipo'), '4'))
+Scn(cc:2, Fbn('Tasa1'))
+endif
+proximo
+endif
+endif
+
+
+Acn(cf:1, Val(cf:2))
+Acn(ca:1, Val(ca:2))
+Acn(ce:1, Val(ce:2))
+Acn(cc:1, Val(cc:2))
+
+if (Incluido(Fbn()['TipoOp'], 'MMCP|MMDCA|MMO|'))
+Acn(ta1, Fbn()['Precio1'])
+Acn(sp1, Fbn()['Spread'])
+Acn(im1, Fbn()['ImpGastos1'] + Fbn()['DeltaTasa'])
+Act(at1, 'Precio4')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMPSI|MMPSC|'))
+Acn(ta1, Fbn()['Precio1'])
+Acn(sp1, Fbn()['Spread'])
+Acn(im1, Fbn()['TasaImp1'] + Fbn()['TotalAux1'])
+Act(at1, 'Precio4')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMFRNP|MMFRN|MMON|'))
+Acn(ta1, Fbn()['Precio1'])
+Acn(sp1, Fbn()['Spread'])
+Acn(im1, Fbn()['TotalAux1'] + Fbn()['TasaImp1'])
+Act(at1, 'Precio4')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMCPM|'))
+Acn(ta1, Fbn()['CPrecio2'])
+Acn(sp1, Fbn()['Spread'])
+Acn(im1, Fbn()['ImpGastos1'] + Fbn()['DeltaTasa'])
+Act(at1, 'Precio4')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMFIMV|'))
+Acn(ta1, Fbn()['CPrecio2'])
+Acn(sp1, Fbn()['CPrecio4'])
+Acn(im1, Fbn()['TotalAux1'] + Fbn()['TasaImp1'])
+Act(at1, 'Total3')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMONM|'))
+Acn(ta1, Fbn()['CPrecio2'])
+Acn(sp1, Fbn()['CPrecio4'])
+Acn(im1, Fbn()['CTasa3'] + Fbn()['TotalAux1'])
+Act(at1, 'Total3')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMPCCM|'))
+Acn(ta1, Fbn()['CPrecio2'])
+Acn(sp1, Fbn()['CPrecio4'])
+Acn(im1, iif (Fbn()['RB6'] = 2, Fbn()['TotalAux1'], 0) + iif (Fbn()['RB6'] = 3 o Fbn()['RB6'] = 4, Fbn()['TasaPrecan'], 0) + iif (Fbn()['MB3'] = 1, Fbn()['TasaBase'], 0))
+Act(at1, 'Precio3')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMPCCV|'))
+Acn(ta1, Fbn()['Precio1'])
+Acn(sp1, Fbn()['Spread'])
+Acn(im1, iif (Fbn()['RB6'] = 2, Fbn()['TotalAux1'], 0) + iif (Fbn()['RB6'] = 3 o Fbn()['RB6'] = 4, Fbn()['TasaPrecan'], 0) + iif (Fbn()['MB3'] = 1, Fbn()['TasaBase'], 0))
+Act(at1, 'Precio4')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMPCL|'))
+Acn(ta1, Fbn()['Precio1'])
+Acn(sp1, Fbn()['Spread'])
+Acn(im1, Fbn()['TasaImp1'])
+Scn(ca:1, Fbn('ImpComCor1') + Fbn('PeriodoInts'))
+Act(at1, 'Precio4')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMPCLM|'))
+Acn(ta1, Fbn()['CPrecio2'])
+Acn(sp1, Fbn()['CPrecio4'])
+Acn(im1, Fbn()['TasaImp1'])
+Scn(ca:1, Fbn('CEC') + Fbn('FinCEC'))
+Act(at1, 'Precio3')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMPCOS|'))
+Acn(ta1, Fbn()['Precio1'])
+Acn(sp1, Fbn()['Spread'])
+Acn(im1, Fbn()['TotalAux1'] + Fbn()['TasaImp1'])
+Scn(ca:1, Fbn('ImpComCorEq2'))
+Act(at1, 'Precio4')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMPOSM|'))
+Acn(ta1, Fbn()['CPrecio2'])
+Acn(sp1, Fbn()['CPrecio4'])
+Acn(im1, Fbn()['TotalAux1'] + Fbn()['TasaImp1'])
+Scn(ca:1, Fbn('CEC'))
+Act(at1, 'Precio3')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMPEM|MMPIM|'))
+Acn(ta1, Fbn()['CPrecio2'])
+Acn(sp1, Fbn()['CPrecio4'])
+Acn(im1, Fbn()['TotalAux1'] + Fbn()['TasaImp1'])
+Scn(ca:1, Fbn('CEC') + Fbn('CEN'))
+Act(at1, 'Precio3')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMPE|MMPI|'))
+Acn(ta1, Fbn()['Precio1'])
+Acn(sp1, Fbn()['Spread'])
+Acn(im1, Fbn()['TotalAux1'] + Fbn()['TasaImp1'])
+Scn(ca:1, Fbn('ImpComCorEq2') + Fbn('PorComMer1'))
+Act(at1, 'Precio4')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMSIMV|'))
+Acn(ta1, Fbn()['CPrecio2'])
+Acn(sp1, Fbn()['CPrecio4'])
+Acn(im1, Fbn()['TasaImp1'] + Fbn()['TotalAux1'])
+Act(at1, 'Total3')
+endif
+
+if (Fbn()['NrCuota'] > 0)
+Sqladd("Select * FROM "~Dbo()~".COMISIONES2 Where ")
+Sqladd("NrOperacion='"~dialogo.nroperacion1~"' ")
+Sqladd("and NrCuota="~FStr(Fbn()['NrCuota'], 0, 0)~" ")
+Sqladd(" AND Tipo Not IN ('4') ")
+Sqladd("Order By Fecha1")
+recorrer sql
+Dfa()
+if (Incluido(Fbn('Tipo'), '0|1|'))
+Scn(cf:1, Fbn('Importe1'))
+endif
+if (Eqstr(Fbn('Tipo'), '2'))
+Scn(ca:1, Fbn('Importe1'))
+endif
+if (Incluido(Fbn('Tipo'), '3|4'))
+Scn(cc:1, Fbn('Tasa1'))
+endif
+if (Eqstr(Fbn('Tipo'), '5'))
+Scn(ce:1, Fbn('Importe1'))
+Acn(te:1, Fbn('Tasa1'))
+endif
+proximo
+endif
+
+Acd(fe1, Fbn()['Fecha'])
+Acd(fe2, Fbn()['Fecha2'])
+
+Sqladd("Select O.FechaOp,O.*,O.Cantidad VResidual,O.Precio3 Tasa,O.Spread ,O.FechaOp2 Fecha1,O.TotalBrutoCli1 Cantidad2,")
+Sqladd("       O.TotalGanancias Tasa2,O.TotalNetoCli2 Total4,O.FechaOp2 Fecha5,Cantidad Cantidad6,")
+Sqladd("       TotalBrutoCli1 Cantidad5,0 NrCuota,O.FechaOp Fecha2,O.FechaVto Fecha6,O.TipoOp,O.TotalIntereses InteresC ")
+Sqladd("from   "~Dbo()~".OPERACIONES O ")
+Sqladd("where  O.OperacionRef='"~Val(co1)~"' ")
+Sqladd("       and TipoOp In ('DTSFF','DTSFV','DTSVV') ")
+Sqladd("Union All ")
+Sqladd("Select O.FechaOp,O.*, C.Cantidad1 VResidual,C.Precio1 Tasa,C.Total3 Spread,C.Fecha1,C.Cantidad2, ")
+Sqladd("       C.Precio2 Tasa2,C.Total4,C.Fecha5,C.Cantidad6,C.Cantidad5,C.NrCuota,C.Fecha2,C.Fecha6,O.TipoOp,C.Cantidad3 as InteresC ")
+Sqladd("from   "~Dbo()~".OPERACIONES O, "~Dbo()~".CUOTAS C ")
+Sqladd("where  O.NrOperacion = C.NrOperacion  ")
+Sqladd("       and O.OperacionRef = '"~Val(co1)~"' ")
+if (NoVacio(dialogo.nroperacion2) y NoVacio(dialogo.lista1))
+Sqladd("   and (( O.NrOperacion='"~dialogo.nroperacion2~"' and C.NrCuota In ("~Pipe2Comillas(dialogo.lista1)~")) or O.OperacionRef = '"~Val(co1)~"') ")
+endif
+Sqladd("       and TipoOp In ('DTSFFM','DTSFVM','DTSVVM','DTCAP','DTFLO') ")
+Sqladd("       and ((C.Fecha1<="~IdxDate2(FSys())~" and C.Fecha2>="~IdxDate2(FSys())~") or ("~IdxDate2(FSys())~">=C.Fecha4 and "~IdxDate2(FSys())~"<=C.Fecha1)) ")
+Sqladd("       and (C.Fecha2>="~IdxDate2(Val(fe1))~" and C.Fecha1<="~IdxDate2(Val(fe2))~")")
+Sqladd("Order By 1")
+
+Acn(pi1, 0)
+Acn(ts1, 0)
+Acn(ss1, 0)
+Act(os1, '')
+
+recorrer sql
+Message(Fbn('NrOperacion')~' '~Fbn('NrCuota'))
+Dfa()
+if (Val(pi1) = 0)
+Acn(pi1, 1)
+Acn(ta1, 0)
+Acn(sp1, 0)
+Acn(im1, 0)
+endif
+
+if (not Eqstr(Val(os1), Fbn('NrOperacion')))
+Act(os1, Fbn('NrOperacion'))
+Scn(ts1, Fbn()['Tasa'])
+Scn(ss1, Fbn()['Spread_1'])
+endif
+proximo
+
+Acn(im:1, Val(im:1) / 100)
+Acn(cf:1, Val(cf:1) * 100)
+Acn(ca:1, Val(ca:1) * 100)
+Acn(ce:1, Val(ce:1) * 100)
+Acn(mo:2, Val(mo:1) / (1 + (Val(te:1) / 100)))
+
+Acn(ba:1, ((Val(ta:1) + Val(sp:1)) * (1 + Val(im:1)) + Val(cc:1)) * Val(da:1))
+Acn(bb:1, (Val(cf:1) / Val(pl:1)) / Val(mo:2))
+
+Acn(bc:1, Val(ca:1) / Val(mo:2))
+
+Acn(bd:1, (Val(ce:1) / Val(pl:1)) / Fbn()['Cantidad'])
+
+
+Acn(tt:1, Val(ba:1) + Val(bb:1) + Val(bc:1) + Val(bd:1))
+
+if (Val(pi1) = 1)
+Scn(tt:1, Val(ts1) + Val(ss1))
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMFCMV|MMSCMV|'))
+Acn(tt1, Query("Select SUM(C.Cantidad2*C.Total3)/SUM(C.Cantidad2) from "~Dbo()~".CUOTAS C,"~Dbo()~".OPERACIONES O where O.NrOperacion=C.NrOperacion and O.OperacionRef='"~dialogo.nroperacion1~"' and C.NrCuota="~FStr(Fbn()['NrCuota'], 0, 0)~" "))
+Act(at1, 'Total3')
+endif
+
+if (Incluido(Fbn()['TipoOp'], 'MMCCR'))
+Acn(tt1, Fbn()['Precio1'])
+Act(at1, 'Precio4')
+endif
+
+
+if (Fbn()['NrCuota'] = 0)
+Sqladd("Update "~Dbo()~".OPERACIONES Set "~Val(at1)~"="~FStr(Val(tt1), 0, 8)~" Where ")
+Sqladd("NrOperacion = '"~Fbn()['NrOperacion']~"' ")
+else
+Sqladd("Update "~Dbo()~".CUOTAS Set "~Val(at1)~"="~FStr(Val(tt1), 0, 8)~" Where ")
+Sqladd("NrOperacion = '"~Fbn()['NrOperacion']~"' and NrCuota="~FStr(Fbn()['NrCuota'], 0, 0)~" ")
+endif
+Sqlnew()
+Sqlexec()
+proximo
+
+
+

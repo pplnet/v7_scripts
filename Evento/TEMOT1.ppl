@@ -1,0 +1,104 @@
+﻿* TEMOTA
+* Modificacion de Tasas Fecha Valor
+* Modifica la tabla de TasasTerceros, actualizando las minutas diarias
+* Siempre y cuando estas no hayan generado minuta mensual.
+CrearDialogo
+  Fecha1     : "Fecha"        ;;;;;;Dialogo.Fecha1<=Fsys;'Debe Ingresar la Fecha';NO;FSYS
+  Vehiculo1  : 'Vehiculo1'    ;;;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))];'El Vehiculo Colocador es Invalido';NO;
+  Cliente1   : 'Cliente1'     ;;;;;;NOVACIO(Dialogo.Cliente1);'El Vehiculo Tomador es Invalido';NO;;;;
+  Especie1   : 'Moneda'       ;;;;;;NOVACIO(Dialogo.Especie1) y DESCIENDEDEESPECIE(Dialogo.Especie1,'MONEDA');'Debe Ingresar una Especie Valida';NO;
+  Precio1    : 'Tasa'         ;;;;;;Dialogo.Precio1<>0;'Debe Existir la Tasa para esta Seleccion';NO;;SQL("SELECT Tasa from "~DBO~".TASASTERCEROS where Vehiculo='"~Dialogo.Vehiculo1~"' and Cliente='"~Dialogo.Cliente1~"' and Especie ='"~Dialogo.Especie1~"' and Fecha='"~IdxDate(Dialogo.Fecha1)~"' ")
+  Radio1     : 'U.T.|360|365' ;;;;;;Dialogo.Radio1>=0;'Unidad de Tiempo Invalida';NO;;IIF(EqStr(SQL("SELECT Divisor from "~DBO~".IMPTERCEROS where Vehiculo='"~Dialogo.Vehiculo1~"' and Cliente='"~Dialogo.Cliente1~"' "),'360'),0,1)
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+* Obtengo Todos los Pares de Vehiculos
+SQL.ADD("SELECT * from "~DBO~".OPERACIONES O")
+SQL.ADD("where O.TipoOp='TEMIND' and O.FechaOp='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and Vehiculo1='"~Dialogo.Vehiculo1~"' and Cliente1='"~Dialogo.Cliente1~"' ")
+SQL.ADD(" and Especie='"~Dialogo.Especie1~"' and (NrOperacion2 is null or NrOperacion2='') ")
+SQL.ADD("Order By O.Vehiculo1,O.Cliente1,O.Especie ")
+
+ACN(x1,0)
+
+Recorrer SQL
+    SCN(x1,1)
+    Break
+Proximo
+
+IF VAL(X1)>0
+   Message('Modificando la Tasa ... ')  
+   SQL.ADD("UPDATE "~DBO~".TASASTERCEROS Set Tasa="~Fstr(Dialogo.Precio1,0,5)~" Where ")
+   SQL.ADD(" Vehiculo='"~Dialogo.Vehiculo1~"' and Cliente='"~Dialogo.Cliente1~"' ")
+   SQL.ADD(" and Fecha='"~IdxDate(Dialogo.Fecha1)~"' ")            
+   SQL.ADD(" and Especie='"~Dialogo.Especie1~"' ")      
+   SQL.NEW
+
+   Message('Modificando la Unidad de Tiempo en Pares de Vehiculos ... ')  
+   SQL.ADD("UPDATE "~DBO~".IMPTERCEROS Set Divisor='"~IIF(Dialogo.Radio1=0,'360','365')~"' Where ")
+   SQL.ADD(" Vehiculo='"~Dialogo.Vehiculo1~"' and Cliente='"~Dialogo.Cliente1~"' ")
+   SQL.NEW
+   SQL.EXEC
+Else
+   MessageBox('Se han generado Las Minutas Mensuales, No se puede modificar la Tasa !!!')
+EndIf
+
+* Obtengo Todos los Pares de Vehiculos
+SQL.ADD("SELECT * from "~DBO~".OPERACIONES O")
+SQL.ADD("where O.TipoOp='TEMIND' and O.FechaOp='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and Vehiculo1='"~Dialogo.Vehiculo1~"' and Cliente1='"~Dialogo.Cliente1~"' ")
+SQL.ADD(" and Especie='"~Dialogo.Especie1~"' ")
+SQL.ADD("Order By O.Vehiculo1,O.Cliente1,O.Especie ")
+
+ACN(x1,0)
+
+Recorrer SQL
+
+   IF Vacio(FBN['NrOperacion2']) o EqStr(FBN['NrOperacion2'],' ')
+      SCN(x1,1)
+
+      * Lo modifico si no genero la Minuta Mensual
+      Message('Obteniendo los Nros. de Operaciones a Generar .... ')          
+
+      * Obtengo el Nro de Caso para la Minuta Vinculada AB6: Caso 
+      ACN(AB6,FBN['RB6'])
+
+      *-- z6: Interes  
+      ACN(Z6,Dialogo.Precio1*FBN['Cantidad']*FBN['Plazo']/(100*IIF(Dialogo.Radio1=0,360,365)) )
+
+      Message('Calculando los Impuestos para Operacion Directa ')
+
+      ACT(AV1,Dialogo.Vehiculo1)
+      ACT(AV2,Dialogo.Cliente1)
+      ACT(Z7,FBN['MB3'])
+
+      * Determina los Impuestos de Vinculadas
+      * Y5 : Imp.Ret.IVA  Y6 : Alicuota de IVA  Y12: Alicuota Percepcion  Y13: Importe  de Percepcion
+      * Y16: IvaNeto  Y17: MontoCapitalizable Y19:TTN
+      * I1: Tasa Impuesto Extr I2: Importe de Impuesto Ext
+      * W1: Tasa WH  W2: Importe de WH Directa  
+
+      (."IMPVINTER".)
+
+      Message('Modificando la Minuta de Diaria .... '~FBN['NrOperacion'])          
+      SQL.ADD(" UPDATE "~DBO~".OPERACIONES Set ")
+      SQL.ADD(" Precio1="~Fstr(Dialogo.Precio1,0,5)~", ")
+      SQL.ADD(" TotalIntereses="~Fstr(VAL(Z6),10,5)~", ")
+      SQL.ADD(" Precio4="~Fstr(VAL(Y19),0,5)~", ")  
+      SQL.ADD(" TotalAux1="~Fstr(VAL(W1),0,5)~", ")  
+      SQL.ADD(" RB8='"~Fstr(Dialogo.Radio1,0,0)~"', ")
+      SQL.ADD(" TasaPrecan="~Fstr(Val(I1),0,2)~" ")
+      SQL.ADD(" Where NrOperacion='"~FBN['NrOperacion']~"' ")
+      SQL.NEW 
+      SQL.EXEC
+
+      * Insert de Instancias: Recibe i3: Nro.Op.
+      ACT(i3,FBN['NrOperacion'])
+
+      (."MODIINSTAN".)
+   EndIf 
+Proximo  
+

@@ -1,0 +1,238 @@
+﻿CrearDialogo
+  Fecha1    : 'D.Fecha'   ;;;;;;;;;FSys
+  Fecha2    : 'H.Fecha'   ;;;;;;;;;FSys+365
+FinDialogo
+
+if not Ok 
+  Cancelar
+endif
+
+ACT(a4, 'Limites - Descalce de plazos')
+ACT(a5, 'D.Fecha: '~Dialogo.Fecha1)
+ACT(a6, 'H.Fecha: '~Dialogo.Fecha2)
+
+ACT(a8, 'Empresa')
+ACT(b8, 'Pesos')
+ACT(b9, 'Activos')
+ACT(c9, 'Pasivos')
+ACT(d9, 'Cobertura')
+ACT(e8, 'Dolares')
+ACT(e9, 'Activos')
+ACT(f9, 'Pasivos')
+ACT(g9, 'Cobertura')
+ACT(h8, 'Otros')
+ACT(h9, 'Activos')
+ACT(i9, 'Pasivos')
+ACT(j9, 'Cobertura')
+ACT(k8, 'Totales')
+ACT(k9, 'Activos')
+ACT(l9, 'Pasivos')
+ACT(m9, 'Cobertura')
+
+AgregarMarco(a8..m9, 1, 0, Exe('COLOR'))
+AgregarMarco(b8..d8, 1)
+AgregarMarco(b9..b9, 1)
+AgregarMarco(c9..c9, 1)
+AgregarMarco(d9..d9, 1)
+
+AgregarMarco(e8..g8, 1)
+AgregarMarco(e9..e9, 1)
+AgregarMarco(f9..f9, 1)
+AgregarMarco(g9..g9, 1)
+
+AgregarMarco(h8..j8, 1)
+AgregarMarco(h9..h9, 1)
+AgregarMarco(i9..i9, 1)
+AgregarMarco(j9..j9, 1)
+
+AgregarMarco(k8..m8, 1)
+AgregarMarco(k9..k9, 1)
+AgregarMarco(l9..l9, 1)
+AgregarMarco(m9..m9, 1)
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+Setfont(a1..z9, 1)
+SetFilaActual(9)
+
+
+SQL.ADD("Select Especie, Cantidad, NrOperacion, TipoOp, Vehiculo1,'' Cotiza,ContraEspecie,TotalBrutoCli1 from "~DBO~".OPERACIONES where FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("((TipoOp in ('MMCDIA','MMCDP','MMCP','MMCPM','MMD','MMDCA','MMCCR','MMO','MMFRN','MMFCMV','MMON','MMONM','MMPCL','MMPCLM','MMPCOS','MMPE','MMPEM','MMPI','MMPIM','MMPOSM','MMPSC','MMSCMV','MMPLME')")
+SQL.ADD("and FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' and FechaVto < '"~IdxDate(Dialogo.Fecha2)~"')")
+SQL.ADD("or")
+SQL.ADD("(TipoOp in ('MMFRN','MMFCMV','MMPSC','MMSCMV')")
+SQL.ADD("and FechaVto2 > '"~IdxDate(Dialogo.Fecha1)~"' and FechaVto2 < '"~IdxDate(Dialogo.Fecha2)~"'))")
+SQL.ADD("  Union All ")
+*- Fondos de Money Market a FechaDesde
+SQL.ADD("Select S.Especie,S.Saldo Cantidad,'0' NrOperacion,'FONDO' TipoOp,S.EnteCustodia Vehiculo1,E.Cotiza,'' ContraEspecie,0 TotalBrutoCli1 ")
+SQL.ADD("from "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E ")
+SQL.ADD("where  S.Especie = E.Codigo  ")
+SQL.ADD("  and  S.NrSaldo = 2 ")
+SQL.ADD("  and  S.Saldo <> 0 ")
+SQL.ADD("  and  E.Tipo = 'FON' ")
+SQL.ADD("  and  E.Alias2 = '0' ")
+SQL.ADD("  and  S.Fecha = (Select Max(D.Fecha) from "~DBO~".SALDOSDIA D ")
+SQL.ADD("                   where  D.EnteCustodia = S.EnteCustodia ")
+SQL.ADD("                   and    D.Especie = S.Especie  ")
+SQL.ADD("                   and    D.Cliente = S.Cliente  ")
+SQL.ADD("                   and    D.NrSaldo = 2 ")
+SQL.ADD("                   and    D.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD("  Union All ")
+*- FX Spot Hoy Comun
+SQL.ADD(" Select O.Especie, O.Cantidad, O.NrOperacion, O.TipoOp, O.Vehiculo1,'' Cotiza,O.ContraEspecie,O.TotalBrutoCli1 from "~DBO~".OPERACIONES O where ")
+SQL.ADD(" O.FechaOp  = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and  O.ValorRB1 = '0'  and O.Puesto='0' ")
+SQL.ADD(" and  O.TipoOp In ('FXCS','FXVS') ")
+SQL.ADD("  Union All ")
+SQL.ADD(" Select DISTINCT '' Especie,0 Cantidad,'' NrOperacion,'TERC' TipoOp,Vehiculo Vehiculo1,' ' Cotiza,'' ContraEspecie,0 TotalBrutoCli1 FROM  "~DBO~".IMPTERCEROS ")
+SQL.ADD(" Where Estado='HAB' ")
+SQL.ADD("order by 5 ")
+
+
+Recorrer SQL
+  dfa
+  Message(fbn('Vehiculo1')~' '~fbn('TipoOp'))
+
+  if Not EqStr(fbn('Vehiculo1'), Val(a:fac))
+     ifa
+     ACT(a:fac, fbn('Vehiculo1'))
+
+     *- Terceros 
+     (.'LDESPTEMIN'.)
+
+  endif
+
+  if Not Incluido(fbn('TipoOp'), 'FONDO|FXCS|FXVS')
+
+     ACN(z3, fbn('Cantidad'))
+
+     *- Para las mv. tomo el valor nominal de la cuota vigente a fecha1
+     if Incluido(fbn('TipoOp'),'MMCPM|MMFCMV|MMONM|MMPCLM|MMPEM|MMPIM|MMPOSM|MMSCMV')
+        ACN(z3, SQL("Select Cantidad2 from "~DBO~".CUOTAS where NrOperacion='"~fbn('NrOperacion')~"' and Fecha1<= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha2>'"~IdxDate(Dialogo.Fecha1)~"'"))
+     EndIf
+
+     if Incluido(fbn('TipoOp'), 'MMCDIA|MMCDP|MMCP|MMCPM|MMD|MMDCA|MMCCR|MMO')
+        *-  Activos
+        if Incluido(fbn('Especie'), 'USD|USB') 
+           ACN(z3, val(z3)/1000)
+           ACN(y1, 1)
+        else
+           if Incluido(fbn('Especie'), 'ARP')
+              ACN(z3, val(z3)/Cotizacion('USD',,,,Dialogo.Fecha1,1)/1000)
+              ACN(y1, 0)
+           else
+              ACN(z3, val(z3)*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+              ACN(y1, 2)
+           endif
+        endif
+        SCN(2+(3*Val(y1)):fac, Val(z3))
+        SCN(11:fac, Val(z3))
+     else
+        *-  Pasivos
+        if Incluido(fbn('Especie'), 'USD|USB') 
+           ACN(z3, val(z3)/1000)
+           ACN(y1, 1)
+        else
+           if Incluido(fbn('Especie'), 'ARP')
+              ACN(z3, val(z3)/Cotizacion('USD',,,,Dialogo.Fecha1,1)/1000)
+              ACN(y1, 0)
+           else
+              ACN(z3, val(z3)*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+              ACN(y1, 2)
+           endif
+        endif
+        SCN(3+(3*Val(y1)):fac, Val(z3))
+        SCN(12:fac, Val(z3))
+     endif 
+  endif 
+
+  if Incluido(fbn('TipoOp'), 'FONDO') 
+     ACN(z3, fbn('Cantidad')*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+     if EqStr(fbn('Cotiza'),'ARP') 
+        ACN(y1, 0)
+     else
+        if Incluido(fbn('Cotiza'), 'USD|USB') 
+           ACN(y1, 1)
+        else
+           ACN(y1, 2)
+        endif
+     endif
+
+     SCN(2+(3*Val(y1)):fac, Val(z3))
+     SCN(11:fac, Val(z3))
+  EndIf
+
+  if Incluido(fbn('TipoOp'), 'FXCS') 
+     *- Activo por la cantidad     
+     ACN(z3, fbn('Cantidad')*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+
+     if Incluido(fbn('Especie'), 'USD|USB') 
+        ACN(y1, 1)
+     else
+        ACN(y1, 2)
+     endif
+
+     SCN(2+(3*Val(y1)):fac, Val(z3))
+     SCN(11:fac, Val(z3))
+  EndIf
+
+  if Incluido(fbn('TipoOp'), 'FXVS') 
+     *- Pasivo por Cantidad
+     ACN(z3, fbn('Cantidad')*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')/1000)
+
+     if Incluido(fbn('Especie'), 'USD|USB') 
+        ACN(y1, 1)
+     else
+        ACN(y1, 2)
+     endif
+
+     SCN(3+(3*Val(y1)):fac, Val(z3))
+     SCN(12:fac, Val(z3))
+  EndIf
+
+Proximo
+
+ACT(a:fac+1, 'Total')
+ACN(b:fac+1, sum(b10..b:fac))
+ACN(c:fac+1, sum(c10..c:fac))
+ACN(e:fac+1, sum(e10..e:fac))
+ACN(f:fac+1, sum(f10..f:fac))
+ACN(h:fac+1, sum(h10..h:fac))
+ACN(i:fac+1, sum(i10..i:fac))
+ACN(k:fac+1, sum(k10..k:fac))
+ACN(l:fac+1, sum(l10..l:fac))
+AgregarMarco(a:fac+1..m:fac+1,1,0,Exe('COLOR'))
+AgregarMarco(b10..d:fac+1,1)
+AgregarMarco(e10..g:fac+1,1)
+AgregarMarco(h10..j:fac+1,1)
+AgregarMarco(a10..m:fac+1,1)
+
+recorrer&i 10, fac+1
+  if Val(c:&i) > 0 y Val(b:&i) > 0
+    ACN(d:&i, Val(b:&i)*100/Val(c:&i))
+  else
+    ACT(d:&i, 'N/A')
+  endif
+  if Val(f:&i) > 0 y Val(e:&i) > 0
+    ACN(g:&i, Val(e:&i)*100/Val(f:&i))
+  else
+    ACT(g:&i, 'N/A')
+  endif
+  if Val(i:&i) > 0 y Val(h:&i) > 0
+    ACN(j:&i, Val(h:&i)*100/Val(i:&i))
+  else
+    ACT(j:&i, 'N/A')
+  endif
+  if Val(l:&i) > 0 y Val(k:&i) > 0
+    ACN(m:&i, Val(k:&i)*100/Val(l:&i))
+  else
+    ACT(m:&i, 'N/A')
+  endif
+proximo
+
+ACO(1,10)
+SetFont(a10..z:fac, 2)
+SetFont(a:fac+1..z:fac+1, 1)
+LimitesVision(n:fac+2)
+Impresion(1,2)

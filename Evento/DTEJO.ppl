@@ -1,0 +1,132 @@
+﻿* DTEJEO: Ejercico de Opciones de Tasas
+CrearDialogo
+  Fecha1       : "F Real Ej."               ;1;1;;;;Dialogo.Fecha1>=BuscarCampo('Operaciones','FechaOp2','NrOperacion',Dialogo.NrOperacion1) y Dialogo.Fecha1<=BuscarCampo('Operaciones','FechaEj','NrOperacion',Dialogo.NrOperacion1);'FECHA EJERCICIO REAL TIENE QUE ESTAR EN EL PLAZO DE LA OPERACION';NO;Fsys
+  NrOperacion1 : "Operacion"                ;;;;;;EqStr(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'DTO');'DEBE INGRESAR UNA OPERACION DE TIPO DTO';NO;;;SQLSET("Select NrOperacion from "~DBO~".OPERACIONES where TipoOp = 'DTO' ")
+  Precio2      : "Precio_Ref"               ;;;;;;Dialogo.Precio2<=VAR('RTASA2') Y Dialogo.Precio2>=VAR('RTASA1');'Tasa del Vehiculo Fuera de Rango:'~VAR('RTASA1')~" Y "~VAR('RTASA2');SI;0
+  Fecha3       : "F Settlement"             ;;;;;;Dialogo.Fecha3>=Dialogo.Fecha4;'LA FECHA DE SETTLEMENT DEBE SER MAYOR O IGUAL A LA FECHA DE FIN DEL SETTLEMENT';NO;;BuscarCampo('Operaciones','FechaPago','NrOperacion',Dialogo.NrOperacion1)
+  Radio1       : "Opcion|Europea|Americana|Asiatica" ;;;;NO;;Dialogo.Radio1=1 O [Dialogo.Radio1<>1 Y Dialogo.Fecha1=BuscarCampo('Operaciones','FechaEj','NrOperacion',Dialogo.NrOperacion1)];'NO SE PUEDE EJERCER EN ESTA FECHA PARA UNA OPCION EUROPEA O ASIATICA';NO;;BuscarCampo('Operaciones','TipoOpcion','NrOperacion',Dialogo.NrOperacion1)
+  Radio2       : "Tipo|Call|Put"            ;;;;NO;;;;;;BuscarCampo('Operaciones','MB1','NrOperacion',Dialogo.NrOperacion1)
+  Radio3       : "Operacion de|Compra|/Venta" ;;;;NO;;;;;;BuscarCampo('Operaciones','MB3','NrOperacion',Dialogo.NrOperacion1)
+  Fecha4       : "Fecha Fin Opcion"         ;;;;NO;;;;;;BuscarCampo('Operaciones','FechaEj','NrOperacion',Dialogo.NrOperacion1)
+  Precio3      : "Precio Ej"                ;;;;NO;;;;;;BuscarCampo('Operaciones','PrecioEj','NrOperacion',Dialogo.NrOperacion1)
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+If Not Incluido(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'DTO|')
+   Cancelar('La operacion N# '~Dialogo.NrOperacion1~' No es un Call o Put de Tasas')
+endif
+
+* Verifico que se encuentre en Back Office o Terminal
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+
+If VAL(X1)<>20 y VAL(X1)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+If Ok
+   * X1: Recupero la Operacion
+   acn(x1,0)
+
+   SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+   SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   SQL.ADD("and (CB8 is Null or CB8='0') ")  
+   SQL.ADD("and ((TipoOpcion<>'1' and FechaEj = '"~IdxDate(Dialogo.Fecha1)~"') ")
+   SQL.ADD(" or (TipoOpcion='1' and FechaEj >= '"~IdxDate(Dialogo.Fecha1)~"')) ")
+
+   Recorrer SQL
+
+     *-- Verifico que la Fecha de Settlement 
+     *-- sea habil en la tabla de feriados de la operacion
+     IF [NOT ESHABIL(Dialogo.Fecha3,FBN['TablaFeriados1'])]          
+        MESSAGEBOX('La Fecha de Settlement NO ES Dia Habil en la Tabla de Feriados '~FBN['TablaFeriados1'] )        
+        Break
+     ENDIF
+
+     acn(x1,1)
+
+     *** Calculo el Resultado      
+     ACN (z20, 0)
+     ACN (Z11, FBN['RB8'])
+
+     ACN (Z11, VAL(Z11)+1)
+
+     *** call compra
+     if EqStr (fbn['MB1'],'0') y EqStr(fbn['MB3'],'0')
+        if FBN['PrecioEj']>=Dialogo.Precio2 
+          ACN (z20, 0)
+        else
+          ACN (Z20, ((FBN['Cantidad']*(Dialogo.Precio2-FBN['PrecioEj']))/100)*FACTORDIAS(FBN['FechaEx1'],FBN['FechaEx2'],VAL(Z11)))
+        endif
+    endif
+
+     *** call venta
+     if EqStr(fbn['MB1'],'0') y EqStr(fbn['MB3'],'1')
+        if FBN['PrecioEj']>=Dialogo.Precio2 
+          ACN (z20, 0)
+        else
+          ACN(z20, ((FBN['Cantidad']*(FBN['PrecioEj']-Dialogo.Precio2))/100)*FACTORDIAS(FBN['FechaEx1'],FBN['FechaEx2'],VAL(z11)))
+        endif
+     endif
+
+     *** put compra
+     if EqStr(fbn['MB1'],'1') y EqStr(fbn['MB3'],'0')
+        if FBN['PrecioEj']<=Dialogo.Precio2 
+          ACN (z20, 0)
+        else
+          ACN (z20, ((FBN['Cantidad']*(FBN['PrecioEj']-Dialogo.Precio2))/100)*FACTORDIAS(FBN['FechaEx1'],FBN['FechaEx2'],val(z11)))
+        endif
+     endif
+
+     *** put venta
+     if EqStr(fbn['MB1'],'1') y EqStr(fbn['MB3'],'1')
+        if FBN['PrecioEj']<=Dialogo.Precio2 
+           ACN (z20, 0)
+        else
+           acn (z20, ((fbn['Cantidad']*(Dialogo.Precio2-fbn['PrecioEj']))/100)*FACTORDIAS(FBN['FechaEx1'],FBN['FechaEx2'],val(z11)))
+        endif
+     endif
+
+
+    Message('Actualizando la Opcion .... ')                  
+    *** Marca la operacion como ejercida ***
+    SQL.ADD("Update "~DBO~".OPERACIONES ")
+    SQL.ADD("Set CB8 = '1', ")
+    SQL.ADD("FechaVto2 = '"~IdxDate(Dialogo.Fecha1)~"', ")
+    SQL.ADD("FechaPago = '"~IdxDate(Dialogo.Fecha3)~"', ")
+    SQL.ADD("Precio4   = "~Fstr(VAL(z20),0,2)~", ")
+    SQL.ADD("Precio2   = "~Fstr(Dialogo.Precio2,0,7)~"  ")
+    SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+    SQL.NEW
+    SQL.EXEC
+
+    * Actualizo la Instancia de la Operacion a Supervision
+    (.'MODIINSTAN'.)      
+
+    *-- Mov. por el Resultado
+    If Val(z20)<>0
+*       EjecutarEvento('IMOVPE',NrOperacion1=Dialogo.NrOperacion1,Fecha1=Dialogo.Fecha3,Cliente1=FBN['Cliente1'],Especie1=FBN['ContraEspecie'],Vehiculo1=FBN['Vehiculo1'],Entero1=1,Precio1=IIF(EqStr(FBN['MB3'],'0'),-val(z20),val(z20)),String='Resultado Settlement',Entero2=9,Entero3=0,String1='')
+    EndIf
+
+     *** Actualiza movimientos y limites ****
+     SQL.ActualizarMovimientos(Dialogo.NrOperacion1,SI)
+     SQL.EXEC
+
+   proximo
+
+   If Val(x1)=0
+      Cancelar('La operacion N# '~Dialogo.NrOperacion1~' No puede ser Ejercida')
+   endif
+endif
+

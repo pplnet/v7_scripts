@@ -1,0 +1,51 @@
+﻿CrearDialogo
+  Fecha1   : 'Fecha Saldo'    ;;;;;;Dialogo.Fecha1<>0 ;'Fecha Incorrecta';NO;FSys;
+FinDialogo
+
+IF Not Ok
+  Cancelar
+ENDIF
+
+SQL.ADD("SELECT S1.Especie as Esp, E.Nombre as NombreEspecie,SUM(S1.Saldo) as Saldo")
+SQL.ADD("FROM "~DBO~".SALDOSDIA S1 WITH (NOLOCK) INNER JOIN "~DBO~".CLIENTES C WITH (NOLOCK)")
+SQL.ADD("           ON S1.Cliente = C.Codigo ")
+SQL.ADD("     INNER JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ")
+SQL.ADD("           ON E.Codigo = S1.Especie ")
+SQL.ADD("     INNER JOIN "~DBO~".CUENTAS CU WITH (NOLOCK) ")
+SQL.ADD("           ON CU.Codigo = S1.Cuenta ")
+SQL.ADD("     INNER JOIN "~DBO~".ESTADOSCUSTODIA EC WITH (NOLOCK)  ")
+SQL.ADD("           ON (S1.NrSaldo>201 or S1.NrSaldo=101) AND ((S1.NrSaldo-100=EC.NrSaldo AND S1.NrSaldo>201) or (S1.NrSaldo=EC.NrSaldo AND S1.NrSaldo=101)) ")
+SQL.ADD("WHERE S1.EnteCustodia = '"~VAR('VEHICULODE')~"' AND ")
+*No poner Filtro, en caso de ponerlo filtrara todos lo que tengan un saldo 0, sin tener en cuenta la sumatoria
+*SQL.ADD("      S1.Saldo = 0 AND ")
+SQL.ADD("      ISNULL(S1.Cliente,'') =ISNULL(S1.EnteCustodia,'') AND")
+SQL.ADD("      S1.Especie IN (select E.Codigo from  "~DBO~".ESPECIES E where E.FechaInicioTenencia IS NOT NULL AND S1.Especie = E.Codigo) AND ")
+SQL.ADD("      S1.Fecha = (SELECT MAX(S2.Fecha) ")
+SQL.ADD("                  FROM "~DBO~".SALDOSDIA S2 WITH (NOLOCK) ")
+SQL.ADD("                  WHERE ISNULL(S2.Cliente,'') = ISNULL(S1.Cliente,'') AND ")
+SQL.ADD("                        ISNULL(S2.Especie,'') = ISNULL(S1.Especie,'') AND")
+SQL.ADD("                        ISNULL(S2.Cupon,'') = ISNULL(S1.Cupon,'') AND")
+SQL.ADD("                        ISNULL(S2.EnteCustodia,'') = ISNULL(S1.EnteCustodia,'') AND")
+SQL.ADD("                        ISNULL(S2.Mercado,'') = ISNULL(S1.Mercado,'') AND")
+SQL.ADD("                        ISNULL(S2.NrSaldo,'') = ISNULL(S1.NrSaldo,'') AND")
+SQL.ADD("                        ISNULL(S2.Cuenta,'') = ISNULL(S1.Cuenta,'') AND")
+SQL.ADD("                        ISNULL(S2.Book,'') =ISNULL(S1.Book,'') AND")
+SQL.ADD("                        ISNULL(S2.CallPut,'') =ISNULL(S1.CallPut,'') AND")
+SQL.ADD("                        S2.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"' ) ")
+SQL.ADD("GROUP BY S1.Especie, E.Nombre ")
+
+Recorrer sql
+    ACT(A:FAC, FBN["Esp"])
+    ACT(B:FAC, FBN["NombreEspecie"])
+    ACN(C:FAC, FBN["Saldo"]) 
+    if ROUND(VAL(C:FAC),2) = ROUND(0,2)
+       SQL.ADD("UPDATE "~dbo~".ESPECIES SET FechaInicioTenencia = NULL WHERE Codigo = '"~FBN['Esp']~"'")
+       SQL.NEW 
+       SQL.EXEC
+    endif
+Proximo
+
+
+
+
+

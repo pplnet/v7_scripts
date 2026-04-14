@@ -1,0 +1,71 @@
+creardialogo
+nroperacion1: 'Nr.Operacion';1;1;;;;;;;;;;;;"TipoOp in ('PMU','PME') and (CB6 is Null or CB6='0') "
+fecha1:'Fecha';2;1;;NO;;;;;;FSys()
+cantidad1:'Prev.Actual';3;1;;NO;;;;;;BuscarCampo('OPERACIONES', 'TotalRetenciones', 'NrOperacion', dialogo.nroperacion1);
+cantidad2:'Prev.Nueva';3;2;;NoVacio(dialogo.nroperacion1) y dialogo.check1 = 1;NoVacio(dialogo.nroperacion1) y dialogo.check1 = 1;
+check1:'Procesa';5;1;;NO;SI;;;;1
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (dialogo.check1 = 1)
+if (Eqstr(BuscarCampo('OPERACIONES', 'CB6', 'NrOperacion', dialogo.nroperacion1), '1'))
+Cancelar('El prestamo esta cancelado')
+endif
+
+if (Messagebox('Confirma Cambio de Prevision Préstamo '~dialogo.nroperacion1~' ?', 3, 1) = 1)
+Acn(ck1, 1)
+endif
+endif
+
+if ((dialogo.check1 = 0) o (dialogo.check1 = 1 y Val(ck1) = 1))
+
+Sqladd("Select FechaOp,Cliente1,Especie,Operador ")
+Sqladd("from "~Dbo()~".OPERACIONES ")
+Sqladd("where NrOperacion='"~dialogo.nroperacion1~"' ")
+recorrer sql
+Act(aa2, Fbn()['Cliente1'])
+Act(aa3, Fbn()['Especie'])
+Act(aa4, Fbn()['Operador'])
+proximo
+
+if (Query("Select count(*) from "~Dbo()~".MOVEJECUTADOS where NrOperacion='"~dialogo.nroperacion1~"' and NrSaldo=20 and FechaMov ='"~IdxDate(dialogo.fecha1)~"' ") > 0)
+Acn(aa6, Query("Select Cantidad from "~Dbo()~".MOVEJECUTADOS where NrOperacion='"~dialogo.nroperacion1~"' and NrSaldo=20 and FechaMov ='"~IdxDate(dialogo.fecha1)~"' "))
+if (dialogo.check1 = 1)
+Acn(aa5, dialogo.cantidad2 - dialogo.cantidad1 + Val(aa6))
+else
+Acn(aa5, dialogo.cantidad1)
+endif
+
+Sqladd("Update "~Dbo()~".MOVEJECUTADOS ")
+Sqladd("set Cantidad = "~Val(aa5)~" ")
+Sqladd("where NrOperacion = '"~dialogo.nroperacion1~"' ")
+Sqladd("and   NrSaldo = 20 ")
+Sqladd("and   FechaMov = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqlnew()
+else
+if (dialogo.check1 = 1)
+Acn(aa5, dialogo.cantidad2 - dialogo.cantidad1)
+else
+Acn(aa5, dialogo.cantidad1)
+endif
+
+Sqladd("Insert into "~Dbo()~".MOVEJECUTADOS ")
+Sqladd("(NrOperacion,FechaMov,Cliente,Especie, ")
+Sqladd("Cantidad,Leyenda,NrSaldo,FechaEje,UsuarioEje,Bits) ")
+Sqladd("values ")
+Sqladd("('"~dialogo.nroperacion1~"','"~IdxDate(dialogo.fecha1)~"', '"~Val(aa2)~"', '"~Val(aa3)~"', ")
+Sqladd(" "~Val(aa5)~" ,'Prevision',20,'"~IdxDate(FSys())~"','"~Val(aa4)~"','AV') ")
+Sqlnew()
+endif
+Sqlexec()
+
+if (dialogo.check1 = 1)
+Sqladd("Update "~Dbo()~".OPERACIONES set TotalRetenciones= "~dialogo.cantidad2~" ")
+Sqladd("where NrOperacion = '"~dialogo.nroperacion1~"' ")
+Sqlnew()
+Sqlexec()
+endif
+endif

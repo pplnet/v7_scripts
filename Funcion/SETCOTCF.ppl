@@ -1,0 +1,76 @@
+﻿***---Se ingresan cotizaciones de USD y EURO siempre.
+***---Si va al cuadro en ARP, se toma el monto en ARP
+***---Si va al cuadro en USD y la moneda es USD, se toma el monto en USD
+***---Si va al cuadro en USD y la moneda NO es USD, se toma la cotizacion ingresada en esta grilla para pasarlo a USD
+
+*--> ML:2 -> Valor en EDWARDS de MONELOCA
+*--> ME:2 -> Valor en EDWARDS de MONEEXTR
+
+SQL.ADD(" Select Distinct CCCRCD As Moneda ")
+SQL.ADD(" From "~DBO~".F5509997 ")
+***---SQL.ADD(" From "~Var('OWDBL1')~".F5509997@"~Var('DBLINK1')~" ")
+SQL.ADD(" Where ((CCGPK6 = 'EXT' and (CCCRCD <> '"~Val(ME:2)~"' and CCCRCD <> '"~Val(ME:3)~"')) ")
+SQL.ADD("       or (CCGPK6 = 'MON' and (CCCRCD <> '"~Val(ML:2)~"' AND CCCRCD <> '"~Val(ML:3)~"' AND CCCRCD <> '"~Val(ML:2)~"'))) ")
+SQL.ADD("   and CCDIVJ >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND CCCRCD <> '"~Val(ML:2)~"' ")
+SQL.ADD(" Order By 1 ")
+ACN(rx:1, 1)
+Recorrer SQL
+   DFA
+   *--> Con la moneda traida de JDE busco esa moneda en FPA
+   ***---ACT(MN:1, BuscarCampo('ESPECIES', 'Alias5', 'Codigo', FBN['Moneda']) )
+   ACT(MN:1, BuscarCampo('ESPECIES', 'Codigo', 'Alias10', FBN['Moneda']) )
+   If Vacio(Val(MN:1))
+      ACT(MN:1, BuscarCampo('ESPECIES', 'Codigo', 'Alias6', FBN['Moneda']) )
+   EndIf
+   ACT(yx:Val(rx:1), 'DOL')
+   ACT(yy:Val(rx:1), Val(MN:1))
+   IF Eqstr(Val(ME:1), Val(MN:1))
+      ACN(yz:Val(rx:1), CotizacionC(Val(MN:1),,,,Dialogo.Fecha1-1,1,SI,Val(ML:1)))
+   ELSE
+      ACN(yz:Val(rx:1), CotizacionC(Val(MN:1),,,,Dialogo.Fecha1-1,1,SI,Val(ME:1)))
+   ENDIF
+   SCN(rx:1,1)
+Proximo
+ACN(EX:1, 0)
+ACN(EX:2, 0)
+
+Recorrer&k 1, Val(RX:1)
+    IF Eqstr(Val(YY:&k), Val(ME:1))
+        ACN(EX:1, 1)
+    ELSE
+        IF Eqstr(Val(YY:&k), Val(MU:1))
+            ACN(EX:2, 1)
+        ENDIF
+    ENDIF
+Proximo
+IF Val(EX:1) = 0
+    ***---No existe USD => lo agrego
+    ACT(yx:Val(rx:1), 'DOL')
+    ACT(yy:Val(rx:1), Val(ME:1))
+    ACN(yz:Val(rx:1), CotizacionC(Val(ME:1),,,,Dialogo.Fecha1-1,1,SI,Val(ML:1)))
+    SCN(RX:1, 1)
+ENDIF
+IF Val(EX:2) = 0
+    ***---No existe EUR => lo agrego
+    ACT(yx:Val(rx:1), 'DOL')
+    ACT(yy:Val(rx:1), Val(MU:1))
+    ACN(yz:Val(rx:1), CotizacionC(Val(MU:1),,,,Dialogo.Fecha1-1,1,SI,Val(ME:1)))
+    SCN(RX:1, 1)
+ENDIF
+
+If Val(rx:1) > 1
+   ACT(yx:Val(rx:1), "CON")
+   ACT(yy:Val(rx:1), Val(ME:1))
+   ACN(yz:Val(rx:1), Cotizacion(Val(ME:1),,,,Dialogo.Fecha1-1,1,SI))
+   CrearListBox;'Arial,8,B';'Seteo de Cotizaciones Vehiculo: '~IIF(NoVacio(Dialogo.Vehiculo1), Dialogo.Vehiculo1, 'Todos')
+      'Cuadro'             ;yx:1..yx:Val(rx:1);NO;SI           ;                     ;80;STRING
+      'Moneda'             ;yy:1..yy:Val(rx:1);NO;SI           ;                     ;80;STRING
+      'Cotizacion'         ;yz:1..yz:Val(rx:1);SI;Val(yz:FLB)>0;'Cotizacion Invalida';80;NUMERO;'##,###,###.########'
+   FinListBox
+   If Not Ok
+      Cancelar
+   EndIf
+EndIf
+
+

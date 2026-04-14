@@ -1,0 +1,302 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+   Fecha1   : 'Fecha'                           ;1;1;;;;Dialogo.Fecha1<>0;'Fecha invalida';NO;Fsys
+   Cliente1 : 'Cliente'                         ;2;1;
+   Especie1 : 'Especie'                         ; ; ;;;;NoVacio(Dialogo.Especie1);'Debe ingresar una especie';NO;
+   Radio1   : 'Tipo Especie|Titulo|Moneda|Todas'; ; ;;Vacio(Dialogo.Especie1);NO;;;;2
+   Vehiculo1: 'Vehiculo'                        ;;;;;;[NoVacio(Dialogo.Vehiculo1) Y Incluido(Dialogo.Vehiculo1, IIF(NoVacio(UsrVehiculos(UsuarioActivo)), UsrVehiculos(UsuarioActivo), SQLSet(" Select Codigo From "~DBO~".VEHICULOS ")))];'Debe Ingresar un Vehiculo Valido';NO;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='')"),SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+FinDialogo
+
+If Not OK
+   Cancelar
+Endif
+
+CrearFont(1,"Arial,12,BI")
+CrearFont(2,"Arial,10,B")
+CrearFont(3,"Arial,10,")
+CrearFont(4,"Arial,8,BU")
+CrearFont(5,"Arial,8,B")
+CrearFont(6,"Arial,8,")
+CrearFont(7,"Arial,8,BI")
+
+* ----------------------------------------------------------------------------------------------------------------------- *
+
+SetFilaActual(1)
+ACT(a:FAC, 'Control de Saldos por Cliente')
+SetFont(a:FAC,1)
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Fecha:')
+ACT(b:FAC, Dialogo.Fecha1)
+If NoVacio(Dialogo.Cliente1)
+   ACT(a:FAC+1, 'Cliente:')
+   ACT(b:FAC+1, '('~Dialogo.Cliente1~') '~BuscarCampo('CLIENTES','RazonSocial','Codigo',Dialogo.Cliente1))
+Else
+   ACT(a:FAC+1, 'Clientes:')
+   ACT(b:FAC+1, 'TODOS')
+Endif
+
+If NoVacio(Dialogo.Especie1)
+   ACT(a:FAC+2, 'Especie:')
+   ACT(b:FAC+2, '('~Dialogo.Especie1~') '~BuscarCampo('ESPECIES','Nombre','Codigo',Dialogo.Especie1))
+Else
+   ACT(a:FAC+2, 'Especies:')
+   If Dialogo.Radio1=0
+      ACT(b:FAC+2, 'TITULOS')
+   Else
+      If Dialogo.Radio1=1
+         ACT(b:FAC+2, 'MONEDAS')
+      Else
+         ACT(b:FAC+2, 'TODAS')
+      Endif
+   Endif
+Endif
+
+ACT(a:FAC+3, 'Vehiculo:')
+ACT(b:FAC+3, Dialogo.Vehiculo1)
+
+SetFont(a:FAC..a:FAC+3,5)
+SetFont(b:FAC..b:FAC+3,5)
+
+SetFilaActual(FAC+5)
+ACT(a:FAC  , 'Especie')
+ACT(b:FAC  , 'Cupon')
+ACT(c:FAC  , 'Cuenta')
+ACT(d:FAC  , 'Saldo')
+ACT(e:FAC  , 'Valor')
+ACT(e:FAC+1, 'Residual')
+ACT(f:FAC  , 'Cotizacion')
+ACT(g:FAC  , 'Inversion')
+ACT(h:FAC  , 'CEsp.')
+ACT(i:FAC  , 'Fecha')
+SetFont(a:FAC..i:FAC+1,5)
+AlinearCeldas(a:FAC..i:FAC+1,'C')
+AgregarMarco(a:FAC..i:FAC+1,0,0,EXE('COLOR6'))
+
+ACT(z:1,'')
+ACT(z:2,'')
+
+message('Saldos de Clientes.')
+
+If NoVacio(Dialogo.Vehiculo1)
+   ACT(zz6, Dialogo.Vehiculo1)
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+   Else
+      ACT(zz6,SQLSET("Select V.Codigo FROM "~DBO~".VEHICULOS V where (Status='HAB' or Status Is Null or Status='') ") )
+   EndIf
+Endif
+
+SQL.ADD("SELECT S.Cliente, C.RazonSocial, S.Especie, E.Nombre, E.Cotiza, S.Cupon, S.Cuenta, S.Saldo, E.InteresesC, S.Fecha ")
+SQL.ADD("FROM   "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E, "~DBO~".CLIENTES C ")
+SQL.ADD("WHERE  S.Especie = E.Codigo ")
+SQL.ADD("       and  S.Cliente = C.Codigo ")
+SQL.ADD("       and  S.NrSaldo = 1 ")
+SQL.ADD("       and  '"~Dialogo.Vehiculo1~"'=S.Cliente ")
+SQL.ADD("       and  S.Cliente In ("~Pipe2Comillas(val(zz6))~") ")
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD("       and  S.Cliente = '"~Dialogo.Cliente1~"' ")
+Endif
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("       and  S.Especie = '"~Dialogo.Especie1~"' ")
+Else
+   If Dialogo.Radio1=0
+      SQL.ADD("       and  (E.Jerarquia LIKE '"~Jerarquia('ESPECIES','TITULO')~"%' or E.Jerarquia LIKE '"~Jerarquia('ESPECIES','CUPON')~"%') ")
+   Else
+      If Dialogo.Radio1=1
+         SQL.ADD("       and  E.Jerarquia LIKE '"~Jerarquia('ESPECIES','MONEDA')~"%' ")
+      Endif
+   Endif
+Endif
+SQL.ADD("       and  S.Fecha = (SELECT Max(Fecha) ")
+SQL.ADD("                       FROM   "~DBO~".SALDOSDIA ")
+SQL.ADD("                       WHERE  Especie = S.Especie ")
+SQL.ADD("                              and  Cliente = S.Cliente ")
+SQL.ADD("                              and  NrSaldo = S.NrSaldo ")
+SQL.ADD("                              and  (Cupon = S.Cupon or (Cupon IS NULL and S.Cupon IS NULL)) ")
+SQL.ADD("                              and  (EnteCustodia = S.EnteCustodia or (EnteCustodia IS NULL and S.EnteCustodia IS NULL)) ")
+SQL.ADD("                              and  Fecha <= "~IdxDate2(Dialogo.Fecha1)~") ")
+SQL.ADD("ORDER BY S.Cliente, S.Especie, S.Cupon, S.Cuenta ")
+
+Recorrer SQL
+   If FBN['Saldo']<>0
+      *- Corte por Cliente
+      message(FBN['Cliente'])
+      If Not Eqstr(FBN['Cliente'],Val(z:1))
+         ACT(z:1, FBN['Cliente'])
+         ACT(z:2, '')
+         IFA
+         ACT(a:FAC, FBN['RazonSocial'])
+         SetFont(a:FAC,4)
+         IFA
+      Endif 
+      
+      *- Corte por Especie
+      If Not Eqstr(FBN['Especie'],Val(z:2))
+         ACT(z:2, FBN['Especie'])
+         ACT(a:FAC, FBN['Nombre'])
+      Endif 
+       
+      
+      *ACT(c:FAC, BuscarCampo('CUENTAS','Numero','Codigo',FBN['Cuenta']))
+      ACT(c:FAC, FBN['Cuenta'])
+      ACN(d:FAC, FBN['Saldo'])
+      FormatoCeldas(d:FAC, EXE('F2'))
+      If DesciendeDeEspecie(FBN['Especie'], 'TITULO') o DesciendeDeEspecie(FBN['Especie'], 'CUPON')
+         ACT(b:FAC, FBN['Cupon'])
+         ACN(e:FAC, ValorTeorico2(FBN['Especie'],Dialogo.Fecha1))
+         ACN(f:FAC, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,FBN['Cotiza']))
+         FormatoCeldas(e:FAC..f:FAC, EXE('F6'))
+         ACN(g:FAC, Val(d:FAC)*Val(f:FAC)*IIF(Eqstr(FBN['InteresesC'],'CLE'),Val(e:FAC),1))
+         FormatoCeldas(g:FAC,Exe('F2'))
+      Else
+         If DesciendeDeEspecie(FBN['Especie'], 'MONEDA')
+            If Not EqStr(FBN['Especie'],FBN['Cotiza'])
+               ACN(f:FAC, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,FBN['Cotiza']))
+               FormatoCeldas(f:FAC,Exe('F6'))
+               ACN(g:FAC,IIF(EqStr(Modo(FBN['Especie'],FBN['Cotiza']),'DIR'),Val(d:FAC)*Val(f:FAC),Val(d:FAC)/Val(f:FAC)))
+               FormatoCeldas(g:FAC,Exe('F2'))
+            Else
+               ACN(g:FAC, Val(d:FAC))
+               FormatoCeldas(g:FAC,Exe('F2'))
+            Endif
+         Endif
+      Endif 
+      ACT(h:FAC, FBN('Cotiza'))
+      ACT(i:FAC, FBN('Fecha'))
+      AlinearCeldas(h:FAC..i:FAC,'C')
+      SetFont(a:FAC..i:FAC,6)
+   Else
+      DFA
+   Endif
+Proximo
+
+* ----------------------------------------------------------------------------------------------------------------------- *
+
+SetFilaActual(FAC+3)
+ACT(a:FAC, 'Movimientos Pendientes')
+SetFont(a:FAC,1)
+
+SetFilaActual(FAC+2)
+ACT(a:FAC  , 'Especie')
+ACT(b:FAC  , 'Cupon')
+ACT(c:FAC  , 'Cuenta')
+ACT(d:FAC  , 'Saldo')
+ACT(e:FAC  , 'Valor')
+ACT(e:FAC+1, 'Residual')
+ACT(f:FAC  , 'Cotizacion')
+ACT(g:FAC  , 'Saldo')
+ACT(g:FAC+1, 'Valorizado')
+ACT(h:FAC  , 'CEsp.')
+ACT(i:FAC  , 'Fecha Mov.')
+SetFont(a:FAC..i:FAC+1,5)
+AlinearCeldas(a:FAC..i:FAC+1,'C')
+AgregarMarco(a:FAC..i:FAC+1,0,0,EXE('COLOR6'))
+
+ACT(z:1, '')
+ACT(z:2, '')
+ACN(z:3, 0)
+
+message('Movimientos Pendientes')
+
+SQL.ADD("SELECT S.Cliente, C.RazonSocial, S.Especie, E.Nombre, E.Cotiza, E.InteresesC, ")
+SQL.ADD("       S.Cupon, S.Cuenta, S.Cantidad, S.FechaMov, NrOperacion, NrMov ")
+SQL.ADD("FROM   "~DBO~".MOVPENDIENTES S, "~DBO~".ESPECIES E, "~DBO~".CLIENTES C ")
+SQL.ADD("WHERE  S.Especie = E.Codigo ")
+SQL.ADD("       and  S.Cliente = C.Codigo ")
+SQL.ADD("       and  S.NrSaldo = 1 ")
+SQL.ADD("       and  '"~Dialogo.Vehiculo1~"'=S.EnteCustodia ")
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD("       and  S.Cliente = '"~Dialogo.Cliente1~"' ")
+Endif
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("       and  S.Especie = '"~Dialogo.Especie1~"' ")
+Else
+   If Dialogo.Radio1=0
+      SQL.ADD("       and  (E.Jerarquia LIKE '"~Jerarquia('ESPECIES','TITULO')~"%' or E.Jerarquia LIKE '"~Jerarquia('ESPECIES','CUPON')~"%') ")
+   Else
+      If Dialogo.Radio1=1
+         SQL.ADD("       and  E.Jerarquia LIKE '"~Jerarquia('ESPECIES','MONEDA')~"%' ")
+      Endif
+   Endif
+Endif
+SQL.ADD("ORDER BY S.Cliente, S.Especie, S.Cupon, S.Cuenta, S.FechaMov ")
+
+Recorrer SQL
+   If FBN['Cantidad']<>0
+      *- Corte por Cliente
+      message(FBN['Cliente'])
+      ACN(z:3, 1)
+      If Not Eqstr(FBN['Cliente'],Val(z:1))
+         ACT(z:1, FBN['Cliente'])
+         ACT(z:2, '')
+         ifa 
+         ACT(a:FAC, FBN['RazonSocial'])
+         SetFont(a:FAC,4)
+         IFA
+      Endif 
+      
+      *- Corte por Especie
+      If Not Eqstr(FBN['Especie'],Val(z:2))
+         ACT(z:2, FBN['Especie'])
+         ACT(a:FAC, FBN['Nombre'])
+      Endif 
+      
+      ACT(c:FAC, FBN['Cuenta'])
+      ACN(d:FAC, FBN['Cantidad'])
+      FormatoCeldas(d:FAC, EXE('F2'))
+      If DesciendeDeEspecie(FBN['Especie'], 'TITULO') o DesciendeDeEspecie(FBN['Especie'], 'CUPON')
+         ACT(b:FAC, FBN['Cupon'])
+         ACN(e:FAC, ValorTeorico2(FBN['Especie'],Dialogo.Fecha1))
+         ACN(f:FAC, Cotizacion(FBN['Especie'],,,,Dialogo.Fecha1,1,SI))
+         FormatoCeldas(e:FAC..f:FAC, EXE('F6'))
+         ACN(g:FAC, Val(d:FAC)*Val(f:FAC)*iif(Eqstr(FBN['InteresesC'],'CLE'),Val(e:FAC),1))
+         FormatoCeldas(g:FAC,Exe('F2'))
+      Else
+         If DesciendeDeEspecie(FBN['Especie'], 'MONEDA')
+            If Not EqStr(FBN['Especie'],FBN['Cotiza'])
+               ACN(f:FAC, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,FBN['Cotiza']))
+               FormatoCeldas(f:FAC,Exe('F6'))
+               ACN(g:FAC,iif(EqStr(Modo(FBN['Especie'],FBN['Cotiza']),'DIR'),Val(d:FAC)*Val(f:FAC),Val(d:FAC)/Val(f:FAC)))
+               FormatoCeldas(g:FAC,Exe('F2'))
+            Else
+               ACN(g:FAC, Val(d:FAC))
+               FormatoCeldas(g:FAC,Exe('F2'))
+            Endif
+         Endif
+      Endif 
+      ACT(h:FAC, FBN['Cotiza'])
+      ACT(i:FAC, FBN['FechaMov'])
+      AlinearCeldas(h:FAC..i:FAC,'C')
+      SetFont(a:FAC..i:FAC,6)
+   Else
+      DFA
+   Endif
+Proximo
+
+If Val(z:3) = 0
+   SetFilaActual(FAC+2)
+   ACT(b:FAC,'No se detectan saldos pendientes...')
+   SetFont(b:FAC,7)
+   ifa
+Endif
+
+* ----------------------------------------------------------------------------------------------------------------------- *
+
+LimitesVision(j:FAC+2)
+
+SetPrintFit(3,90)
+Impresion(1,1)
+Impresion(2,1)
+SetMargins(0,0,0,2)
+
+ACO( 1,10)
+ACO( 2, 5)
+ACO( 3,12)
+ACO( 4,10)
+ACO( 5, 8)
+ACO( 6, 8)
+ACO( 7,10)
+ACO( 8, 4)
+ACO( 9, 8)

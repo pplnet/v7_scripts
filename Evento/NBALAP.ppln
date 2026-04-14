@@ -1,0 +1,101 @@
+HojaVisible(NO)
+MostrarCuadroDeMensajes()
+creardialogo
+fecha1:'D.F.Gener.';;;;;;;;;FSys()
+fecha2:'H.F.Gener.';;;;;;;;;FSys()
+radio1:'Procesar|Nuevos|Enviados|Ambos|';;;;;;;;;0
+
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Message('Chequeando asientos bimonetarios ...')
+
+Sqladd(" SELECT A.NrUnicoAsiento, SUM(A1.Cantidad1) Cantidad, A1.Cantidad3, A1.Especie1, A1.DebitoCredito ")
+Sqladd(" FROM "~Dbo()~".ASIENTOSCON A, "~Dbo()~".ASIENTOSCON1 A1  ")
+Sqladd(" Where A.NrUnicoAsiento = A1.NrUnicoAsiento ")
+Sqladd("   and A.FechaGeneracion >= "~IdxDate2(dialogo.fecha1))
+Sqladd("   and A.FechaGeneracion <= "~IdxDate2(dialogo.fecha2))
+Sqladd("   and (A.Sector IS NULL OR A.Sector = '' ) ")
+Sqladd("   and A1.DebitoCredito = 'DEB' ")
+if (dialogo.radio1 = 0)
+Sqladd(" and (A.Estado Is Null or Estado='') ")
+endif
+if (dialogo.radio1 = 1)
+Sqladd(" and A.Estado In ('E','R') ")
+endif
+Sqladd(" group by A.NrUnicoAsiento, A1.Cantidad3, A1.Especie1, A1.DebitoCredito ")
+Sqladd(" UNION ")
+Sqladd(" SELECT A.NrUnicoAsiento, SUM(A1.Cantidad1) Cantidad, A1.Cantidad3, A1.Especie1, A1.DebitoCredito ")
+Sqladd(" FROM "~Dbo()~".ASIENTOSCON A, "~Dbo()~".ASIENTOSCON1 A1  ")
+Sqladd(" Where A.NrUnicoAsiento = A1.NrUnicoAsiento ")
+Sqladd("   and A.FechaGeneracion >= "~IdxDate2(dialogo.fecha1))
+Sqladd("   and A.FechaGeneracion <= "~IdxDate2(dialogo.fecha2))
+Sqladd("   and (A.Sector IS NULL OR A.Sector = '' ) ")
+Sqladd("   and A1.DebitoCredito = 'CRE' ")
+if (dialogo.radio1 = 0)
+Sqladd(" and (A.Estado Is Null or Estado='') ")
+endif
+if (dialogo.radio1 = 1)
+Sqladd(" and A.Estado In ('E','R') ")
+endif
+Sqladd(" group by A.NrUnicoAsiento, A1.Cantidad3, A1.Especie1, A1.DebitoCredito ")
+Sqladd(" order by A.NrUnicoAsiento ")
+
+Act(aa:1, '')
+Acn(ab:1, 0)
+
+
+recorrer sql
+if (Eqstr(Fbn('NrUnicoAsiento'), Val(aa:1)))
+Dfa()
+Acn(ab:1, 1)
+else
+Message(Fbn('NrUnicoAsiento'))
+Acn(ab:1, 0)
+endif
+
+Act(a:fac, Fbn('NrUnicoAsiento'))
+if (Eqstr(Fbn('DebitoCredito'), 'DEB'))
+Acn(b:fac, Num(fstr2(Fbn('Cantidad'), 16, 2)) * (-1))
+Act(c:fac, Fbn('Especie1'))
+Acn(f:fac, (Num(fstr2(Fbn('Cantidad'), 16, 2)) * (-1)) * iif (Eqstr(Modo(Var('MONELOCA'), Val(c:fac)), 'DIR'), 1 / Num(fstr2(Fbn('Cantidad3'), 0, 4)), Num(fstr2(Fbn('Cantidad3'), 0, 4))))
+else
+Acn(d:fac, Num(fstr2(Fbn('Cantidad'), 16, 2)))
+Act(e:fac, Fbn('Especie1'))
+Acn(g:fac, Num(fstr2(Fbn('Cantidad'), 16, 2)) * iif (Eqstr(Modo(Var('MONELOCA'), Val(e:fac)), 'DIR'), 1 / Num(fstr2(Fbn('Cantidad3'), 0, 4)), Num(fstr2(Fbn('Cantidad3'), 0, 4))))
+endif
+
+
+Acn(h:fac, Num(fstr2(Val(f:fac), 0, 2)) + Num(fstr2(Val(g:fac), 0, 2)))
+
+if (Val(ab:1) = 1)
+if (Num(fstr2(Val(h:fac), 0, 2)) <> 0 y not Eqstr(Val(c:fac), Val(e:fac)))
+if ((Eqstr(Val(c:fac), Var('MONELOCA')) y Abs(Val(f:fac)) > Abs(Val(g:fac))) o (Eqstr(Val(e:fac), Var('MONELOCA')) y Abs(Val(g:fac)) > Abs(Val(f:fac))))
+Acn(j:fac, -Abs(Val(h:fac)))
+else
+Acn(j:fac, Abs(Val(h:fac)))
+endif
+Sqladd(" SELECT *  FROM "~Dbo()~".ASIENTOSCON1 WHERE NrUnicoAsiento= '"~Fbn('NrUnicoAsiento')~"' ")
+
+recorrer sql
+Dfa()
+if (Eqstr(Fbn('Especie1'), Var('MONELOCA')))
+Sqladd(" UPDATE "~Dbo()~".ASIENTOSCON1 SET Cantidad1 = Cantidad1+"~fstr2(Val(j:fac), 0, 2)~" WHERE NrUnicoAsiento= '"~Fbn('NrUnicoAsiento')~"' AND Especie1='"~Var('MONELOCA')~"' ")
+Sqlnew()
+Sqlexec()
+Message('Asiento '~Fbn('NrUnicoAsiento')~' actualizado.')
+break
+endif
+proximo
+endif
+endif
+
+Acn(i:fac, Fbn('Cantidad3'))
+Act(aa:1, Fbn('NrUnicoAsiento'))
+proximo
+
+
+

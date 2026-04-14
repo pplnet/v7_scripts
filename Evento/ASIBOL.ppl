@@ -1,0 +1,113 @@
+﻿* Asignar Nro. de Boleto a operaciones de titulos en forma automatica y secuencial
+CrearDialogo
+  Radio1        : 'Tipo|Minor|Mayor';;;;;SI;;;;1
+  NrOperacion1  : 'Nro.Oper.May.'   ;;;;Dialogo.Radio1=1;;NoVacio(Dialogo.NrOperacion1)   o Dialogo.Radio1=0;'Debe ingresar Operacion Mayorista';NO;
+FinDialogo
+if Not OK
+  Cancelar
+endif
+
+ACT(x:5,Var('LICINUMESP'))
+
+Message(' Asignar Nro. Boleto a Op '~Dialogo.NrOperacion1)
+
+** FJL 13/03/26 - Migracion A3 rueda TRD
+*SQL.ADD("Select NrOperacion, TipoOp, Especie, PaseCB, CB7, CB5, Rojo, NrBoleto, Mercado4 ")
+SQL.ADD("Select NrOperacion, TipoOp, Especie, PaseCB, CB7, CB5, Rojo, NrBoleto, Mercado4, IsNull(Plataforma,'SIOPEL') Plataforma ")
+SQL.ADD("  from "~DBO~".OPERACIONES ")
+SQL.ADD(" Where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+** FJL 05/03/25 - Migracion A3 Mercados
+*SQL.ADD("   and Mercado4 = 'MAE' ")
+SQL.ADD("   and Mercado4 = '"~Var('AMBMAE')~"' ")
+** FJL 10/10/18 - Para que las operaciobnes MAE no vayan dos veces a la 67 
+*SQL.ADD("   and IsNull(NrBoleto,'')='' ")
+Recorrer SQL
+
+  BorrarCeldas(x:1..y:1)
+  ** FJL 10/10/18 - Para que las operaciobnes MAE no vayan dos veces a la 67 
+  if Vacio(fbn('NrBoleto'))
+    **SI ES DE MAE O BYMA
+    ACT(x:1, BuscarCampo('ESPECIES','CodMAEContado','Codigo',fbn('Especie')))
+    ACT(x:2, FBN['Mercado4'])
+    if EqStr(Val(x:5), 'SI')
+        if EqStr(fbn("TipoOp"), 'TCOPRI')
+           ** LICINUMSEP = SI, TCOPRI = SI
+           if EqStr(Val(x:2),Var('AMBMAE'))
+               ACT(y:1, GetNumerador(1098))
+           else
+               ACT(y:1, GetNumerador(1099))
+           endif
+        else 
+           ** LICINUMSEP = SI, TCOPRI = NO
+           if NoVacio(Val(x:1))
+               ACT(y:1, GetNumerador(98))
+           else
+               ACT(y:1, GetNumerador(99))
+           endif
+        endif
+      else
+        ** LICINUMSEP = NO, TCOPRI = SI/NO
+        if NoVacio(Val(x:1))
+           ACT(y:1, GetNumerador(98))
+        else
+           ACT(y:1, GetNumerador(99))   
+        endif
+    endif
+
+    * actualizar nro. boleto
+    SQL.ADD("Update "~DBO~".OPERACIONES ")
+    SQL.ADD("   Set NrBoleto    = '"~Val(y:1)~"' ")
+    SQL.ADD(" Where NrOperacion = '"~fbn['NrOperacion']~"' ")
+    SQL.NEW
+    SQL.EXEC
+  endif
+  
+  if EqStr(fbn['CB7'],'1')
+    ** Si la Operacion es "No MAE" 
+    * A Instancia Emision de Boletos (67)
+    if Dialogo.Radio1=1
+      * Mayorista
+      EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=Dialogo.Radio1, Radio2=2, Entero1=71, Entero2=67)
+    else
+      * Minorista
+      EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=Dialogo.Radio1, Radio2=2, Entero1=71, Entero2=80)
+    endif
+  else
+    ** Si la Operacion no es "No MAE" (se informa a Siopel)
+    * A Instancia Informar Boletos al MAE (65)
+    if EqStr(fbn['PaseCB'],'1') y EqStr(fbn['CB5'],'1') y EqStr(fbn['Rojo'],'1')
+      ** Pata de Pase x Oferta y viene retrocediendo
+      if Incluido(fbn('TipoOp'),'TIC|TIV')
+        EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=Dialogo.Radio1, Radio2=1, Entero1=71, Entero2=51)
+      else
+        EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=Dialogo.Radio1, Radio2=1, Entero1=71, Entero2=78)
+      endif
+    else
+      if EqStr(fbn('Plataforma'),'SIOPEL')
+        EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=Dialogo.Radio1, Radio2=2, Entero1=71, Entero2=65)
+      else
+        EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=Dialogo.Radio1, Radio2=2, Entero1=71, Entero2=67)
+      endif
+    endif
+  endif
+proximo
+
+SQL.ADD("Select NrOperacion ")
+SQL.ADD("  from "~DBO~".OPERACIONES ")
+SQL.ADD(" Where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+** FJL 10/10/18 - Para que las operaciobnes MAE no vayan dos veces a la 67 
+**SQL.ADD("   and (IsNull(NrBoleto,'')<>'' or Mercado4 <> 'MAE' ) ")
+** FJL 05/03/25 - Migracion A3 Mercados
+*SQL.ADD("   and  Mercado4 <> 'MAE'  ")
+SQL.ADD("   and Mercado4 <> '"~Var('AMBMAE')~"' ")
+Recorrer SQL
+  * A Instancia Emision de Boletos (67)
+  if Dialogo.Radio1=1
+    * Mayorista
+    Message('Pasa a 67 - Emision de Boleto Op '~Dialogo.NrOperacion1)
+    EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=Dialogo.Radio1, Radio2=2, Entero1=71, Entero2=67)
+  else
+    * Minorista
+    EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=Dialogo.Radio1, Radio2=2, Entero1=71, Entero2=80)
+  endif
+proximo

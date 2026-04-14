@@ -1,0 +1,162 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:       'Fecha'       ; 1;;;;;;;;fsys
+  Lista1:       'Vehiculos'   ; 3;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+  Check1:       'TEST DE PROCESO' ;;;;NO;NO;
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+***---Se chequea siempre si existe asiento anterior enviado
+***---IF Eqstr(Var('CONTAPROCE'), 'SI')
+    ACN(CK:1, 1)
+***---ELSE
+***---    ACN(CK:1, 0)
+***---ENDIF
+
+****              Barrera de habilitacion de proceso Contable Vrs Proceso SAP
+IF Eqstr(Var('INTASIENTO'), 'SI')
+      MESSAGEbOX ('Se esta ejecutando el proceso contable con SAP...Por favor intente en unos minutos',2,0)   
+      Cancelar
+ELSE
+     ** Se coloca la variable GENASIENTO en SI para avisar/bloquear el proceso SAP  
+     SQL.ADD(" Update "~DBO~".VARIABLES Set Valor='SI' Where Codigo='GENASIENTO' ")
+     SQL.NEW
+     SQL.EXEC
+ENDIF
+
+***--- Borra movimientos puntuales en la tabla de MovPendientes (27-05-09) 
+     SQL.ADD("DELETE "~DBO~".MOVPENDIENTES Where NrOperacion= '50001871' and NrMov ='8004' and NrGrupo2 ='5004'  ")             
+     SQL.NEW
+     SQL.EXEC
+        
+     SQL.ADD("DELETE "~DBO~".MOVPENDIENTES Where (NrOperacion= '50001651' and NrMov ='8002') or  ") 
+     SQL.ADD("                                   (NrOperacion= '50001651' and NrMov ='8003') or  ") 
+     SQL.ADD("                                   (NrOperacion= '50001651' and NrMov ='8102')     ")              
+     SQL.NEW
+     SQL.EXEC        
+
+('FECHACIERR')
+
+***---Anulacion de Asientos
+EjecutarEvento('ANUASI', Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha1, Lista2=Dialogo.Lista1, Lista1='', ListaTabla1='')
+
+***---Asientos de Concertacion
+EjecutarEvento('CONT1', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, ListaTabla1='', Check1=Val(CK:1))
+
+***---Asientos por Ingreso de Gastos
+EjecutarEvento('CONT16', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+***---Asientos de Liquidacion
+EjecutarEvento('CONT2', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, ListaTabla1='', Check1=Val(CK:1))
+
+***---Asientos de Devengados
+EjecutarEvento('CONT3', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, ListaTabla1='', TipoOp1='', Check1=Val(CK:1))
+
+***---Asientos de Devengados de Descubiertos 
+EjecutarEvento('CONT32', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, ListaTabla1='', TipoOp1='', Check1=Val(CK:1))
+
+***---Asientos de Resultados por Tenencia - Fondos
+***---EjecutarEvento('CONT5', Fecha1=Dialogo.Fecha1, Especie1='', Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+***---Asientos de Corte de Cupon
+EjecutarEvento('CONT6', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+***---Asientos de Pago de Dividendos
+EjecutarEvento('CONT7', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+***---Asientos de Transferencias entre cuentas
+***---Se comenta porque vamos a contabilizar las liquidaciones de las TRANSF
+***---EjecutarEvento('CONT8', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, ListaTabla1='', Check1=Val(CK:1))
+
+***---Asientos de Resultados por Diferencia de Cambio Plazo Fijo - Mensual o al vto.
+***---EjecutarEvento('CONT9', Fecha1=Dialogo.Fecha1, ListaTabla1='', Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+***---Asientos de Resultados por Tenencia Forward y NDF de FXs
+EjecutarEvento('CONT10', Fecha1=Dialogo.Fecha1, ListaTabla1='', Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+***---Asientos de Resultados por Tenencia Futuros Mercado Regulado - Mensual o al vto.
+EjecutarEvento('CONT11', Fecha1=Dialogo.Fecha1, ListaTabla1='', Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+***---Asientos de Resultados por Diferencia de Cambio Prestamos - Mensual o al vto.
+***---EjecutarEvento('CONT12', Fecha1=Dialogo.Fecha1, ListaTabla1='', Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+
+ACN(x1, SQL("Select 1 from "~DBO~".VARIABLES where Codigo = 'DIASCONT' "))
+if Val(x1)=1
+   ACN(x1, Trunc(Var('DIASCONT'),0))
+endif
+if Val(x1)<1
+   ACN(x1, 1)
+endif
+ACD(x2, Habiles(PriDeMes(Dialogo.Fecha1,SI)-1,Val(x1),'ARG'))
+ACD(x3, PriDeMes(Dialogo.Fecha1,SI)-1)
+ACD(x4, PriDeMes(Val(x3),SI))
+
+if Dialogo.Fecha1=Val(x2)
+    ***---Asientos Mensuales
+    ***---Asientos de Resultados por Tenencia - Titulos       
+    EjecutarEvento('CONT4', Fecha1=Dialogo.Fecha1, Especie1='', Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+    ***---Asientos de Resultados por Tenencia - Fondos
+    EjecutarEvento('CONT5', Fecha1=Dialogo.Fecha1, Especie1='', Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+    ***---Asientos Diferencia de Cambio Titulos y Acciones
+    ***---EjecutarEvento('CONT20', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, ListaTabla1='', TipoOp1='', Check1=Val(CK:1))
+
+    ***---Asientos Diferencia de Cambio FCI
+    ***---EjecutarEvento('CONT21', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, ListaTabla1='', TipoOp1='', Check1=Val(CK:1))
+    
+    ***---Asientos Diferencia de Cambio de Saldos en Cuentas Comitentes
+    EjecutarEvento('CONT25', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+    
+    ***---Asientos de Reclasificacion de Deuda - Prestamos
+    EjecutarEvento('CONT30', Fecha1=Dialogo.Fecha1, ListaTabla1='', Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+
+    ***---Asientos de Reclasificacion de Deuda - Descubiertos
+    EjecutarEvento('CONT31', Fecha1=Dialogo.Fecha1, ListaTabla1='', Lista1=Dialogo.Lista1, Check1=Val(CK:1))
+       
+    Recorrer&i Val(x4), Val(x3)
+      ACD(FE:1,&I)
+      If DiaSem(Val(FE:1))>1 Y DiaSem(Val(FE:1))<7
+         ***---Asientos de Resultados Realizados~
+         Message('-----Resultados Realizados por Venta '~Val(FE:1)~'-----')
+         EjecutarEvento('ANUASI', Fecha1=Val(FE:1), Fecha2=Val(FE:1), Lista2=Dialogo.Lista1, Lista1=Var('TIPASIRZ'), ListaTabla1='')
+         EjecutarEvento('CONT47', Fecha1=Val(FE:1), Lista1=Dialogo.Lista1, TipoOp1='', Check1=Val(CK:1), Fecha2=Dialogo.Fecha1)
+      EndIf
+    Proximo
+endif
+IF Dialogo.Fecha1 = Habiles(Val(X:2), 1, 'ARG')
+    ***---Reversa asiento devengados a fin de mes, al dia siguiente
+    EjecutarEvento('CONT48', Fecha1=Habiles(Dialogo.Fecha1, -Val(X:1)), ListaTabla1='', Lista1=Dialogo.Lista1, Check1=Val(CK:1), Fecha2=Dialogo.Fecha1)
+ENDIF
+
+***---ContraAsientos de Operaciones
+EjecutarEvento('CONT40', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1)
+
+***---ContraAsientos de Transacciones
+EjecutarEvento('CONT41', Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1)
+
+
+***---ContraAsientos Resultados por Tenencia FCI
+*EjecutarEvento('CONT42', Fecha1=Dialogo.Fecha1)
+
+***---Marcar asientos con errores
+EjecutarEvento('CONT99', Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha1, Radio1=0, NrUnicoAsiento1='', ListaTabla1='', ListaTabla2='')
+
+***---Balanceo de asientos
+EjecutarEvento('BALASI', Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha1, NrUnicoAsiento1='', Radio1=0)
+
+***---Contabilidad Procesada
+SQL.ADD(" Update "~DBO~".VARIABLES ")
+SQL.ADD(" Set Valor = 'SI' ")
+SQL.ADD(" Where Codigo = 'CONTAPROCE' ")
+SQL.NEW
+SQL.EXEC
+
+** Se coloca la variable GENASIENTO en NO para habilitar el proceso SAP  
+SQL.ADD(" Update "~DBO~".VARIABLES Set Valor='NO' Where Codigo='GENASIENTO' ")
+SQL.NEW
+SQL.EXEC
+

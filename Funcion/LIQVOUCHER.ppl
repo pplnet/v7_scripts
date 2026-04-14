@@ -1,0 +1,286 @@
+﻿If Val(tv:1)>0
+   ACT(tt:1, 'RETFM')
+Endif
+If Val(tv:1)<0
+   ACT(tt:1, 'DEPFM')
+Endif
+If Val(tv:1)=0
+   ACT(tt:1, 'COMPFM')
+Endif
+ACT(nt:1, GetNumerador(7))
+
+ACT(cc:1, IIF(Dialogo.Radio1=0,'FX',IIF(Dialogo.Radio1=1,'MM')))
+
+* ----------------- Genera Voucher de Liquidacion ----------------*
+SQL.ADD(" INSERT INTO "~DBO~".TRANSACCIONES2 ( ")
+SQL.ADD(" Cliente1, Especie, Cantidad1, ")
+SQL.ADD(" Vehiculo1, Cuenta1, Cuenta2, ")
+SQL.ADD(" Fecha1, Fecha2, TipoTr2, NrTrans, ")
+SQL.ADD(" UsrInput, FechaCarga, FechaCargaSys, Ley1 ")
+SQL.ADD(" ) VALUES ( ")
+SQL.ADD(" '"~Val(ca:1)~"', '"~Val(ea:1)~"', "~FSTR(ABS(Val(tv:1)),0,2)~", ")
+SQL.ADD(" '"~Dialogo.Vehiculo1~"', '"~Val(cu:1)~"', '"~Val(cu:2)~"', ")
+If Dialogo.Radio1=0 y Dialogo.Radio2=1
+   SQL.ADD(" "~Idxdate2(Val(t:&i))~", "~Idxdate2(Val(s:&i))~", '"~Val(tt:1)~"', '"~Val(nt:1)~"', ")
+Else
+   SQL.ADD(" "~Idxdate2(Val(o:&i))~", "~Idxdate2(Val(j:&i))~", '"~Val(tt:1)~"', '"~Val(nt:1)~"', ")
+Endif
+SQL.ADD(" '"~USUARIOACTIVO~"', "~SQLFecha(AHORA)~", "~Idxdate2(Fsys)~", '"~Val(cc:1)~"' ")
+SQL.ADD(" ) ")
+SQL.NEW
+SQL.EXEC
+
+* --- Genera los movimientos del vehiculo --- *
+SQL.ActualizarMovimientosT4(Val(nt:1),SI,NO,NO,NO,NO,NO)
+SQL.EXEC
+
+Recorrer&j 5,70
+  ACT(kk:1,Fstr(&j,1,0)) 
+  If Incluido(Val(kk:1),'7|8|70') 
+    SQL.ADD(" INSERT INTO "~DBO~".OPERACIONESBITS ( ")
+    SQL.ADD(" NrOperacion, NrBit, Valor ")
+    SQL.ADD(" ) VALUES ( ")
+    SQL.ADD(" '"~Val(nt:1)~"', "~Val(kk:1)~", ")
+    If Eqstr(Val(kk:1),'7')
+      SQL.ADD(" '1') ")
+    Else
+      SQL.ADD(" '0') ")
+    Endif
+    SQL.NEW
+  Endif
+Proximo
+
+
+* ------------ Pasa los movimientos de las operaciones o vouchers de transporte a ejecutados
+SQL.ADD(" SELECT M.NrOperacion, M.Especie, M.Cantidad, ")
+SQL.ADD(" M.Cuenta, M.Cliente, M.EnteCustodia, M.Bits, M.NrGrupo2, ")
+SQL.ADD(" M.NrSaldo, M.Leyenda, M.NrMov, M.Concepto, M.Book, ")
+SQL.ADD(" M.Vehiculo, 'O' Tipo, O.FechaOp, B.NrBit, M.FechaMov, M.Status ")
+SQL.ADD(" FROM "~DBO~".MOVPENDIENTES M, "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B ")
+SQL.ADD(" WHERE M.NrOperacion  = O.NrOperacion")
+SQL.ADD(" AND   M.NrOperacion  = B.NrOperacion")
+SQL.ADD(" AND   M.Cliente = O.Cliente1 ")
+SQL.ADD(" AND   M.NrSaldo = 1 ")
+SQL.ADD(" AND   M.FechaMov  <= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND   O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   B.Valor     = '1' ")
+SQL.ADD(" AND   M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   M.Transaccion  = '"~Val(nt:2)~"' ")
+SQL.ADD(" AND   M.Cliente      = '"~Val(ca:1)~"' ")
+SQL.ADD(" AND   M.Especie      = '"~Val(ea:1)~"' ")
+SQL.ADD(" AND   M.NrOperacion IN ("~Pipe2Comillas(Val(lo:1))~") ")
+IF Not CeldaVacia(TS:1)
+   SQL.ADD(" AND M.Status = '"~Val(TS:1)~"' ")
+ENDIF
+If Dialogo.Radio1=0
+  SQL.ADD(" AND M.Concepto = 'FX' ")
+  If Dialogo.Radio2=0
+    SQL.ADD(" AND M.NrGrupo2 <> 2 ")
+  Else
+    SQL.ADD(" AND M.NrGrupo2 = 2 ")
+  Endif
+  If Dialogo.Radio3=0
+    SQL.ADD(" AND   B.NrBit IN (11) ")
+  Endif
+  If Dialogo.Radio3=1
+    SQL.ADD(" AND   B.NrBit IN (7) ")
+  Endif
+  If Dialogo.Radio3=2
+    SQL.ADD(" AND   B.NrBit IN (11,7) ")
+  Endif
+Else
+  SQL.ADD(" AND   B.NrBit IN (11) ")
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" AND M.Concepto = 'MM' ")
+Endif
+If Dialogo.Radio1=2
+  SQL.ADD(" AND M.Concepto = 'TI' ")
+Endif
+SQL.ADD(" UNION ")
+SQL.ADD(" SELECT M.NrOperacion, M.Especie, M.Cantidad, ")
+SQL.ADD(" M.Cuenta, M.Cliente, M.EnteCustodia, M.Bits, M.NrGrupo2, ")
+SQL.ADD(" M.NrSaldo, M.Leyenda, M.NrMov, M.Concepto, M.Book, ")
+SQL.ADD(" M.Vehiculo, 'T' Tipo, O.Fecha1 FechaOp, B.NrBit, M.FechaMov, M.Status ")
+SQL.ADD(" FROM "~DBO~".MOVPENDIENTES M, "~DBO~".TRANSACCIONES2 O, "~DBO~".OPERACIONESBITS B ")
+SQL.ADD(" WHERE M.NrOperacion = O.NrTrans ")
+SQL.ADD(" AND   M.NrOperacion = B.NrOperacion ")
+SQL.ADD(" AND   M.Cliente     = O.Cliente1 ")
+SQL.ADD(" AND   M.NrSaldo     = 1   ")
+SQL.ADD(" AND   M.FechaMov   <= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND   O.Vehiculo1   = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   B.Valor       = '1' ")
+SQL.ADD(" AND   B.NrBit       IN (15) ")
+SQL.ADD(" AND   M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   M.Transaccion  = '"~Val(nt:2)~"' ")
+SQL.ADD(" AND   M.Cliente      = '"~Val(ca:1)~"' ")
+SQL.ADD(" AND   M.Especie      = '"~Val(ea:1)~"' ")
+SQL.ADD(" AND   M.NrOperacion IN ("~Pipe2Comillas(Val(lo:1))~") ")
+IF Not CeldaVacia(TS:1)
+    SQL.ADD(" AND M.Status = '"~Val(TS:1)~"' ")
+ENDIF
+If Dialogo.Radio1=0
+  SQL.ADD(" AND M.Concepto = 'FX' ")
+  If Dialogo.Radio2=0
+    SQL.ADD(" AND M.NrGrupo2 <> 2 ")
+  Else
+    SQL.ADD(" AND M.NrGrupo2 = 2 ")
+  Endif
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" AND M.Concepto = 'MM' ")
+Endif
+If Dialogo.Radio1=2
+  SQL.ADD(" AND M.Concepto = 'TI' ")
+Endif
+
+Recorrer SQL
+  SQL.ADD(" INSERT INTO "~DBO~".MOVEJECUTADOS ( ")
+  SQL.ADD(" NrOperacion, Especie, Cantidad, ")
+  SQL.ADD(" Cuenta, Cliente, FechaMov, ")
+  SQL.ADD(" EnteCustodia, Bits, ")
+  SQL.ADD(" NrSaldo, Leyenda, NrMov, ")
+  SQL.ADD(" Concepto, Book, Vehiculo, ")
+  SQL.ADD(" NrTrans2, FechaEje, UsuarioEje, ")
+  SQL.ADD(" NrGrupo2, Status ")
+  SQL.ADD(" ) VALUES ( ")
+  SQL.ADD(" '"~fbn('NrOperacion')~"', '"~fbn('Especie')~"', "~FSTR(fbn('Cantidad'),0,2)~", ")
+  SQL.ADD(" '"~fbn('Cuenta')~"', '"~fbn('Cliente')~"', "~IdxDate2(fbn('FechaMov'))~", ")
+  SQL.ADD(" '"~fbn('EnteCustodia')~"', '"~fbn('Bits')~"', ")
+  SQL.ADD(" "~FSTR(fbn('NrSaldo'),0,0)~", '"~fbn('Leyenda')~"', "~FSTR(fbn('NrMov'),0,0)~", ")
+  SQL.ADD(" '"~fbn('Concepto')~"', '"~fbn('Book')~"', '"~fbn('Vehiculo')~"', ")
+  SQL.ADD(" '"~Val(nt:1)~"', "~IdxDate2(Fsys)~", '"~USUARIOACTIVO~"', ")
+  SQL.ADD(" "~FSTR(fbn('NrGrupo2'),0,0)~", '"~fbn('Status')~"' ")
+  SQL.ADD(" ) ")
+  SQL.NEW
+IF NO
+  * LAS TR VAN A PASAR A TERMINAL EN EL CIERRE.
+  ACN(cc:1, 0)
+  ACN(cc:1, SQL(" SELECT 1 FROM "~DBO~".MOVPENDIENTES WHERE NrOperacion = '"~fbn('NrOperacion')~"' AND NrMov <> "~Fstr(fbn('NrMov'),0,0)~" ") )
+  If Val(cc:1)=0 o Eqstr(fbn('Tipo'), 'T')
+    * Si ya no tiene movimientos pendientes pasa a Terminal la operacion 
+    * y a Confirmacion la Transaccion.
+
+    SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS ")
+    SQL.ADD(" SET  Valor = '0' ")
+    If Eqstr(fbn('Tipo'),'O' )
+      SQL.ADD(" WHERE NrBit IN (11,7) ")
+    Else
+      SQL.ADD(" WHERE NrBit IN (15) ")
+    Endif
+    SQL.ADD(" AND NrOperacion = '"~fbn('NrOperacion')~"' ")
+    SQL.NEW
+
+    SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS ")
+    SQL.ADD(" SET  Valor = '1' ")
+    If Eqstr(fbn('Tipo'),'O' )
+      If fbn('NrBit')=11
+        SQL.ADD(" WHERE NrBit = 70 ")
+      Else
+        SQL.ADD(" WHERE NrBit = 11 ")
+      Endif
+    Else
+      SQL.ADD(" WHERE NrBit = 70 ")
+    Endif
+    SQL.ADD(" AND NrOperacion = '"~fbn('NrOperacion')~"' ")
+    SQL.NEW
+
+    SQL.ADD(" INSERT INTO "~DBO~".INSTANCIASOP ( ")
+    SQL.ADD(" Mensaje, NrInstancia, ")
+    SQL.ADD(" Fecha, NrOperacion, Usuario ")
+    SQL.ADD(" ) VALUES ( ")
+    If Eqstr(fbn('Tipo'), 'T')
+      SQL.ADD(" 'Voucher Transporte Liquidado', "~Fstr(fbn('NrBit'),0,0)~", ")
+    Else
+      SQL.ADD(" 'Operacion Liquidada', "~Fstr(fbn('NrBit'),0,0)~", ")
+    Endif
+    SQL.ADD(" "~SQLFecha(AHORA)~", '"~fbn('NrOperacion')~"', '"~USUARIOACTIVO~"' ")
+    SQL.ADD(" ) ")
+    SQL.NEW
+  Endif
+ENDIF
+Proximo
+
+
+* ------------ Borra de pendientes los movimientos de las operaciones o vouchers de transporte 
+
+SQL.ADD(" DELETE FROM "~DBO~".MOVPENDIENTES ")
+SQL.ADD(" FROM "~DBO~".MOVPENDIENTES M, "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B ")
+SQL.ADD(" WHERE M.NrOperacion  = O.NrOperacion")
+SQL.ADD(" AND   M.NrOperacion  = B.NrOperacion")
+SQL.ADD(" AND   M.Cliente = O.Cliente1 ")
+SQL.ADD(" AND   M.NrSaldo = 1 ")
+SQL.ADD(" AND   M.FechaMov  <= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND   O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   B.Valor     = '1' ")
+SQL.ADD(" AND   M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   M.Transaccion  = '"~Val(nt:2)~"' ")
+SQL.ADD(" AND   M.Cliente = '"~Val(ca:1)~"' ")
+SQL.ADD(" AND   M.Especie = '"~Val(ea:1)~"' ")
+SQL.ADD(" AND   M.NrOperacion IN ("~Pipe2Comillas(Val(lo:1))~") ")
+IF Not CeldaVacia(TS:1)
+    SQL.ADD(" AND M.Status = '"~Val(TS:1)~"' ")
+ENDIF
+If Dialogo.Radio1=0
+  SQL.ADD(" AND M.Concepto = 'FX' ")
+  If Dialogo.Radio2=0
+    SQL.ADD(" AND M.NrGrupo2 <> 2 ")
+  Else
+    SQL.ADD(" AND M.NrGrupo2 = 2 ")
+  Endif
+  If Dialogo.Radio3=0
+    SQL.ADD(" AND   B.NrBit IN (11) ")
+  Endif
+  If Dialogo.Radio3=1
+    SQL.ADD(" AND   B.NrBit IN (7) ")
+  Endif
+  If Dialogo.Radio3=2
+    SQL.ADD(" AND   B.NrBit IN (11,7) ")
+  Endif
+Else
+  SQL.ADD(" AND   B.NrBit IN (11) ")
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" AND M.Concepto = 'MM' ")
+Endif
+If Dialogo.Radio1=2
+  SQL.ADD(" AND M.Concepto = 'TI' ")
+Endif
+SQL.NEW
+
+SQL.ADD(" DELETE FROM "~DBO~".MOVPENDIENTES ")
+SQL.ADD(" FROM "~DBO~".MOVPENDIENTES M, "~DBO~".TRANSACCIONES2 O, "~DBO~".OPERACIONESBITS B ")
+SQL.ADD(" WHERE M.NrOperacion = O.NrTrans ")
+SQL.ADD(" AND   M.NrOperacion = B.NrOperacion ")
+SQL.ADD(" AND   M.Cliente     = O.Cliente1 ")
+SQL.ADD(" AND   M.NrSaldo     = 1   ")
+SQL.ADD(" AND   M.FechaMov   <= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND   O.Vehiculo1   = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   B.Valor       = '1' ")
+SQL.ADD(" AND   B.NrBit       IN (15,70) ")
+SQL.ADD(" AND   M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   M.Transaccion  = '"~Val(nt:2)~"' ")
+SQL.ADD(" AND   M.Cliente      = '"~Val(ca:1)~"' ")
+SQL.ADD(" AND   M.Especie      = '"~Val(ea:1)~"' ")
+SQL.ADD(" AND   M.NrOperacion IN ("~Pipe2Comillas(Val(lo:1))~") ")
+IF Not CeldaVacia(TS:1)
+    SQL.ADD(" AND M.Status = '"~Val(TS:1)~"' ")
+ENDIF
+If Dialogo.Radio1=0
+  SQL.ADD(" AND M.Concepto = 'FX' ")
+  If Dialogo.Radio2=0
+    SQL.ADD(" AND M.NrGrupo2 <> 2 ")
+  Else
+    SQL.ADD(" AND M.NrGrupo2 = 2 ")
+  Endif
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" AND M.Concepto = 'MM' ")
+Endif
+If Dialogo.Radio1=2
+  SQL.ADD(" AND M.Concepto = 'TI' ")
+Endif
+SQL.NEW
+SQL.EXEC
+
+message('Voucher: '~Val(nt:1)~' generado.')

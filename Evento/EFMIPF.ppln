@@ -1,0 +1,335 @@
+MostrarCuadroDeMensajes()
+creardialogo
+fecha1: 'Fecha';1;;;;;;;;FSys()
+vehiculo1: 'Vehiculo';2;;;NO;;;;;Var('VEHICON')
+findialogo
+
+if (not ok)
+raise('Evento Cancelado')
+endif
+
+Act(ml:1, Var('MONELOCA'))
+Acd(fv:1, dialogo.fecha1)
+let(&fechaproceso, Fecha(dialogo.fecha1))
+let(&cuentacustodia, '')
+let(&tablainformada, 'EFECTIVOMINIMOPF')
+
+Sqladd(" Delete "~Dbo()~"."~&tablainformada~" WHERE FecIncorporacion = '"~IdxDate(&fechaproceso)~"' ")
+Sqlnew()
+Sqlexec()
+
+
+
+
+let(&campoparamodelos, 'ModelosEfectivoMinPF')
+let(&campomarcainforma, 'EfectivoMinPF')
+let(&tipoop, 'TIDE|TICT|')
+
+Acd(fv:1, dialogo.fecha1)
+Act(vc:1, dialogo.vehiculo1)
+
+let(&valorcontablevaluado, 0)
+let(&valorcontable, 0)
+let(&nroperacion, '')
+let(&tiporegistro, 'A')
+let(&importeacumuladoasiento, 0)
+
+Sqladd("Select A1.DebitoCredito, A1.Valor2 CantidadOperacion, A1.Cantidad1 ImporteAsiento, A1.Alias1 Especie, ")
+Sqladd("A1.Alias2 Book, A.FechaValor, A.NrOperacion, A1.Cuenta, A1.Especie1 MonedaAsiento, ")
+Sqladd("A1.TablaRC tipoCuenta, A.Modelo, O.TipoOp TipoOp, O.Cuenta1, O.Cuenta2 ")
+Sqladd("FROM "~Dbo()~".ASIENTOSCON A  ")
+Sqladd("       JOIN "~Dbo()~".ASIENTOSCON1 A1 ON A.NrUnicoAsiento = A1.NrUnicoAsiento ")
+Sqladd("       JOIN "~Dbo()~".OPERACIONES O ON A.NrOperacion = O.NrOperacion ")
+Sqladd("where O.FechaVto > A.FechaValor ")
+Sqladd("and A.Fecha1 = '"~IdxDate(dialogo.fecha1)~"' ")
+if (NoVacio(&tipoop))
+Sqladd("and O.TipoOp IN ("~Pipe2Comillas(&tipoop)~")")
+endif
+Sqladd("and NOT (A1.TablaRc = '' AND A1.TablaRc = ' ' AND A1.TablaRc IS NULL) ")
+Sqladd("Order by A.FechaValor, A1.Cuenta, O.NrOperacion ")
+Watch(Sqlbatch())
+
+let(&primerregistro, 0)
+let(&seinforma, 0)
+let(&importeasientoanterior, 0)
+
+recorrer sql
+let(&tipocuenta, Fbn('tipoCuenta'))
+let(&modelo, Fbn('Modelo'))
+
+if (&primerregistro = 0)
+Acd(fv:1, Fbn('FechaValor'))
+
+let(&nroperacion, Fbn('NrOperacion'))
+
+let(&cuentacontable, Fbn('Cuenta'))
+
+let(&primerregistro, 1)
+endif
+
+if (Val(fv:1) <> Fbn('FechaValor') o not Eqstr(&nroperacion, Fbn('NrOperacion')) o &cuentacontable <> Fbn('Cuenta'))
+if (&seinforma = 1)
+Sqladd(" Select  Codigo,MonedaEmision, Tipo TipoEspecie, Issuer, Alias1 as EspBanTotal, VTeorico as VTeorico, Cotiza ")
+Sqladd(" From "~Dbo()~".ESPECIES ")
+Sqladd(" Where Codigo = '"~&especie~"' ")
+recorrer sql
+Acn(vt:1, Fbn('VTeorico'))
+proximo
+
+let(&cotiniif, CotizacionNIIF(&especie, Val(fv:1), &book))
+
+if (Vacio(&cotiniif))
+let(&precioniif, 0)
+else
+let(&precioniif, &cotiniif.preciocotizaciondeterminada)
+endif
+Acn(co:1, Cotizacion(&especie, null, null, null, Val(fv:1), 1) * CotizacionC(BuscarCampo('ESPECIES', 'Cotiza', 'Codigo', &especie), null, null, null, Val(fv:1), 25, SI, 'ARP'))
+
+if (&precioniif = 0)
+let(&precioniif, Val(co:1))
+endif
+
+if (not Eqstr(&monedaasiento, Var('MONELOCA')))
+let(&revalopvig, 'NO')
+let(&fecharevaluo, Val(fv:1))
+let(&monedaaconvertir, &monedaasiento)
+let(&monedaexpresion, Var('MONELOCA'))
+let(&valorcontablevaluado, &importeacumuladoasiento * EvalFormula('TCCONTABREVAL'))
+else
+let(&valorcontablevaluado, &importeacumuladoasiento)
+endif
+
+let(&importeasientoanterior, Query("Select ValorContValuado FROM "~Dbo()~"."~&tablainformada~" WHERE Fecha = '"~IdxDate(Habiles(Val(fv:1), -1, 'ARG', SI))~"' AND NrOperacion = '"~&nroperacion~"' and CuentaContable = '"~&cuentacontable~"' and TipoRegistro ='A' "))
+
+let(&valorcontablevaluado, &valorcontablevaluado + &importeasientoanterior)
+
+if (&valorcontablevaluado >= 0)
+let(&valorcontable, &cantidaddeoperacion)
+else
+let(&valorcontable, &cantidaddeoperacion * -1)
+endif
+
+let(&valorresidual, iif (Val(vt:1) <> 0, Val(vt:1), 1) * &valorcontable)
+
+let(&nrcupon, NrCupon2(&especie, Val(fv:1)))
+let(&tipocupon, Query("Select TipoCupon from "~Dbo()~".AGENDACUPONES where NrCupon = '"~FStr(&nrcupon, 0, 0)~"' AND Especie = '"~&especie~"' "))
+if (Eqstr(&tipocupon, 'AMO'))
+let(&tipocupon, 1)
+else
+if (Eqstr(&tipocupon, 'REN'))
+let(&tipocupon, 2)
+else
+if (Eqstr(&tipocupon, 'RYA'))
+let(&tipocupon, 3)
+else
+let(&tipocupon, 0)
+endif
+endif
+endif
+
+
+
+Message('Procesando Especie: '~&especie)
+recorrer&i Val(fv:1), Habiles(Val(fv:1), 1, 'ARG', SI) - 1
+Sqladd("INSERT INTO "~Dbo()~"."~&tablainformada~" ( ")
+Sqladd("Fecha, Especie, TipCupon, CuentaContable, ValorResidual, ")
+Sqladd("ValorContable, ValorContValuado, FecIncorporacion, ")
+Sqladd("TipoRegistro, NrOperacion, Cotizacion, CuentaCustodia,InformaFecInc) ")
+Sqladd("VALUES ( ")
+Sqladd("'"~IdxDate(&i)~"','"~&especie~"', "~FStr(&tipocupon, 0, 0)~",'"~&cuentacontable~"',"~FStr(&valorresidual, 0, 0)~", ")
+Sqladd(" "~FStr(&valorcontable, 0, 0)~", "~FStr(&valorcontablevaluado, 0, 2)~", '"~IdxDate(&fechaproceso)~"', ")
+Sqladd("'"~&tiporegistro~"', '"~&nroperacion~"', "~FStr(&precioniif, 0, 8)~", '"~&cuentacustodia~"', '"~&informafecinc~"') ")
+Sqlnew()
+Sqlexec()
+proximo
+
+
+
+
+
+Acd(fv:1, Fbn('FechaValor'))
+
+let(&nroperacion, Fbn('NrOperacion'))
+
+let(&cuentacontable, Fbn('Cuenta'))
+
+let(&importeacumuladoasiento, 0)
+
+let(&seinforma, 0)
+
+let(&importeasientoanterior, 0)
+endif
+endif
+
+if (Incluido(&modelo, SQLSet("SELECT "~&campoparamodelos~" from "~Dbo()~".TIPOCTACONT where Codigo = '"~&tipocuenta~"' AND "~&campomarcainforma~"='SI' ")))
+let(&seinforma, 1)
+
+Acd(fv:1, Fbn('FechaValor'))
+
+let(&nroperacion, Fbn('NrOperacion'))
+
+let(&cuentacontable, Fbn('Cuenta'))
+
+if (Eqstr(Fbn('DebitoCredito'), 'DEB'))
+let(&importeasiento, Fbn('ImporteAsiento'))
+else
+let(&importeasiento, Fbn('ImporteAsiento') * -1)
+endif
+
+let(&importeacumuladoasiento, &importeacumuladoasiento + &importeasiento)
+
+if (Eqstr(BuscarCampo('TIPOCTACONT', 'EsDeInteres', 'Codigo', &tipocuenta), 'SI'))
+let(&cantidaddeoperacion, 0)
+else
+if ((Vacio(Fbn('CantidadOperacion')) o Fbn('CantidadOperacion') = 0) y NoVacio(&nroperacion))
+let(&cantidaddeoperacion, BuscarCampo('OPERACIONES', 'Cantidad', 'NrOperacion', &nroperacion))
+else
+let(&cantidaddeoperacion, Fbn('CantidadOperacion'))
+endif
+endif
+
+let(&especie, Fbn('Especie'))
+
+let(&monedaasiento, Fbn('MonedaAsiento'))
+
+let(&book, Fbn('Book'))
+
+let(&tipoop, Fbn('TipoOp'))
+
+if (Eqstr(&tablainformada, 'EFECTIVOMINIMOPF'))
+let(&cuentacustodia, Fbn('Cuenta2'))
+else
+let(&cuentacustodia, '')
+endif
+
+let(&informafecinc, 'SI')
+
+if (Eqstr(&tipoop, 'TIPO') y Incluido(&tipocuenta, 'DIFCOT|DEUDFINOT|'))
+let(&informafecinc, 'NO')
+endif
+
+if (Incluido(&tipoop, 'TICT|TIDE|') y Incluido(&tipocuenta, 'TITREC|DEUDFINOT|'))
+let(&informafecinc, 'NO')
+endif
+endif
+proximo
+
+if (&seinforma = 1)
+Sqladd(" Select  Codigo,MonedaEmision, Tipo TipoEspecie, Issuer, Alias1 as EspBanTotal, VTeorico as VTeorico, Cotiza ")
+Sqladd(" From "~Dbo()~".ESPECIES ")
+Sqladd(" Where Codigo = '"~&especie~"' ")
+recorrer sql
+Acn(vt:1, Fbn('VTeorico'))
+proximo
+
+let(&cotiniif, CotizacionNIIF(&especie, Val(fv:1), &book))
+
+if (Vacio(&cotiniif))
+let(&precioniif, 0)
+else
+let(&precioniif, &cotiniif.preciocotizaciondeterminada)
+endif
+Acn(co:1, Cotizacion(&especie, null, null, null, Val(fv:1), 1) * CotizacionC(BuscarCampo('ESPECIES', 'Cotiza', 'Codigo', &especie), null, null, null, Val(fv:1), 25, SI, 'ARP'))
+
+if (&precioniif = 0)
+let(&precioniif, Val(co:1))
+endif
+
+if (not Eqstr(&monedaasiento, Var('MONELOCA')))
+let(&revalopvig, 'NO')
+let(&fecharevaluo, Val(fv:1))
+let(&monedaaconvertir, &monedaasiento)
+let(&monedaexpresion, Var('MONELOCA'))
+let(&valorcontablevaluado, &importeacumuladoasiento * EvalFormula('TCCONTABREVAL'))
+else
+let(&valorcontablevaluado, &importeacumuladoasiento)
+endif
+
+let(&importeasientoanterior, Query("Select ValorContValuado FROM "~Dbo()~"."~&tablainformada~" WHERE Fecha = '"~IdxDate(Habiles(Val(fv:1), -1, 'ARG', SI))~"' AND NrOperacion = '"~&nroperacion~"' and CuentaContable = '"~&cuentacontable~"' and TipoRegistro ='A' "))
+
+let(&valorcontablevaluado, &valorcontablevaluado + &importeasientoanterior)
+
+if (&valorcontablevaluado >= 0)
+let(&valorcontable, &cantidaddeoperacion)
+else
+let(&valorcontable, &cantidaddeoperacion * -1)
+endif
+
+let(&valorresidual, iif (Val(vt:1) <> 0, Val(vt:1), 1) * &valorcontable)
+
+let(&nrcupon, NrCupon2(&especie, Val(fv:1)))
+let(&tipocupon, Query("Select TipoCupon from "~Dbo()~".AGENDACUPONES where NrCupon = '"~FStr(&nrcupon, 0, 0)~"' AND Especie = '"~&especie~"' "))
+if (Eqstr(&tipocupon, 'AMO'))
+let(&tipocupon, 1)
+else
+if (Eqstr(&tipocupon, 'REN'))
+let(&tipocupon, 2)
+else
+if (Eqstr(&tipocupon, 'RYA'))
+let(&tipocupon, 3)
+else
+let(&tipocupon, 0)
+endif
+endif
+endif
+
+
+
+Message('Procesando Especie: '~&especie)
+recorrer&i Val(fv:1), Habiles(Val(fv:1), 1, 'ARG', SI) - 1
+Sqladd("INSERT INTO "~Dbo()~"."~&tablainformada~" ( ")
+Sqladd("Fecha, Especie, TipCupon, CuentaContable, ValorResidual, ")
+Sqladd("ValorContable, ValorContValuado, FecIncorporacion, ")
+Sqladd("TipoRegistro, NrOperacion, Cotizacion, CuentaCustodia,InformaFecInc) ")
+Sqladd("VALUES ( ")
+Sqladd("'"~IdxDate(&i)~"','"~&especie~"', "~FStr(&tipocupon, 0, 0)~",'"~&cuentacontable~"',"~FStr(&valorresidual, 0, 0)~", ")
+Sqladd(" "~FStr(&valorcontable, 0, 0)~", "~FStr(&valorcontablevaluado, 0, 2)~", '"~IdxDate(&fechaproceso)~"', ")
+Sqladd("'"~&tiporegistro~"', '"~&nroperacion~"', "~FStr(&precioniif, 0, 8)~", '"~&cuentacustodia~"', '"~&informafecinc~"') ")
+Sqlnew()
+Sqlexec()
+proximo
+
+
+
+
+endif
+
+
+
+let(&seinformohoy, 0)
+
+Sqladd("SELECT TA.* FROM "~Dbo()~"."~&tablainformada~" TA ")
+Sqladd("JOIN "~Dbo()~".OPERACIONES O ON TA.NrOperacion = O.NrOperacion ")
+Sqladd("where TA.FecIncorporacion = '"~IdxDate(Habiles(&fechaproceso, -1, 'ARG', SI))~"' ")
+Sqladd("AND TA.TipoRegistro='A' ")
+Sqladd("AND O.FechaVto > '"~IdxDate(&fechaproceso)~"' ")
+
+recorrer sql
+let(&seinformohoy, iif (Vacio(Query("SELECT 1 FROM "~Dbo()~"."~&tablainformada~" TH WHERE TH.FecIncorporacion = '"~IdxDate(&fechaproceso)~"' AND TH.CuentaContable = '"~Fbn('CuentaContable')~"' AND TH.NrOperacion = '"~Fbn('NrOperacion')~"' AND TH.TipoRegistro = 'A' ")), 0, 1))
+
+if (&seinformohoy = 0)
+let(&especiedecorte, Fbn('Especie'))
+let(&tipocupon, Fbn('TipCupon'))
+let(&cuentacontable, Fbn('CuentaContable'))
+let(&valorresidual, Fbn('ValorResidual'))
+let(&valorcontable, Fbn('ValorContable'))
+let(&valorcontablevaluado, Fbn('ValorContValuado'))
+let(&tiporegistro, Fbn('TipoRegistro'))
+let(&nroperacion, Fbn('NrOperacion'))
+let(&precioniif, Fbn('Cotizacion'))
+let(&cuentacustodia, Fbn('CuentaCustodia'))
+let(&informafecinc, Fbn('InformaFecInc'))
+
+Sqladd("INSERT INTO "~Dbo()~"."~&tablainformada~" ( ")
+Sqladd("Fecha, Especie, TipCupon, CuentaContable, ValorResidual, ")
+Sqladd("ValorContable, ValorContValuado, FecIncorporacion, ")
+Sqladd("TipoRegistro, NrOperacion, Cotizacion, CuentaCustodia, InformaFecInc ) ")
+Sqladd("VALUES ( ")
+Sqladd("'"~IdxDate(Val(fv:1))~"','"~&especiedecorte~"', "~FStr(&tipocupon, 0, 0)~",'"~&cuentacontable~"',"~FStr(&valorresidual, 0, 0)~", ")
+Sqladd(" "~FStr(&valorcontable, 0, 0)~", "~FStr(&valorcontablevaluado, 0, 2)~", '"~IdxDate(&fechaproceso)~"', ")
+Sqladd("'"~&tiporegistro~"', '"~&nroperacion~"', "~FStr(&precioniif, 0, 8)~", '"~&cuentacustodia~"', '"~&informafecinc~"') ")
+Sqlnew()
+Sqlexec()
+endif
+proximo
+

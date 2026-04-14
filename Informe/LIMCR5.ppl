@@ -1,0 +1,145 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Vehiculo1: 'Vehiculo';;;;;;;;;VAR('VEHICULODE')
+  Fecha1   : 'Fecha '  ;;;;;;;;;FSys
+  Radio1   : 'Total|Asignado|Consumido|Excedidos'       ;;;;;;;;;0
+FinDialogo
+if Not OK
+  Cancelar
+endif
+
+CrearFont(1,'Arial,8,B')
+CrearFont(2,'Arial,8,')
+
+AgregarBMP(a1,Exe('LOGO'),Exe('ESCALOGO'))
+
+ACT(a:4, 'Limites de Credito')
+ACT(d:4, 'Tipo : '~ItemLista('Asignado|Consumido|Excedidos|',Dialogo.Radio1+1))
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(a:5, 'Vehiculo: '~Dialogo.Vehiculo1)
+else
+  ACT(a:5, 'Vehiculo: Todos (Consolidado)')
+endif
+ACT(d:5, 'Fecha: '~Fecha(Dialogo.Fecha1))
+
+ACT(a:7, 'Entidad')
+ACT(b:7, 'Settlement')
+ACT(b:8, 'Asignado')
+ACT(c:8, 'Consumido')
+ACT(d:8, 'Disponible')
+ACT(e:7, 'Pre-Settlement')
+ACT(e:8, 'Asignado')
+ACT(f:8, 'Consumido')
+ACT(g:8, 'Disponible')
+
+ACT(h:7, 'Due From Currency')
+ACT(h:8, 'Asignado')
+ACT(i:8, 'Consumido')
+ACT(j:8, 'Disponible')
+
+AgregarMarco(a:7..p:8,1,0,Exe('COLOR6'))
+AgregarMarco(b:7..d:8,1)
+AgregarMarco(e:7..g:8,1)
+**AgregarMarco(h:7..j:8,1)
+AgregarMarco(h:7..j:8,1)
+AgregarMarco(n:7..p:8,1)
+AgregarMarco(b:8..d:8,1)
+AgregarMarco(e:8..g:8,1)
+**AgregarMarco(h:8..j:8,1)
+AgregarMarco(h:8..j:8,1)
+AgregarMarco(n:8..p:8,1)
+AgregarMarco(c:8..c:8,1)
+AgregarMarco(f:8..f:8,1)
+**AgregarMarco(i:8..i:8,1)
+AgregarMarco(i:8..i:8,1)
+AgregarMarco(o:8..o:8,1)
+
+SetFilaActual(8)
+SQL.ADD("Select Codigo, RazonSocial from "~DBO~".CLIENTES WHERE Codigo IN (SELECT Codigo FROM "~DBO~".LIMCONSUMIDOS) ")
+Recorrer SQL
+  if EsTerminal(fbn('Codigo'), Cliente)
+
+    *ACT(a:fac, fbn('Codigo'))
+    ACT(a:fac, Pad(fbn('Codigo'),10)~' - '~fbn('razonsocial'))
+    AsignarLink(a:fac,'LCRCON',Fecha1=Dialogo.Fecha1,Cliente1=FBN('Codigo'),Vehiculo1=Dialogo.Vehiculo1)
+* FJL 15/8/18 - En V6 no se carga LimOperativo en la tabla LIMASIGNADOS
+*    ACN(b:fac, LimOperativo(fbn('Codigo'), 'SETTLEMENT','USD',Dialogo.Vehiculo1))
+*    ACN(e:fac, LimOperativo(fbn('Codigo'), 'PRESETTLEM','USD',Dialogo.Vehiculo1))
+*    ACN(h:fac, LimOperativo(fbn('Codigo'), 'DFROM'     ,'USD',Dialogo.Vehiculo1))
+    ACN(b:fac, LimAsignado(fbn('Codigo'), 'SETTLEMENT','USD',Dialogo.Vehiculo1))
+    ACN(e:fac, LimAsignado(fbn('Codigo'), 'PRESETTLEM','USD',Dialogo.Vehiculo1))
+    ACN(h:fac, LimAsignado(fbn('Codigo'), 'DFROM'     ,'USD',Dialogo.Vehiculo1))
+    ACN(c:fac, LimSumado(   fbn('Codigo'), 'SETTLEMENT',Dialogo.Fecha1,Dialogo.Vehiculo1))
+    SCN(c:fac, LimSumado(   fbn('Codigo'), 'SETTFAIL'  ,Dialogo.Fecha1,Dialogo.Vehiculo1))
+    ACN(f:fac, LimConsumido(fbn('Codigo'), 'PRESETTLEM','USD',0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1))
+    ACN(i:fac, LimConsumido(fbn('Codigo'), 'DFROM'     ,'USD',0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1))
+
+
+    if Val(c:fac)>0.01 y Val(c:fac)<-0.01
+      AsignarLink(c:fac,'DETLCR',Fecha1=Dialogo.Fecha1,Cliente1=Val(a:fac),Vehiculo1=Dialogo.Vehiculo1,TipoLimite1='SETTLEMENT')
+    endif
+    if Val(f:fac)>0.01 y Val(f:fac)<-0.01
+      AsignarLink(f:fac,'DETLCR',Fecha1=Dialogo.Fecha1,Cliente1=Val(a:fac),Vehiculo1=Dialogo.Vehiculo1,TipoLimite1='PRESETTLEM')
+    endif
+    if Val(i:fac)>0.01 y Val(i:fac)<-0.01
+       AsignarLink(i:fac,'DETLCR',Fecha1=Dialogo.Fecha1,Cliente1=Val(a:fac),Vehiculo1=Dialogo.Vehiculo1,TipoLimite1='DFROM')
+    endif
+    ACN(d:fac, Val(b:fac)-Val(c:fac))
+    ACN(g:fac, Val(e:fac)-Val(f:fac))
+
+    ACN(j:fac, Val(h:fac)-Val(i:fac))
+**    if Dialogo.Radio1=1 y [Val(b:fac)>-0.01 y Val(b:fac)<0.01] y [Val(e:fac)>-0.01 y Val(e:fac)<0.01] y [Val(k:fac)>-0.01 y Val(k:fac)<0.01] y [Val(h:fac)>-0.01 y Val(h:fac)<0.01] y [Val(n:fac)>-0.01 y Val(n:fac)<0.01]
+    if Dialogo.Radio1=1 y [Val(b:fac)>-0.01 y Val(b:fac)<0.01] y [Val(e:fac)>-0.01 y Val(e:fac)<0.01] y [Val(h:fac)>-0.01 y Val(h:fac)<0.01] y [Val(n:fac)>-0.01 y Val(n:fac)<0.01]
+       BorrarCeldas(a:FAC..s:FAC)
+       DFA
+    endif
+**    if Dialogo.Radio1=2 y [Val(c:fac)>-0.01 y Val(c:fac)<0.01] y [Val(f:fac)>-0.01 y Val(f:fac)<0.01] y [Val(i:fac)>-0.01 y Val(i:fac)<0.01] y [Val(l:fac)>-0.01 y Val(l:fac)<0.01] y [Val(o:fac)>-0.01 y Val(o:fac)<0.01]
+    if Dialogo.Radio1=2 y [Val(c:fac)>-0.01 y Val(c:fac)<0.01] y [Val(f:fac)>-0.01 y Val(f:fac)<0.01] y [Val(i:fac)>-0.01 y Val(i:fac)<0.01] y [Val(o:fac)>-0.01 y Val(o:fac)<0.01]
+       BorrarCeldas(a:FAC..s:FAC)
+       DFA
+    endif
+**    if Dialogo.Radio1=3 y Val(d:fac)>=-0.01 y Val(g:fac)>=-0.01 y Val(j:fac)>=-0.01 y Val(m:fac)>=-0.01 y Val(p:fac)>=-0.01
+    if Dialogo.Radio1=3 y Val(d:fac)>=-0.01 y Val(g:fac)>=-0.01 y Val(j:fac)>=-0.01 y Val(p:fac)>=-0.01
+       BorrarCeldas(a:FAC..s:FAC)
+       DFA
+    endif
+  else
+    dfa
+  endif
+proximo
+
+AgregarMarco(a:9..a:fac,1)
+AgregarMarco(b:9..d:fac,1)
+AgregarMarco(e:9..g:fac,1)
+**AgregarMarco(h:9..j:fac,1)
+AgregarMarco(h:9..j:fac,1)
+AgregarMarco(n:9..p:fac,1)
+*AgregarMarco(q:9..s:fac,1)
+
+SetFont(a1..az:8, 1)
+SetFont(a9..az:fac, 2)
+FormatoCeldas(b9..s:fac, Exe('F2'))
+
+ACO(1,48)
+ACO(2,9)
+ACO(3,9)
+ACO(4,9)
+ACO(5,9)
+ACO(6,9)
+ACO(7,9)
+ACO(8,9)
+ACO(9,9)
+ACO(10,9)
+ACO(11,1)
+ACO(12,1)
+ACO(13,1)
+ACO(14,1)
+ACO(15,1)
+ACO(16,1)
+ACO(17,9)
+ACO(18,9)
+ACO(19,9)
+
+Impresion(1,2)
+LimitesVision(j:fac+1)
+SetPrintFit(3, 60)

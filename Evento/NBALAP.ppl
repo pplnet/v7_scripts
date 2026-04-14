@@ -1,0 +1,111 @@
+﻿HOJAVISIBLE(NO)
+MostrarCuadrodeMensajes
+CrearDialogo
+ Fecha1  :'D.F.Gener.'    ;;;;;;;;;FSYS
+ Fecha2  :'H.F.Gener.'    ;;;;;;;;;Fsys
+ Radio1  :'Procesar|Nuevos|Enviados|Ambos|' ;;;;;;;;;0
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+Message('Chequeando asientos bimonetarios ...')
+
+SQL.ADD(" SELECT A.NrUnicoAsiento, SUM(A1.Cantidad1) Cantidad, A1.Cantidad3, A1.Especie1, A1.DebitoCredito ")
+SQL.ADD(" FROM "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1  ")
+SQL.ADD(" Where A.NrUnicoAsiento = A1.NrUnicoAsiento ") 
+SQL.ADD("   and A.FechaGeneracion >= "~IdxDate2(Dialogo.Fecha1) )
+SQL.ADD("   and A.FechaGeneracion <= "~IdxDate2(Dialogo.Fecha2) )
+SQL.ADD("   and (A.Sector IS NULL OR A.Sector = '' ) ")
+SQL.ADD("   and A1.DebitoCredito = 'DEB' ")
+If Dialogo.Radio1=0
+  SQL.ADD(" and (A.Estado Is Null or Estado='') ")
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" and A.Estado In ('E','R') ")
+Endif
+SQL.ADD(" group by A.NrUnicoAsiento, A1.Cantidad3, A1.Especie1, A1.DebitoCredito ")
+SQL.ADD(" UNION ")
+SQL.ADD(" SELECT A.NrUnicoAsiento, SUM(A1.Cantidad1) Cantidad, A1.Cantidad3, A1.Especie1, A1.DebitoCredito ")
+SQL.ADD(" FROM "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1  ")
+SQL.ADD(" Where A.NrUnicoAsiento = A1.NrUnicoAsiento ") 
+SQL.ADD("   and A.FechaGeneracion >= "~IdxDate2(Dialogo.Fecha1) )
+SQL.ADD("   and A.FechaGeneracion <= "~IdxDate2(Dialogo.Fecha2) )
+SQL.ADD("   and (A.Sector IS NULL OR A.Sector = '' ) ")
+SQL.ADD("   and A1.DebitoCredito = 'CRE' ")
+If Dialogo.Radio1=0
+  SQL.ADD(" and (A.Estado Is Null or Estado='') ")
+Endif
+If Dialogo.Radio1=1
+  SQL.ADD(" and A.Estado In ('E','R') ")
+Endif
+SQL.ADD(" group by A.NrUnicoAsiento, A1.Cantidad3, A1.Especie1, A1.DebitoCredito ")
+SQL.ADD(" order by A.NrUnicoAsiento ")
+
+ACT(aa:1,'')
+ACN(ab:1, 0)
+
+***---Fstr2: En algunos casos Fstr pierde decimales al hacer los calculos. Fstr2 los salva.
+
+Recorrer SQL
+  If Eqstr(fbn('NrUnicoAsiento'),Val(aa:1))
+    dfa
+    ACN(ab:1,1)
+  Else
+    message(fbn('NrUnicoAsiento'))
+    ACN(ab:1,0)
+  Endif
+
+  ACT(a:fac, fbn('NrUnicoAsiento'))
+  If Eqstr(fbn('DebitoCredito'),'DEB')
+*    ACN(b:fac, NUM(FSTR(fbn('Cantidad'),0,2))*(-1))
+     ACN(B:fac, Num(Fstr2(fbn('Cantidad'),16,2)) * (-1))
+    ACT(c:fac, fbn('Especie1'))
+*    ACN(f:fac,  Val(b:fac)*iif( Eqstr(Modo(VAR('MONELOCA'),Val(c:fac)),'DIR'), 1/NUM(FSTR(fbn('Cantidad3'),0,4)) ,NUM(FSTR(fbn('Cantidad3'),0,4))))
+    ACN(f:fac,  (Num(Fstr2(fbn('Cantidad'),16,2)) * (-1)) * iif( Eqstr(Modo(VAR('MONELOCA'),Val(c:fac)),'DIR'), 1/NUM(FSTR2(fbn('Cantidad3'),0,4)) ,NUM(FSTR2(fbn('Cantidad3'),0,4))))
+  Else
+*    ACN(d:fac, NUM(FSTR(fbn('Cantidad'),0,2)))
+     ACN(D:fac, Num(Fstr2(fbn('Cantidad'),16,2)))
+    ACT(e:fac, fbn('Especie1'))
+*    ACN(g:fac,  Val(d:fac)*iif( Eqstr(Modo(VAR('MONELOCA'),Val(e:fac)),'DIR'), 1/NUM(FSTR(fbn('Cantidad3'),0,4)) ,NUM(FSTR(fbn('Cantidad3'),0,4))))
+    ACN(g:fac,  Num(Fstr2(fbn('Cantidad'),16,2)) * iif( Eqstr(Modo(VAR('MONELOCA'),Val(e:fac)),'DIR'), 1/NUM(FSTR2(fbn('Cantidad3'),0,4)) ,NUM(FSTR2(fbn('Cantidad3'),0,4))))
+  Endif
+
+*  ACN(h:fac, Val(f:fac)+Val(g:fac))
+
+  ACN(h:fac, Num(Fstr2(Val(F:fac), 0, 2)) + Num(Fstr2(Val(G:fac), 0, 2)))
+
+  If Val(ab:1)=1
+    * --- Cuando cambia de asiento.
+    If NUM(FSTR2(Val(h:fac),0,2))<>0 y Not Eqstr(Val(c:fac),Val(e:fac))
+      * SI NO BALANCEA  
+      * CALCULA LA DIFERENCIA
+      If [Eqstr(Val(c:fac),VAR('MONELOCA')) y ABS(Val(f:fac))>ABS(Val(g:fac))] o [Eqstr(Val(e:fac),VAR('MONELOCA')) y ABS(Val(g:fac))>ABS(Val(f:fac))]
+        * --- El monto en $ > a usd
+        ACN(j:fac, -ABS(Val(h:fac)))
+      Else
+        * --- El monto en $ < a usd
+        ACN(j:fac, ABS(Val(h:fac)))
+      Endif
+      * Busca el asiento, la linea en $ y la actualiza para que balancee
+      SQL.ADD(" SELECT *  FROM "~DBO~".ASIENTOSCON1 WHERE NrUnicoAsiento= '"~fbn('NrUnicoAsiento')~"' ")
+
+      Recorrer SQL
+         dfa
+         If Eqstr(fbn('Especie1'),VAR('MONELOCA'))
+           SQL.ADD(" UPDATE "~DBO~".ASIENTOSCON1 SET Cantidad1 = Cantidad1+"~fstr2(Val(j:fac),0,2)~" WHERE NrUnicoAsiento= '"~fbn('NrUnicoAsiento')~"' AND Especie1='"~VAR('MONELOCA')~"' ")
+           SQL.NEW
+           SQL.EXEC
+           message('Asiento '~fbn('NrUnicoAsiento')~' actualizado.')
+           Break
+         Endif
+      Proximo 
+    Endif
+  Endif
+
+  ACN(i:fac, fbn('Cantidad3'))
+  ACT(aa:1, fbn('NrUnicoAsiento'))
+Proximo
+
+

@@ -1,0 +1,75 @@
+﻿CrearDialogo
+  NrOperacion1: 'Nr.Operacion'             ;1;1;;;;;;;;;;;;" TipoOp in ('PME','PMU') and isnull(RB2,'0')<>'1' and NrOperacion  not in (Select M.NrOperacion From "~DBO~".MOVPENDIENTES M Where M.NrOperacion = NrOperacion and NrSaldo=1 and NrGrupo=1) and NrOperacion not in (Select ME.NrOperacion From "~DBO~".MOVEJECUTADOS ME Where ME.NrOperacion= NrOperacion and NrSaldo=1 and NrGrupo=1 ) and NrOperacion in (Select OB.NrOperacion from "~DBO~".OPERACIONESBITS OB where OB.NrOperacion=NrOperacion and OB.NrBit in ('10','70') and OB.Valor='1')  "
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+
+ACT(z1,Dialogo.NrOperacion1)
+
+ACN(x1,SQL("Select 1 From "~DBO~".MOVPENDIENTES Where NrOperacion='"~val(z1)~"' and NrSaldo=1 and NrGrupo=1 "))
+if val(x1)=1
+  Cancelar('El Desembolso ya fue cancelado. No puede cancelar.')
+endif
+
+ACN(x1,SQL("Select 1 From "~DBO~".MOVEJECUTADOS Where NrOperacion='"~val(z1)~"' and NrSaldo=1 and NrGrupo=1 "))
+if val(x1)=1
+  Cancelar('El Desembolso fue liquidado. No puede cancelar.')
+endif
+
+ACN(x1, SQL("Select 1 from "~DBO~".OPERACIONESBITS where NrOperacion='"~val(z1)~"' and NrBit in ('10','70') and Valor='1'"))
+if val(x1)<>1
+  Cancelar('La Operacion '~val(z1)~' debe estar en instancia Liquidacion o Terminal ')
+endif
+
+
+SQL.ADD("Select Especie, Cliente1, Cantidad, FechaOp, Plazo, FechaVto, Vehiculo1, Mercado, TipoOp, Cuenta3, RB2 ")
+SQL.ADD("From "~DBO~".OPERACIONES Where NrOperacion='"~val(z1)~"' ")
+Recorrer SQL
+  ACT(a1, fbn['Especie'])
+  ACT(b1, fbn['Cliente1'])
+  ACN(c1, fbn['Cantidad'])
+  ACD(d1, fbn['FechaOp'])
+  ACN(e1, fbn['Plazo'])
+  ACD(f1, fbn['FechaVto'])
+  ACT(p1, fbn['Vehiculo1'])
+  ACT(q1, fbn['Mercado'])
+  ACT(w1, fbn['TipoOp'])
+  ACT(c3, fbn['Cuenta3'])
+  ACT(bo4,FBN['RB2'])
+Proximo
+
+if EqStr(val(bo4),'1')
+  Cancelar('La Operacion '~val(z1)~' es Gar. 2412. No puede cancelar desembolso.')
+endif
+
+CrearDialogo
+  NrOperacion1 : "Operacion"           ; 1;1;;NO;;;;;val(z1)
+  Cliente1     : "Cliente"             ; 2;1;;NO;;;;;val(b1)
+  Especie1     : "Moneda"              ; 3;1;;NO;;;;;val(a1)
+  Cantidad1    : "Cantidad"            ; 4;1;;NO;;;;;val(c1)
+  Fecha1       : "F.Concer."           ; 1;2;;NO;;;;;val(d1)
+  Entero3      : "Pl.Original"         ; 2;2;;NO;;;;;val(e1)
+  Fecha2       : "F.Vto.Original"      ; 3;2;;NO;;;;;val(f1)
+  Cuenta1      : "Cuenta "             ; 5;1;;NO;;;;;val(c3)
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+
+if Messagebox('Confirma la Cancelacion del Desembolso del Prestamo '~val(z1)~' ?',3,1) = 1
+
+  ACN(pc1,0)
+  ACD(z2,FSYS)
+  if EqStr(val(w1),'PMU')
+    ACT(z3,'Alta Prestamo Pago Unico')
+  else
+    ACT(z3,'Alta de Prestamo con Esquema')
+  endif
+  (.'CANPRE18'.)
+
+  LinkearHoja('PMODES',5,NrTrans1=val(nm1), Check1=0)
+endif
+

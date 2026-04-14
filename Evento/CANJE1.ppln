@@ -1,0 +1,1015 @@
+MostrarCuadroDeMensajes()
+creardialogo
+fecha1:'Record Date';1;1;;;;dialogo.fecha1 <> 0;'Debe ingresar un Record Date valido';NO;FSys()
+fecha2:'Fecha Pago';2;1;;;;dialogo.fecha2 <> 0;'Debe ingresar una Fecha valida';NO;FSys()
+especie1:'Especie';3;1;;;;NoVacio(dialogo.especie1) y not DesciendeDeEspecie(dialogo.especie1, 'MONEDA');'Debe ingresar una Especie valida';NO;;;;;;" Jerarquia Like '"~jerarquia('ESPECIES', 'ACCION')~"%' "
+mercado1:'Mercado';4;1;;;;
+lista1:'Nuevas Especies ';1;2;;;;NoVacio(dialogo.lista1);'Debe Seleccionar Nuevas Especies';NO;;;SQLSet("select Codigo from "~Dbo()~".ESPECIES where Jerarquia LIKE '"~jerarquia('ESPECIES', 'ACCION')~"%' order by Codigo ")
+especie2:'Moneda Fraccion';0;1;;NO;;NoVacio(dialogo.especie2);'Debe ingresar moneda Fraccion';NO;Var('MONELOCA');if ((NoVacio(dialogo.especie1), Query(" Select MonedaEmision from "~Dbo()~".ESPECIES where Codigo='"~dialogo.especie1~"' "));'ARP|USD|';;;" Status='HAB' and Jerarquia Like '"~jerarquia('ESPECIES', 'MONEDA')~"%' ")
+cantidad1:'Valor Fraccion';1;1;;;;dialogo.cantidad1 > 0;'Debe especificar un Valor de Fraccion positivo';NO
+vehiculo1:'Vehiculo';2;1;;;;NoVacio(dialogo.vehiculo1);'Debe Ingresar el vehiculo';NO;Var('VEHICULODE')
+operador1:'Operador';3;1;;NO;;NoVacio(dialogo.operador1);'Debe Ingresar el Operador';NO;UsuarioActivo()
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Acd(fe:1, dialogo.fecha1)
+Acd(fe:2, dialogo.fecha2)
+Act(vh:1, dialogo.vehiculo1)
+Act(z:1, dialogo.especie1)
+Act(z:3, dialogo.lista1)
+Acn(z:5, Elementos(dialogo.lista1))
+Acd(z:6, dialogo.fecha1)
+Acd(z:7, dialogo.fecha2)
+Act(z:9, dialogo.mercado1)
+Act(z:10, dialogo.especie2)
+Acn(z:11, dialogo.cantidad1)
+Act(z:12, dialogo.vehiculo1)
+Acn(sa:1, 0)
+Acn(sa:2, 0)
+Act(xx:1, '*')
+
+Sqladd(" Select Nombre, ISIN, LaminaMinima ")
+Sqladd(" From "~Dbo()~".ESPECIES ")
+Sqladd(" Where Codigo = '"~dialogo.especie1~"' ")
+
+recorrer sql
+Dfa()
+Act(nm:1, Fbn('Nombre'))
+Act(ai:1, Fbn('ISIN'))
+Acn(lm:1, iif (Fbn('LaminaMinima') = 0, 1, Fbn('LaminaMinima')))
+proximo
+
+Acn(co:1, CotizacionC(dialogo.especie1, null, null, null, dialogo.fecha1, 1, SI, Val(z:10)))
+Acn(co:2, 1)
+Acn(co:3, CotizacionC(Var('MONEEXTR'), null, null, null, dialogo.fecha1, 1, SI, Var('MONELOCA')))
+Acn(co:4, Cotizacion(dialogo.especie1, null, null, null, dialogo.fecha1, 1, SI))
+Acn(sl:1, BuscarCampo('EstadosCustodia', 'NrSaldo', 'Codigo', Var('SALLIBRECU')))
+Act(sl:2, Var('LIBREDISP'))
+Act(sl:3, Var('BLOQUEOS'))
+Act(sl:4, Var('SALPARK'))
+
+Act(ml:1, Var('MERAUXLIQ'))
+
+recorrer&i 1, Val(z:5)
+creardialogo
+precio1:'Rel.Origen';2;2;;;;dialogo.precio1 > 0;'Debe especificar un valor positivo';NO;1;;;;'##0.0000'
+precio2:'Rel.Destino';3;2;;;;dialogo.precio2 > 0;'Debe especificar un valor positivo';NO;1;;;;'##0.0000'
+label1:'';1;1;;NO;;;;;'Relacion entre Especies'
+especie1: 'Esp.Actual';2;1;;NO;;;;;Val(z: 1)
+especie2: 'Esp.Nueva';3;1;;NO;;;;;ItemLista(Val(z: 3), &i)
+findialogo
+if (not ok)
+Cancelar()
+else
+Act(z:2, Val(z:2)~FStr(dialogo.precio1, 1, 4)~'|')
+Act(z:4, Val(z:4)~FStr(dialogo.precio2, 1, 4)~'|')
+endif
+proximo
+
+
+SetFilaActual(0)
+Acn(aa:5, 0)
+Acn(zz:1, 0)
+
+if (not celdavacia(z:9))
+if (Query(" Select 1 From "~Dbo()~".TRANSACCIONES2 Where TipoTr2='CANJE' and Especie='"~Val(z:1)~"' and Fecha1='"~IdxDate(Val(z:6))~"' and Vehiculo1='"~Val(vh:1)~"' and Mercado1='"~Val(z:9)~"' and RB1>0 ") = 1)
+Messagebox('Canje ya Ejectutado para Especie '~Val(z:1)~', Fecha '~Fecha(Val(z:6))~', Vehiculo '~Val(vh:1)~' y Mercado '~Val(z:9))
+Acn(zz:1, 1)
+endif
+else
+if (Query(" Select 1 From "~Dbo()~".TRANSACCIONES2 Where TipoTr2='CANJE' and Especie='"~Val(z:1)~"' and Fecha1='"~IdxDate(Val(z:6))~"' and Vehiculo1='"~Val(vh:1)~"' and RB1>0 ") = 1)
+Messagebox('Canje ya Ejectutado para Especie '~Val(z:1)~', Fecha '~Fecha(Val(z:6))~' y Vehiculo '~Val(vh:1))
+Acn(zz:1, 1)
+endif
+endif
+
+if (Val(zz:1) = 0)
+Sqladd("Select 0 Tipo, S.Cliente, S.Cuenta, S.Mercado, S.Saldo, S.NrSaldo, C.RazonSocial, C.CondicionGan, ")
+Sqladd("       C.CondicionIVA, C.Res3337, C.TipoCliente, C.TIngBru, '"~Val(vh:1)~"' Alias1 ")
+Sqladd("  from "~Dbo()~".SALDOSDIA S, "~Dbo()~".CLIENTES C, "~Dbo()~".CUENTAS CU ")
+Sqladd(" where S.Cliente      = C.Codigo ")
+Sqladd("   AND C.Status       = 'HAB' ")
+Sqladd("   AND S.NrSaldo      in ("~Pipe2Comillas(Val(sl:2))~") ")
+Sqladd("   AND S.NrSaldo      Not in ("~Pipe2Comillas(Val(sl:4))~") ")
+Sqladd("   and S.Especie      = '"~Val(z:1)~"' ")
+Sqladd("   and S.EnteCustodia = '"~Val(z:12)~"' ")
+Sqladd("   and S.Cuenta       = CU.Codigo ")
+Sqladd("   and CU.Comitente   = '"~Val(z:12)~"' ")
+Sqladd("   AND (C.BloqueoFondos = 'NO' or C.BloqueoFondos IS NULL ) ")
+if (not celdavacia(z:9))
+Sqladd(" AND S.Mercado      = '"~Val(z:9)~"' ")
+endif
+Sqladd("   and S.Fecha IN (select MAX(S1.Fecha) ")
+Sqladd("                    from  "~Dbo()~".SALDOSDIA S1 ")
+Sqladd("                    where (S1.Mercado = S.Mercado or (S1.Mercado IS NULL and S.Mercado IS NULL)) ")
+Sqladd("                      and (S1.Cuenta  = S.Cuenta  or (S1.Cuenta  IS NULL and S.Cuenta  IS NULL)) ")
+Sqladd("                      and (S1.Cupon   = S.Cupon   or (S1.Cupon   IS NULL and S.Cupon   IS NULL)) ")
+Sqladd("                      and (S1.CallPut = S.CallPut or (S1.CallPut IS Null and S.CallPut IS Null)) ")
+Sqladd("                      and S1.Cliente      = S.Cliente ")
+Sqladd("                      and S1.Especie      = S.Especie ")
+Sqladd("                      and S1.NrSaldo      = S.NrSaldo ")
+Sqladd("                      and S1.Fecha       <= "~IdxDate2(Val(z:6))~") ")
+
+Sqladd("union all ")
+
+Sqladd("Select 0 Tipo, S.Cliente, S.Cuenta, S.Mercado, S.Saldo, S.NrSaldo, C.RazonSocial, C.CondicionGan, ")
+Sqladd("       C.CondicionIVA, C.Res3337, C.TipoCliente, C.TIngBru, '"~Val(vh:1)~"' Alias1 ")
+Sqladd("  from "~Dbo()~".SALDOSDIA S, "~Dbo()~".CLIENTES C, "~Dbo()~".CUENTAS CU ")
+Sqladd(" where S.Cliente      = C.Codigo ")
+Sqladd("   AND C.Status       = 'HAB' ")
+Sqladd("   AND S.NrSaldo      in ("~Pipe2Comillas(Val(sl:3))~") ")
+Sqladd("   AND S.NrSaldo      Not in ("~Pipe2Comillas(Val(sl:4))~") ")
+Sqladd("   and S.Especie      = '"~Val(z:1)~"' ")
+Sqladd("   and S.EnteCustodia = '"~Val(z:12)~"' ")
+Sqladd("   and S.Cuenta       = CU.Codigo ")
+Sqladd("   and CU.Comitente   = '"~Val(z:12)~"' ")
+Sqladd("   AND (C.BloqueoFondos = 'NO' or C.BloqueoFondos IS NULL ) ")
+if (not celdavacia(z:9))
+Sqladd(" AND S.Mercado      = '"~Val(z:9)~"' ")
+endif
+Sqladd("   and S.Fecha IN (select MAX(S1.Fecha) ")
+Sqladd("                    from  "~Dbo()~".SALDOSDIA S1 ")
+Sqladd("                    where (S1.Mercado = S.Mercado or (S1.Mercado IS NULL and S.Mercado IS NULL)) ")
+Sqladd("                      and (S1.Cuenta  = S.Cuenta  or (S1.Cuenta  IS NULL and S.Cuenta  IS NULL)) ")
+Sqladd("                      and (S1.Cupon   = S.Cupon   or (S1.Cupon   IS NULL and S.Cupon   IS NULL)) ")
+Sqladd("                      and (S1.CallPut = S.CallPut or (S1.CallPut IS Null and S.CallPut IS Null)) ")
+Sqladd("                      and S1.Cliente      = S.Cliente ")
+Sqladd("                      and S1.Especie      = S.Especie ")
+Sqladd("                      and S1.NrSaldo      = S.NrSaldo ")
+Sqladd("                      and S1.Fecha       <= "~IdxDate2(Val(z:6))~") ")
+
+Sqladd("union all ")
+
+Sqladd("Select 1 Tipo, S.Cliente, S.Cuenta, S.Mercado, S.Saldo, S.NrSaldo, C.RazonSocial, C.CondicionGan, ")
+Sqladd("       C.CondicionIVA, C.Res3337, C.TipoCliente, C.TIngBru, '"~Val(vh:1)~"' Alias1 ")
+Sqladd("  from "~Dbo()~".SALDOSDIA S, "~Dbo()~".CLIENTES C, "~Dbo()~".CUENTAS CU ")
+Sqladd(" where S.Cliente      = C.Codigo ")
+Sqladd("   AND C.Status       = 'HAB' ")
+Sqladd("   AND S.NrSaldo      in ("~Pipe2Comillas(Val(sl:4))~") ")
+Sqladd("   and S.Especie      = '"~Val(z:1)~"' ")
+Sqladd("   and S.EnteCustodia = '"~Val(z:12)~"' ")
+Sqladd("   and S.Cuenta       = CU.Codigo ")
+Sqladd("   and CU.Comitente   = '"~Val(z:12)~"' ")
+Sqladd("   AND (C.BloqueoFondos = 'NO' or C.BloqueoFondos IS NULL ) ")
+if (not celdavacia(z:9))
+Sqladd(" AND S.Mercado      = '"~Val(z:9)~"' ")
+endif
+Sqladd("   and S.Fecha IN (select MAX(S1.Fecha) ")
+Sqladd("                    from  "~Dbo()~".SALDOSDIA S1 ")
+Sqladd("                    where (S1.Mercado = S.Mercado or (S1.Mercado IS NULL and S.Mercado IS NULL)) ")
+Sqladd("                      and (S1.Cuenta  = S.Cuenta  or (S1.Cuenta  IS NULL and S.Cuenta  IS NULL)) ")
+Sqladd("                      and (S1.Cupon   = S.Cupon   or (S1.Cupon   IS NULL and S.Cupon   IS NULL)) ")
+Sqladd("                      and (S1.CallPut = S.CallPut or (S1.CallPut IS Null and S.CallPut IS Null)) ")
+Sqladd("                      and S1.Cliente      = S.Cliente ")
+Sqladd("                      and S1.Especie      = S.Especie ")
+Sqladd("                      and S1.NrSaldo      = S.NrSaldo ")
+Sqladd("                      and S1.Fecha       <= "~IdxDate2(Val(z:6))~") ")
+Sqladd(" ORDER BY Tipo, S.Cliente, S.NrSaldo, S.Cuenta, S.Mercado ")
+
+Act(uu:fac, '')
+recorrer sql
+if (Fbn('Saldo') > 0)
+if (Fbn('Tipo') = 0)
+Scn(fi:2, 1)
+else
+endif
+Scn(aa:5, 1)
+Act(aa:1, Fbn('Cuenta'))
+Act(aa:3, Fbn('Mercado'))
+
+recorrer&i 1, Val(z:5)
+Acn(u:fac, Fbn('NrSaldo'))
+Acn(v:fac, Fbn('Tipo'))
+Acn(w:fac, Val(u:fac))
+if (Val(u:fac) > 201)
+Acn(w:fac, Val(u:fac) - 100)
+endif
+Act(x:fac, BuscarCampo('ESTADOSCUSTODIA', 'Descripcion', 'NrSaldo', Val(w:fac)))
+Acn(y:fac, 0)
+if (Incluido(Val(u:fac), Val(sl:3)))
+Acn(y:fac, 1)
+endif
+
+if (&i = 1)
+Act(a:fac, Fbn('Cliente'))
+Act(b:fac, Fbn('Cuenta'))
+Act(c:fac, Fbn('Mercado'))
+Act(d:fac, Fbn('Mercado'))
+Acn(e:fac, Fbn('Saldo'))
+Act(p:fac, Fbn('RazonSocial'))
+Act(r:fac, Fbn('RazonSocial'))
+Act(tc:1, Fbn('TipoCliente'))
+Act(aa:21, Fbn('Cliente'))
+
+if (not Eqstr(Val(aa:21), Fbn('Cliente')))
+Acn(xp:fac - 1, 1)
+Act(aa:21, Fbn('Cliente'))
+Message('Cliente: '~Fbn('Cliente'))
+endif
+
+Acn(f:fac, 1)
+Acn(g:fac, Fbn('Saldo'))
+Acn(t:fac, Val(e:fac) * Val(co:1))
+Act(ax:fac, Val(x:fac))
+Act(l:fac, BookDefault2(Val(vh:1), 'TIC', '', Val(z:1), '', '', '', '', 'HAB'))
+else
+Ifa()
+Act(c:fac, Fbn('Mercado'))
+Acn(f:fac, 1)
+Acn(g:fac, Fbn('Saldo'))
+Act(ax:fac, Val(ax:fac - 1))
+
+Scn(aa:5, 1)
+if (Fbn('Tipo') = 0)
+Scn(fi:2, 1)
+else
+endif
+endif
+Acn(k:fac, &i)
+
+Acn(se:fac, Fbn('Saldo'))
+Acn(sd:fac, Fbn('NrSaldo'))
+Act(me:fac, Fbn('Mercado'))
+
+
+if (NoVacio(Val(a:fac)))
+Act(cc:1, Val(a:fac))
+Act(cl:fac, Val(a:fac))
+else
+Act(cl:fac, Val(cc:1))
+endif
+
+Acn(h:fac, Num(ItemLista(Val(z:2), &i)))
+Act(i:fac, ItemLista(Val(z:3), &i))
+Acn(j:fac, Num(ItemLista(Val(z:4), &i)))
+Act(q:fac, '')
+
+if (not Eqstr(Val(cl:fac), Val(vh:1)))
+Acn(bd:fac, 1)
+if (Val(y:fac) = 1)
+Act(cf:fac, Query(" SELECT TOP 1 Codigo From "~Dbo()~".CUENTAS Where Cliente = '"~Val(cl:fac)~"' AND Estado = 'HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') and TipoCuenta In ('VIS') and Mercado='"~Val(ml:1)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+else
+Act(cf:fac, Query(" SELECT TOP 1 Codigo From "~Dbo()~".CUENTAS Where Cliente = '"~Val(cl:fac)~"' AND Estado = 'HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') and TipoCuenta In ('CC','CA') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+endif
+Acn(bb:fac, 0)
+Acn(pi:fac, 0)
+else
+Act(cf:fac, Query(" SELECT TOP 1 Codigo From "~Dbo()~".CUENTAS Where Cliente = '"~Val(cl:fac)~"' AND Estado = 'HAB' AND (Especies LIKE '"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+Acn(bd:fac, 0)
+Acn(pi:fac, 0)
+endif
+Acn(aa:4, Val(g:fac) * Val(j:fac) / Val(h:fac))
+Acn(n:fac, Trunc(Val(aa:4)))
+Acn(o:fac, (Val(aa:4) - Val(n:fac)) * Val(z:11))
+
+if (&i = 1)
+if (not Eqstr(Val(a:fac), Val(vh:1)) y Val(t:fac) > 0)
+Act(de:fac, 'CANJE')
+Acn(dg:fac, CotizacionC(Val(z:10), null, null, null, Val(fe:1), 25, SI, Var('MONELOCA')))
+Acn(dh:fac, iif (Eqstr(Modo(Val(z:10), Var('MONELOCA')), 'INV'), 1 / Val(dg:fac), Val(dg:fac)))
+
+Acn(df:fac, MontoArancelC(null, Val(a:fac), Val(z:1), Val(vh:1), Val(de:fac), Val(t:fac) * iif (Eqstr(Var('LIQCOMMO'), 'SI'), 1, Val(dh:fac)), 4, null, null, null, 'CANJE', Val(d:fac), null, null, SI, SI, null, SI))
+Acn(da:fac, MontoArancelC(null, Val(a:fac), Val(z:1), Val(vh:1), Val(de:fac), Val(t:fac) * iif (Eqstr(Var('LIQCOMMO'), 'SI'), 1, Val(dh:fac)), 0, null, null, null, 'CANJE', Val(d:fac), null, null, SI, SI, null, SI))
+
+Act(dc:fac, BuscarCampo('CLIENTES', 'CondicionIVA', 'Codigo', Val(vh:1)))
+Acn(dd:fac, MontoImpuesto('IVACOMECA', Val(fe:1), 3, Val(dc:fac)) / 100)
+
+Acn(db:fac, Val(da:fac) * Val(dd:fac))
+else
+Acn(da:fac, 0)
+Acn(db:fac, 0)
+endif
+if (Val(t:fac) > 0)
+if (Eqstr(Val(a:fac), Val(z:12)))
+Acn(ei:fac, 1)
+else
+Acn(ei:fac, 0)
+endif
+Act(ee:fac, 'CVCANJ')
+Acn(eg:fac, CotizacionC(Val(z:10), null, null, null, Val(fe:1), 25, SI, Var('MONELOCA')))
+Acn(eh:fac, iif (Eqstr(Modo(Val(z:10), Var('MONELOCA')), 'INV'), 1 / Val(eg:fac), Val(eg:fac)))
+
+Acn(ef:fac, MontoArancelC(null, Val(a:fac), Val(z:1), Val(vh:1), Val(ee:fac), Val(t:fac) * iif (Eqstr(Var('LIQCOMMO'), 'SI'), 1, Val(eh:fac)), 4, null, null, null, 'CANJE', Val(d:fac), null, null, SI, SI, null, SI))
+Acn(ea:fac, MontoArancelC(null, Val(a:fac), Val(z:1), Val(vh:1), Val(ee:fac), Val(t:fac) * iif (Eqstr(Var('LIQCOMMO'), 'SI'), 1, Val(eh:fac)), 0, null, null, null, 'CANJE', Val(d:fac), null, null, SI, SI, null, SI))
+
+Act(ec:fac, BuscarCampo('CLIENTES', 'CondicionIVA', 'Codigo', Val(vh:1)))
+Acn(ed:fac, MontoImpuesto('IVACOMECA', Val(fe:1), 3, Val(ec:fac)) / 100)
+
+Acn(eb:fac, Val(ea:fac) * Val(ed:fac))
+else
+Acn(ea:fac, 0)
+Acn(eb:fac, 0)
+endif
+else
+Act(e:fac, '')
+Act(t:fac, '')
+Act(da:fac, '')
+Act(db:fac, '')
+Act(ea:fac, '')
+Act(eb:fac, '')
+endif
+
+proximo
+else
+Dfa()
+endif
+proximo
+
+Acn(xp:fac - 1, 1)
+
+if (Val(aa:5) <= 0)
+Messagebox('No se encontraron Saldos de la especie solicitada')
+else
+crearlistbox;'Arial,8,';'Canje: '~Val(nm:1)~' (ISIN: '~Val(ai:1)~') - SALDOS'
+'Cliente';r:1..r:Val(fi:2);NO;;;90;string;;RGB(220, 220, 193)
+'Cuenta';b:1..b:Val(fi:2);NO;;;80;string;;RGB(220, 220, 193)
+'Mercado';d:1..d:Val(fi:2);NO;;;60;string;;RGB(220, 220, 193)
+'Saldo Inicial';e:1..e:Val(fi:2);NO;;;90;numero;'##,###,###.##';RGB(220, 220, 193)
+'Ok?';f:1..f:Val(fi:2);Val(k:flb) = 1;;;40;check;iif (Val(k:flb) = 1, RGB(255, 255, 193), RGB(220, 220, 193));iif (Val(k:flb) > 1, Val(f:flb - 1), Val(f:flb));
+'Cant.a Canjear';g:1..g:Val(fi:2);Val(k:flb) = 1;Val(g:flb) >= 0;'Cantidad origen Invalida';90;numero;'##,###,###.##';iif (Val(k:flb) = 1, RGB(255, 255, 193), RGB(220, 220, 193));iif (Val(k:flb) > 1, Val(g:flb - 1), Val(g:flb));SI;;;;;SI
+'Rel.Origen';h:1..h:Val(fi:2);NO;;;70;numero;'###,###.####';RGB(220, 220, 193)
+'Nueva Especie';i:1..i:Val(fi:2);NO;;;90;string;;RGB(220, 220, 193)
+'Rel.Destino';j:1..j:Val(fi:2);NO;;;70;numero;'###,###.####';RGB(220, 220, 193)
+'Cant.Dest.';n:1..n:Val(fi:2);NO;;;70;numero;'##,###,###.##';RGB(220, 220, 193);Trunc(Val(g:flb) * Val(j:flb) / Val(h:flb))
+'Fraccion '~Val(z:10);o:1..o:Val(fi:2);NO;;;80;numero;'##,###,###.##';RGB(220, 220, 193);((Val(g:flb) * Val(j:flb) / Val(h:flb)) - Trunc(Val(g:flb) * Val(j:flb) / Val(h:flb))) * Val(z:11)
+'Cta.Fraccion';cf:1..cf:Val(fi:2);SI;Val(f:flb) = 0 o ClienteCuenta(Val(cl:flb), Val(cf:flb), Val(z:10));'Cuenta de Fraccion Invalida';100;tabla;'CUENTAS';'Codigo';'Codigo; Nombre';iif (Val(bd:flb) = 0, " '"~Val(cl:flb)~"'=Cliente AND Estado='HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%')", " Cliente='"~Val(cl:flb)~"' AND Estado='HAB' AND Mercado='"~Val(c:flb)~"' AND (Especies LIKE '"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%')");RGB(255, 255, 193);iif (Eqstr(Val(cl:flb), Val(vh:1)), Query("SELECT Codigo FROM "~Dbo()~".CUENTAS WHERE Cliente='"~Val(cl:flb)~"' AND Estado='HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') "), Query("SELECT Codigo FROM "~Dbo()~".CUENTAS WHERE Cliente='"~Val(cl:flb)~"' AND Estado='HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') "));NO;NO;iif (Eqstr(Val(cl:flb), Val(vh:1)), '12');;;;SI
+'Valuacion';t:1..t:Val(fi:2);NO;;;120;numero;'#,###,###,###.##';RGB(220, 220, 193);iif (Val(k:flb) = 1, Val(g:flb) * Val(co:1))
+'Comision';da:1..da:Val(fi:2);NO;;;80;numero;'#,###,###,###.##';RGB(220, 220, 193);iif (Val(k:flb) = 1, MontoArancelC(null, Val(a:flb), Val(z:1), Val(vh:1), Val(de:flb), Val(t:flb) * iif (Eqstr(Var('LIQCOMMO'), 'SI'), 1, Val(dh:flb)), 0, null, null, null, 'CANJE', Val(d:flb), null, null, SI, SI, null, SI))
+'IVA';db:1..db:Val(fi:2);NO;;;80;numero;'#,###,###,###.##';RGB(220, 220, 193);iif (Val(k:flb) = 1, Val(da:flb) * Val(dd:flb))
+'Comision CV';ea:1..ea:Val(fi:2);NO;;;80;numero;'#,###,###,###.##';RGB(220, 220, 193);iif (Val(k:flb) = 1, MontoArancelC(null, Val(a:flb), Val(z:1), Val(vh:1), Val(ee:flb), Val(t:flb) * iif (Eqstr(Var('LIQCOMMO'), 'SI'), 1, Val(eh:flb)), 0, null, null, null, 'CANJE', Val(d:flb), null, null, SI, SI, null, SI))
+'IVA Com CV';eb:1..eb:Val(fi:2);NO;;;80;numero;'#,###,###,###.##';RGB(220, 220, 193);iif (Val(k:flb) = 1, Val(ea:flb) * Val(ed:flb))
+'Estado';ax:1..ax:Val(fi:2);NO;;;100;string;;RGB(220, 220, 193)
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+
+recorrer&j 1, Fac()
+if (Val(f:&j) = 1 y Val(bd:&j) = 1)
+Scn(sa:1, Val(g:&j))
+endif
+if (Val(f:&j) = 1 y Val(bd:&j) = 0)
+Scn(sa:2, Val(g:&j))
+endif
+proximo
+
+
+recorrer&i 1, Val(aa:5)
+if (not celdavacia(a:&i))
+Acn(aa:8, &i)
+Act(aa:6, Val(a:&i))
+Act(aa:10, Val(b:&i))
+Act(aa:11, Val(c:&i))
+Acn(aa:9, Val(e:&i))
+Act(aa:7, Val(p:&i))
+endif
+
+if (Val(f:&i) = 1)
+if (Val(k:&i) = 1)
+Scn(aa:9, (-1) * Val(g:&i))
+endif
+if (Val(aa:9) < 0)
+Messagebox('Se ha excedido el saldo de '~Val(z:1)~' del Cliente '~Val(aa:7)~' para la Cuenta '~Val(aa:10)~'.'~Chr(13)~Chr(10)~'No se grabaran sus movimientos.')
+recorrer&j Val(aa:8), &i
+Acn(f:&j, 0)
+proximo
+endif
+endif
+proximo
+
+
+recorrer&i 1, Val(aa:5)
+if (not celdavacia(a:&i))
+Act(aa:6, Val(a:&i))
+Act(aa:10, Val(b:&i))
+Act(aa:11, Val(c:&i))
+Act(aa:14, Query("select * from "~Dbo()~".CUENTAS where Cliente='"~Val(z:12)~"' and Mercado='"~Val(aa:11)~"' and (Especies LIKE '%TITULO%' or Especies LIKE '%"~Val(z:1)~"%')  and Estado='HAB' "))
+endif
+
+if (Val(f:&i) = 1)
+
+if ((not Eqstr(Val(b:&i), Val(xx:1)) o Val(u:&i) <> Val(xx:2)) y NoVacio(Val(r:&i)))
+Sqlexec()
+SqlActualizarmovimientost2(Val(aa:13), SI, NO, NO, SI)
+Sqlexec()
+Act(aa:13, getnumerador(405))
+
+
+Sqladd("insert into "~Dbo()~".TRANSACCIONES2 ")
+Sqladd("(TipoTr2, NrTrans, Cliente1, Numerador, UsrInput, ")
+Sqladd(" Vehiculo1, Mercado1, Especie, Especie2, ")
+Sqladd(" Fecha1, Fecha2, FechaCarga, FechaCargaSys, ")
+Sqladd(" Cuenta1, Cuenta5, Cantidad1, Cantidad2, Cantidad3, ")
+Sqladd(" Cambio2, Cambio3, Cambio4, Cliente2, ")
+Sqladd(" Cantidad10, Cantidad11, ")
+Sqladd(" Cantidad9, ")
+if (Val(ei:&i) = 1)
+Sqladd(" Cantidad12, Cantidad13, ")
+else
+Sqladd(" Cantidad14, Cantidad15, ")
+endif
+Sqladd(" CB3, ")
+Sqladd(" CB4, ")
+Sqladd(" Cambio5, ")
+Sqladd(" Book1, ")
+Sqladd(" Cupon1, ")
+Sqladd(" RB1, RB2 ")
+
+Sqladd(" ) values ( ")
+Sqladd(" 'CANJE', ")
+Sqladd(" '"~Val(aa:13)~"', ")
+Sqladd(" '"~Val(aa:6)~"', ")
+Sqladd(" 405, ")
+Sqladd(" '"~UsuarioActivo()~"', ")
+
+Sqladd(" '"~Val(z:12)~"', ")
+Sqladd(" '"~Val(me:&i)~"', ")
+Sqladd(" '"~Val(z:1)~"', ")
+Sqladd(" '"~Val(z:10)~"', ")
+
+Sqladd(" "~IdxDate2(Val(z:6))~", ")
+Sqladd(" "~IdxDate2(Val(z:7))~", ")
+Sqladd(" "~IdxDate2(FSys())~", ")
+Sqladd(" "~IdxDate2(FSys())~", ")
+
+Sqladd(" '"~Val(aa:10)~"', ")
+Sqladd(" '"~Val(cf:&i)~"', ")
+Sqladd(" "~Val(g:&i)~", ")
+Sqladd(" "~FStr(Val(sd:&i), 0, 0)~", ")
+Sqladd(" "~Val(o:&i)~", ")
+
+Sqladd(" "~Val(h:&i)~", ")
+Sqladd(" "~Val(j:&i)~", ")
+Sqladd(" "~Val(z:11)~", ")
+Sqladd(" '"~Val(cr:&i)~"', ")
+Sqladd(" "~FStr(Val(da:&i), 0, 2)~", ")
+Sqladd(" "~FStr(Val(db:&i), 0, 2)~", ")
+
+Sqladd(" "~FStr(Val(t:&i), 0, 2)~", ")
+Sqladd(" "~FStr(Val(ea:&i), 0, 2)~", ")
+Sqladd(" "~FStr(Val(eb:&i), 0, 2)~", ")
+
+Sqladd(" "~FStr(Val(y:&i), 0, 0)~", ")
+Sqladd(" "~FStr(Val(v:&i), 0, 0)~", ")
+Sqladd(" "~FStr(Val(u:&i), 0, 0)~", ")
+Sqladd(" '"~Val(l:&i)~"', ")
+Sqladd(" 0, ")
+Sqladd(" '1', ")
+Sqladd(" '0') ")
+Sqlnew()
+
+
+Sqladd(" INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+Sqladd(" ( NrOperacion, NrBit, Valor ) ")
+Sqladd(" VALUES ")
+Sqladd(" ( '"~Val(aa:13)~"',51, '1') ")
+Sqlnew()
+
+Message('Transaccion Nro. '~Val(aa:13)~' generada.')
+Acn(nc:1, 0)
+Sqlexec()
+endif
+
+Scn(nc:1, 1)
+Message(FStr(Val(nc:1), 0, 0)~' - '~Val(i:&i))
+
+Sqladd(" INSERT INTO "~Dbo()~".CUOTAS ( ")
+Sqladd(" NrOperacion, NrCuota, Especie1, ")
+Sqladd(" Cantidad1, Cantidad2, Cantidad3, Cantidad4 ")
+Sqladd(" ) VALUES ( ")
+Sqladd(" '"~Val(aa:13)~"', ")
+Sqladd(" "~FStr(Val(nc:1), 0, 0)~", ")
+Sqladd(" '"~Val(i:&i)~"', ")
+Sqladd(" "~FStr(Val(n:&i), 0, 2)~", ")
+Sqladd(" "~FStr(Val(h:&i), 0, 0)~", ")
+Sqladd(" "~FStr(Val(j:&i), 0, 0)~", ")
+Sqladd(" "~FStr(Val(g:&i), 0, 2)~" ")
+Sqladd(" ) ")
+Sqlnew()
+Sqlexec()
+
+SqlActualizarmovimientost2(Val(aa:13), SI, NO, NO, SI)
+Sqlexec()
+
+Act(xx:1, Val(b:&i))
+Acn(xx:2, Val(u:&i))
+endif
+proximo
+
+endif
+
+
+if (NO)
+Act(xx:1, '*')
+Acn(fi:1, Fac() + 1)
+Sqladd("SELECT M.Cliente, M.Cuenta, M.Mercado, SUM(M.Cantidad) Cantidad, C.RazonSocial, ")
+Sqladd("       C.CondicionGan, C.CondicionIVA, C.Res3337, C.TipoCliente, C.TIngBru, '"~Val(vh:1)~"' Alias1 ")
+Sqladd("  FROM "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".CLIENTES C, "~Dbo()~".OPERACIONES O, "~Dbo()~".CUENTAS CU ")
+Sqladd(" WHERE M.Cliente      = C.Codigo ")
+Sqladd("   and C.Status       = 'HAB' ")
+Sqladd("   AND M.NrSaldo      = 1 ")
+Sqladd("   AND M.Especie      = '"~Val(z:1)~"' ")
+Sqladd("   AND M.NrOperacion  = O.NrOperacion ")
+Sqladd("   and M.EnteCustodia = '"~Val(vh:1)~"' ")
+Sqladd("   and M.Cuenta       = CU.Codigo ")
+Sqladd("   and CU.Comitente   = '"~Val(vh:1)~"' ")
+if (not celdavacia(z:9))
+Sqladd(" AND M.Mercado      = '"~Val(z:9)~"'")
+endif
+Sqladd("   AND M.FechaMov    <= '"~IdxDate(Val(z:6))~"'  ")
+Sqladd(" GROUP BY M.Cliente, M.Cuenta, M.Mercado, C.RazonSocial, C.CondicionGan, ")
+Sqladd("          C.CondicionIVA, C.TipoCliente, C.Res3337, C.TipoCliente, C.TIngBru ")
+
+Sqladd(" Union ")
+
+Sqladd("SELECT M.Cliente, M.Cuenta, M.Mercado, SUM(M.Cantidad) Cantidad, C.RazonSocial, ")
+Sqladd("       C.CondicionGan, C.CondicionIVA, C.Res3337, C.TipoCliente, C.TIngBru, '"~Val(vh:1)~"' Alias1 ")
+Sqladd("  FROM "~Dbo()~".MOVPENDIENTES M, "~Dbo()~".CLIENTES C, "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".CUENTAS CU ")
+Sqladd(" WHERE M.Cliente      = C.Codigo ")
+Sqladd("   and C.Status       = 'HAB' ")
+Sqladd("   AND M.NrSaldo      = "~FStr(Val(sl:1), 0, 0)~" ")
+Sqladd("   AND M.Especie      = '"~Val(z:1)~"' ")
+Sqladd("   AND M.NrOperacion  = T.NrTrans ")
+Sqladd("   AND (T.TipoTr2 not in ('CANJE','DTP','RTP') or (CB6 = '0' and  T.TipoTr2 in ('DTP','RTP'))) ")
+Sqladd("   and M.EnteCustodia = '"~Val(vh:1)~"' ")
+Sqladd("   and M.Cuenta       = CU.Codigo ")
+Sqladd("   and CU.Comitente   = '"~Val(vh:1)~"' ")
+if (not celdavacia(z:9))
+Sqladd(" AND M.Mercado      = '"~Val(z:9)~"'")
+endif
+Sqladd("   AND M.FechaMov    <= '"~IdxDate(Val(z:6))~"'  ")
+Sqladd(" GROUP BY M.Cliente, M.Cuenta, M.Mercado, C.RazonSocial, C.CondicionGan, ")
+Sqladd("          C.CondicionIVA, C.TipoCliente, C.Res3337, C.TipoCliente, C.TIngBru ")
+
+Sqladd(" ORDER BY M.Cliente, M.Mercado, M.Cuenta ")
+
+Acn(aa:5, Fac())
+Acn(zz:2, Fac())
+
+recorrer sql
+Scn(aa:5, 1)
+Act(aa:1, Fbn('Cuenta'))
+Act(aa:3, Fbn('Mercado'))
+
+recorrer&i 1, Val(z:5)
+if (&i = 1)
+Act(a:fac, Fbn('Cliente'))
+Act(b:fac, Fbn('Cuenta'))
+Act(c:fac, Fbn('Mercado'))
+Acn(e:fac, -Fbn('Cantidad'))
+Act(p:fac, Fbn('RazonSocial'))
+Act(r:fac, Fbn('RazonSocial'))
+Act(tc:1, Fbn('TipoCliente'))
+Act(aa:21, Fbn('Cliente'))
+
+if (not Eqstr(Val(aa:21), Fbn('Cliente')))
+Acn(xp:fac - 1, 1)
+Act(aa:21, Fbn('Cliente'))
+Message('Cliente: '~Fbn('Cliente'))
+endif
+
+Acn(f:fac, 1)
+Acn(g:fac, -Fbn('Cantidad'))
+Acn(t:fac, Val(e:fac) * Val(co:1))
+else
+Acn(f:fac, 0)
+Acn(g:fac, 0)
+Scn(aa:5, 1)
+Ifa()
+endif
+
+Acn(se:fac, Fbn('Cantidad'))
+Act(me:fac, Fbn('Mercado'))
+
+if (NoVacio(Val(a:fac)))
+Act(cc:1, Val(a:fac))
+Act(cl:fac, Val(a:fac))
+else
+Act(cl:fac, Val(cc:1))
+endif
+
+Acn(h:fac, Num(ItemLista(Val(z:2), &i)))
+Act(i:fac, ItemLista(Val(z:3), &i))
+Acn(j:fac, Num(ItemLista(Val(z:4), &i)))
+Act(q:fac, '')
+
+if (not Eqstr(Val(cl:fac), Val(vh:1)))
+Acn(bd:fac, 1)
+Act(cf:fac, Query(" SELECT TOP 1 Codigo From "~Dbo()~".CUENTAS Where Cliente = '"~Val(cl:fac)~"' AND Estado = 'HAB' AND (Especies LIKE '"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+Acn(bb:fac, 0)
+Acn(pi:fac, 0)
+else
+Act(cf:fac, Query(" SELECT TOP 1 Codigo From "~Dbo()~".CUENTAS Where Cliente = '"~Val(cl:fac)~"' AND Estado = 'HAB' AND (Especies LIKE '"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+Acn(bd:fac, 0)
+Acn(pi:fac, 0)
+endif
+Acn(aa:4, Val(g:fac) * Val(j:fac) / Val(h:fac))
+Acn(n:fac, Trunc(Val(aa:4)))
+Acn(o:fac, (Val(aa:4) - Val(n:fac)) * Val(z:11))
+
+if (&i = 1)
+if (not Eqstr(Val(a:fac), Val(vh:1)) y Val(t:fac) > 0)
+Act(de:fac, 'CANJE')
+Acn(dg:fac, CotizacionC(Val(z:10), null, null, null, Val(fe:1), 25, SI, Var('MONELOCA')))
+Acn(dh:fac, iif (Eqstr(Modo(Val(z:10), Var('MONELOCA')), 'INV'), 1 / Val(dg:fac), Val(dg:fac)))
+
+Acn(df:fac, MontoArancelC(null, Val(a:fac), Val(z:1), Val(vh:1), Val(de:fac), Val(t:fac) * iif (Eqstr(Var('LIQCOMMO'), 'SI'), 1, Val(dh:fac)), 4, null, null, null, 'CANJE', Val(d:fac), null, null, SI, SI, null, SI))
+Acn(da:fac, MontoArancelC(null, Val(a:fac), Val(z:1), Val(vh:1), Val(de:fac), Val(t:fac) * iif (Eqstr(Var('LIQCOMMO'), 'SI'), 1, Val(dh:fac)), 0, null, null, null, 'CANJE', Val(d:fac), null, null, SI, SI, null, SI))
+
+Act(dc:fac, BuscarCampo('CLIENTES', 'CondicionIVA', 'Codigo', Val(vh:1)))
+Acn(dd:fac, MontoImpuesto('IVACOMECA', Val(fe:1), 3, Val(dc:fac)) / 100)
+
+Acn(db:fac, Val(da:fac) * Val(dd:fac))
+else
+Acn(da:fac, 0)
+Acn(db:fac, 0)
+endif
+endif
+
+proximo
+proximo
+
+Acn(xp:fac - 1, 1)
+
+if (Val(aa:5) = Val(zz:2))
+Messagebox('No se encontraron Movimientos de la especie solicitada')
+else
+crearlistbox;'Arial,8,';'Canje: '~Val(nm:1)~' (ISIN: '~Val(ai:1)~') - MOVPENDIENTES'
+'Cliente';r:Val(fi:1)..r:Val(aa:5);NO;;;90;string;;RGB(220, 220, 193)
+'Cuenta';b:Val(fi:1)..b:Val(aa:5);NO;;;80;string;;RGB(220, 220, 193)
+'Mercado';c:Val(fi:1)..c:Val(aa:5);NO;;;60;string;;RGB(220, 220, 193)
+'Cantidad';e:Val(fi:1)..e:Val(aa:5);NO;;;70;numero;'##,###,###.##';RGB(220, 220, 193)
+'Ok?';f:Val(fi:1)..f:Val(aa:5);;;;40;check;RGB(255, 255, 193)
+'Cant.Orig.';g:Val(fi:1)..g:Val(aa:5);SI;;;120;numero;'##,###,###.##';RGB(255, 255, 193);;;;;;;;SI
+'Rel.Origen';h:Val(fi:1)..h:Val(aa:5);NO;;;70;numero;'###,###';RGB(220, 220, 193)
+'Nueva Especie';i:Val(fi:1)..i:Val(aa:5);NO;;;90;string;;RGB(220, 220, 193)
+'Rel.Destino';j:Val(fi:1)..j:Val(aa:5);NO;;;70;numero;'###,###';RGB(220, 220, 193)
+'Cant.Dest.';n:Val(fi:1)..n:Val(aa:5);NO;;;120;numero;'##,###,###.##';RGB(220, 220, 193);Trunc(Val(g:flb) * Val(j:flb) / Val(h:flb))
+'Fraccion '~Val(z:10);o:Val(fi:1)..o:Val(aa:5);NO;;;100;numero;'##,###,###.##';RGB(220, 220, 193);((Val(g:flb) * Val(j:flb) / Val(h:flb)) - Trunc(Val(g:flb) * Val(j:flb) / Val(h:flb))) * Val(z:11)
+'Cta.Fraccion';cf:Val(fi:1)..cf:Val(aa:5);SI;Val(f:flb) = 0 o ClienteCuenta(Val(cl:flb), Val(cf:flb), Val(z:10));'Cuenta de Fraccion Invalida';100;tabla;'CUENTAS';'Codigo';'Codigo; Nombre';iif (Val(bd:flb) = 0, "'"~Val(cl:flb)~"'=Cliente AND Estado='HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%')", " Cliente='"~Val(cl:flb)~"' AND Estado='HAB' AND Mercado='"~Val(c:flb)~"' AND (Especies LIKE '"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%')");RGB(255, 255, 193);iif (Eqstr(Val(cl:flb), Val(vh:1)), Query("SELECT Codigo FROM "~Dbo()~".CUENTAS WHERE Cliente='"~Val(cl:flb)~"' AND Estado='HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') "), Query("SELECT Codigo FROM "~Dbo()~".CUENTAS WHERE Cliente='"~Val(cl:flb)~"' AND Estado='HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') AND Mercado='"~Val(c:flb)~"'"));NO;NO;iif (Eqstr(Val(cl:flb), Val(vh:1)), '12');;;;SI
+'Valuacion';t:Val(fi:1)..t:Val(aa:5);NO;;;120;numero;'#,###,###,###.##';RGB(220, 220, 193)
+'Comision';da:Val(fi:1)..da:Val(aa:5);NO;;;120;numero;'#,###,###,###.##';RGB(220, 220, 193)
+'IVA';db:Val(fi:1)..db:Val(aa:5);NO;;;120;numero;'#,###,###,###.##';RGB(220, 220, 193)
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+
+recorrer&j Val(fi:1), Fac()
+if (Val(f:&j) = 1 y Val(bd:&j) = 1)
+Scn(sa:1, Val(g:&j))
+endif
+if (Val(f:&j) = 1 y Val(bd:&j) = 0)
+Scn(sa:2, Val(g:&j))
+endif
+proximo
+
+
+recorrer&i Val(fi:1), Val(aa:5)
+if (not celdavacia(a:&i))
+Acn(aa:8, &i)
+Act(aa:6, Val(a:&i))
+Act(aa:10, Val(b:&i))
+Act(aa:11, Val(c:&i))
+Acn(aa:9, Val(e:&i))
+Act(aa:7, Val(p:&i))
+endif
+
+if (Val(f:&i) = 1)
+if (Val(g:&i) < 0)
+Scn(aa:9, (-1) * Val(gg:&i))
+else
+Scn(aa:9, Val(gg:&i))
+endif
+if (Val(aa:9) < 0)
+Messagebox('Se ha excedido el saldo de '~Val(z:1)~' del Cliente '~Val(aa:7)~' para la Cuenta '~Val(aa:10)~'.'~Chr(13)~Chr(10)~'No se grabaran sus movimientos.')
+recorrer&j Val(aa:8), &i
+Acn(f:&j, 0)
+proximo
+endif
+endif
+proximo
+
+
+recorrer&i Val(fi:1), Val(aa:5)
+if (not celdavacia(a:&i))
+Act(aa:6, Val(a:&i))
+Act(aa:10, Val(b:&i))
+Act(aa:11, Val(c:&i))
+Act(aa:14, Query("select * from "~Dbo()~".CUENTAS where Cliente='"~Val(z:12)~"' and Mercado='"~Val(aa:11)~"' and (Especies LIKE '%TITULO%' or Especies LIKE '%"~Val(z:1)~"%')  and Estado='HAB' "))
+endif
+
+if (Val(f:&i) = 1)
+if (not Eqstr(Val(b:&i), Val(xx:1)) y NoVacio(Val(r:&i)))
+Acn(fr:1, 0)
+
+Sqlexec()
+SqlActualizarmovimientost2(Val(aa:13), SI, NO, NO, NO)
+
+Sqlexec()
+Act(aa:13, getnumerador(405))
+
+
+Sqladd("insert into "~Dbo()~".TRANSACCIONES2 ")
+Sqladd("(TipoTr2, NrTrans, Cliente1, Numerador, UsrInput, ")
+Sqladd(" Vehiculo1, Mercado1, Especie, Especie2, ")
+Sqladd(" Fecha1, Fecha2, FechaCarga, FechaCargaSys, ")
+Sqladd(" Cuenta1, Cuenta5, Cantidad1,  Cantidad3, ")
+Sqladd(" Cambio2, Cambio3, Cambio4, Cliente2, ")
+Sqladd(" Cantidad10, Cantidad11, ")
+Sqladd(" RB1, RB2) ")
+Sqladd(" values ")
+Sqladd("('CANJE','"~Val(aa:13)~"','"~Val(aa:6)~"', 405, '"~UsuarioActivo()~"', ")
+Sqladd(" '"~Val(z:12)~"', '"~Val(me:&i)~"', '"~Val(z:1)~"','"~Val(z:10)~"', ")
+Sqladd(" "~IdxDate2(Val(z:6))~","~IdxDate2(Val(z:7))~","~IdxDate2(FSys())~","~IdxDate2(FSys())~", ")
+Sqladd(" '"~Val(aa:10)~"', '"~Val(cf:&i)~"', "~Val(se:&i)~", "~Val(o:&i)~", ")
+Sqladd(" "~Val(h:&i)~","~Val(j:&i)~","~Val(z:11)~", '"~Val(cr:&i)~"', ")
+Sqladd(" "~FStr(Val(da:&i), 0, 0)~", "~FStr(Val(db:&i), 0, 0)~", ")
+Sqladd(" '2', '0') ")
+Sqlnew()
+
+
+Sqladd(" INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+Sqladd(" ( NrOperacion, NrBit, Valor ) ")
+Sqladd(" VALUES ")
+Sqladd(" ( '"~Val(aa:13)~"',51, '1') ")
+Sqlnew()
+
+Message('Transaccion Nro. '~Val(aa:13)~' generada.')
+Acn(nc:1, 0)
+Sqlexec()
+endif
+
+Scn(fr:1, Val(o:&i))
+Sqladd(" Update "~Dbo()~".TRANSACCIONES2 Set ")
+Sqladd(" Cantidad3 = "~FStr(Trunc(Val(fr:1), 2), 0, 2)~" ")
+Sqladd(" Where NrTrans = '"~Val(aa:13)~"' ")
+Sqlnew()
+
+Scn(nc:1, 1)
+Message(FStr(Val(nc:1), 0, 0)~' - '~Val(i:&i))
+
+Sqladd(" INSERT INTO "~Dbo()~".CUOTAS ( ")
+Sqladd(" NrOperacion, NrCuota, Especie1, ")
+Sqladd(" Cantidad1, Cantidad2, Cantidad3, Cantidad4 ")
+Sqladd(" ) VALUES ( ")
+Sqladd(" '"~Val(aa:13)~"', "~FStr(Val(nc:1), 0, 0)~", '"~Val(i:&i)~"', ")
+Sqladd(" "~FStr(Val(n:&i), 0, 2)~", "~FStr(Val(h:&i), 0, 0)~", "~FStr(Val(j:&i), 0, 0)~", "~FStr(Val(g:&i), 0, 2)~" ")
+Sqladd(" ) ")
+Sqlnew()
+Sqlexec()
+
+SqlActualizarmovimientost2(Val(aa:13), SI, NO, NO, NO)
+Sqlexec()
+
+Act(xx:1, Val(b:&i))
+endif
+proximo
+
+endif
+
+endif
+
+endif
+
+
+Act(xx:1, '*')
+Acn(zz:1, 0)
+
+if (not celdavacia(z:9))
+if (Query(" Select 1 From "~Dbo()~".TRANSACCIONES2 Where TipoTr2='CANJE' and Especie='"~Val(z:1)~"' and Fecha1='"~IdxDate(Val(z:6))~"' and Vehiculo1='"~Val(vh:1)~"' and Mercado1='"~Val(z:9)~"' and RB1=0 ") = 1)
+Messagebox('Canje ya Ejectutado para Especie '~Val(z:1)~', Fecha '~Fecha(Val(z:6))~', Vehiculo '~Val(vh:1)~' y Mercado '~Val(z:9))
+Acn(zz:1, 1)
+endif
+else
+if (Query(" Select 1 From "~Dbo()~".TRANSACCIONES2 Where TipoTr2='CANJE' and Especie='"~Val(z:1)~"' and Fecha1='"~IdxDate(Val(z:6))~"' and Vehiculo1='"~Val(vh:1)~"' and RB1=0 ") = 1)
+Messagebox('Canje ya Ejectutado para Especie '~Val(z:1)~', Fecha '~Fecha(Val(z:6))~' y Vehiculo '~Val(vh:1))
+Acn(zz:1, 1)
+endif
+endif
+
+if (Val(zz:1) = 0 y NO)
+Acn(fi:1, Fac() + 1)
+Sqladd(" Select P.Cliente, P.Book, P.Sector as Mercado, P.CantidadFin as Cantidad, C.RazonSocial, ")
+Sqladd(" C.CondicionGan, C.CondicionIVA, C.Res3337, C.TipoCliente, C.TIngBru, '"~Val(vh:1)~"' Alias1 ")
+Sqladd(" From "~Dbo()~".POSICIONESACCION P, "~Dbo()~".CLIENTES C ")
+Sqladd(" Where P.Cliente = C.Codigo ")
+Sqladd(" AND P.Especie = '"~Val(z:1)~"' ")
+Sqladd(" AND P.Cliente = '"~Val(vh:1)~"' ")
+Sqladd(" AND P.Vehiculo = '"~Val(vh:1)~"' ")
+Sqladd(" and P.NrSaldo = 101 ")
+if (not celdavacia(z:9))
+Sqladd(" AND P.Sector = '"~Val(z:9)~"' ")
+endif
+Sqladd(" AND P.Fecha = (Select Max(P2.Fecha) From "~Dbo()~".POSICIONESACCION P2 ")
+Sqladd("               Where P.Especie = P2.Especie ")
+Sqladd("               AND P.Cliente = P2.Cliente ")
+Sqladd("               AND P.Vehiculo = P2.Vehiculo ")
+Sqladd("               AND P.NrSaldo = P2.NrSaldo ")
+Sqladd("               AND P.Book    = P2.Book ")
+Sqladd("               AND P.Sector = P2.Sector ")
+Sqladd("               AND P2.Fecha <= '"~IdxDate(Val(z:6))~"') ")
+
+Sqladd(" ORDER BY P.Cliente, Mercado, P.Book ")
+
+Acn(aa:5, Fac())
+Acn(zz:2, Fac())
+
+recorrer sql
+if (Fbn('Cantidad') > 0)
+Scn(aa:5, 1)
+Act(aa:1, Fbn('Book'))
+Act(aa:3, Fbn('Mercado'))
+
+recorrer&i 1, Val(z:5)
+if (&i = 1)
+Act(a:fac, Fbn('Cliente'))
+Act(b:fac, Fbn('Book'))
+Act(c:fac, Fbn('Mercado'))
+Acn(e:fac, Fbn('Cantidad'))
+Act(p:fac, Fbn('RazonSocial'))
+Act(r:fac, Fbn('RazonSocial'))
+Act(tc:1, Fbn('TipoCliente'))
+Act(aa:21, Fbn('Cliente'))
+
+if (not Eqstr(Val(aa:21), Fbn('Cliente')))
+Acn(xp:fac - 1, 1)
+Act(aa:21, Fbn('Cliente'))
+Message('Cliente: '~Fbn('Cliente'))
+endif
+
+Acn(f:fac, 1)
+Acn(g:fac, Fbn('Cantidad'))
+else
+Acn(f:fac, 0)
+Acn(g:fac, 0)
+Scn(aa:5, 1)
+Ifa()
+endif
+
+Acn(se:fac, Fbn('Cantidad'))
+Act(me:fac, Fbn('Mercado'))
+
+if (NoVacio(Val(a:fac)))
+Act(cc:1, Val(a:fac))
+Act(cl:fac, Val(a:fac))
+else
+Act(cl:fac, Val(cc:1))
+endif
+
+Acn(h:fac, Num(ItemLista(Val(z:2), &i)))
+Act(i:fac, ItemLista(Val(z:3), &i))
+Acn(j:fac, Num(ItemLista(Val(z:4), &i)))
+Act(q:fac, '')
+
+if (not Eqstr(Val(cl:fac), Val(vh:1)))
+Acn(bd:fac, 1)
+
+Act(cr:fac, '')
+Act(cf:fac, Query(" SELECT Codigo From "~Dbo()~".CUENTAS Where Cliente = '"~Val(cl:fac)~"' AND Estado = 'HAB' AND Especies LIKE '"~Val(z:10)~"%' "))
+Acn(bb:fac, 0)
+Acn(pi:fac, 0)
+else
+Act(cr:fac, Fbn('Alias1'))
+Act(cf:fac, Query(" SELECT Codigo From "~Dbo()~".CUENTAS Where Cliente = '"~Val(cl:fac)~"' AND Estado = 'HAB' AND (Especies LIKE '"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') and TipoCuenta In ('CC','CA') "))
+Acn(bd:fac, 0)
+Acn(pi:fac, 0)
+endif
+Acn(aa:4, Val(g:fac) * Val(j:fac) / Val(h:fac))
+Acn(n:fac, Trunc(Val(aa:4)))
+Acn(o:fac, (Val(aa:4) - Val(n:fac)) * Val(z:11))
+proximo
+else
+Dfa()
+endif
+proximo
+
+Acn(xp:fac - 1, 1)
+
+if (Val(aa:5) = Val(zz:2))
+Messagebox('No se encontraron Posiciones de la especie solicitada')
+else
+crearlistbox;'Arial,8,';'  Canje: '~Val(nm:1)~' (ISIN: '~Val(ai:1)~') - POSICIONES'
+'Cliente';r:Val(fi:1)..r:Val(aa:5);NO;;;90;string;;RGB(220, 220, 193)
+'Book';b:Val(fi:1)..b:Val(aa:5);NO;;;80;string;;RGB(220, 220, 193)
+'Mercado';c:Val(fi:1)..c:Val(aa:5);NO;;;60;string;;RGB(220, 220, 193)
+'Cantidad';e:Val(fi:1)..e:Val(aa:5);NO;;;70;numero;'##,###,###.##';RGB(220, 220, 193)
+'Ok?';f:Val(fi:1)..f:Val(aa:5);NO;;;40;check;RGB(220, 220, 193);iif (Val(g:flb) > 0, 1, 0);
+'Cant.Orig.';g:Val(fi:1)..g:Val(aa:5);SI;Val(g:flb) >= 0;'Cantidad origen Invalida';70;numero;'##,###,###.##';RGB(255, 255, 193);;;;;;;;SI
+'Rel.Origen';h:Val(fi:1)..h:Val(aa:5);NO;;;70;numero;'###,###';RGB(220, 220, 193)
+'Nueva Especie';i:Val(fi:1)..i:Val(aa:5);NO;;;90;string;;RGB(220, 220, 193)
+'Rel.Destino';j:Val(fi:1)..j:Val(aa:5);NO;;;70;numero;'###,###';RGB(220, 220, 193)
+'Cant.Dest.';n:Val(fi:1)..n:Val(aa:5);NO;;;70;numero;'##,###,###.##';RGB(220, 220, 193);Trunc(Val(g:flb) * Val(j:flb) / Val(h:flb))
+'Fraccion '~Val(z:10);o:Val(fi:1)..o:Val(aa:5);NO;;;0;numero;'##,###,###.##';RGB(220, 220, 193);((Val(g:flb) * Val(j:flb) / Val(h:flb)) - Trunc(Val(g:flb) * Val(j:flb) / Val(h:flb))) * Val(z:11)
+'Cta.Fraccion';cf:Val(fi:1)..cf:Val(aa:5);SI;Val(f:flb) = 0 o ClienteCuenta(Val(cl:flb), Val(cf:flb), Val(z:10));'Cuenta de Fraccion Invalida';100;tabla;'CUENTAS';'Codigo';'Codigo; Nombre';iif (Val(bd:flb) = 0, "'"~Val(cl:flb)~"'=Cliente AND Estado='HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%')", " Cliente='"~Val(cl:flb)~"' AND Estado='HAB' AND Mercado='"~Val(c:flb)~"' AND (Especies LIKE '"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%')");RGB(255, 255, 193);iif (Eqstr(Val(cl:flb), Val(vh:1)), Query("SELECT Codigo FROM "~Dbo()~".CUENTAS WHERE Cliente='"~Val(cl:flb)~"' AND Estado='HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') "), Query("SELECT Codigo FROM "~Dbo()~".CUENTAS WHERE Cliente='"~Val(cl:flb)~"' AND Estado='HAB' AND (Especies LIKE '%"~Val(z:10)~"%' OR Especies LIKE '%MONEDA%') AND Mercado='"~Val(c:flb)~"'"));NO;NO;iif (Eqstr(Val(cl:flb), Val(vh:1)), '12');;;;SI
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+
+recorrer&j Val(fi:1), Fac()
+if (Val(f:&j) = 1 y Val(bd:&j) = 1)
+Scn(sa:1, Val(g:&j))
+endif
+if (Val(f:&j) = 1 y Val(bd:&j) = 0)
+Scn(sa:2, Val(g:&j))
+endif
+proximo
+
+
+recorrer&i Val(fi:1), Val(aa:5)
+if (not celdavacia(a:&i))
+Acn(aa:8, &i)
+Act(aa:6, Val(a:&i))
+Act(aa:10, Val(b:&i))
+Act(aa:11, Val(c:&i))
+Acn(aa:9, Val(e:&i))
+Act(aa:7, Val(p:&i))
+endif
+
+if (Val(f:&i) = 1)
+Scn(aa:9, (-1) * Val(g:&i))
+if (Val(aa:9) < 0)
+Messagebox('Se ha excedido el saldo de '~Val(z:1)~' del Cliente '~Val(aa:7)~' para la Cartera '~Val(aa:10)~'.'~Chr(13)~Chr(10)~'No se grabaran sus movimientos.')
+recorrer&j Val(aa:8), &i
+Acn(f:&j, 0)
+proximo
+endif
+endif
+proximo
+
+
+recorrer&i Val(fi:1), Val(aa:5)
+
+if (not celdavacia(a:&i))
+Act(aa:6, Val(a:&i))
+Act(aa:10, Val(b:&i))
+Act(aa:11, Val(c:&i))
+Act(aa:14, Query("select * from "~Dbo()~".CUENTAS where Cliente='"~Val(z:12)~"' and Mercado='"~Val(aa:11)~"' and (Especies LIKE '%TITULO%' or Especies LIKE '%"~Val(z:1)~"%')  and Estado='HAB' "))
+endif
+
+if (Val(f:&i) = 1)
+
+if (not Eqstr(Val(b:&i), Val(xx:1)) y NoVacio(Val(r:&i)))
+
+Sqlexec()
+SqlActualizarmovimientost2(Val(aa:13), NO, NO, NO, SI)
+Sqlexec()
+Act(aa:13, getnumerador(405))
+
+
+Sqladd("insert into "~Dbo()~".TRANSACCIONES2 ")
+Sqladd("(TipoTr2, NrTrans, Cliente1, Numerador, UsrInput, ")
+Sqladd(" Vehiculo1, Mercado1, Especie, Especie2, ")
+Sqladd(" Fecha1, Fecha2, FechaCarga, FechaCargaSys, ")
+Sqladd(" Cuenta1, Cuenta5, Cantidad1,  Cantidad3, Book1, ")
+Sqladd(" Cambio2, Cambio3, Cambio4, Cliente2, RB1, RB2) ")
+Sqladd(" values ")
+Sqladd("('CANJE','"~Val(aa:13)~"','"~Val(aa:6)~"', 405, '"~UsuarioActivo()~"', ")
+Sqladd(" '"~Val(z:12)~"', '"~Val(me:&i)~"', '"~Val(z:1)~"','"~Val(z:10)~"', ")
+Sqladd(" "~IdxDate2(Val(z:6))~","~IdxDate2(Val(z:7))~","~IdxDate2(FSys())~","~IdxDate2(FSys())~", ")
+Sqladd(" '"~Val(aa:14)~"', '"~Val(cf:&i)~"', "~Val(se:&i)~", "~Val(o:&i)~", '"~Val(b:&i)~"', ")
+Sqladd(" "~Val(h:&i)~","~Val(j:&i)~","~Val(z:11)~", '"~Val(cr:&i)~"', '0', '0') ")
+Sqlnew()
+
+
+Sqladd(" INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+Sqladd(" ( NrOperacion, NrBit, Valor ) ")
+Sqladd(" VALUES ")
+Sqladd(" ( '"~Val(aa:13)~"',51, '1') ")
+Sqlnew()
+
+Message('Transaccion Nro. '~Val(aa:13)~' generada.')
+Acn(nc:1, 0)
+Sqlexec()
+endif
+
+Scn(nc:1, 1)
+Message(FStr(Val(nc:1), 0, 0)~' - '~Val(i:&i))
+
+Sqladd(" INSERT INTO "~Dbo()~".CUOTAS ( ")
+Sqladd(" NrOperacion, NrCuota, Especie1, ")
+Sqladd(" Cantidad1, Cantidad2, Cantidad3, Cantidad4 ")
+Sqladd(" ) VALUES ( ")
+Sqladd(" '"~Val(aa:13)~"', "~FStr(Val(nc:1), 0, 0)~", '"~Val(i:&i)~"', ")
+Sqladd(" "~FStr(Val(n:&i), 0, 2)~", "~FStr(Val(h:&i), 0, 0)~", "~FStr(Val(j:&i), 0, 0)~", "~FStr(Val(g:&i), 0, 2)~" ")
+Sqladd(" ) ")
+Sqlnew()
+Sqlexec()
+
+SqlActualizarmovimientost2(Val(aa:13), NO, NO, NO, SI)
+Sqlexec()
+
+Act(xx:1, Val(b:&i))
+endif
+proximo
+
+endif
+endif
+

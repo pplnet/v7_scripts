@@ -1,0 +1,215 @@
+MostrarCuadroDeMensajes()
+
+Act(vh:1, SQLSet(" Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+Sqladd(" SELECT V.Valor FROM "~Dbo()~".VARIABLES V, "~Dbo()~".CLIENTES C ")
+Sqladd(" WHERE  V.Codigo = C.Alias4 ")
+Sqladd(" AND    C.Codigo IN (SELECT Distinct Entidad FROM "~Dbo()~".CODIGOSDATANET) ")
+recorrer sql
+Dfa()
+Act(l:1, Val(l:1)~Fbn('Valor'))
+proximo
+
+
+
+creardialogo
+check1: 'CONFIRMA';1;1;1;NO;NO;;;;1
+fecha1: 'F.Bajada';1;1;1;;;;;;FSys()
+radio2: 'Tipo Cta|Cta.Cte|Interm|Recaud|C.Ahorro|Todos';2;1;;;;;;;4
+check2: 'Incluye Pagadoras';3;1;;;;;;;1
+lista1:'Archivo';4;1;;;;;;;;;Val(l: 1)
+lista2: 'Vehiculos';-2;2;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), Val(vh: 1))
+lista3: 'Bancos';;1;1;;;;;;;;SQLSet(" Select Codigo From "~Dbo()~".CLIENTES WHERE Sector='BAN' ");
+lista4: 'Cuentas';-7;2;1;;;;;;;;SQLSet(" Select Codigo From "~Dbo()~".CUENTAS  WHERE Comitente IN ("~Pipe2Comillas(dialogo.lista3)~") "~iif (NoVacio(dialogo.lista2), " AND Cliente IN ("~Pipe2Comillas(dialogo.lista2)~")", iif (NoVacio(UsrVehiculos(UsuarioActivo())), " AND Cliente IN ("~Pipe2Comillas(Val(vh: 1))~") "))~"  ");
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Act(dn:1, Var('DNNODEPU'))
+
+Sqladd(" Select /*+ RULE */ M.FechaAcreditacion, M.Vehiculo, M.NrDatanet, M.Moneda, M.Importe, M.Cuenta, ")
+Sqladd(" M.Banco, M.NrMovDatanet, M.TipoMov, D.Archivo ")
+Sqladd(" FROM "~Dbo()~".MOVDATANET M, "~Dbo()~".DATANET D, "~Dbo()~".VEHICULOS V, "~Dbo()~".CUENTAS C, ")
+Sqladd(" "~Dbo()~".CODIGOSDATANET CD ")
+Sqladd(" WHERE  M.NrDatanet   = D.NrDatanet ")
+Sqladd(" AND    M.Cuenta      = C.Numero ")
+Sqladd(" AND    M.TipoMov     = CD.Codigo (+) ")
+Sqladd(" AND    D.FechaBajada = "~IdxDate2(dialogo.fecha1)~" ")
+Sqladd(" AND    M.DC          = 'C' ")
+Sqladd(" AND    M.Vehiculo    = V.Codigo ")
+Sqladd(" AND    M.EstadoConciliacion = 'P' ")
+if (not celdavacia(dn:1))
+Sqladd(" AND    CD.Tipo NOT IN ("~Pipe2Comillas(Val(dn:1))~") ")
+endif
+if (dialogo.radio2 = 0)
+Sqladd(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+endif
+if (dialogo.radio2 = 1)
+Sqladd(" AND C.TipoCuenta IN ('INT')")
+endif
+if (dialogo.radio2 = 2)
+Sqladd(" AND C.TipoCuenta IN ('REC')")
+endif
+if (dialogo.radio2 = 3)
+Sqladd(" AND C.TipoCuenta IN ('CA')")
+endif
+if (dialogo.check2 = 0)
+Sqladd(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+endif
+if (NoVacio(dialogo.lista1))
+Sqladd(" AND   D.Archivo IN ("~Pipe2Comillas(dialogo.lista1)~") ")
+endif
+if (NoVacio(dialogo.lista2))
+Sqladd(" AND   M.Vehiculo IN ("~Pipe2Comillas(dialogo.lista2)~") ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+Sqladd(" AND M.Vehiculo IN ("~Pipe2Comillas(Val(vh:1))~") ")
+endif
+endif
+if (NoVacio(dialogo.lista3))
+Sqladd(" AND   C.Comitente IN ("~Pipe2Comillas(dialogo.lista3)~") ")
+endif
+if (NoVacio(dialogo.lista4))
+Sqladd(" AND   C.Codigo IN ("~Pipe2Comillas(dialogo.lista4)~") ")
+endif
+
+if (dialogo.check1 = 1)
+Sqladd(" ORDER BY M.NrDataNet, M.Vehiculo, M.Banco, M.Cuenta ")
+endif
+Acn(z:1, 0)
+recorrer sql
+Acn(a:fac, 0)
+Acd(b:fac, Fbn('FechaAcreditacion'))
+Act(c:fac, Fbn('Vehiculo'))
+Act(d:fac, Fbn('NrDatanet'))
+Act(e:fac, Fbn('Moneda'))
+Acn(f:fac, Fbn('Importe'))
+Act(g:fac, Fbn('Cuenta'))
+Act(h:fac, Fbn('Banco'))
+Acn(p:fac, Fbn('NrMovDatanet'))
+Act(q:fac, Fbn('Archivo'))
+Act( o :fac, Fbn('TipoMov'))
+Acn(op:1, Fbn('NrMovDatanet'))
+Act(op:2, Fbn('NrDatanet'))
+Acn(kk:1, 0)
+
+Sqladd(" Select /*+ RULE */ M1.FechaAcreditacion, M1.Vehiculo, M1.NrDatanet, M1.Moneda, M1.Importe, ")
+Sqladd(" M1.Cuenta, M1.NrMovDatanet, M1.TipoMov ")
+Sqladd(" FROM "~Dbo()~".MOVDATANET M1, "~Dbo()~".DATANET D1  ")
+Sqladd(" WHERE  M1.NrDataNet  = D1.NrDatanet ")
+Sqladd(" AND    ABS(M1.Importe) = "~FStr(Fbn('Importe'), 0, 4)~" ")
+Sqladd(" AND    M1.Vehiculo   = '"~Fbn('Vehiculo')~"' ")
+Sqladd(" AND    M1.Cuenta     = '"~Fbn('Cuenta')~"' ")
+Sqladd(" AND    M1.Moneda     = '"~Fbn('Moneda')~"' ")
+Sqladd(" AND    M1.Banco      = '"~Fbn('Banco')~"' ")
+Sqladd(" AND    M1.TipoMov    = '"~Fbn('TipoMov')~"' ")
+Sqladd(" AND    M1.DC         = 'D' ")
+Sqladd(" AND    M1.EstadoConciliacion = 'P' ")
+recorrer sql
+Acn(z:1, 1)
+if (Val(kk:1) = 0)
+Dfa()
+Acn(a:fac, 1)
+Acn(i:fac, 1)
+else
+Acn(i:fac, 0)
+endif
+Acn(kk:1, 1)
+Acd(j:fac, Fbn('FechaAcreditacion'))
+Act(k:fac, Fbn('Vehiculo'))
+Act(l:fac, Fbn('NrDatanet'))
+Act(m:fac, Fbn('Moneda'))
+Acn(n:fac, Fbn('Importe'))
+Act(o:fac, Fbn('Cuenta'))
+Acn(q:fac, Fbn('NrMovDatanet'))
+Act(os:fac, Fbn('TipoMov'))
+Acn(r:fac, Val(op:1))
+Act(s:fac, Val(op:2))
+proximo
+if (Val(kk:1) = 0)
+Dfa()
+endif
+proximo
+
+if (Val(z:1) = 0)
+Message('No se encontraron movimientos para depurar.')
+Cancelar()
+endif
+
+if (dialogo.check1 = 1)
+crearlistbox;'Arial,8,'
+'OK';a:1..a:fac;SI;;;30;check;RGB(232, 255, 215);
+'NrDatanet';d:1..d:fac;NO;;;70;string;;RGB(232, 232, 232);
+'NrMovDatanet';p:1..p:fac;NO;;;80;numero;'###,###,###';RGB(232, 232, 232);
+'FechaValor';b:1..b:fac;NO;;;80;fecha;RGB(232, 232, 232);
+'Vehiculo';c:1..c:fac;NO;;;70;string;;RGB(232, 232, 232);
+'Moneda';e:1..e:fac;NO;;;70;string;;RGB(232, 232, 232);
+'Cantidad';f:1..f:fac;NO;;;80;numero;'###,###,###,###.##';RGB(232, 232, 232);
+'Codigo DN'; o :1.. o :fac;NO;;;70;string;;RGB(232, 232, 232);
+'Banco';h:1..h:fac;NO;;;70;string;;RGB(232, 232, 232);
+'Cuenta';g:1..g:fac;NO;;;80;string;;RGB(232, 232, 232);
+
+'OK';i:1..i:fac;SI;;;30;check;RGB(232, 255, 215);
+'NrDatanet';l:1..l:fac;NO;;;70;string;;RGB(221, 242, 255);
+'NrMovDatanet';q:1..q:fac;NO;;;80;numero;'###,###,###';RGB(221, 242, 255);
+'FechaValor';j:1..j:fac;NO;;;80;fecha;RGB(221, 242, 255);
+'Vehiculo';k:1..k:fac;NO;;;70;string;;RGB(221, 242, 255);
+'Moneda';m:1..m:fac;NO;;;70;string;;RGB(221, 242, 255);
+'Cantidad';n:1..n:fac;NO;;;80;numero;'###,###,###,###.##';RGB(221, 242, 255);
+'Codigo DN';os:1..os:fac;NO;;;70;string;;RGB(221, 242, 255);
+'Cuenta';o:1..o:fac;NO;;;80;string;;RGB(221, 242, 255);
+finlistbox
+endif
+
+if (not ok)
+Cancelar()
+endif
+
+Acn(fi:2, 1)
+
+recorrer&i 1, Fac()
+
+if (Val(a:&i) = 1)
+Acn(fi:1, 0)
+Acn(kk:2, 0)
+
+recorrer&j &i, Fac()
+
+if (Val(r:&j) <> Val(p:&i) o not Eqstr(Val(s:&j), Val(d:&i)))
+Acn(fi:2, Fac())
+break
+endif
+
+if (Val(i:&j) = 1)
+Acn(fi:1, &j)
+Scn(kk:2, 1)
+endif
+proximo
+
+if (Val(kk:2) = 1)
+Acn(xx:1, 0)
+if (Val(xx:1) <> 1)
+Acn(xx:1, 0)
+endif
+if (Val(xx:1) <> 0)
+Message('Movimiento ya conciliado.')
+else
+Message('Actualizando Conciliacion Nro. '~Val(d:&i))
+
+Message('Actualizando Operacion '~Val(l:Val(fi:1)))
+Sqladd(" UPDATE /*+ RULE */ "~Dbo()~".MOVDATANET SET EstadoConciliacion = 'FC' ")
+Sqladd(" WHERE (NrDataNet = '"~Val(d:&i)~"' AND NrMovDatanet = "~FStr(Val(p:&i), 0, 0)~") ")
+Sqladd(" OR (NrDataNet = '"~Val(l:Val(fi:1))~"' AND NrMovDatanet = "~FStr(Val(q:Val(fi:1)), 0, 0)~") ")
+Sqlnew()
+Sqlexec()
+endif
+endif
+
+if (Val(kk:2) > 1)
+Messagebox('Solo puede seleccionar uno para matchear.')
+endif
+
+endif
+proximo
+

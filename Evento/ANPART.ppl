@@ -1,0 +1,166 @@
+﻿CrearDialogo
+   Fecha1 : 'Fecha';;;;;;;;;FSys
+FinDialogo
+If not Ok
+  Cancelar
+Endif
+
+acn(x1,0)
+
+* Busco todas las partidas de la fecha dada, Solo permite anular las partidas
+*- que no fueron utilizadas
+SQL.ADD(" Select *                  ")
+SQL.ADD(" From  "~DBO~".OPERACIONES ")
+SQL.ADD(" Where FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   and TipoOp   = 'PARTID' ")
+SQL.ADD("   and Cantidad = TotalNetoCli1 ")
+SQL.ADD(" Order By NrOperacion           ")
+
+Recorrer SQL
+   act(a:fac, fbn('NrOperacion'))
+   acd(b:fac, fbn('FechaOp'))
+   acd(c:fac, fbn('FechaVto'))
+   act(d:fac, fbn('Especie'))
+   acn(e:fac, fbn('Cantidad'))
+   acn(f:fac, fbn('Precio1'))
+   acn(g:fac, fbn('TipoCambio'))
+   acn(h:fac, fbn('RB8'))
+   acn(i:fac, fbn('TotalNetoCli1'))
+   acn(n:fac, fbn('TotalBrutoCli1'))          
+   acn(r:fac, fbn('Cartera'))
+   act(s:fac, fbn('Book1'))
+   acn(l:fac,0)
+   acn(p:fac,0)
+   scn(x1,1)
+Proximo
+
+if Val(x1) > 0
+   CrearListBox ; 'Arial,8,'
+     'Marca'         ;l1..l:fac;SI;SI;;50;CHECK;Exe('COLOR9')
+     'Partida'       ;a1..a:FAC;NO;;;70;STRING;;Exe('COLOR14')
+     'Book   '       ;s1..s:FAC;NO;;;70;STRING;;Exe('COLOR14')
+     ***---     'Tipo'          ;h1..h:FAC;NO;;;80;COMBO;'Compra|Venta';Exe('COLOR14')
+     'Especie'       ;d1..d:FAC;NO;;;50;TABLA;'Especies';'Codigo';'Codigo;Nombre';;Exe('COLOR14')
+     'Cantidad'      ;e1..e:FAC;NO;;;90;NUMERO;'##,###,###.##';Exe('COLOR14')
+     'Precio '       ;f1..f:FAC;NO;;;80;NUMERO;'##,###.#######';Exe('COLOR14')
+     'TIR'           ;g1..g:FAC;NO;;;80;NUMERO;'##,###.#######';Exe('COLOR14')
+   FinListBox
+
+   If Ok 
+      *- Recorro las que querian modificar.
+      Recorrer&i 1,fac
+          Message('Buscando componentes de la partida '~Val(a:&i))    
+          If Val(l:&i)=1
+             */Entro por la relacion, fijandome todo lo que tengo para esa partida
+             SQL.ADD(" Select P.*, O.TipoOp, O.FechaOp, O.FechaVto, O.Precio1, 0 Tipo ")
+             SQL.ADD(" From "~DBO~".PARTIDAS P, "~DBO~".OPERACIONES O        ")
+             SQL.ADD(" Where  P.NrPartida   = '"~Val(a:&i)~"' ")
+             SQL.ADD("   and  P.NrOperacion = O.NrOperacion ")
+             SQL.ADD("   and  P.TipoAct  In ('TIC','TIPA','CTP','CTC','PABC','TCOPRI') ")
+             
+             SQL.ADD(" UNION ")
+             
+             SQL.ADD(" Select P.*, T.TipoTr2 TipoOp, T.Fecha1 FechaOp, T.Fecha1 FechaVto, T.Precio2 Precio1, 1 Tipo")
+             SQL.ADD(" From "~DBO~".PARTIDAS P, "~DBO~".TRANSACCIONES2 T        ")
+             SQL.ADD(" Where  P.NrPartida   = '"~Val(a:&i)~"' ")
+             SQL.ADD("   and  P.NrOperacion = T.NrTrans ")
+             SQL.ADD("   and  P.TipoAct  In ('DTP','TRPOS') ")
+
+             SCN(x11, 0)
+             acn(cl1,fac)
+             Scn(cl1,1)
+
+             Recorrer SQL
+                SCN(x11, 1)
+                act(a:fac, fbn('NrPartida'))          
+                act(b:fac, fbn('NrOperacion'))          
+                act(c:fac, fbn('TipoOp'))          
+                acn(d:fac, fbn('FechaOp'))          
+                acn(e:fac, fbn('FechaVto'))          
+                acn(f:fac, fbn('Cantidad'))          
+                acn(at:fac, fbn('Precio1'))
+                ACN(XT:&i, fbn('Tipo'))
+                acn(l:fac, 0)          
+             Proximo
+
+             If Val(x11) > 0
+                CrearDialogo
+                    Radio1        :'Tipo|Compra|Venta'   ;1;1; ;NO;;;;;Val(h:&i)
+                    ***---Radio2        :'Accion|Elimina|Desvincula' ;1;1;;;;;;;Val(p:&i)
+                    Radio2        :'Accion|Elimina'      ;1;1;;;;;;;Val(p:&i)
+                    Fecha1        :'Fecha Op.'           ;2;2; ;NO;;;;;Val(b:&i)
+                    Fecha2        :'Fecha Vto.'          ; ;2; ;NO;;;;;Val(c:&i)
+                    NrOperacion1  :'Partida'             ;2;1; ;NO;;;;;Val(a:&i)
+                    Especie1      :'Especie'             ; ;1; ;NO;;;;;Val(d:&i)
+
+                    Cantidad1     :'Cantidad'            ;5;1; ;NO;;;;;Val(e:&i)
+                    Cantidad2     :'Monto'               ; ;1; ;NO;;;;;Val(n:&i)
+
+                    Precio1       :'Precio'              ;5;2; ;NO;;;;;Val(f:&i)
+                    Precio2       :'TIR'                 ; ;2; ;NO;;;;;Val(g:&i)
+                    
+                    Book1         :'Book'                ;8;1; ;NO;;;;;Val(s:&i)
+
+                    ListBox; 'Arial,8,N'; 500;300
+                       'Accion'        ;l:Val(cl1)..l:FAC;SI;Not[Dialogo.Radio2 =0 Y Val(L:FLB)=1];'Para eliminar debe Desvincular todas';;50;COMBO;'Desvinc|Nada.'
+                       'Nro.Partida.'  ;a:Val(cl1)..a:FAC;NO;;;;70;STRING
+                       'Operacion'     ;b:Val(cl1)..b:FAC;NO;;;;70;STRING
+                       'Tipo'          ;c:Val(cl1)..c:FAC;NO;;;;50;STRING
+                       'Cantidad'      ;f:Val(cl1)..f:FAC;NO;;;;80;NUMERO;'##,###,###.##'
+                       'Precio'        ;at:Val(cl1)..at:FAC;NO;;;;80;NUMERO;'###,###.######'
+                       'Fecha D.'      ;d:Val(cl1)..d:FAC;NO;;;;70;FECHA
+                       'Fecha H.'      ;e:Val(cl1)..c:FAC;NO;;;;70;FECHA
+                    FinListBox
+                FinDialogo
+
+                If Ok                
+                   Message('Desvinculando las operaciones asociadas..')   
+
+                   if Dialogo.Radio2 = 0
+                      *** borra todo ***
+                      SQL.ADD("Delete "~DBO~".PARTIDAS              ")
+                      SQL.ADD("Where NrPartida   =  '"~Dialogo.NrOperacion1~"' ")
+                      SQL.NEW
+*                      IF Val(XT:&i) = 0
+                        SQL.ADD("Delete "~DBO~".OPERACIONES           ")
+                        SQL.ADD("Where NrOperacion =  '"~Dialogo.NrOperacion1~"' ")
+                        SQL.NEW
+*                      ELSE
+*                        SQL.ADD("Delete "~DBO~".TRANSACCIONES2 ")
+*                        SQL.ADD("Where NrTrans =  '"~Dialogo.NrOperacion1~"' ")
+*                        SQL.NEW
+*                      ENDIF
+                      SQL.EXEC
+                     else
+                      Recorrer&k Val(cl1),fac 
+                        *- Elijo la partida
+                        If Val(l:&k)=0 
+                           SQL.ADD("Delete "~DBO~".PARTIDAS              ")
+                           SQL.ADD("Where NrPartida   =  '"~Val(a:&k)~"' ")
+                           SQL.ADD("  and NrOperacion =  '"~Val(b:&k)~"' ")
+                           SQL.NEW
+                          else
+                           *** recalculo la partida ***
+                           scn(ab1,Val(f:&k))
+                           scn(ab2,Val(f:&k)*Val(at:&k))
+                        Endif
+                      Proximo
+
+                      SQL.ADD("Update "~DBO~".OPERACIONES           ")
+                      SQL.ADD("   Set Cantidad      = "~Fstr(val(ab1),0,2)~", ")
+                      SQL.ADD("       TotalNetoCli1 = "~Fstr(val(ab1),0,2)~", ")
+                      SQL.ADD("       Precio1       = "~Fstr(val(ab2)/val(ab1),0,2)~" ")
+                      SQL.ADD("Where NrOperacion =  '"~Dialogo.NrOperacion1~"' ")
+                      SQL.NEW
+                      SQL.EXEC
+
+                      ModificarOperacion(Dialogo.NrOperacion1,0,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO,0)
+                   endif
+                Endif                  
+             EndIf
+          Endif
+      Proximo       
+   Endif
+Else
+   MessageBox('No hay partidas sin asignar para el dia '~Dialogo.Fecha1)
+Endif

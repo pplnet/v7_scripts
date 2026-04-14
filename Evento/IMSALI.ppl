@@ -1,0 +1,186 @@
+﻿HojaVisible(SI)
+MostrarCuadroDeMensajes
+
+CrearDialogo
+    Directorio1:    'Path '        ;;;;SI;SI;;;;
+    String1:        'Archivo '     ;;;;SI;SI;;;;    
+FinDialogo
+
+*Reviso si existe el directorio y si el archivo existe en el mismo.
+If ExisteDirectorio(Dialogo.Directorio1)
+    If EqStr(Copy(Dialogo.Directorio1,Longitud(Dialogo.Directorio1),1),'\')
+        If Not ExisteArchivo(Dialogo.Directorio1~Dialogo.String1)
+            Cancelar('1.El Archivo '~Dialogo.String1~' no existe en el directorio: '~Dialogo.Directorio1)
+        EndIf
+    Else
+        If Not ExisteArchivo(Dialogo.Directorio1~'\'~Dialogo.String1)
+            Cancelar('2.El Archivo '~Dialogo.String1~' no existe en el directorio: '~Dialogo.Directorio1)
+        EndIf
+    Endif
+Else
+    Cancelar('El directorio '~Dialogo.Directorio1~' no existe')
+EndIf
+
+*Agrego \ al final si el directorio no lo tiene
+let &pf ''
+If EqStr(Copy(Dialogo.Directorio1,Longitud(Dialogo.Directorio1),1),'\')
+    let &pf Dialogo.Directorio1~Dialogo.String1
+Else
+    let &pf Dialogo.Directorio1~'\'~Dialogo.String1
+Endif
+
+ImportarXLS(A2..G1000,AA2..AG1000,&pf)
+
+CrearFont(1, 'Arial,12,B')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,8,')
+
+ACT(C:1,'Errores Importacion Saldos Iniciales FCI')
+SetFont(C:1,1)
+
+*ACT(A:2,'No se importaron')
+*SetFont(A:2,2)
+
+SetFilaActual(2)
+
+Recorrer&i 2,1000000
+    IF NoVacio(Val(AA:&i))
+        *Me guardo los datos en variables
+        let &vehiculo Val(AA:&i)
+        let &book Val(AB:&i)
+        let &especie Val(AC:&i)
+        let &cantidad Double(Val(AD:&i))
+        let &precio1 Double(Val(AE:&i))
+        let &cuentaEspecie Val(AF:&i)
+        let &cuentaMoneda Val(AG:&i)
+        
+        let &contraespecie CotizaEn(&especie)
+        let &cliente BuscarCampo('ESPECIES','Issuer','Codigo',&especie)
+        
+        *Verifico que los datos sean válidos
+        IF SQL(" SELECT 1 FROM "~DBO~".VEHICULOS WHERE Codigo = '"~&vehiculo~"' AND Status ='HAB' ") = 1
+            IF Vacio(UsrVehiculos(UsuarioActivo)) o Incluido(&vehiculo,SqlSet("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"'"))
+                IF SQL(" SELECT 1 FROM "~DBO~".BOOKS WHERE Codigo = '"~&book~"' ") = 1
+                    IF  SQL(" SELECT 1 FROM "~DBO~".ESPECIES WHERE Codigo = '"~&especie~"' ") = 1 Y DESCIENDEDEESPECIE(&especie,'FONDOS')
+                        IF  &precio1 > 0
+                            IF &cantidad > 0
+                                IF SQL(" SELECT 1 FROM "~DBO~".CUENTAS WHERE Codigo = '"~&cuentaEspecie~"' ") = 1
+                                    IF CLIENTECUENTA(&vehiculo,&cuentaEspecie) y ESPECIECUENTA(&especie,&cuentaEspecie) y EqSTr(BuscarCampo('CUENTAS','Estado','Codigo',&cuentaEspecie),'HAB')
+                                        IF SQL(" SELECT 1 FROM "~DBO~".CUENTAS WHERE Codigo = '"~&cuentaMoneda~"' ") = 1
+                                            IF CLIENTECUENTA(&vehiculo,&cuentaMoneda) y ESPECIECUENTA(&contraespecie,&cuentaMoneda) y EqSTr(BuscarCampo('CUENTAS','Estado','Codigo',&cuentaMoneda),'HAB')
+                                                IF NoVacio(&cliente)
+                                                    *Si llegue hasta acá quiere decir que los datos pasaron todas las validaciones
+                                                    
+                                                    *Obtengo los datos a cargar
+                                                    let &nrOperacion GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',&vehiculo))
+                                                    
+                                                    let &RB6 BuscarCampo('ESPECIES','Alias2','Codigo',&especie)
+                                                    let &totalNetoCli1 &cantidad*&precio1
+                                                    let &operador USUARIOACTIVO
+                                                    let &observac2 'SALDO INICIAL'
+                                                    let &observaciones 'SALDO INICIAL'
+                                                    let &RB7 '0'
+                                                    let &tipoOp 'FCS'
+                                                    let &plazo 0
+                                                    let &fecha Habiles(Fecha(Var('FECHAMIGRA')),-1,'ARG',SI)
+                                                    let &tablaFeriados1 'ARG'
+                                                    let &cotizacion1 IIF(Eqstr(&contraespecie,VAR('MONEEXTR')),1,COTIZACIONC(&especie,,,,&fecha,1,SI,VAR('MONEEXTR')))
+                                                    
+                                                    *Inserto la operacion
+                                                    SQL.ADD(" INSERT INTO "~DBO~".OPERACIONES ")
+                                                    SQL.ADD(" (Vehiculo1,Book1,Especie,Cantidad,Precio1,  ")
+                                                    SQL.ADD(" Cuenta1,Cuenta2,ContraEspecie,NrOperacion,Cliente1, ")
+                                                    SQL.ADD(" RB6,TotalNetoCli1,Operador,Observac2,Observaciones, ")
+                                                    SQL.ADD(" RB7,Plazo,FechaOp,FechaOp2,FechaVto, ")
+                                                    SQL.ADD(" TablaFeriados1,Cotizacion1,FechaCargaSys,FechaCarga,TipoOp) ")
+                                                    SQL.ADD(" VALUES ")
+                                                    SQL.ADD(" ('"~&vehiculo~"','"~&book~"','"~&especie~"',"~Fstr(&cantidad,0,2)~","~Fstr(&precio1,0,8)~", ")
+                                                    SQL.ADD(" '"~&cuentaEspecie~"','"~&cuentaMoneda~"','"~&contraespecie~"','"~&nrOperacion~"','"~&cliente~"', ")
+                                                    SQL.ADD(" '"~&RB6~"',"~Fstr(&totalNetoCli1,0,2)~",'"~&operador~"','"~&observac2~"','"~&observaciones~"', ")
+                                                    SQL.ADD(" '"~&RB7~"',"~Fstr(&plazo,0,0)~",'"~IdxDate(&fecha)~"','"~IdxDate(&fecha)~"','"~IdxDate(&fecha)~"', ")
+                                                    SQL.ADD(" '"~&tablaFeriados1~"', "~Fstr(&cotizacion1,0,8)~", '"~IdxDate(Fsys)~"', "~SQLAhora~", '"~&tipoOp~"') ")
+                                                    SQL.NEW
+                                                    SQL.EXEC
+                                                    
+                                                    *La inserto en la instancia de Concertacion
+                                                    SQL.ADD(" INSERT INTO "~DBO~".OPERACIONESBITS ")
+                                                    SQL.ADD(" (NrOperacion,NrBit,Valor) ")
+                                                    SQL.ADD(" VALUES ")
+                                                    SQL.ADD(" ('"~&nrOperacion~"',1,'1'), ")
+                                                    SQL.ADD(" ('"~&nrOperacion~"',3,'0'), ")
+                                                    SQL.ADD(" ('"~&nrOperacion~"',5,'0'), ")
+                                                    SQL.ADD(" ('"~&nrOperacion~"',10,'0'), ")
+                                                    SQL.ADD(" ('"~&nrOperacion~"',13,'0'), ")
+                                                    SQL.ADD(" ('"~&nrOperacion~"',19,'0'), ")
+                                                    SQL.ADD(" ('"~&nrOperacion~"',20,'0'), ")
+                                                    SQL.ADD(" ('"~&nrOperacion~"',50,'0') ")
+                                                    SQL.NEW
+                                                    SQL.EXEC
+                                                    
+                                                    *Actualizo los movimientos
+                                                    SQL.ActualizarMovimientos2(&nrOperacion,SI,NO,NO,SI)
+                                                    SQL.EXEC
+                                                ELSE
+                                                    ACT(A:FAC,'La Especie '~&especie~' no tiene issuer')
+                                                    SetFont(A:FAC,3)
+                                                    IFA
+                                                ENDIF 
+                                            ELSE
+                                                ACT(A:FAC,'La Cuenta '~&cuentaMoneda~' es incorrecta para la moneda, el vehiculo o está deshabilitada')
+                                                SetFont(A:FAC,3)
+                                                IFA
+                                            ENDIF
+                                        ELSE
+                                            ACT(A:FAC,'La Cuenta '~&cuentaMoneda~' no existe')
+                                            SetFont(A:FAC,3)
+                                            IFA
+                                        ENDIF
+                                    ELSE
+                                        ACT(A:FAC,'La Cuenta '~&cuentaEspecie~' es incorrecta para la especie, el vehiculo o está deshabilitada')
+                                        SetFont(A:FAC,3)
+                                        IFA
+                                    ENDIF
+                                ELSE
+                                    ACT(A:FAC,'La Cuenta '~&cuentaEspecie~' no existe')
+                                    SetFont(A:FAC,3)
+                                    IFA
+                                ENDIF
+                            ELSE
+                                ACT(A:FAC,'La cantidad debe ser positiva')
+                                SetFont(A:FAC,3)
+                                IFA
+                            ENDIF
+                        ELSE
+                            ACT(A:FAC,'El precio debe ser positivo')
+                            SetFont(A:FAC,3)
+                            IFA
+                        ENDIF
+                    ELSE
+                        ACT(A:FAC,'La Especie '~&especie~' no existe o no es un Fondo')
+                        SetFont(A:FAC,3)
+                        IFA
+                    ENDIF
+                ELSE
+                    ACT(A:FAC,'El Book '~&book~' no existe')
+                    SetFont(A:FAC,3)
+                    IFA
+                ENDIF
+            ELSE
+                ACT(A:FAC,'El Usuario '~USUARIOACTIVO~' no puede usar el vehiculo '~&vehiculo)
+                SetFont(A:FAC,3)
+                IFA                  
+            ENDIF
+        ELSE
+            ACT(A:FAC,'El Vehiculo '~&vehiculo~' no existe o no está habilitado')
+            SetFont(A:FAC,3)
+            IFA
+        ENDIF
+    ELSE
+        break
+    ENDIF
+Proximo
+
+ACT(A:FAC+2,'Fin del informe')
+SetFont(A:FAC+2,2)
+LimitesVision(G:FAC+2)
+ACO(1,16)

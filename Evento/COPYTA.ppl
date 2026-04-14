@@ -1,0 +1,81 @@
+﻿**-- COPYTA: Copia las tasas diarias de un par de vehiculos a otro par no existente 
+CrearDialogo
+  Fecha1     : "F.Desde"           ;;;;;;Dialogo.Fecha1>0;'Debe Ingresar la Fecha Desde';NO;FSYS
+  Fecha2     : "F.Hasta"           ;;;;;;Dialogo.Fecha2>=Dialogo.Fecha1;'Debe Ingresar la Fecha Hasta';NO;FSYS
+  Vehiculo1  : 'Desde Veh1'        ;;;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))];'El Vehiculo 1 es Invalido';NO;
+  Vehiculo2  : 'Desde Veh2'        ;;;;;;NOVACIO(Dialogo.Vehiculo2) y [Incluido(Dialogo.Vehiculo2, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))];'El Vehiculo 2 es Invalido';NO;;;;
+  Especie1   : 'Moneda'            ;;;;;;NOVACIO(Dialogo.Especie1) y DESCIENDEDEESPECIE(Dialogo.Especie1,'MONEDA');'Debe Ingresar una Especie Valida';NO;
+  Entero1    : 'Existe?'           ;;;;NO;NO;Dialogo.Entero1>0;'No Existe el Rango de Tasas Indicado !!';NO;;SQL("Select COUNT(*) FROM "~DBO~".TASASVEHICULO Where ((Vehiculo1='"~Dialogo.Vehiculo1~"' AND Vehiculo2='"~Dialogo.Vehiculo2~"') or  (Vehiculo1='"~Dialogo.Vehiculo2~"' AND Vehiculo2='"~Dialogo.Vehiculo1~"')) AND Especie='"~Dialogo.Especie1~"' and Fecha>='"~IdxDate(Dialogo.Fecha1)~"' and Fecha<='"~IdxDate(Dialogo.Fecha2)~"' ")
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+* x1: Vehiculo1 x2: Vehiculo2
+act(x1,Dialogo.Vehiculo1)
+act(x2,Dialogo.Vehiculo2)
+acd(x3,Dialogo.Fecha1)
+acd(x4,Dialogo.Fecha2)
+act(x5,Dialogo.Especie1)
+
+CrearDialogo
+  Fecha1     : "F.Desde"       ;;;;NO;;Dialogo.Fecha1>0;'Debe Ingresar la Fecha Desde';NO;VAL(X3)
+  Fecha2     : "F.Hasta"       ;;;;NO;;Dialogo.Fecha2>=Dialogo.Fecha1;'Debe Ingresar la Fecha Hasta';NO;VAL(X4)
+  Especie1   : 'Moneda'        ;;;;NO;;NOVACIO(Dialogo.Especie1) y DESCIENDEDEESPECIE(Dialogo.Especie1,'MONEDA');'Debe Ingresar una Especie Valida';NO;VAL(X5)
+  Vehiculo1  : 'Hasta Veh1'    ;;;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))];'El Vehiculo 1 es Invalido';NO;
+  Vehiculo2  : 'Hasta Veh2'    ;;;;;;NOVACIO(Dialogo.Vehiculo2) y [Incluido(Dialogo.Vehiculo2, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))];'El Vehiculo 2 es Invalido';NO;;;;
+FinDialogo
+
+If not Ok
+  Cancelar
+Endif
+
+SQL.ADD("Select * FROM "~DBO~".TASASVEHICULO ")
+SQL.ADD("Where ((Vehiculo1='"~Val(x1)~"' AND Vehiculo2='"~Val(x2)~"') ")
+SQL.ADD("      or (Vehiculo1='"~Val(x2)~"' AND Vehiculo2='"~Val(x1)~"')) ")
+SQL.ADD("      and Especie='"~Dialogo.Especie1~"' ")
+SQL.ADD("      and Fecha>='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("      and Fecha<='"~IdxDate(Dialogo.Fecha2)~"' Order By Fecha")
+  
+Recorrer SQL
+
+   Message('Copiando Fecha '~FBN['Fecha']~' ...')
+
+   * Verifico que no existan las tasas para esa fecha y vehiculo
+   SQL.ADD("Select * FROM "~DBO~".TASASVEHICULO ")
+   SQL.ADD("Where ((Vehiculo1='"~Dialogo.Vehiculo1~"' AND Vehiculo2='"~Dialogo.Vehiculo2~"') ")
+   SQL.ADD("      or (Vehiculo1='"~Dialogo.Vehiculo2~"' AND Vehiculo2='"~Dialogo.Vehiculo1~"')) ")
+   SQL.ADD("      and Especie='"~Dialogo.Especie1~"' ")
+   SQL.ADD("      and Fecha='"~IdxDate(FBN['Fecha'])~"' ")
+
+   acn(y1,0)
+   Recorrer SQL 
+      acn(y1,FBN['Tasa'])
+   Proximo
+
+   IF VAL(y1)<>0
+      Cancelar('Existe una Tasa de '~Fstr(VAL(y1),0,5)~' Para el Dia '~FBN['Fecha']~' ... ')
+*      acn(t:fac,MessageBox('Existe una Tasa de '~Fstr(VAL(y1),0,5)~' Para el Dia '~FBN['Fecha']~' ... Desea Eliminarla?',2,2))
+
+*      IF Val(t:fac)=1
+*         * Si existe una anterior la borro
+*         SQL.ADD("DELETE "~DBO~".TASASVEHICULO ")
+*         SQL.ADD("Where ((Vehiculo1='"~Dialogo.Vehiculo1~"' AND Vehiculo2='"~Dialogo.Vehiculo2~"') ")
+*         SQL.ADD("      or (Vehiculo1='"~Dialogo.Vehiculo2~"' AND Vehiculo2='"~Dialogo.Vehiculo1~"')) ")
+*         SQL.ADD("      and Especie='"~Dialogo.Especie1~"' ")
+*         SQL.ADD("      and Fecha='"~IdxDate(FBN['Fecha'])~"' ")
+*         SQL.NEW
+*         SQL.EXEC      
+*      ENDIF
+   ELSE
+      * Inserto el nuevo valor
+      SQL.ADD("INSERT INTO "~DBO~".TASASVEHICULO ")
+      SQL.ADD(" (Fecha,Vehiculo1,Vehiculo2,Especie,Tasa) Values ")
+      SQL.ADD(" ('"~IdxDate(FBN['Fecha'])~"','"~Dialogo.Vehiculo1~"','"~Dialogo.Vehiculo2~"','"~Dialogo.Especie1~"',"~Fstr(FBN['Tasa'],0,5)~") ")
+      SQL.NEW
+      SQL.EXEC      
+   EndIf
+
+Proximo
+

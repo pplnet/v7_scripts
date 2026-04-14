@@ -1,0 +1,70 @@
+﻿Messagebox('La anulacion no debe hacerse por este evento')
+IF NO
+    CrearDialogo
+      NrTrans1: 'Nro.Voucher';;;;;;Incluido(BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Dialogo.NrTrans1),'DEP|RET|MATCH');'Tipo de Comprobante incorrecto';NO;
+      Cliente1: 'ClienteVou' ;;;;NO;;;;;;BuscarCampo('TRANSACCIONES2','Cliente1','NrTrans',Dialogo.NrTrans1)
+      Especie1: 'EspecieVou' ;;;;NO;;;;;;BuscarCampo('TRANSACCIONES2','Especie','NrTrans',Dialogo.NrTrans1)
+    FinDialogo
+
+    if Not OK
+      Cancelar
+    endif
+
+    *- Pasa de Instancia az5: Instancia Nueva az6: Instancia Vieja
+    ACT(az3, SQL("Select NrOperacion from "~DBO~".MOVEJECUTADOS where NrTrans2='"~Dialogo.NrTrans1~"' ") )
+    ACT(az4,'TRANSACCIONES2')
+    ACN(az5,12)
+    ACN(az6,11 )
+
+    (.'MODIINSTAN'.)
+
+    ACN(zz1, 0)
+    ACN(zz1, SQL("Select 1 from "~DBO~".CLIENTES where Codigo='"~Dialogo.Cliente1~"' and (CategDepositante='CLI' OR Alias1='CP') ") )
+    ACN(zz2, IIF(DesciendeDeEspecie(Dialogo.Especie1,'MONEDA'),1,0))
+     
+    *- Pasa los Movimientos de La Operacion Original de Ejecutados a Pendientes
+    SQL.ADD("INSERT INTO "~DBO~".MOVPENDIENTES  ")
+    SQL.ADD("( Especie, FechaEj, PrecioEj, CallPut, Cliente, Cantidad, ")
+    SQL.ADD("  FechaMov, NrOperacion, Cuenta, Leyenda, NrSaldo,  ")
+    SQL.ADD("  EnteCustodia, Bits, NrGrupo, Concepto, Formula,  ")
+    SQL.ADD("  NrMov, NrLiq, Mercado, NrTrans2,Book, Cupon ) ")
+    SQL.ADD("SELECT M.Especie, M.FechaEj, M.PrecioEj, M.CallPut, M.Cliente, M.Cantidad, ")
+    SQL.ADD(" M.FechaMov, M.NrOperacion, M.Cuenta, M.Leyenda,  ")
+    SQL.ADD(" 1 ,  ")
+    SQL.ADD(" M.EnteCustodia, M.Bits, M.NrGrupo, M.Concepto,  "~IIF(Val(zz1)=1 y Val(zz2)=0,'10','NULL')~", " )
+    SQL.ADD(" M.NrMov, M.NrLiq, Mercado,'',Book, Cupon ")
+    SQL.ADD("from "~DBO~".MOVEJECUTADOS M ")
+    SQL.ADD("where ")
+    SQL.ADD("M.NrTrans2     = '"~Dialogo.NrTrans1~"' ")
+    SQL.NEW
+
+    *--- Borro los movimientos Ejecutados  ***
+    SQL.ADD("  DELETE from "~DBO~".MOVEJECUTADOS ")
+    SQL.ADD("  where ")
+    SQL.ADD("  NrTrans2     =  '"~Dialogo.NrTrans1~"'  ")
+    SQL.NEW
+
+    *-- Si tiene Transaccion RTP/DTP Borro los movimientos Ejecutados         
+    SQL.ADD("DELETE from "~DBO~".MOVEJECUTADOS  ")
+    SQL.ADD("WHERE NrOperacion IN (SELECT NrTrans ")
+    SQL.ADD("         FROM "~DBO~".TRANSACCIONES2 ")
+    SQL.ADD("         WHERE NrOperacionRef1 = '"~Dialogo.NrTrans1~"') ")
+    SQL.NEW
+
+    *** Borro la Transaccion RTP/DTP ***
+    SQL.ADD("DELETE from "~DBO~".TRANSACCIONES2  ")
+    SQL.ADD("WHERE NrOperacionRef1 = '"~Dialogo.NrTrans1~"' ")
+    SQL.NEW
+
+    *** Borro los movimientos de la transaccion
+    SQL.ADD("DELETE from "~DBO~".MOVEJECUTADOS  ")
+    SQL.ADD("where NrOperacion = '"~Dialogo.NrTrans1~"' ")
+    SQL.NEW
+    SQL.EXEC 
+
+    *** Borro la Transaccion  ***
+    SQL.ADD("DELETE from "~DBO~".TRANSACCIONES2  ")
+    SQL.ADD("where NrTrans = '"~Dialogo.NrTrans1~"' ")
+    SQL.NEW
+    SQL.EXEC 
+endif

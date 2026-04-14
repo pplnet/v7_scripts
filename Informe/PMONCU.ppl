@@ -1,0 +1,159 @@
+﻿*ModoReproceso(ConDialogo)
+MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1   : 'Fecha'    ;1;1;;;;Dialogo.Fecha1<>0;'Fecha invalida';NO;Fsys
+  Especie1 : 'Especie'  ;2;1;;;;Vacio(Dialogo.Especie1) o DesciendeDeEspecie(Dialogo.Especie1, 'MONEDA');'Especie invalida';NO;;;
+  Vehiculo1: 'Vehiculo' ;3;1;;;;Vacio(Dialogo.Vehiculo1) o Incluido(Dialogo.Vehiculo1, IIF(NoVacio(UsrVehiculos(UsuarioActivo)), UsrVehiculos(UsuarioActivo), SQLSet(" Select Codigo From "~DBO~".VEHICULOS ")));'Debe Ingresar un Vehiculo Valido';NO;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='')"),SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+  Book1    : 'Book'     ;4;1;;;;
+FinDialogo
+if NOT OK
+  Cancelar
+endif
+
+CrearFont(1,"Arial,12,BI")
+CrearFont(2,"Arial,10,B")
+CrearFont(3,"Arial,10,")
+CrearFont(4,"Arial,8,BU")
+CrearFont(5,"Arial,8,BI")
+CrearFont(6,"Arial,8,B")
+CrearFont(7,"Arial,8,")
+
+If NoVacio(Dialogo.Vehiculo1)
+  ACT(az:7, Dialogo.Vehiculo1)
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    ACT(az:7,SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+  Else
+    ACT(az:7,SQLSET("Select V.Codigo FROM "~DBO~".VEHICULOS V where (Status='HAB' or Status Is Null or Status='') ") )
+  EndIf
+Endif
+
+SetFilaActual(1)
+ACT(a:fac,'Posicion de Monedas por cuenta')
+SetFont(a:fac,1)
+
+SetFilaActual(fac+2)
+ACT(a:fac  ,'Fecha:')
+ACT(b:fac  ,Dialogo.Fecha1)
+ACT(a:fac+1,'Especie:')
+if NoVacio(Dialogo.Especie1)
+  ACT(b:fac+1, Dialogo.Especie1~' - '~BuscarCampo('ESPECIES','Nombre','Codigo',Dialogo.Especie1))
+else
+  ACT(b:fac+1,'TODAS')
+endif
+ACT(a:fac+2, 'Vehiculo:')
+ACT(b:fac+2, Val(az:7))
+ACT(a:fac+3, 'Book:')
+if NoVacio(Dialogo.Book1)
+  ACT(b:fac+3, Dialogo.Book1~' - '~BuscarCampo('BOOKS','Descripcion','Codigo',Dialogo.Book1))
+else
+  ACT(b:fac+3,'TODOS')
+endif
+SetFont(a:fac..a:fac+3,3)
+SetFont(b:fac..b:fac+3,2)
+
+SetFilaActual(fac+5)
+ACT(a:fac, 'Especie')
+ACT(b:fac, 'Book')
+ACT(c:fac, 'Cuenta')
+ACT(d:fac, 'Fecha.Pos')
+ACT(e:fac, 'Pos.Inicial')
+ACT(f:fac, 'Cant.Com.')
+ACT(g:fac, 'Cant.Ven.')
+ACT(h:fac, 'Pos.Final')
+ACT(i:fac, '# Reg.')
+
+SetFont(a:fac..i:fac,6)
+AlinearCeldas(a:fac..d:fac,'I')
+AlinearCeldas(e:fac+1..i:fac,'D')
+AgregarMarco(a:fac..i:fac,0,0,EXE('COLOR6'))
+
+IFA
+ACN(aw:1, FAC+2)
+ACN(aw:2, FAC+2)
+ACT(az:1,'')
+
+SQL.ADD("Select P.Vehiculo, P.Book, P.Cliente, V.Descripcion, P.Especie, E.Nombre, ")
+SQL.ADD("       P.Fecha, P.NrSaldo, ")
+SQL.ADD("       P.CantidadIni, ")
+SQL.ADD("       P.Cantidad1, ")
+SQL.ADD("       P.Cantidad2, ")
+SQL.ADD("       P.CantidadFin ")
+SQL.ADD(" from  "~DBO~".POSICIONES P, "~DBO~".ESPECIES E, "~DBO~".VEHICULOS V ")
+SQL.ADD(" where P.Especie      =  E.Codigo ")
+SQL.ADD("  and  P.Vehiculo     =  V.Codigo ")
+SQL.ADD("  and  NrSaldo        =  150 ")
+SQL.ADD("  and  P.TipoNegocio  =  'MCV' ")
+SQL.ADD("  and  P.Vehiculo     In ("~Pipe2Comillas(val(az:7))~") ")
+SQL.ADD("  and  P.CantidadFin  <> 0 ")
+if NoVacio(Dialogo.Especie1)
+  SQL.ADD("  and  P.Especie   = '"~Dialogo.Especie1~"' ")
+endif
+if NoVacio(Dialogo.Book1)
+  SQL.ADD("  and  P.Book   = '"~Dialogo.Book1~"' ")
+endif
+SQL.ADD("  and  P.Fecha     = (select Max(Fecha) ")
+SQL.ADD("                        from  "~DBO~".POSICIONES ")
+SQL.ADD("                       where Especie          = P.Especie ")
+SQL.ADD("                         and Vehiculo         = P.Vehiculo ")
+SQL.ADD("                         and Cliente          = P.Cliente ")
+SQL.ADD("                         and IsNull(Book,'')  = IsNull(P.Book,'') ")
+SQL.ADD("                         and NrSaldo          = P.NrSaldo ")
+SQL.ADD("                         and TipoNegocio      = P.TipoNegocio ")
+SQL.ADD("                         and Fecha           <= "~IdxDate2(Dialogo.Fecha1)~" ) ")
+SQL.ADD(" order by P.Vehiculo, P.Especie, P.Book, P.Cliente, P.Fecha ")
+Recorrer SQL
+  message(fbn('Vehiculo')~' '~FStr(fbn('NrSaldo'),1,0)~' '~IdxDate(fbn('Fecha'))~' '~PyC(fbn('CantidadFin'),1,2))
+  If Not EqStr(fbn('Vehiculo'),Val(az:1))
+    SetFont(a:Val(aw:2)..an:fac,7)
+    ifa
+    ACT(az:1,fbn('Vehiculo'))
+    ACT(a:fac, 'Vehiculo: '~fbn('Vehiculo')~' - '~fbn('Descripcion'))
+    SetFont(a:fac,4)
+    ifa
+    ACN(aw:2, FAC)
+  Endif
+
+  ACT(a:fac, fbn('Especie')~' '~fbn('Nombre'))
+  ACT(b:fac, fbn('Book'))
+  ACT(c:fac, fbn('Cliente'))
+
+  ACD(d:fac, fbn('Fecha'))
+  if fbn('Fecha')=Dialogo.Fecha1
+    SCN(e:fac, fbn('CantidadIni'))
+    SCN(f:fac, fbn('Cantidad1'))
+    SCN(g:fac, fbn('Cantidad2'))
+  else
+    SCN(e:fac, fbn('CantidadFin'))
+    SCN(f:fac, 0)
+    SCN(g:fac, 0)
+  endif
+  SCN(h:fac, fbn('CantidadFin'))
+  SCN(i:fac, 1)
+Proximo
+
+SetFont(a:Val(aw:2)..i:fac,7)
+
+FormatoCeldas(e:Val(aw:1)..h:fac,Exe('F2'))
+FormatoCeldas(i:Val(aw:1)..i:fac,Exe('F0'))
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Fin del Listado')
+SetFont(a:FAC,6)
+
+ACO(1,12)
+ACO(2, 8)
+ACO(3, 8)
+ACO(4, 8)
+ACO(5, 10)
+ACO(6, 10)
+ACO(7, 10)
+ACO(8, 10)
+ACO(9, 5)
+
+LimitesVision(i:fac)
+SetPrintFit(3,90)
+Impresion(1,1)
+Impresion(2,1)
+Impresion(4,1)
+SetMargins(0,0,0,2)

@@ -88,8 +88,10 @@
             'pendientes': 'Pendientes',
             'ejecutadas': 'Ejecutadas',
             'canceladas': 'Canceladas',
-            'montototal': 'MontoTotal',
-            'montopromedio': 'MontoPromedio',
+            'montototalarp': 'MontoTotalARP',
+            'montotalusd': 'MontoTotalUSD',
+            'montototalusd': 'MontoTotalUSD',
+            'contraespecie': 'ContraEspecie',
             'mercado': 'Mercado',
             'direccion': 'Direccion'
         };
@@ -171,8 +173,8 @@
             }
         },
         {
-            "data": "Operador",
-            "title": "Operador"
+            "data": "ContraEspecie",
+            "title": "C.Especie"
         }
     ];
 
@@ -339,8 +341,10 @@
             $('#stat-pendientes').text(stats.Pendientes || 0);
             $('#stat-ejecutadas').text(stats.Ejecutadas || 0);
 
-            const montoFormatted = $$.numberFormat(stats.MontoTotal || 0, 2, false, false);
-            $('#stat-monto').text('$' + montoFormatted);
+            const montoARP = $$.numberFormat(stats.MontoTotalARP || 0, 2, false, false);
+            const montoUSD = $$.numberFormat(stats.MontoTotalUSD || 0, 2, false, false);
+            $('#stat-monto-arp').text('$' + montoARP);
+            $('#stat-monto-usd').text('U$S ' + montoUSD);
         }).catch(function(error) {
             console.error('Error cargando estadisticas:', error);
         });

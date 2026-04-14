@@ -1,0 +1,60 @@
+﻿CrearDialogo
+   NrOperacion1 : 'Nro. Operacion';;;;;;NoVacio(Dialogo.NrOperacion1);'Debe ingresar un numero de Op.';NO
+FinDialogo
+
+If not Ok
+   Cancelar
+endIf
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+ACN(z1, SQL("Select count(*) from "~DBO~".OPERACIONES where NrOperacion = '"~Dialogo.NrOperacion1~"'"))
+ACT(z6, SQL("Select Vehiculo1 from "~DBO~".OPERACIONES where NrOperacion = '"~Dialogo.NrOperacion1~"'"))
+If Val(z1) = 0
+   Cancelar('La Operacion no existe')
+Else
+   If Not Incluido(Val(z6), Var('VLIQUIDAA'))
+      Cancelar('La operacion es de un Vehiculo que liquida')
+   Else
+      ACN(z3, SQL("Select count(*) from "~DBO~".OPERACIONESBITS where NrOperacion = '"~Dialogo.NrOperacion1~"' and NrBit in (20,50) and Valor = '1'"))
+      If Val(z3)=0
+         Cancelar('La operacion no esta en BackOffice ni en Terminal')
+      Else
+         ACN(z4, SQL("Select RB3 from "~DBO~".OPERACIONES where NrOperacion = '"~Dialogo.NrOperacion1~"'"))
+         SQL.ADD("Update "~DBO~".OPERACIONES set Impresa='1', Direccion=1 where NrOperacion='"~Dialogo.NrOperacion1~"'")
+         SQL.NEW
+         SQL.EXEC
+         SQL.ADD(" Select NrBit from "~DBO~".OPERACIONESBITS where NrOperacion = '"~Dialogo.NrOperacion1~"' and Valor = '1' ")
+         Recorrer SQL
+             DFA
+             IF fbn('NrBit') = 50
+                 ***---Si esta en terminal verifico si estan las instancias
+                 IF SQL(" Select Count(*) From "~DBO~".OPERACIONESBITS Where NrOperacion = '"~Dialogo.NrOperacion1~"' ") = 1
+                     ***---No estan las otras instancias => las inserto
+                     EjecutarEvento('INSBIT', String1 = 'OPERACIONES', Entero1 = 50, NrOperacion1=Dialogo.NrOperacion1)
+                 ENDIF
+             ENDIF
+         Proximo
+         SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='0' where NrOperacion='"~Dialogo.NrOperacion1~"' and NrBit=20")
+         SQL.NEW
+         SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='0' where NrOperacion='"~Dialogo.NrOperacion1~"' and NrBit=50")
+         SQL.NEW
+         If Val(z4) > 0
+            SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='1' where NrOperacion='"~Dialogo.NrOperacion1~"' and NrBit=10")
+         Else
+            SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='1' where NrOperacion='"~Dialogo.NrOperacion1~"' and NrBit=12")
+         Endif
+         SQL.NEW
+         SQL.EXEC
+         ACT(z5, SQL("Select Alias4 from "~DBO~".VEHICULOS where Codigo = '"~Val(z6)~"'"))
+         SendMail(Val(z5),'Eliminacion de Operaciones', 'Se elimino la operacion : '~Dialogo.NrOperacion1)
+      Endif
+   Endif     
+Endif
+

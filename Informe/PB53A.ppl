@@ -1,0 +1,165 @@
+﻿CrearDialogo
+  Fecha1  : 'D.FechaPago' ;1;1;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys-30
+  Fecha2  : 'H.FechaPago' ;1;2;;;;Dialogo.Fecha2<>0;'Debe Ingresar una Fecha';NO;FSys
+  Vehiculo1: 'Vehiculo'   ;2;1;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))] ;'Vehiculo Invalido';NO;BuscarCampo('USRVEHICULO','Vehiculo','Codigo',USUARIOACTIVO);;;;;iif(NoVacio(UsrVehiculos(UsuarioActivo)), " Codigo in (Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"') ")
+  Lista1:    'Bancos'     ; ;1;1;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CLIENTES WHERE Sector='BAN' ");
+  Lista2:    'Cuentas'    ;-3;2;1;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS  WHERE Cliente = '"~Dialogo.Vehiculo1~"' AND Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ");
+  Entero1 :  'Cheq. Desde' ; ;1;;;;;'Numero de Cheque Desde Invalido';NO;              ;;;;'##############';;
+  Entero2 :  'Cheq. Hasta' ; ;1;;;;;'Numero de Cheque Hasta Invalido';NO;99999999999999;;;;'##############';;
+FinDialogo
+
+IF Not Ok
+  Cancelar
+ENDIF
+
+CrearFont(1,"Arial,14,B")
+CrearFont(2,"Arial,12,")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,10,")
+CrearFont(5,"Arial, 8,")
+CrearFont(6,"Arial,8,B")
+
+SetFilaActual(2)
+ACT(A:fac, 'Informe General de Cheques Anulados')
+SetFont(A:fac, 1)
+ifa
+ifa
+ACT(A:fac, 'Desde Fecha de Pago: '~Dialogo.Fecha1)
+ifa
+ACT(A:fac, 'Hasta Fecha de Pago: '~Dialogo.Fecha2)
+ifa
+ACT(A:fac, 'Estado: '~Val(ES:1))
+ifa
+IF vacio(Dialogo.Lista1)
+  ACT(A:fac, 'Bancos: Todos')
+ELSE
+  ACT(A:fac, 'Bancos: '~Pipe2Comillas(Dialogo.Lista1))
+ENDIF
+ifa
+IF vacio(Dialogo.Lista2)
+  ACT(A:fac, 'Cuentas: Todas')
+ELSE
+  ACT(A:fac, 'Cuentas: '~Pipe2Comillas(Dialogo.Lista2))
+ENDIF
+ifa
+ACT(A:fac, 'Vehiculo : '~Dialogo.Vehiculo1)
+SetFont(A:fac-5..A:fac, 3)
+
+SetFilaActual(11)
+
+ACT(A:fac, 'Numero de')
+ACT(A:fac+1, 'Chequera')
+ACT(B:fac, 'Numero de')
+ACT(B:fac+1, 'Cheque')
+ACT(C:fac, 'Fecha de')
+ACT(C:fac+1, 'Emision')
+ACT(d:fac, 'Fecha de')
+ACT(d:fac+1, 'Vto/Pago')
+ACT(e:fac, 'Proveedor')
+ACT(f:fac, 'Banco')
+ACT(g:fac, 'Monto')
+ACT(h:fac, 'Numero de')
+ACT(h:fac+1, 'Transaccion')
+
+ifa
+AlinearCeldas(A:fac-1..j:fac, 'C')
+SetFont(A:fac-1..j:fac, 3)
+AgregarMarco(A:fac-1..h:fac,1,0,EXE('COLOR6'))
+
+SQL.ADD(" Select C.Chequera, C.NrCheque, C.FechaEmision, C.Monto, C.NrComprobante, C.Estado, C.FechaPago, ")
+SQL.ADD(" B.Banco, B.Cuenta, F.Proveedor, P.Nombre NombreP, F.Especie, T.Numero NroCta  ")
+SQL.ADD(" From "~DBO~".CHEQUES C, "~DBO~".CNCHEQUERASBANCO B, "~DBO~".BTRANSACCIONES2 F, ")
+SQL.ADD(" "~DBO~".CUENTAS T, "~DBO~".CNPROVEEDORES P ")
+SQL.ADD(" Where C.FechaPago >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND   C.FechaPago <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+If novacio(Dialogo.Lista2)
+  SQL.ADD(" AND   B.Cuenta IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+If novacio(Dialogo.Lista1)
+  SQL.ADD(" AND   T.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+SQL.ADD(" AND   C.Chequera      = B.Chequera ")
+SQL.ADD(" AND   F.Proveedor     *= P.Codigo   ")
+SQL.ADD(" AND   C.NrComprobante *= F.NrTrans  ")
+SQL.ADD(" AND   F.Vehiculo1     = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   B.Cuenta = T.Codigo ")
+IF Dialogo.Entero1 > 0 Y Dialogo.Entero2 > 0
+  SQL.ADD(" AND C.NrCheque >= "~Dialogo.Entero1~"  ")
+  SQL.ADD(" AND C.NrCheque <= "~Dialogo.Entero2~"  ")
+ENDIF
+SQL.ADD(" AND C.Estado = 'ANU' ")
+SQL.ADD(" Order By B.Cuenta, C.Chequera, C.NrCheque, C.FechaEmision ")
+
+ACN(FI:1, fac+1)
+ACN(BD:1, 0)
+ACT(ES:2, '')
+ACN(TO:1, 0)
+
+Recorrer SQL
+    message(fbn('Banco')~' - '~fbn('NrComprobante'))
+    ACN(BD:1, 1)
+    IF Not Eqstr(fbn('Cuenta'), Val(ES:2))
+        IF Not CeldaVacia(ES:2)
+            ACT(A:fac, 'Total Cuenta')
+            ACN(g:fac, Val(TO:1))
+            AgregarMarco(A:fac..h:fac, 0, 0, 0)
+            SetFont(A:fac..h:fac, 6)
+            ACN(TO:1, 0)
+            SetFilaActual(fac+2)
+        ENDIF
+        ACT(A:fac, 'Cuenta: '~fbn('NroCta'))
+        AgregarMarco(A:fac..h:fac, 0, 0, Exe('COLOR8'))
+        SetFont(A:fac, 6)
+        ifa
+    ENDIF
+    ACT(ES:2, fbn('Cuenta'))
+    ACT(A:fac, fbn('Chequera'))
+    ACN(B:fac, fbn('NrCheque'))
+    ACT(C:fac, fbn('FechaEmision'))
+    ACT(d:fac, fbn('FechaPago'))
+    ACT(e:fac, fbn('Proveedor')~'-'~fbn('NombreP'))
+    ACT(f:fac, fbn('Banco'))
+    ACN(g:fac, fbn('Monto'))
+    ACT(h:fac, fbn('NrComprobante'))
+    ACLT(h:fac, fbn('NrComprobante'))
+    SCN(TO:1, fbn('Monto'))
+    AlinearCeldas(A:fac..A:fac, 'C')
+Proximo
+
+IF Val(BD:1)=0 Y Elementos(Dialogo.Lista1)=1
+    IF Dialogo.Entero1 = Dialogo.Entero2 Y Dialogo.Entero1 > 0
+      Cancelar('El Numero de Cheque Ingresado no fue Emitido entre el '~Dialogo.Fecha1~' y el '~Dialogo.Fecha2)
+    ELSE
+      Cancelar('Los Numeros de Cheque Ingresados no fueron Emitidos entre el '~Dialogo.Fecha1~' y el '~Dialogo.Fecha2)
+    ENDIF
+ENDIF
+
+IF Val(BD:1) = 1
+  ifa
+  ACT(A:fac, 'Total Cuenta ')
+  ACN(g:fac, Val(TO:1))
+  AgregarMarco(A:fac..h:fac, 0, 0, 0)
+  SetFont(A:fac..h:fac, 6)
+ENDIF
+ifa
+FormatoCeldas(B:Val(FI:1)..B:fac, Exe('F0'))
+AlinearCeldas(i:Val(FI:1)..j:fac, 'C')
+AgregarMarco(A:Val(FI:1)..h:fac,2,0)
+ifa
+ifa
+ACT(A:fac, 'Fin del Informe.')
+SetFont(A:fac, 3)
+
+ACO(1, 8)
+ACO(2, 8)
+ACO(3, 8)
+ACO(4, 8)
+ACO(5, 20)
+ACO(6, 7)
+ACO(7, 8)
+ACO(8, 8)
+
+*SetPrintFit(3, 90)
+Impresion(1,2)
+Impresion(4,1)
+LimitesVision(i:fac+1)

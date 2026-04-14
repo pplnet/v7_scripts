@@ -1,0 +1,121 @@
+creardialogo
+nroperacion1: 'Provision';;;;;;Incluido(BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', dialogo.nroperacion1), 'MMCPR|MMCPRV');'El Nro.de Provision Ingresado es Incorrecto';NO;;;SQLSet("Select NrOperacion from "~Dbo()~".OPERACIONES where TipoOp LIKE '%MMCPR%' ")
+vehiculo1:"Vehiculo";;;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"'"))
+tipoop1:'Clase ';;;;NO;;Eqstr(dialogo.tipoop1, dialogo.tipoop2);'La Clase de Provision no coincide con el Tipo de Operaci¦n';NO;;BuscarCampo('OPERACIONES', 'TipoOp2', 'NrOperacion', dialogo.nroperacion1);
+cantidad1:'Importe';;;;NO;;dialogo.cantidad1 = dialogo.cantidad2;'Los Importes no coinciden !!!';NO;;BuscarCampo('OPERACIONES', 'Cantidad', 'NrOperacion', dialogo.nroperacion1);
+nroperacion2: 'Operacion';1;2;;;;;;;;;SQLSet("Select NrOperacion from "~Dbo()~".OPERACIONES Where TipoOp like 'MM%'  and TipoOp Not In ('MMCPRV','MMPCCM','MMPCCV','MMPV') ")
+tipoop2:'TipoOp';;;;NO;;;;;;BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', dialogo.nroperacion2);
+cantidad2:'Importe';;;;NO;;;;;;BuscarCampo('OPERACIONES', 'Cantidad', 'NrOperacion', dialogo.nroperacion2);
+findialogo
+
+
+if (not ok)
+Cancelar()
+endif
+
+
+Act(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', dialogo.nroperacion1))
+
+Sqladd("SELECT U.Vehiculo FROM "~Dbo()~".USRVEHICULO U,"~Dbo()~".VEHICULOS V ")
+Sqladd("WHERE  U.Codigo='"~UsuarioActivo()~"' and U.Vehiculo=V.Codigo ")
+Sqladd("       and (Status='HAB' or Status Is Null or Status='')")
+
+recorrer sql
+Dfa()
+Act(vh2, Fbn()['Vehiculo']~'|'~Val(vh2))
+proximo
+if (not Incluido(Val(vh1), Val(vh2)) y NoVacio(Val(vh2)))
+Cancelar('Usuario no Habilitado para Trabajar con el Vehiculo ')
+endif
+
+
+Sqladd(" SELECT O.* FROM "~Dbo()~".OPERACIONES O, "~Dbo()~".OPERACIONESBITS B")
+Sqladd(" WHERE O.NrOperacion='"~dialogo.nroperacion1~"'  ")
+Sqladd(" and O.NrOperacion=B.NrOperacion  ")
+Sqladd(" and (B.NrBit=20 or B.NrBit=50) and Valor='1' ")
+
+Acn(x1, 0)
+
+recorrer sql
+
+Acn(x1, 1)
+
+if (NoVacio(Fbn()['OperacionRef']))
+Cancelar('La Provision se afecto anteriormente a otra Operaci¦n !!!')
+endif
+
+Act(a1, Fbn()['Vehiculo1'])
+Act(a2, Fbn()['Cliente1'])
+Act(a3, Fbn()['Especie'])
+
+Sqladd(" SELECT * FROM "~Dbo()~".OPERACIONES O , "~Dbo()~".OPERACIONESBITS B ")
+Sqladd(" WHERE O.NrOperacion='"~dialogo.nroperacion2~"'  ")
+Sqladd(" and O.NrOperacion=B.NrOperacion  ")
+Sqladd(" and (B.NrBit=20 or B.NrBit=50) and Valor='1' ")
+
+Acn(x1, 0)
+
+recorrer sql
+Acn(x1, 1)
+
+if (NoVacio(Fbn()['Mercado3']))
+Cancelar('La Operaci¦n se afecto anteriormente a otra Provisi¦n !!!')
+endif
+
+if (not Eqstr(Val(a1), Fbn()['Vehiculo1']))
+Cancelar('Los Vehiculos no Coinciden !!!')
+endif
+
+if (not Eqstr(Val(a2), Fbn()['Cliente1']))
+Cancelar('Las Entidades no Coinciden !!!')
+endif
+
+if (not Eqstr(Val(a3), Fbn()['Especie']))
+Cancelar('Las Monedas no Coinciden !!!')
+endif
+proximo
+proximo
+
+if (Val(x1) = 1)
+Message('Actualizando Provisi¦n '~dialogo.nroperacion1~' ... ')
+
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" Set OperacionRef='"~dialogo.nroperacion2~"'  ")
+Sqladd(" WHERE NrOperacion='"~dialogo.nroperacion1~"'  ")
+Sqlnew()
+Sqlexec()
+
+Message('Actualizando la Operaci¦n '~dialogo.nroperacion2~' ... ')
+
+Sqladd(" UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd(" Set Mercado3='"~dialogo.nroperacion1~"'  ")
+Sqladd(" WHERE NrOperacion='"~dialogo.nroperacion2~"'  ")
+Sqlnew()
+Sqlexec()
+
+Act(i3, dialogo.nroperacion2)
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS ")
+Sqladd("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+Sqladd("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+Sqlnew()
+
+if (Query(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+Ejecutarevento('INSBIT', 'entero1', Val(az5), 'nroperacion1', Val(az3))
+endif
+
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS ")
+Sqladd("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+Sqlnew()
+Sqlexec()
+
+
+
+else
+Messagebox('Las Operaciones Deben Estar en Back Office o Terminal')
+endif
+

@@ -1,0 +1,77 @@
+﻿MostrarCuadroDeMensajes
+Hojavisible(SI)
+CrearDialogo
+  Fecha1   : 'Fecha Mov'         ;1;1;;NO;;;;;FSYS
+  Vehiculo1: 'Vehiculo'          ;2;1;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))];'Vehiculo Invalido';NO;BuscarCampo('USRVEHICULO','Vehiculo','Codigo',USUARIOACTIVO);;;;;iif(NoVacio(UsrVehiculos(UsuarioActivo)), " Codigo in (Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"') ")
+  Especie1 : 'Moneda'            ;3;1;;;;NOVACIO(Dialogo.Especie1) ;'Moneda Invalida';NO;'ARP';;;;;"Status = 'HAB' AND Tipo='MON' "
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+ACT(a:1, "Detalle de los Movimientos a Reprocesar: ")
+ACT(a:3, "Tipo")
+ACT(b:3, "Nr. Transaccion")
+ACT(c:3, "Vehiculo")
+ACT(d:3, "Fecha")
+ACT(e:3, "Fecha Acreditacion")
+ACT(f:3, "Moneda")
+ACT(g:3, "Cantidad")
+ACT(h:3, "De Banco")
+ACT(i:3, "De Cuenta")
+ACT(j:3, "A Banco")
+ACT(k:3, "A Cuenta")
+ACN(x:1,4)
+ACT(x:2, VAR("DNLIQUID")~"Reproc-"~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".XLS")
+
+SQL.ADD(" SELECT /*+ RULE */ T.NrTrans, B.NrBit, T.TipoTr2, ")
+SQL.ADD(" T.Vehiculo1, T.Fecha1, T.Fecha2, T.Especie, T.Cantidad1,  ")
+SQL.ADD(" T.Cliente1, T.Cuenta1, T.Cliente2, T.Cuenta2  ")
+SQL.ADD(" FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS B, "~DBO~".INSTANCIASOP I ")
+SQL.ADD(" WHERE T.NrTrans = B.NrOperacion ")
+SQL.ADD(" AND T.NrTrans = I.NrOperacion ")
+SQL.ADD(" AND I.Fecha = "~idxdate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND T.TipoTr2 IN('DEP','RET') ")
+SQL.ADD(" AND T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND T.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD(" AND I.NrInstancia = '17' ")
+SQL.ADD(" AND I.Mensaje = 'ZPBD2' ")
+SQL.ADD(" AND B.Valor = 1 ")
+Recorrer SQL
+  If fbn("NrBit") = 18
+    SQL.ADD(" UPDATE /*+ RULE */ "~DBO~".OPERACIONESBITS SET Valor='0' ")
+    SQL.ADD(" WHERE NrBit='18' AND NrOperacion='"~fbn("NrTrans")~"' ")
+    SQL.NEW
+    SQL.EXEC
+    SQL.ADD(" UPDATE /*+ RULE */ "~DBO~".OPERACIONESBITS SET Valor='1' ")
+    SQL.ADD(" WHERE NrBit='17' AND NrOperacion='"~fbn("NrTrans")~"' ")
+    SQL.NEW
+    SQL.EXEC
+  Else
+    SQL.ADD(" UPDATE /*+ RULE */ "~DBO~".OPERACIONESBITS SET Valor='0' ")
+    SQL.ADD(" WHERE NrBit='3' AND NrOperacion='"~fbn("NrTrans")~"' ")
+    SQL.NEW
+    SQL.EXEC
+    SQL.ADD(" UPDATE /*+ RULE */ "~DBO~".OPERACIONESBITS SET Valor='1' ")
+    SQL.ADD(" WHERE NrBit='17' AND NrOperacion='"~fbn("NrTrans")~"' ")
+    SQL.NEW
+    SQL.EXEC
+  EndIf
+  ACT(a:val(x:1), fbn("TipoTr2"))
+  ACT(b:val(x:1), fbn("NrTrans"))
+  ACT(c:val(x:1), fbn("Vehiculo1"))
+  ACT(d:val(x:1), fbn("Fecha1"))
+  ACT(e:val(x:1), fbn("Fecha2"))
+  ACT(f:val(x:1), fbn("Especie"))
+  ACT(g:val(x:1), fbn("Cantidad1"))
+  ACT(h:val(x:1), fbn("Cliente1"))
+  ACT(i:val(x:1), fbn("Cuenta1"))
+  ACT(j:val(x:1), fbn("Cliente2"))
+  ACT(k:val(x:1), fbn("Cuenta2"))
+  SCN(x:1,1) 
+Proximo
+
+if val(x:1) > 3
+  ExportarXLS(a:1..l:val(x:1), a1..l:val(x:1), val(x:2))
+EndIf

@@ -1,0 +1,54 @@
+﻿Message('Confirmando Voucher de Operacion '~val(ck1)~' '~val(cl1)~' Voucher '~Val(cg1))
+
+*- ck1: NrOperacionRef1 cl1: TipoOP
+If Incluido(BuscarCampo('OPERACIONES','TipoOp','NrOperacion', BuscarCampo('TRANSACCIONES2','NrOperacionRef1','NrTrans',Val(cg1))),'MMCCR|MMCDIA|MMCDP|MMCP|MMCPM|MMD|MMDCA|MMO|FCS|FCR|')
+   Recorrer ("Select Leyenda, NrOperacion, FechaEje,Especie,FechaMov from "~dbo~".MOVEJECUTADOS where NrTrans2='"~Val(cg1)~"' and Cliente='"~Val(ca1)~"' ")
+       dfa
+       If [Incluido(Copy(fbn('Leyenda'),1,7),'Vto Int|Vto Cap|Vto Co|Ints C|Vto.Cap|Vto.Int|Suscrip|Rescate') o [EqStr(Copy(fbn('Leyenda'),1,7),'Vto.Imp') y EqStr(Val(cl1),'MMCCR')]]
+          ACT(ce1, SQL("SELECT Especie FROM "~DBO~".LIMASIGNADOS WHERE Cliente='"~Val(ca1)~"' and Limite='COTOR' "))
+
+          *- Cotizacion de la especie de afectacion 
+          ACN(cv1,COTIZACIONC(FBN['Especie'],,,,FBN['FechaMov'],1,SI,val(ce1)) )
+
+          SQL.ADD("Insert into "~DBO~".MOVLIMITES")
+          SQL.ADD("(FechaMov, Cliente, Limite, Especie,")
+          SQL.ADD("Monto, NrOperacion, Descripcion, Bits) values (")
+          SQL.ADD("'"~IdxDate(FSys)~"', '"~Val(ca1)~"', 'COTOR', '"~VAL(ce1)~"',")
+          SQL.ADD(""~FStr(-Val(cf1)*val(cv1),0,2)~", '"~BuscarCampo('TRANSACCIONES2','NrOperacionRef1','NrTrans',Val(cg1))~"', 'Conf.Cobro "~Val(cg1)~"', 'P')")
+          SQL.NEW
+       EndIf
+   Proximo
+Endif
+
+*- tp1: Tipo de Operacion
+act(tp1, BuscarCampo('OPERACIONES','TipoOp','NrOperacion', BuscarCampo('TRANSACCIONES2','NrOperacionRef1','NrTrans',Val(cg1))) )
+
+If Incluido(val(tp1),'FXAT|FXATV|FXCT|FXCTV|FXREPO|FXREPV|FXVT|FXVTV|SECT|SERA|SERP|SEVT|SECS|SEVS|DFXO|FXAS|FXCS|FXREPO|FXVS|')
+
+   *- Fecha de Movimiento de la Transaccion que estoy tomando
+   ACT(fv1,SQL("Select Leyenda From "~dbo~".MOVEJECUTADOS where NrTrans2='"~Val(cg1)~"' and Cliente='"~Val(ca1)~"' ") )
+
+   If [EqStr(Val(ci1),'DEP') y Not Incluido(val(tp1),'SERA|SERP|')]  o [ [[EqStr(val(cl1),'SERA') y EqStr(val(ci1),'RET')] o [EqStr(val(cl1),'SERP') y EqStr(val(ci1),'DEP')]] y Incluido('Repo Imp. Liq. Te',Copy(VAL(fv1),1,17)) ]
+
+      Recorrer ("Select Monto,Limite,Descripcion from "~DBO~".MOVLIMITES where NrOperacion='"~Val(ck1)~"' and Limite in ('CONTRACT','SETCRE') and Monto > 0 ")
+         dfa
+         ACN(co1, FBN['Monto'])
+         SCN(cp1, FBN['Monto'])
+
+         ACT(ce1, SQL("SELECT Especie FROM "~DBO~".LIMASIGNADOS WHERE Cliente='"~Val(ca1)~"' and Limite='"~FBN['Limite']~"' "))
+
+         SQL.ADD("Insert into "~DBO~".MOVLIMITES")
+         SQL.ADD("(FechaMov, Cliente, Limite, Especie,")
+         SQL.ADD("Monto, NrOperacion, Descripcion, Bits) values (")
+         SQL.ADD("'"~IdxDate(FSys)~"', '"~Val(ca1)~"', '"~FBN['Limite']~"', '"~val(ce1)~"',")
+         SQL.ADD(FStr(-Val(co1),0,2)~", '"~Val(ck1)~"', 'Conf.Cobro "~Val(cg1)~"', 'P')")
+         SQL.NEW
+      Proximo
+   Endif
+Endif
+
+SQL.ADD("UPDATE "~DBO~".TRANSACCIONES2 ")
+SQL.ADD("SET CB9 = '1', FechaConfir = '"~IdxDate(FSys)~"'")
+SQL.ADD("Where NrTrans = '"~Val(cg1)~"' ")
+SQL.NEW
+SQL.EXEC

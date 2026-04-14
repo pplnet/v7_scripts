@@ -1,0 +1,156 @@
+creardialogo
+nrorden1:'Orden';;;;;;;;;;;;;;" FechaOrden >= "~IdxDate2(Habiles(FSys(), -Var('FVALORORD')))~" and TipoOrden Like 'OTI%' and NrOrden in (Select NrOperacion from OPERACIONESBITS where NrOperacion = NrOrden and Valor = '1'  and NrBit in (33)) "
+entero1:'Monto desde';2;1;;;;;;;;;;;'#############.##'
+entero2:'Monto hasta';;1;;;;(dialogo.entero1 = 0 y dialogo.entero2 = 0) o dialogo.entero2 > 0;'hasta Invalido';NO;;;;;'#############.##'
+entero3:'Nr Secuencia';;1;;;;;;;;;;;'#####'
+check1:'Procesa';;;;NO;NO;;;;1;
+findialogo
+if (not ok)
+Cancelar()
+endif
+if (dialogo.check1 = 0)
+HojaVisible(SI)
+endif
+
+Sqladd("Select OB.Nrbit, O.* from "~Dbo()~".ORDENES O, "~Dbo()~".OPERACIONESBITS OB ")
+Sqladd(" where NrOrden     = OB.NrOperacion ")
+if (NoVacio(dialogo.nrorden1))
+Sqladd("   and  NrOrden     = '"~dialogo.nrorden1~"' ")
+endif
+Sqladd("   and Valor       = '1' ")
+Sqladd("   and NrBit       = 33 ")
+Sqladd("   and TipoOrden Like 'OTI%' ")
+
+Watch(Sqlbatch())
+Acn(xy1, 0)
+recorrer sql
+
+Act(t:1, Fbn('NrOperacion2'))
+Dfa()
+Sqladd("Select * from "~Dbo()~".EJECUCIONES E")
+Sqladd(" where NrOrden     = '"~Fbn('NrOrden')~"' ")
+Sqladd("   and fecha2 is not null")
+if (dialogo.entero3 <> 0)
+Sqladd("   and NrSecuencia = "~dialogo.entero3~" ")
+else
+if (dialogo.entero2 > 0)
+Sqladd("   and Cantidad Between "~dialogo.entero1~" and "~dialogo.entero2~" ")
+endif
+endif
+Sqladd(" Order By NrEjecucion ")
+Watch(Sqlbatch())
+recorrer sql
+Acn(x:fac, 0)
+Act(a:fac, Fbn('NrOrden'))
+Act(b:fac, Fbn('NrEjecucion'))
+Act(c:fac, Fecha(Fbn('Fecha')))
+Act(d:fac, Hora(Fbn('Fecha')))
+Act(e:fac, Fbn('NrSecuencia'))
+Acn(f:fac, Fbn('Cantidad'))
+Acn(g:fac, Fbn('Precio'))
+Acn(h:fac, Fbn('Cantidad2'))
+Acn(a:0, Fac())
+proximo
+Act(t:2, Fbn('NrOrden'))
+Act(t:3, Fbn('TipoOrden'))
+Acd(t:4, Fbn('FechaOrden'))
+Acd(t:5, Fbn('FechaVto'))
+Acn(t:6, Fbn('CantidadToTalOrden'))
+Acn(t:7, Fbn('Cantidad1'))
+Act(t:8, Fbn('Especie'))
+Act(t:9, Fbn('Mercado2'))
+Act(t:10, Fbn('Leyenda3'))
+Acn(t:11, Fbn('MB2'))
+Act(t:12, Fbn('AfectaLs'))
+Act(t:13, Fbn('Cuenta4'))
+Acn(t:14, Fbn('TotalAux1'))
+Acn(t:15, Fbn('LInstancia'))
+Acn(t:16, Query("select LInstancia from "~Dbo()~".OPERACIONES where NrOperacion = '"~Val(t:1)~"' "))
+Act(t:20, 'OK')
+Scn(xy1, 1)
+proximo
+
+if (Val(xy1) = 0)
+Cancelar('La Orden no se encuentra en instancia válida para anulación: Ejecutada o Anulada con Ejecuciones. o Fecha valor máxima superada.')
+endif
+
+if (Eqstr(Val(t:20), 'OK'))
+Message('Supervision Anulacion de Ejecuciones')
+crearlistbox;'Arial,8,';'Supervision Anulacion de Ejecuciones '
+'Accion ?';x:1..x:fac;SI;;;50;combo;'Autoriza|Rechaza'
+'NrOrden';a:1..a:Val(a:0);NO;;;60;string;
+'Nr Ejec';b:1..b:Val(a:0);NO;;;60;string;
+'Fecha';c:1..c:Val(a:0);NO;;;100;string;
+'Hora';d:1..d:Val(a:0);NO;;;100;string;
+'NrSecuencia';e:1..e:Val(a:0);NO;;;100;string;
+'Cantidad';f:1..f:Val(a:0);NO;;;80;numero;'###,###,###,###.##';
+'Precio';g:1..g:Val(a:0);NO;;;80;numero;'###,###,###,###.##';
+'Monto';h:1..h:Val(a:0);NO;;;80;numero;'###,###,###,###.##';
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+
+if (dialogo.check1 = 1)
+
+recorrer&i 1, Val(a:0)
+if (Val(x:&i) = 0)
+Acn(ca:1, Query("Select SUM(Cantidad)   From "~Dbo()~".EJECUCIONES Where NrOrden='"~Val(a:&i)~"' "))
+Acn(ca:2, Query("Select SUM(Cantidad2) From "~Dbo()~".EJECUCIONES Where NrOrden='"~Val(a:&i)~"' "))
+Acn(pr:1, ((Val(ca:2) - Val(h:&i)) / (Val(ca:1) - Val(f:&i))))
+Acn(ca:10, Val(f:&i))
+Acn(ca:12, Val(t:7) - Val(ca:10))
+
+Sqladd(" Update "~Dbo()~".EJECUCIONES Set ")
+Sqladd("  Cantidad3    = "~FStr(Val(ca:10), 0, 2)~", ")
+Sqladd("  Cantidad     = "~FStr(0, 0, 2)~", ")
+Sqladd("  Cantidad2    = "~FStr(0, 0, 2)~" ")
+Sqladd(" Where NrOrden = '"~Val(a:&i)~"' ")
+Sqladd("   and NrEjecucion = '"~Val(b:&i)~"' ")
+Sqlnew()
+
+Sqladd(" Update "~Dbo()~".ORDENES Set ")
+Sqladd("  Cantidad1            = "~FStr(Val(ca:12), 0, 2)~", ")
+Sqladd("  Cantidad4            = "~FStr(Val(pr:1), 0, 8)~" ")
+Sqladd(" Where NrOrden = '"~Val(t:2)~"' ")
+Sqlnew()
+
+Sqladd(" Update "~Dbo()~".OPERACIONES Set ")
+Sqladd("  Cantidad    = "~FStr(Val(ca:12), 0, 2)~", ")
+Sqladd("  Precio1     = "~FStr(Val(pr:1), 0, 8)~" ")
+Sqladd(" Where NrOperacion = '"~Val(t:1)~"' ")
+Sqlnew()
+Sqlexec()
+
+modificaroperacion(Val(t:1), 0, NO, SI, SI, NO, SI, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, SI, NO, NO, NO, SI, NO, SI, NO, 0, NO, NO)
+
+modificarorden(Val(a:&i), 0, NO, SI, SI, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, SI, NO, NO, NO)
+
+if (Val(ca:12) = 0)
+Ejecutarevento('CBOINS', 'string1', Val(t:1), 'radio1', 1, 'radio2', 0, 'entero1', 33, 'entero2', 30)
+else
+Ejecutarevento('CBOINS', 'string1', Val(t:1), 'radio1', 1, 'radio2', 0, 'entero1', 33, 'entero2', Val(t:16))
+endif
+Ejecutarevento('CBOINS', 'string1', Val(t:2), 'radio1', 1, 'radio2', 0, 'entero1', 33, 'entero2', Val(t:15))
+else
+Sqladd(" Update "~Dbo()~".EJECUCIONES Set ")
+Sqladd("  Cantidad3    = "~FStr(0, 0, 2)~", ")
+Sqladd("  Fecha2    = Null ")
+Sqladd(" Where NrOrden = '"~Val(a:&i)~"' ")
+Sqladd("   and NrEjecucion = '"~Val(b:&i)~"' ")
+Sqlnew()
+Sqlexec()
+
+Ejecutarevento('CBOINS', 'string1', Val(t:2), 'radio1', 1, 'radio2', 0, 'entero1', 33, 'entero2', Val(t:15))
+Ejecutarevento('CBOINS', 'string1', Val(t:1), 'radio1', 1, 'radio2', 0, 'entero1', 33, 'entero2', Val(t:16))
+
+endif
+
+Ejecutarevento('CBOINS', 'string1', Val(t:2), 'radio1', 1, 'radio2', 0, 'entero1', 33, 'entero2', Val(t:15))
+Ejecutarevento('CBOINS', 'string1', Val(t:1), 'radio1', 1, 'radio2', 0, 'entero1', 33, 'entero2', Val(t:16))
+
+proximo
+endif
+endif
+

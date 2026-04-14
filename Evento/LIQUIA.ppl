@@ -1,0 +1,268 @@
+﻿*-- hojavisible(SI)
+*-- Selecciono los vehiculos que el usuario puede liquidar.
+
+If NoVacio(UsrVehiculos(UsuarioActivo))
+   ACT(zz6,SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+EndIf
+
+SQL.ADD("Select * from "~DBO~".MOVPENDIENTES M, "~DBO~".OPERACIONESBITS B where")
+SQL.ADD("NrSaldo = 1 ")
+SQL.ADD("and M.FechaMov <= '"~IdxDate(FSys)~"' ")
+SQL.ADD("and M.NrOperacion = B.NrOperacion ")
+If NoVacio(val(zz6))
+   SQL.ADD(" and M.EnteCustodia In ("~Pipe2Comillas(val(zz6))~") ")
+EndIf
+SQL.ADD("and M.Bits = 'MV'")
+SQL.ADD("and ((B.NrBit = 20 and B.Valor = '1') or (B.NrBit = 50 and B.Valor = '1'))")
+SQL.ADD("order by M.NrOperacion")
+
+Recorrer SQL
+
+  ACT(z1, BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', fbn('NrOperacion')))
+
+  if Incluido(Val(z1),Exe('CARTA1C')) o Incluido(Val(z1),Exe('CARTA1V')) o Incluido(Val(z1),Exe('CARTA2'))
+     message(fbn('EnteCustodia'))
+     dfa
+  else
+     ACT(a:fac, FBN['NrOperacion'])
+     ACD(b:fac, FBN['FechaMov'])
+     ACT(c:fac, FBN['Cliente'])
+     ACT(d:fac, FBN['Especie']~' '~FBN['Cupon'])
+     ACN(e:fac, -FBN['Cantidad'])
+     ACT(f:fac, FBN['EnteCustodia'])
+     ACT(g:fac, FBN['Transaccion'])
+     ACT(h:fac, FBN['Cuenta'])
+     ACT(i:fac, FBN['Leyenda'])
+     ACN(k:fac, 1)
+     ACN(p:fac, FBN['NrMov'])
+     ACT(r:fac, FBN['Especie'])
+     ACT(s:fac, FBN['Cupon'])
+  endif
+proximo
+
+if fac=0
+  Cancelar
+endif
+
+Recorrer&i 1, FAC
+
+    * Verifico que los mov. que esta tomando esten Pendientes
+    ACN(o:&i,1) 
+
+    SQL.ADD("Select * from "~DBO~".MOVPENDIENTES M where")
+    SQL.ADD("NrSaldo=1 ")
+    SQL.ADD("and M.FechaMov   <='"~IdxDate(val(b:&i))~"' ")
+    SQL.ADD("and M.EnteCustodia='"~VAL(f:&i)~"' ")
+    SQL.ADD("and M.Bits = 'MV' ")
+    SQL.ADD("and M.Especie = '"~VAL(r:&i)~"' ")
+    SQL.ADD("and M.Cliente = '"~VAL(c:&i)~"' ")
+    SQL.ADD("and M.NrOperacion='"~VAL(a:&i)~"' ")
+    SQL.ADD("and M.NrMov      = "~Fstr(VAL(p:&i),0,0)~" ")
+
+    Recorrer SQL
+        Message('Verifico que el Mov. no se haya liquidado Previamente '~val(a:&i)~' '~Fstr(VAL(p:&i),0,0)~' ...' )
+        ACN(o:&i,0) 
+    Proximo
+
+    If val(o:&i)=1
+       Cancelar('El Mov. de la Operacion '~val(a:&i)~' Nro. '~Fstr(VAL(p:&i),0,0)~' fue liquidado Previamente por Otro Usuario ....')
+    EndIf
+
+    if Val(o:&i)=0
+       *******   Genera Voucher de Liquidacion
+       ACT(t:&i,GetNumerador(BuscarCampo('VEHICULOS','Alias3','Codigo',Val(f:&i))))
+
+       If Vacio(val(t:&i))
+          Cancelar('Proceso Cancelado, Numerador Inexistente Vehiculo '~val(f:&i)~' Op. Nro. '~val(a:&i))
+       EndIf 
+
+       SQL.ADD("Insert into "~DBO~".TRANSACCIONES2 (")
+       SQL.ADD("Especie, ")
+       SQL.ADD("Fecha1, ")
+       SQL.ADD("Fecha2, ")
+       SQL.ADD("Cliente1, ")
+       SQL.ADD("Vehiculo1, ")
+       SQL.ADD("NrOperacionRef1, ")
+       SQL.ADD("TipoTr2, ")
+       SQL.ADD("Cantidad1, ")
+       SQL.ADD("Cupon1, ")
+       SQL.ADD("NrTrans ")
+ 
+       SQL.ADD(") Values (")
+
+       SQL.ADD("'"~Val(r:&i)~"', ")
+       SQL.ADD("'"~IdxDate(FSys)~"', ")
+       SQL.ADD("'"~IdxDate(FSys)~"', ")
+       SQL.ADD("'"~Val(c:&i)~"', ")
+       SQL.ADD("'"~Val(f:&i)~"', ")
+ 
+       SQL.ADD("'"~Val(a:&i)~"', ")
+       if Val(e:&i) > 0
+          SQL.ADD("'DEP', ")
+          SQL.ADD(""~FStr(Val(e:&i),1,2)~", ")
+       else
+          SQL.ADD("'RET', ")
+          SQL.ADD(""~FStr(-Val(e:&i),1,2)~", ")
+       endif
+       SQL.ADD("'"~Val(s:&i)~"', ")
+       SQL.ADD("'"~Val(t:&i)~"' ")
+ 
+       SQL.ADD(")")
+       SQL.NEW
+
+       SQL.ADD("Insert into "~DBO~".OPERACIONESBITS ")
+       SQL.ADD("(NrBit, NrOperacion, Valor) ")
+       SQL.ADD("Select NrInstancia, '"~Val(t:&i)~"', '0'")
+       SQL.ADD("from "~DBO~".INSTANCIAS ")
+       SQL.ADD("where Tabla = 'TRANSACCIONES2'")
+       SQL.NEW
+
+       SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS ")
+       SQL.ADD(" SET Valor = '1' ")
+       SQL.ADD(" Where NrBit = 10 and NrOperacion = '"~Val(t:&i)~"' ")
+       SQL.NEW
+
+       Message('Genera Voucher '~Val(t:&i))
+
+       *********   Genera Movimientos de la Transaccion
+       SQL.ADD("Insert into "~DBO~".MOVEJECUTADOS (")
+       SQL.ADD("FechaEje, ")
+       SQL.ADD("UsuarioEje, ")
+       SQL.ADD("NrTrans2, ")
+       SQL.ADD("NrOperacion, ")
+       SQL.ADD("Leyenda, ")
+       SQL.ADD("Cantidad, ")
+       SQL.ADD("Cliente, ")
+       SQL.ADD("Especie, ")
+       SQL.ADD("CallPut, ")
+       SQL.ADD("NrSaldo, ")
+       SQL.ADD("NrGrupo, ")
+       SQL.ADD("NrGrupo2, ")
+       SQL.ADD("Bits, ")
+       SQL.ADD("Cupon, ")
+       SQL.ADD("NrMov, ")
+       SQL.ADD("NrInstan, ")
+       SQL.ADD("FechaMov, ")
+       SQL.ADD("EnteCustodia ")
+       SQL.ADD(") Values (")
+       *  if Dialogo.Fecha1<=FSys
+          SQL.ADD("'"~IdxDate(Hoy)~"', ")
+          SQL.ADD("'"~UsuarioActivo~"', ")
+       *  endif
+          
+       SQL.ADD("'"~Val(t:&i)~"', ")
+       SQL.ADD("'"~Val(t:&i)~"', ")
+       if Val(e:&i) > 0
+          SQL.ADD("'Cobro', ")
+       else
+          SQL.ADD("'Pago', ")
+       endif
+       SQL.ADD(""~FStr(Val(e:&i),1,2)~", ")
+       SQL.ADD("'"~Val(f:&i)~"',")
+       SQL.ADD("'"~Val(r:&i)~"', ")
+       SQL.ADD("'', ")
+       SQL.ADD(""~FStr(1,1,0)~", ")
+       SQL.ADD(""~FStr(0,1,0)~", ")
+       SQL.ADD(""~FStr(0,1,0)~", ")
+ 
+       SQL.ADD("'AV', ")
+       SQL.ADD("'"~Val(s:&i)~"', ")
+       SQL.ADD(""~FStr(0,1,0)~", ")
+       SQL.ADD(""~FStr(0,1,0)~", ")
+       SQL.ADD("'"~IdxDate(FSys)~"', ")
+       SQL.ADD("'"~Val(f:&i)~"' ")
+       SQL.ADD(")")
+       SQL.NEW
+
+       *****   Genera Movimientos Ejecutados de la Operacion
+
+       SQL.ADD("Insert into "~DBO~".MOVEJECUTADOS (")
+       SQL.ADD("NrOperacion, ")
+       SQL.ADD("FechaMov, ")
+       SQL.ADD("Cliente, ")
+       SQL.ADD("Especie, ")
+       SQL.ADD("NrSaldo, ")
+       SQL.ADD("CallPut, ")
+       SQL.ADD("FechaEj, ")
+       SQL.ADD("PrecioEj, ")
+       SQL.ADD("EnteCustodia, ")
+       SQL.ADD("Mercado, ")
+       SQL.ADD("Formula, ")
+       SQL.ADD("Leyenda, ")
+       SQL.ADD("Bits, ")
+       SQL.ADD("NrGrupo, ")
+       SQL.ADD("Concepto, ")
+       SQL.ADD("NrGrupo2, ")
+       SQL.ADD("NrMov, ")
+       SQL.ADD("NrLiq, ")
+       SQL.ADD("Status, ")
+       SQL.ADD("NrComprob, ")
+       SQL.ADD("NrInstan, ")
+       SQL.ADD("FechaEje, ")
+       SQL.ADD("UsuarioEje, ")
+       SQL.ADD("Cupon, ")
+       SQL.ADD("NrTrans2, ")
+       SQL.ADD("Cantidad ")
+       SQL.ADD(") select ")
+       SQL.ADD("NrOperacion, ")
+       SQL.ADD("FechaMov, ")
+       SQL.ADD("Cliente, ")
+       SQL.ADD("Especie, ")
+       SQL.ADD("NrSaldo, ")
+       SQL.ADD("CallPut, ")
+       SQL.ADD("FechaEj, ")
+       SQL.ADD("PrecioEj, ")
+       SQL.ADD("EnteCustodia, ")
+       SQL.ADD("Mercado, ")
+       SQL.ADD("Formula, ")
+       SQL.ADD("Leyenda, ")
+       SQL.ADD("Bits, ")
+       SQL.ADD("NrGrupo, ")
+       SQL.ADD("Concepto, ")
+       SQL.ADD("NrGrupo2, ")
+       SQL.ADD("NrMov, ")
+       SQL.ADD("NrLiq, ")    
+       SQL.ADD("Status, ")
+       SQL.ADD("NrComprob, ")
+       SQL.ADD("NrInstan, ")
+       SQL.ADD("'"~IdxDate(FSys)~"', ")
+       SQL.ADD("'"~UsuarioActivo~"', ")
+       SQL.ADD("Cupon, ")
+       SQL.ADD("'"~Val(t:&i)~"', ")
+       SQL.ADD("Cantidad ")
+       SQL.ADD(" from "~DBO~".MOVPENDIENTES ")
+       SQL.ADD("where NrOperacion = '"~Val(a:&i)~"' ")
+       SQL.ADD("and NrSaldo = 1 ")
+       SQL.ADD("and FechaMov = '"~IdxDate(Val(b:&i))~"'")
+       SQL.ADD("and Cliente = '"~Val(c:&i)~"'")
+       SQL.ADD("and Especie = '"~Val(r:&i)~"' ")
+       if NoVacio(Val(s:&i))
+          SQL.ADD("and Cupon = '"~Val(s:&i)~"' ")
+       else
+          SQL.ADD("and (Cupon = '"~Val(s:&i)~"' or Cupon is NULL)")
+       endif
+       *  SQL.ADD("and Cantidad = "~FStr(-Val(e:&i),1,2)~" ")
+       SQL.ADD("and NrMov = "~FStr(Val(p:&i),1,0)~" ")
+       SQL.NEW
+
+       *******   Se Borran los Movs Pendientes de la operacion
+       SQL.ADD("DELETE FROM "~DBO~".MOVPENDIENTES ")
+       SQL.ADD("where NrOperacion = '"~Val(a:&i)~"' ")
+       SQL.ADD("and NrSaldo = 1 ")
+       SQL.ADD("and FechaMov = '"~IdxDate(Val(b:&i))~"'")
+       SQL.ADD("and Cliente = '"~Val(c:&i)~"'")
+       SQL.ADD("and Especie = '"~Val(r:&i)~"' ")
+       if NoVacio(Val(s:&i))
+          SQL.ADD("and Cupon = '"~Val(s:&i)~"' ")
+       else
+          SQL.ADD("and (Cupon = '"~Val(s:&i)~"' or Cupon is NULL)")
+       endif
+       *  SQL.ADD("and Cantidad = "~FStr(-Val(e:&i),1,8)~" ")
+       SQL.ADD("and NrMov = "~FStr(Val(p:&i),1,0)~" ")
+       SQL.NEW
+       SQL.EXEC
+       * -- Si no lo liquidaron anteriormente.
+    Endif 
+proximo
+
+SetFont(w1..z6,1)

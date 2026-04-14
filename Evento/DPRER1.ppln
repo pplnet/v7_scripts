@@ -1,0 +1,151 @@
+creardialogo
+nroperacion1:"Operacion";1;1;;;;NoVacio(dialogo.nroperacion1);'Debe Ingresar una Operacion';NO;
+entero1:"Nro.Settlement";;;;;;dialogo.entero1 > 0;'El Nro. de Settlement es Incorrecto';NO
+fecha1:"F Real Ej.";;;;NO;;dialogo.fecha1 >= dialogo.fecha4;'La Fecha de Ejercicio Real para esta Operacion es Invalida';NO;FSys()
+radio2:"Tipo|Consumer|Producer";;;;NO;;;;;;BuscarCampo('Operaciones', 'MB1', 'NrOperacion', dialogo.nroperacion1)
+precio3:"Call_Strike";;;;NO;;;;;;BuscarCampo('Operaciones', 'TipoCambio2', 'NrOperacion', dialogo.nroperacion1)
+precio2:"Fl_Pr_Call";;;;;;;;;;;;;"###,###,###.########"
+entero2:"Doas_Call";;;;;;dialogo.entero2 + dialogo.entero4 <= dialogo.entero3;'La Cant. de Doas de Resultado Incorrecto';NO;
+especie1:"Commodity";1;2;;NO;;;;;;BuscarCampo('Operaciones', 'Especie', 'NrOperacion', dialogo.nroperacion1)
+fecha4:"Fecha Settlement";2;2;;NO;;;;;;Query(" Select Fecha1 from "~Dbo()~".CUOTAS where NrOperacion='"~dialogo.nroperacion1~"' and NrCuota="~FStr(dialogo.entero1, 2, 0)~" ")
+precio4:"Fade Out";;;;NO;;;;;;BuscarCampo('Operaciones', 'PrecioEj', 'NrOperacion', dialogo.nroperacion1)
+entero3:"Doas_Habiles";;;;NO;;;;;;Query("Select Plazo2 from "~Dbo()~".CUOTAS where NrOperacion='"~dialogo.nroperacion1~"' and NrCuota="~FStr(dialogo.entero1, 2, 0)~" ")
+precio6:"Put_Strike";;;;NO;;;;;;BuscarCampo('Operaciones', 'TipoCambio3', 'NrOperacion', dialogo.nroperacion1)
+precio5:"Fl_Pr_Put";;;;;;;;;;;;;"###,###,###.########"
+entero4:"Doas_Put";;;;;;dialogo.entero2 + dialogo.entero4 <= dialogo.entero3;'La Cant. de Doas de Resultado Incorrecto';NO;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+Act(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', dialogo.nroperacion1))
+
+Sqladd("SELECT U.Vehiculo FROM "~Dbo()~".USRVEHICULO U,"~Dbo()~".VEHICULOS V ")
+Sqladd("WHERE  U.Codigo='"~UsuarioActivo()~"' and U.Vehiculo=V.Codigo ")
+Sqladd("       and (Status='HAB' or Status Is Null or Status='')")
+
+recorrer sql
+Dfa()
+Act(vh2, Fbn()['Vehiculo']~'|'~Val(vh2))
+proximo
+if (not Incluido(Val(vh1), Val(vh2)) y NoVacio(Val(vh2)))
+Cancelar('Usuario no Habilitado para Trabajar con el Vehiculo ')
+endif
+
+
+if (not Incluido(BuscarCampo('Operaciones', 'TipoOp', 'NrOperacion', dialogo.nroperacion1), 'DPRC|'))
+Cancelar('La operacion No '~dialogo.nroperacion1~' No es Range Collar')
+endif
+
+Acn(x1, Query("Select NrBit FROM "~Dbo()~".OPERACIONESBITS  Where NrOperacion='"~dialogo.nroperacion1~"' AND Valor='1'"))
+
+if (Val(x1) <> 20 y Val(x1) <> 50)
+Cancelar('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~Query("Select Nombre FROM "~Dbo()~".INSTANCIAS  Where NrInstancia="~FStr(Val(x1), 0, 0)~" AND Tabla='OPERACIONES'"))
+endif
+
+Acd(d1, Query("Select Fecha2 FROM "~Dbo()~".CUOTAS where NrOperacion = '"~dialogo.nroperacion1~"' and NrCuota=(Select Max(NrCuota) FROM "~Dbo()~".CUOTAS where NrOperacion='"~dialogo.nroperacion1~"') "))
+
+Message(Val(d1))
+
+if (Vacio(Val(d1)))
+Acd(d1, BuscarCampo('Operaciones', 'FechaPago', 'NrOperacion', dialogo.nroperacion1))
+Message(Val(d1)~' Operaciones Simple ')
+endif
+
+
+
+
+if (dialogo.fecha1 > Val(d1))
+Cancelar('La Operacion ya fue Liquidada, No se puede Modificar !!!')
+endif
+
+if (ok)
+Acn(x1, 0)
+
+Sqladd("Select * from "~Dbo()~".CUOTAS ")
+Sqladd("where NrOperacion = '"~dialogo.nroperacion1~"' ")
+Sqladd("and NrCuota = "~FStr(dialogo.entero1, 2, 0)~" ")
+
+
+recorrer sql
+Acn(x1, 1)
+
+Acn(z3, 0)
+Acn(z4, 0)
+
+if ((dialogo.precio2 - dialogo.precio3) >= 0 y (dialogo.radio2 = 1 o dialogo.precio2 <= dialogo.precio4))
+Acn(z4, (dialogo.precio2 - dialogo.precio3))
+endif
+
+if ((dialogo.precio6 - dialogo.precio5) >= 0 y (dialogo.radio2 = 0 o dialogo.precio5 >= dialogo.precio4))
+Acn(z3, (dialogo.precio6 - dialogo.precio5))
+endif
+
+if (dialogo.radio2 = 0)
+Acn(z3, -Val(z3))
+else
+Acn(z4, -Val(z4))
+endif
+
+Acn(z2, ((Val(z3) * dialogo.entero4) + (Val(z4) * dialogo.entero2)) * Fbn()['Cantidad1'])
+
+if (Val(z3) = 0)
+Acn(a1, Messagebox('Con estos Valores el Resultado del Put ser# 0 ...', 2, 1))
+endif
+
+if (Val(z4) = 0)
+Acn(a2, Messagebox('Con estos Valores el Resultado del Call ser# 0 ...', 2, 1))
+endif
+
+if (Val(a1) <> 2 y Val(a2) <> 2)
+Message('Actualizando la Opcion  .... ')
+
+Sqladd("Update "~Dbo()~".CUOTAS ")
+Sqladd("Set ")
+Sqladd("Precio1   = "~FStr(dialogo.precio5, 0, 8)~", ")
+Sqladd("Precio2   = "~FStr(Val(z3), 0, 8)~", ")
+Sqladd("Cantidad2 = "~FStr(dialogo.entero4, 3, 0)~", ")
+Sqladd("Precio3   = "~FStr(dialogo.precio2, 0, 8)~", ")
+Sqladd("Precio4   = "~FStr(Val(z4), 0, 8)~", ")
+Sqladd("Cantidad3 = "~FStr(dialogo.entero2, 3, 0)~", ")
+Sqladd("Total1    = "~FStr(Val(z2), 0, 8)~" ")
+Sqladd("where NrOperacion = '"~dialogo.nroperacion1~"' ")
+Sqladd("and NrCuota = "~FStr(dialogo.entero1, 2, 0)~" ")
+Sqlnew()
+Sqlexec()
+
+
+Sqlactualizarmovimientos(dialogo.nroperacion1, SI)
+Sqlexec()
+
+
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS ")
+Sqladd("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+Sqladd("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+Sqlnew()
+
+if (Query(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+Ejecutarevento('INSBIT', 'entero1', Val(az5), 'nroperacion1', Val(az3))
+endif
+
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS ")
+Sqladd("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+Sqlnew()
+Sqlexec()
+
+
+
+endif
+proximo
+
+if (Val(x1) = 0)
+Cancelar('La operacion No '~dialogo.nroperacion1~' No puede ser Ejercida')
+endif
+endif

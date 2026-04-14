@@ -1,0 +1,290 @@
+creardialogo
+fecha1:'Fecha Vto';1;1;;NO;;;;;FSys()
+string1:'Moneda';2;1;;;;Eqstr(dialogo.string1, Var('MONELOCA')) o Eqstr(dialogo.string1, Var('MONEEXTR'));"Debe ingresar una moneda valida";NO;;Var('MONELOCA');'ARP|USD';;;
+listatabla1:'Clientes';3;1;;;;;;;;;;;;;'Codigo';'Codigo;RazonSocial';'CLIENTES'
+string3:'Sector';1;2;;NO;;;;;;Query("SELECT SECTOR FROM "~Dbo()~".USRVEHICULO WHERE Codigo = '"~UsuarioActivo()~"'");;;;;
+string2:'Tipo De Calculo';2;2;;;;Eqstr(dialogo.string2, 'TEM') o Eqstr(dialogo.string2, 'TNA');"Debe ingresar un Tipo de Calculo valido";NO;;'TNA';'TNA|TEM';;;
+tipotasa:'Tipo Tasa';3;2;;NO;;;;;;Query("Select Codigo from  "~Dbo()~".TIPOSTASA WHERE TiposOperacion LIKE ('%MMCREM|%')");;;;;;
+listatabla2:'Oficial';4;2;;;;;;;;;;;;;'Codigo';'Codigo;Descripcion';'OFICIALESCUENTA'
+findialogo
+
+if (not ok)
+Cancelar("Evento Cancelado.")
+endif
+
+
+
+Act(az6, "1|2|7|8|10|30|70|91|92|93|")
+SetFilaActual(0)
+&cantoperaciones := 0
+&diahabil := Habiles(dialogo.fecha1, -1, 'ARG', SI) + 1
+
+Sqladd("SELECT O.Cliente1, O.Cuenta1, O.NrOperacion, O.Cantidad, O.FechaOp,")
+Sqladd("O.Plazo, O.Precio1, O.Precio4, CL.OficialCuenta, O.FechaVto")
+Sqladd("FROM "~Dbo()~".OPERACIONES O INNER JOIN "~Dbo()~".CUENTAS CU ")
+Sqladd("ON O.Cliente1 = CU.Cliente AND O.Cuenta1 = CU.Codigo")
+Sqladd("INNER JOIN "~Dbo()~".CLIENTES CL ON O.Cliente1 = CL.Codigo")
+Sqladd("INNER JOIN "~Dbo()~".OPERACIONESBITS OB ON O.NrOperacion = OB.NrOperacion AND Valor = 1")
+Sqladd("WHERE O.TipoOp = 'MMCREM' AND O.FechaVto >= "~IdxDate2(&diahabil)~" AND  O.FechaVto <= "~IdxDate2(dialogo.fecha1)~" AND O.Especie = '"~dialogo.string1~"'")
+if (Eqstr(dialogo.string2, 'TEM'))
+Sqladd("AND CU.TEM = 'SI'")
+else
+Sqladd("AND ISNULL(CU.TEM, 'NO') = 'NO'")
+endif
+if (NoVacio(dialogo.listatabla1))
+Sqladd("AND O.Cliente1 IN ("~Pipe2Comillas(dialogo.listatabla1)~")")
+endif
+if (NoVacio(dialogo.listatabla2))
+Sqladd("AND CL.OficialCuenta IN ("~Pipe2Comillas(dialogo.listatabla2)~")")
+endif
+Sqladd("AND O.Sector1 = '"~dialogo.string3~"'")
+Sqladd("AND O.Cliente1 NOT IN (SELECT cliente FROM "~Dbo()~".GRUPOSECONOMICOS WHERE cliente IS NOT NULL)")
+Sqladd("AND ISNULL(TRIM(NrOperacion4), '') = ''")
+Sqladd("AND OB.NrBit IN ('70','93') ")
+Sqladd("AND O.FechaOp <> O.FechaVto")
+
+
+recorrer sql
+Act(a:fac, Fbn()['Cliente1'])
+Act(b:fac, Fbn()['Cuenta1'])
+Acn(aa:fac, Query("SELECT ISNULL((SELECT Porcentaje FROM "~Dbo()~".PORENCAJETASAT WHERE CodJerarquia IN ("~Pipe2Comillas(Ascendientes('CLIENTES', Val(a:fac)))~")),0)"))
+Act(c:fac, Fbn()['NrOperacion'])
+Acn(d:fac, Fbn()['Cantidad'])
+Acn(e:fac, Fbn()['Plazo'])
+Acn(f:fac, Fbn()['Precio1'])
+Acn(g:fac, Fbn()['Precio4'])
+Acn(h:fac, Fbn()['Cantidad'])
+Acd(o:fac, Fbn()['FechaVto'])
+Acn(i:fac, Val(e:fac))
+Act(p:fac, dialogo.tipotasa)
+if (Eqstr(Var('BASEXPILAR'), 'SI'))
+Acn(j:fac, Query("SELECT dbo.ObtenerTasaTransferencia("~IdxDate2(Val(o:fac))~",'"~Val(p:fac)~"' ,'"~dialogo.string1~"','"~Val(e:fac)~"')") + Val(aa:fac))
+Acn(k:fac, Val(j:fac))
+else
+Acn(j:fac, TasaDia(Val(p:fac), dialogo.string1, Val(o:fac), Val(e:fac), 1) + Val(aa:fac))
+Acn(k:fac, Val(j:fac))
+endif
+Acn(l:fac, 1)
+Act(m:fac, Query("SELECT RazonSocial FROM "~Dbo()~".CLIENTES WHERE Codigo = '"~Val(a:fac)~"'"))
+Act(n:fac, Fbn()['OficialCuenta'])
+Acd(q:fac, Fbn()['FechaOp'])s
+Acd(r:fac, Val(o:fac) + Val(e:fac))
+&cantoperaciones := &cantoperaciones + 1
+
+
+proximo
+
+if (&cantoperaciones > 0)
+crearlistbox;'Arial,8,'
+'Confirma';l1..l:fac;SI;;;60;check;RGB(180, 180, 193);
+'Cliente';a1..a:fac;NO;SI;;100;string;;RGB(232, 232, 255);
+'Razon Social';m1..m:fac;NO;SI;;200;string;;RGB(232, 232, 255);
+'Cuenta';b1..b:fac;NO;SI;;100;string;;RGB(232, 232, 255);
+'NrOperacion Actual';c1..c:fac;NO;SI;;100;string;;RGB(232, 232, 255);
+'Saldo Minimo Actual';d1..d:fac;NO;SI;;100;numero;;RGB(232, 232, 255);
+'Fecha Op Actual';q1..q:fac;NO;SI;;100;fecha;RGB(232, 232, 255);
+'Plazo Actual';e1..e:fac;NO;SI;;100;string;;RGB(232, 232, 255);;;;;;;;;;
+'Fecha Vto Actual';o1..o:fac;NO;SI;;100;fecha;RGB(232, 232, 255);
+'Valor Tasa Actual';f1..f:fac;NO;SI;;150;numero;'#######.######';RGB(232, 232, 255);
+'Valor Tasa Transf Actual';g1..g:fac;NO;SI;;150;numero;'#######.######';RGB(232, 232, 255);
+'Saldo minimo nuevo';h1..h:fac;SI;iif (Val(l:flb) = 1, Val(h:flb) > 0);'El saldo debe ser mayor a cero';150;numero;;RGB(180, 180, 193);
+'Fecha Op Nuevo';o1..o:fac;NO;SI;;120;fecha;RGB(232, 232, 255);
+'Plazo Nuevo';i1..i:fac;SI;iif (Val(l:flb) = 1, Val(i:flb) > 0);'El plazo debe ser mayor a cero';100;numero;'######';RGB(180, 180, 193);;;;;;;;;
+'Fecha Vto Nuevo';r1..r:fac;NO;SI;;120;fecha;RGB(232, 232, 255);Val(o:flb) + Val(i:flb)
+'Valor Tasa  Nuevo';k1..k:fac;SI;iif (Val(l:flb) = 1, Val(k:flb) > 0);'La tasa debe ser mayor a cero';140;numero;'#######.######';RGB(180, 180, 193);iif (modi, Val(k:flb), iif (Eqstr(Var('BASEXPILAR'), 'SI'), Query("SELECT dbo.ObtenerTasaTransferencia("~IdxDate2(Val(o:flb))~",'"~Val(p:flb)~"' ,'"~dialogo.string1~"','"~Val(i:flb)~"')") + Val(aa:flb), TasaDia(Val(p:flb), dialogo.string1, Val(o:flb), Val(i:flb), 1) + Val(aa:flb)));NO;NO
+'Valor Tasa Transf Nuevo';j1..j:fac;SI;iif (Val(l:flb) = 1, Val(j:flb) > 0);'La tasa transf debe ser mayor a cero';140;numero;'#######.######';RGB(180, 180, 193);iif (modi, Val(j:flb), iif (Eqstr(Var('BASEXPILAR'), 'SI'), Query("SELECT dbo.ObtenerTasaTransferencia("~IdxDate2(Val(o:flb))~",'"~Val(p:flb)~"' ,'"~dialogo.string1~"','"~Val(i:flb)~"')") + Val(aa:flb), TasaDia(Val(p:flb), dialogo.string1, Val(o:flb), Val(i:flb), 1) + Val(aa:flb)));NO;NO
+
+
+finlistbox
+else
+Cancelar('No hay operaciones que cumplan las condiciones')
+endif
+
+if (not ok)
+Cancelar('Evento Cancelado.')
+endif
+
+recorrer&i 1, &cantoperaciones
+if (Val(l:&i) = 1)
+Acn(ze:&i, 0)
+&nroperacion := getnumerador(10)
+if (Eqstr(Var('BASEXPILAR'), 'SI'))
+Acn(ab:1, Query("SELECT dbo.ObtenerTasaTransferencia("~IdxDate2(Val(o:&i))~",'"~Val(p:&i)~"' ,'"~dialogo.string1~"','"~Val(i:&i)~"')") + Val(aa:&i))
+Acn(ac:2, Val(ab:1) * (1 - Var('RANGOREM') / 100))
+Acn(ac:3, Val(ab:1) * (1 + Var('RANGOREM') / 100))
+Acn(ac:4, Val(ab:1) * (1 - Var('EXCESOREM') / 100))
+Acn(ac:5, Val(ab:1) * (1 + Var('EXCESOREM') / 100))
+Acn(ab:2, Val(j:&i) * (1 - Var('RANGOREM') / 100))
+Acn(ab:3, Val(j:&i) * (1 + Var('RANGOREM') / 100))
+Acn(ab:4, Val(j:&i) * (1 - Var('EXCESOREM') / 100))
+Acn(ab:5, Val(j:&i) * (1 + Var('EXCESOREM') / 100))
+else
+Acn(ab:1, TasaDia(Val(p:&i), dialogo.string1, Val(o:&i), Val(i:&i), 1) + Val(aa:&i))
+Acn(ac:2, Val(ab:1) * (1 - Var('RANGOREM') / 100))
+Acn(ac:3, Val(ab:1) * (1 + Var('RANGOREM') / 100))
+Acn(ac:4, Val(ab:1) * (1 - Var('EXCESOREM') / 100))
+Acn(ac:5, Val(ab:1) * (1 + Var('EXCESOREM') / 100))
+Acn(ab:2, Val(j:&i) * (1 - Var('RANGOREM') / 100))
+Acn(ab:3, Val(j:&i) * (1 + Var('RANGOREM') / 100))
+Acn(ab:4, Val(j:&i) * (1 - Var('EXCESOREM') / 100))
+Acn(ab:5, Val(j:&i) * (1 + Var('EXCESOREM') / 100))
+endif
+if (Val(k:&i) < Val(ab:4) o Val(k:&i) > Val(ab:5))
+Messagebox('Tasa Fuera de Rango para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Tasa: '~Val(k:&i)~Chr(13)~Chr(10)~'Tasa minima: '~Val(ab:4)~Chr(13)~Chr(10)~'Tasa maxima: '~Val(ab:5)~Chr(13)~Chr(10), 2, 0)
+Acn(ze:&i, 1)
+elseif (Val(k:&i) < Val(ab:2) o Val(k:&i) > Val(ab:3))
+if (Messagebox('Tasa Exceso de Rango para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Tasa: '~Val(k:&i)~Chr(13)~Chr(10)~'Tasa minima: '~Val(ab:2)~Chr(13)~Chr(10)~'Tasa maxima: '~Val(ab:3)~Chr(13)~Chr(10), 1, 1) = 2)
+Acn(ze:&i, 1)
+else
+Acn(za:&i, 1)
+endif
+endif
+endif
+if (Val(ze:&i) = 0)
+if (Val(j:&i) < Val(ac:4) o Val(j:&i) > Val(ac:5))
+Messagebox('Tasa Transf Fuera de Rango para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Tasa: '~Val(k:&i)~Chr(13)~Chr(10)~'Tasa Transf minima: '~Val(ac:4)~Chr(13)~Chr(10)~'Tasa maxima:'~Val(ac:5)~Chr(13)~Chr(10), 2, 0)
+Acn(ze:&i, 1)
+elseif (Val(j:&i) < Val(ac:2) o Val(j:&i) > Val(ac:3))
+if (Messagebox('Tasa Transf Exceso de Rango para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Tasa minima: '~Val(ac:2)~Chr(13)~Chr(10)~'Tasa maxima: '~Val(ac:3)~Chr(13)~Chr(10), 1, 1) = 2)
+Acn(ze:&i, 1)
+else
+Acn(zb:&i, 1)
+endif
+endif
+endif
+endif
+
+if (Val(ze:&i) = 0)
+if (Val(k:&i) > Val(j:&i))
+if (Messagebox('Spread Negativo para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Diferencia: '~FStr(Val(k:&i) - Val(j:&i), null, 6), 1, 1) = 2)
+Acn(ze:&i, 1)
+else
+Acn(zc:&i, 1)
+endif
+endif
+endif
+
+if (Val(ze:&i) = 0)
+if (Val(j:&i) <> Val(ab:1))
+if (Messagebox('Tasa Transf modificada para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Original: '~Val(ab:1)~Chr(13)~Chr(10)~"Modificada: "~Val(j:&i), 1, 1) = 2)
+Acn(ze:&i, 1)
+else
+Acn(zd:&i, 1)
+endif
+endif
+endif
+
+if (Val(ze:&i) = 0)
+if (Val(o:&i) <> Fecha(FSys()))
+if (Messagebox('Es una Operacion FechaValor: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'FechaOp: '~Val(o:&i)~Chr(13)~Chr(10)~"Fecha Sistema: "~Fecha(FSys()), 1, 1) = 2)
+Acn(ze:&i, 1)
+else
+Acn(zf:&i, 1)
+endif
+endif
+endif
+if (Val(ze:&i) = 0)
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS")
+Sqladd("SET Valor =")
+Sqladd("CASE WHEN NrBit = 70 THEN 1 ELSE 0 END")
+Sqladd("Where NrOperacion ='"~Val(c:&i)~"'")
+Sqlnew()
+Sqladd("UPDATE "~Dbo()~".OPERACIONES")
+Sqladd("SET NrOperacion4 = '"~&nroperacion~"'")
+Sqladd("Where NrOperacion ='"~Val(c:&i)~"'")
+Sqlnew()
+Sqladd(" Insert INTO "~Dbo()~".OPERACIONES                                           ")
+Sqladd(" (  TipoOp,           NrOperacion,       FechaOp,         Especie,         ")
+Sqladd("  Cliente1,              Cantidad,       Vehiculo1,         FechaVto,      ")
+Sqladd("  Operador,              TipoTasa,       Cuenta1,         Precio1,         ")
+Sqladd("  FechaCarga,        FechaCargaSys,     OficialCuenta,     Precio4,        ")
+Sqladd("  NrOperacion3,              Plazo,         Observac2,    Precio2,         ")
+Sqladd("PorBonificacion,       NrOperacion2,       Sector1, Observac3)             ")
+Sqladd(" Values  ")
+Sqladd("(      'MMCREM',        '"~&nroperacion~"', "~IdxDate2(Val(o:&i))~", '"~dialogo.string1~"',    ")
+Sqladd("'"~Val(a:&i)~"',        "~Val(h:&i)~",'"~Var('VEHICULODE')~"',"~IdxDate2(Val(r:&i))~",         ")
+Sqladd("'"~UsuarioActivo()~"',    '"~Val(p:&i)~"' ,'"~Val(b:&i)~"',     "~Val(k:&i)~",                   ")
+Sqladd(SQLAhora()~",          "~IdxDate2(FSys())~", '"~Val(n:&i)~"',  "~Val(j:&i)~",                 ")
+Sqladd("'"~&nroperacion~"',"~FStr(Val(i:&i), 1, 0)~", 'A', '"~Val(ab:1)~"',                              ")
+Sqladd(FStr(Val(aa:&i), 0, 6)~",'"~Val(c:&i)~"', '"~dialogo.string3~"', 'RENOV')                         ")
+Sqlnew()
+Act(az3, &nroperacion)
+Act(az4, 'OPERACIONES')
+Act(az5, '1|')
+Message('Ingresando Instancias Operacion '~Val(az3)~' ...')
+
+Sqladd("SELECT NrInstancia FROM "~Dbo()~".INSTANCIAS Where Tabla='"~Val(az4)~"' AND NrInstancia IN ("~Pipe2Comillas(Val(az6))~")")
+Sqladd("ORDER BY NrInstancia ")
+
+recorrer sql
+Dfa()
+Sqladd("INSERT INTO "~Dbo()~".OPERACIONESBITS ")
+Sqladd("(NrOperacion,NrBit,Valor) ")
+Sqladd(" Values ")
+Sqladd("('"~Val(az3)~"',"~FStr(Fbn()['NrInstancia'], 3, 0)~",")
+if (Incluido(Fbn()['NrInstancia'], Val(az5)))
+Sqladd("'1')")
+else
+Sqladd("'0')")
+endif
+Sqlnew()
+proximo
+
+Sqladd("UPDATE "~Dbo()~".OPERACIONES Set ")
+Sqladd("Observaciones=Observaciones+'"~BuscarCampo('EVENTOS', 'Nombre', 'Codigo', codigoinforme)~"' ")
+Sqladd("Where NrOperacion='"~Val(az3)~"' ")
+Sqlnew()
+
+
+
+
+
+if (Val(za:&i) = 1)
+Sqladd(" Insert INTO "~Dbo()~".EXCEPCIONES")
+Sqladd("(NrOperacion,   Tipo,    Fecha,   Descripcion)")
+Sqladd(" Values  ")
+Sqladd("('"~&nroperacion~"','RANGOTASA',"~IdxDate2(FSys())~",'Tasa Fuera de Rango: "~Val(ab:2)~" y "~Val(ab:3)~"')")
+Sqlnew()
+endif
+
+if (Val(zb:&i) = 1)
+Sqladd(" Insert INTO "~Dbo()~".EXCEPCIONES")
+Sqladd("(NrOperacion,   Tipo,    Fecha,   Descripcion)")
+Sqladd(" Values  ")
+Sqladd("('"~&nroperacion~"','RANGOTRANS',"~IdxDate2(FSys())~",'Tasa Transferencia Fuera de Rango: "~Val(ac:2)~" y "~Val(ac:3)~"')")
+Sqlnew()
+endif
+if (Val(zf:&i) = 1)
+Sqladd(" Insert INTO "~Dbo()~".EXCEPCIONES")
+Sqladd("(NrOperacion,   Tipo,    Fecha,   Descripcion)")
+Sqladd(" Values  ")
+Sqladd("('"~&nroperacion~"','FVALOR',"~IdxDate2(FSys())~", 'Es una Operacion FechaValor')")
+Sqlnew()
+endif
+if (Val(zc:&i) = 1)
+Sqladd(" Insert INTO "~Dbo()~".EXCEPCIONES")
+Sqladd("(NrOperacion,   Tipo,    Fecha,   Descripcion)")
+Sqladd(" Values  ")
+Sqladd("('"~&nroperacion~"','SPREADNEG',"~IdxDate2(FSys())~", 'Spread Negativo: "~FStr(Val(k:&i) - Val(j:&i), null, 6)~"')")
+Sqlnew()
+endif
+
+if (Val(zd:&i) = 1)
+Sqladd(" Insert INTO "~Dbo()~".EXCEPCIONES")
+Sqladd("(NrOperacion,   Tipo,    Fecha,   Descripcion)")
+Sqladd(" Values  ")
+Sqladd("('"~&nroperacion~"','TASATMOD',"~IdxDate2(FSys())~", 'Tasa Transferencia: "~Val(ab:1)~". Tasa Transferencia Modificada: "~Val(j:&i)~". ')")
+Sqlnew()
+endif
+
+&totalop := &totalop + 1
+endif
+endif
+proximo
+Sqlexec()
+if (&totalop = 1)
+Messagebox("Se cargo "~FStr(&totalop, 1, 0)~" operacion")
+else
+Messagebox("Se cargaron "~FStr(&totalop, 1, 0)~" operaciones")
+endif
+

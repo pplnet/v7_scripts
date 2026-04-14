@@ -1,0 +1,173 @@
+creardialogo
+fecha1:"Fecha";;;;;;;;;FSys()
+lista1:'Vehiculos';;;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+
+
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (NoVacio(dialogo.lista1))
+Act(zz6, dialogo.lista1)
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+Act(zz6, SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+endif
+endif
+
+Sqladd(" Select O.FechaOp, O.Cantidad, O.TotalComisiones, O.TotalAux3, O.TotalNetoCli3,O.TipoOp, ")
+Sqladd(" C.* from "~Dbo()~".OPERACIONES O, "~Dbo()~".COMISIONES2 C ")
+Sqladd(" WHERE O.NrOperacion=C.NrOperacion AND C.Fecha1='"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND Importe1=0 AND O.TipoOp IN ('MMP','MMPV','MMFRN','MMFCMV','MMPSC','MMSCMV') AND Tipo IN ('4') ")
+if (NoVacio(dialogo.lista1))
+Sqladd(" and O.Vehiculo1 IN ("~Pipe2Comillas(dialogo.lista1)~") ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+Sqladd(" and O.Vehiculo1 IN ("~Pipe2Comillas(Val(zz6))~") ")
+endif
+endif
+
+Sqladd(" ORDER BY C.NrOperacion,C.Tipo ")
+
+recorrer sql
+Acn(x2, Fbn()['TotalNetoCli3'])
+
+if (Incluido(Fbn()['TipoOp'], 'MMP'))
+Acn(x2, Fbn()['Cantidad'] + Fbn()['TotalComisiones'] - Fbn()['TotalAux3'])
+endif
+if (Incluido(Fbn()['TipoOp'], 'MMPV'))
+Acn(x2, Fbn()['Cantidad'] - Fbn()['TotalAux3'])
+endif
+Acn(x1, Query("Select NrBit FROM "~Dbo()~".OPERACIONESBITS  Where NrOperacion='"~Fbn()['NrOperacion']~"' AND Valor='1'"))
+
+if (Val(x1) <> 20 y Val(x1) <> 50)
+Messagebox('La Operaci¦n '~Fbn()['NrOperacion']~' Debe estar en BackOffice o Terminal !!!. Instancia Actual='~Query("Select Nombre FROM "~Dbo()~".INSTANCIAS  Where NrInstancia="~FStr(Val(x1), 0, 0)~" AND Tabla='OPERACIONES'"))
+else
+Message("*-- Recuperando Fecha de Pago Anterior Operaci¦n: "~Fbn()['NrOperacion']~" Nro: "~Fbn()['NrComision']~"...")
+Acn(z1, Fac())
+Acn(d:fac, Fbn()['Tasa1'])
+Acn(e:fac, iif (Fbn()['RB2'] = 0, 36000, 36500))
+
+Sqladd(" Select * FROM "~Dbo()~".COMISIONES2  ")
+Sqladd(" WHERE NrOperacion='"~Fbn()['NrOperacion']~"' AND Tipo='"~Fbn()['Tipo']~"' ")
+Sqladd(" AND Importe1<>0 AND Fecha1<'"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" ORDER BY Fecha1 DESC")
+
+Acn(x1, 0)
+recorrer sql
+Dfa()
+Acn(x1, 1)
+Acn(b:fac, Fbn()['Importe5'])
+Acd(c:fac, Fbn()['Fecha1'])
+break
+proximo
+
+if (Val(x1) = 0)
+
+Acn(b:fac, Fbn()['Cantidad'])
+Acd(c:fac, Fbn()['FechaOp'])
+
+Sqladd(" Select * FROM "~Dbo()~".COMISIONES2 ")
+Sqladd(" WHERE NrOperacion='"~Fbn()['NrOperacion']~"' ")
+Sqladd(" AND Tipo='5' ")
+
+recorrer sql
+Dfa()
+Acn(b:fac, Val(b:fac) + Fbn()['Importe1'])
+break
+proximo
+endif
+
+Sqladd(" Select * FROM "~Dbo()~".OPERACIONES ")
+Sqladd(" WHERE OperacionRef='"~Fbn()['NrOperacion']~"' ")
+Sqladd(" AND  FechaOp <='"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND  FechaOp >='"~IdxDate(Val(c:fac))~"' ")
+Sqladd(" ORDER BY FechaOp ")
+
+Acn(y1, 0)
+
+recorrer sql
+Acn(x1, Query("Select NrBit FROM "~Dbo()~".OPERACIONESBITS  Where NrOperacion='"~Fbn()['NrOperacion']~"' AND Valor='1'"))
+
+if (Val(x1) <> 20 y Val(x1) <> 50)
+Messagebox('La Operaci¦n '~Fbn()['NrOperacion']~' Debe estar en BackOffice o Terminal !!!. Instancia Actual='~Query("Select Nombre FROM "~Dbo()~".INSTANCIAS  Where NrInstancia="~FStr(Val(x1), 0, 0)~" AND Tabla='OPERACIONES'"))
+Acn(y1, 1)
+break
+endif
+
+Acn(a:fac, Fbn()['Cantidad'])
+Acd(c:fac, Fbn()['FechaOp'])
+
+Sqladd(" Select * FROM "~Dbo()~".COMISIONES2 ")
+Sqladd(" WHERE NrOperacion='"~Fbn()['NrOperacion']~"' ")
+Sqladd(" AND Tipo='5' ")
+
+recorrer sql
+Dfa()
+Acn(a:fac, Val(a:fac) + Fbn()['Importe1'])
+break
+proximo
+
+Acn(b:fac, Val(b:fac - 1) - Val(a:fac))
+
+Acn(f:fac, (Val(b:fac - 1) * Val(d:Val(z1)) * (Val(c:fac) - Val(c:fac - 1))) / Val(e:Val(z1)))
+
+Acn(g:fac, Val(g:fac - 1) + Val(f:fac))
+proximo
+
+if (Val(y1) = 0)
+Ifa()
+
+Acn(f:fac, (Val(b:fac - 1) * Val(d:Val(z1)) * (dialogo.fecha1 - Val(c:fac - 1))) / Val(e:Val(z1)))
+Acn(g:fac, Val(g:fac - 1) + Val(f:fac))
+
+Acn(j:fac, Val(g:fac) * Fbn()['Tasa2'] / 100)
+Acn(k:fac, Val(g:fac) * Fbn()['Tasa3'] / 100)
+Acn(l:fac, Val(g:fac) * Fbn()['Precio1'] / 100)
+
+Message('Actualizar Comisiones ...')
+
+Sqladd(" UPDATE "~Dbo()~".COMISIONES2 ")
+Sqladd(" SET Importe1="~FStr(Val(g:fac), 0, 2)~", ")
+Sqladd("     Importe2="~FStr(Val(j:fac), 0, 2)~", ")
+Sqladd("     Importe3="~FStr(Val(k:fac), 0, 2)~", ")
+Sqladd("     Precio2 ="~FStr(Val(l:fac), 0, 2)~", ")
+Sqladd("     Importe4="~FStr(Val(k:fac) + Val(g:fac) + Val(l:fac), 0, 2)~", ")
+Sqladd("     Importe5="~FStr(Val(b:fac - 1), 0, 2)~" ")
+Sqladd(" WHERE NrOperacion='"~Fbn()['NrOperacion']~"' and ")
+Sqladd(" NrComision="~FStr(Fbn()['NrComision'], 0, 0)~" ")
+Sqlnew()
+Sqlexec()
+
+Act(i3, Fbn()['NrOperacion'])
+Message('Modificando Instancias Operacion '~Val(az3)~' ...')
+
+
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS ")
+Sqladd("Set Valor=0 Where Valor=1 and NrOperacion='"~Val(az3)~"' ")
+if (Val(az6) <> 0)
+Sqladd("and NrBit="~FStr(Val(az6), 0, 0)~"  ")
+endif
+Sqlnew()
+
+if (Query(" Select Count(1) From "~Dbo()~".OPERACIONESBITS Where NrOperacion = '"~Val(az3)~"' AND NrBit="~FStr(Val(az5), 0, 0)~" ") = 0)
+Ejecutarevento('INSBIT', 'entero1', Val(az5), 'nroperacion1', Val(az3))
+endif
+
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS ")
+Sqladd("Set Valor=1 Where NrBit="~FStr(Val(az5), 0, 0)~" and NrOperacion='"~Val(az3)~"' ")
+Sqlnew()
+Sqlexec()
+
+
+
+
+Sqlactualizarmovimientos(Fbn()['NrOperacion'], SI)
+Sqlexec()
+endif
+endif
+proximo
+
+

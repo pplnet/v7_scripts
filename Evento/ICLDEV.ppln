@@ -1,0 +1,138 @@
+creardialogo
+fecha1:'Fecha';;;;;;;;;;FSys()
+vehiculo1: 'Vehiculo';;;;NO;;NoVacio(dialogo.vehiculo1);'Debe Ingresar un Vehiculo';NO;Var('VEHICULODE');
+fecha2:'Fecha Hasta';;;;NO;;;;;;Habiles(dialogo.fecha1, 1, 'ARG', SI) - 1
+fecha3:'Fecha Prox';;;;NO;;;;;;Habiles(dialogo.fecha1, 1, 'ARG', SI)
+findialogo
+
+
+if (not ok)
+Cancelar()
+endif
+
+Acd(fe:1, dialogo.fecha2)
+
+
+recorrer&k dialogo.fecha1, Val(fe:1)
+
+
+Sqladd("DELETE FROM "~Dbo()~".MOVDEVENGADOS  ")
+Sqladd(" WHERE Fecha     = '"~IdxDate(&k)~"' ")
+Sqladd(" AND   NrSaldo   = 110 ")
+Sqladd(" AND   TipoDevengado = 'INTICL'    ")
+Sqladd(" AND   Vehiculo      = '"~dialogo.vehiculo1~"'  ")
+Sqlnew()
+Sqlexec()
+
+Sqladd(" Select O.NrOperacion, Cliente1, Especie, TipoOp, Cantidad, Book1, FechaOp, ")
+Sqladd("  Case When DiasAnio = '0' Then 36000 Else 36500 End Divisor,")
+Sqladd("  Precio1 as Tasa, TipoTasa as CodTasa, Spread, Especie1 as CodSpread, ")
+Sqladd("  (Select "~Dbo()~".SaldoCONU(O.NrOperacion,'"~IdxDate(&k)~"',2)) as Saldo ")
+Sqladd(" from "~Dbo()~".OPERACIONES O, "~Dbo()~".OPERACIONESBITS OB ")
+Sqladd(" where (FechaVto >= '"~IdxDate(&k)~"'  or CB1=1) ")
+Sqladd("   and O.NrOperacion = OB.NrOperacion ")
+Sqladd("   and OB.NrBit in ('10','70') and OB.Valor = '1' ")
+Sqladd("   and TipoOp in ('CONU')")
+Sqladd("   and (Select "~Dbo()~".SaldoCONU(O.NrOperacion,'"~IdxDate(&k)~"',2))>0")
+Watch(Sqlbatch())
+recorrer sql
+
+Acn(sa:1, Fbn('Saldo'))
+Acn(di:1, Fbn('Divisor'))
+Act(ta:1, Fbn('CodTasa'))
+Acn(ta:2, Fbn('Tasa'))
+Act(sp:1, Fbn('CodSpread'))
+Acn(sp:2, Fbn('Spread'))
+Act(es:1, Fbn('Especie'))
+Acd(fp:1, &k)
+Acn(pz:1, 1)
+
+if (Vacio(Val(ta:1)))
+Acn(ta:10, Val(ta:2))
+else
+Acn(ta:10, Query("select Valor1 from "~Dbo()~".TASASDIA where TipoTasa = '"~Val(ta:1)~"' and Especie ='"~Val(es:1)~"' and Fecha=  (select Max(Fecha) from "~Dbo()~".TASASDIA where Fecha<= '"~IdxDate(Val(fp:1))~"' and TipoTasa = '"~Val(ta:1)~"' and Especie ='"~Val(es:1)~"') "))
+endif
+
+if (Vacio(Val(sp:1)))
+Acn(ta:11, Val(sp:2))
+else
+Acn(ta:11, Query("Select Precio1 from "~Dbo()~".COTIZACIONES where Codigo = '"~Val(sp:1)~"' and Fecha=  (select Max(Fecha) from "~Dbo()~".COTIZACIONES where Fecha<= '"~IdxDate(Val(fp:1))~"' and Codigo = '"~Val(sp:1)~"') "))
+endif
+
+Acn(ta:3, Val(ta:10) + Val(ta:11))
+
+Acn( in :1, Val(sa:1) * Val(ta:3) / Val(di:1) * Val(pz:1))
+
+
+Acd(fe:2, Query(" Select max(Fecha) from "~Dbo()~".MOVDEVENGADOS where NrOperacion='"~Fbn('NrOperacion')~"' and TipoDevengado='INTICL' and Especie='"~Fbn('Especie')~"' and NrSaldo= 110 "))
+if (Val(fe:2) < Fecha('01/01/2000'))
+Acd(fe:2, Fbn('FechaOp'))
+else
+Acd(fe:2, Val(fe:2) + 1)
+endif
+
+if (Val(fe:2) < dialogo.fecha1)
+recorrer&j Val(fe:2), dialogo.fecha1 - 1
+Acd(fe:3, &j)
+if (Query(" Select 1 from "~Dbo()~".MOVDEVENGADOS where NrOperacion='"~Fbn('NrOperacion')~"' and  Fecha= '"~IdxDate(&k)~"' and TipoDevengado='INTICL' and Especie='"~Fbn('Especie')~"' and NrSaldo= 110 ") > 0)
+Message('Borrando devengados del dia ... ')
+Sqladd("DELETE FROM "~Dbo()~".MOVDEVENGADOS  ")
+Sqladd(" WHERE Fecha     = '"~IdxDate(Val(fe:3))~"' ")
+Sqladd(" AND   NrSaldo   = 110 ")
+Sqladd(" AND   TipoDevengado = 'INTICL'    ")
+Sqladd(" AND   Cliente       = '"~Fbn('Cliente1')~"'  ")
+Sqladd(" AND   Vehiculo      = '"~dialogo.vehiculo1~"'  ")
+Sqladd(" AND   NrOperacion   = '"~Fbn('NrOperacion')~"' ")
+Sqlnew()
+endif
+
+Message('Generando movimiento devengado ... ')
+Sqladd(" INSERT INTO "~Dbo()~".MOVDEVENGADOS ( ")
+Sqladd(" NrOperacion, Fecha, FechaEj, Monto, TipoDevengado, ")
+Sqladd(" Cliente, Vehiculo, NrSaldo, Especie, ")
+Sqladd(" Book, EspecieRef, Producto, Tasa1, Tasa2 ")
+Sqladd(" ) VALUES ( ")
+Sqladd(" '"~Fbn('NrOperacion')~"', '"~IdxDate(Val(fe:3))~"','"~iif (Mes(Val(fe:3)) = Mes(dialogo.fecha1), IdxDate(dialogo.fecha1), IdxDate(dialogo.fecha3))~"',  "~FStr(Val( in :1), 0, 2)~", 'INTICL', ")
+Sqladd(" '"~Fbn('Cliente1')~"', '"~dialogo.vehiculo1~"', 110, '"~Fbn()['Especie']~"', ")
+Sqladd(" '"~Fbn()['Book1']~"', '"~Fbn()['Especie']~"', 'ICL', "~FStr(Val(ta:10), 0, 8)~", "~FStr(Val(ta:11), 0, 8)~"")
+Sqladd(" ) ")
+Sqlnew()
+Sqlexec()
+
+
+proximo
+endif
+
+Acd(fe:3, &k)
+if (Query(" Select 1 from "~Dbo()~".MOVDEVENGADOS where NrOperacion='"~Fbn('NrOperacion')~"' and  Fecha= '"~IdxDate(&k)~"' and TipoDevengado='INTICL' and Especie='"~Fbn('Especie')~"' and NrSaldo= 110 ") > 0)
+Message('Borrando devengados del dia ... ')
+Sqladd("DELETE FROM "~Dbo()~".MOVDEVENGADOS  ")
+Sqladd(" WHERE Fecha     = '"~IdxDate(Val(fe:3))~"' ")
+Sqladd(" AND   NrSaldo   = 110 ")
+Sqladd(" AND   TipoDevengado = 'INTICL'    ")
+Sqladd(" AND   Cliente       = '"~Fbn('Cliente1')~"'  ")
+Sqladd(" AND   Vehiculo      = '"~dialogo.vehiculo1~"'  ")
+Sqladd(" AND   NrOperacion   = '"~Fbn('NrOperacion')~"' ")
+Sqlnew()
+endif
+
+Message('Generando movimiento devengado ... ')
+Sqladd(" INSERT INTO "~Dbo()~".MOVDEVENGADOS ( ")
+Sqladd(" NrOperacion, Fecha, FechaEj, Monto, TipoDevengado, ")
+Sqladd(" Cliente, Vehiculo, NrSaldo, Especie, ")
+Sqladd(" Book, EspecieRef, Producto, Tasa1, Tasa2 ")
+Sqladd(" ) VALUES ( ")
+Sqladd(" '"~Fbn('NrOperacion')~"', '"~IdxDate(Val(fe:3))~"','"~iif (Mes(Val(fe:3)) = Mes(dialogo.fecha1), IdxDate(dialogo.fecha1), IdxDate(dialogo.fecha3))~"',  "~FStr(Val( in :1), 0, 2)~", 'INTICL', ")
+Sqladd(" '"~Fbn('Cliente1')~"', '"~dialogo.vehiculo1~"', 110, '"~Fbn()['Especie']~"', ")
+Sqladd(" '"~Fbn()['Book1']~"', '"~Fbn()['Especie']~"', 'ICL', "~FStr(Val(ta:10), 0, 8)~", "~FStr(Val(ta:11), 0, 8)~"")
+Sqladd(" ) ")
+Sqlnew()
+Sqlexec()
+
+
+
+proximo
+
+proximo
+
+

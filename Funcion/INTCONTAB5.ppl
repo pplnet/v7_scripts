@@ -1,0 +1,284 @@
+﻿ACN(ID:1, 0)
+ACN(WH:1, 0)
+ACN(CM:1, 0)
+ACN(IV:1, 0)
+ACN(WC:1, 0)
+ACT(ED:1, 'Pendiente')
+
+*- Ix:1 Resultado de Indice 
+ACN(IX:1, 0)
+
+MostrarCuadroDeMensajes
+
+ACT(LS:3, Var('TCOMISION'))
+IF NoVacio(Dialogo.Especie1)
+    ACT(ES:21, Dialogo.Especie1)
+ELSE
+    ACT(ES:21, '')
+ENDIF
+
+ACT(LS:1, Val(VH:10))
+
+IF NoVacio(Dialogo.NrOperacion1)
+   ACT(NR:2, Dialogo.NrOperacion1)
+ELSE
+   ACT(NR:2, '')
+ENDIF
+
+ACN(EL:1, Elementos(Val(LS:1)))
+ACN(EL:2, Elementos(Val(LS:9)))
+ACN(EL:3, Elementos(Val(LS:3)))
+***---Lista de Comisiones CEN-CEC devengadas
+ACT(LN:1, 'CECVARI|CECFIJA|CSTOCEC|CENVARI|CENFIJA')
+Recorrer&k 1, Val(EL:1)
+    ***---Armo lista de envios anteriores de devengados en el dia para el vehiculo 
+    ***---(Movimiento 0 (cero) son los devengados)
+*    ACT(EA:1, SQLSet(" Select NrOperacion From "~DBO~".MOVIMIENTOS Where Compania_Codigo_PC3 = '"~ItemLista(Val(LS:1), &k)~"' AND Movimiento_Numero=0 AND FechaProceso = '"~IdxDate(Dialogo.Fecha1)~"' "))
+    ACT(EA:1, SQLSet(" Select NrOperacion From "~DBO~".MOVIMIENTOS Where Compania_Codigo_PC3 = '"~ItemLista(Val(LS:1), &k)~"' AND Movimiento_Numero=0 AND FechaContable = '"~IdxDate(Dialogo.Fecha1)~"' "))
+    ***---Busco el Nr. de envio para el vehiculo
+    IF Val(XV:1) > 0
+        ***---Hubo envios de operaciones en esta corrida
+        ACN(XV:2, 0)
+        Repetir
+            SCN(XV:2, 1)
+            IF Eqstr(ItemLista(Val(LS:1), &k), Val(VX:Val(XV:2)))
+                ACN(EV:1, Val(VY:Val(XV:2)))
+                Break
+            ENDIF
+            IF Val(XV:2) = Val(XV:1)
+               *- VH:3 Vehiculo EV1: Nro. de Envio Actual
+               ACT(VH:3,ItemLista(Val(LS:1), &k) )
+               (.'INTCONTAB0'.)
+                ***---El vehiculo no tuvo envios en esta corrida
+                Break
+            ENDIF
+        Proximo
+    ELSE
+       *- VH:3 Vehiculo EV1: Nro. de Envio Actual
+       ACT(VH:3,ItemLista(Val(LS:1), &k) )
+       (.'INTCONTAB0'.)
+        ***---No hubo envios de operaciones en esta corrida
+    ENDIF
+    *- Despues de recorrer las op. de MM invoco al informe de titulos por vehiculo
+    *- para recuperar el resultado por indexacion
+
+      (.'INTCONTA10'.)
+    Recorrer&i 1, Val(EL:2)
+        ACT(LC:1, '')
+        ***---Busco que y cuantas comisiones tuvo la operacion
+        SQL.ADD(" Select C.Tipo From "~DBO~".COMISIONES2 C ")
+        SQL.ADD(" Where C.NrOperacion IN (Select Distinct O.NrOperacion ")
+        SQL.ADD("                         From "~DBO~".OPERACIONES O, "~DBO~".COMISIONES2 C2 ")
+        SQL.ADD("                         Where O.TipoOp = '"~ItemLista(Val(LS:9), &i)~"' ")
+        SQL.ADD("                         AND O.NrOperacion = C2.NrOperacion  ")
+        SQL.ADD("                         AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD("                         AND O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD("                         AND O.Vehiculo1 = '"~ItemLista(Val(LS:1), &k)~"') ")
+        ***---Se excluyen las comisiones FFC de ONs, porque se contabilizan manualmente
+*        SQL.ADD("                         AND (O.TipoOp Not IN ('MMON','MMONM') OR (C2.Tipo Not IN ('1')))) ")
+        IF NoVacio(Dialogo.NrOperacion1)
+            SQL.ADD(" AND C.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+        ENDIF
+        SQL.ADD(" Order By C.Tipo ")
+        Recorrer SQL
+            IF Not Incluido(fbn('Tipo'), Val(LC:1))
+                ACT(LC:1, Val(LC:1)~fbn('Tipo')~'|')
+            ENDIF
+        Proximo
+        ACN(EL:3, Elementos(Val(LC:1)))
+        IF Val(EL:3) = 0
+            ***---Si no tiene comisiones, lo corro una vez para los intereses
+            ACN(EL:3, 1)
+        ENDIF
+        Recorrer&j 1, Val(EL:3)
+            ***---Linkeo el informe para obtener los devengados
+            LinkearHoja('DEVMES', 1, Fecha1 = FinDeMes(Dialogo.Fecha1,SI), Cliente1 = '', Especie1 = Val(ES:21), NrOperacion1 = Val(NR:2), Check1 = 1, Check2 = 1, Check3 = 1, Check4 = 1, Check5 = 1, Radio1 = 2, Lista3 = ItemLista(Val(LS:3), Num(ItemLista(Val(LC:1), &j))+1), Lista1 = ItemLista(Val(LS:1), &k), Lista2 = ItemLista(Val(LS:9), &i), Check6 = 1)
+            ACN(FL:1, 14)
+            Repetir
+                SCN(FL:1, 1)
+                ACN(QQ:1, 0)
+                ACT(CQ:1, '')
+                IF [[Eqstr(LinkH(1, B:Val(FL:1)), ItemLista(Val(LS:9), &i))] Y [Not Incluido(LinkH(1, A:Val(FL:1)), Val(EA:1))]] O [Vacio(LinkH(1, B:Val(FL:1))) Y Eqstr(LinkH(1, AZ:Val(FL:1)), Val(NP:1)) Y NoVacio(LinkH(1, AZ:Val(FL:1)))]
+                    ***---(Es el TipoOp y no fue enviado) o Misma Comision=> Bajo el registro
+                    IF &j = 1
+                        ***---Bajo ID y PD solo para primer comision
+                        ACN(ID:1, LinkH(1, J:Val(FL:1)))
+                        ACN(PD:1, LinkH(1, Y:Val(FL:1)))
+                        ACN(CM:1, LinkH(1, AE:Val(FL:1)))
+                        ACN(WH:1, LinkH(1, T:Val(FL:1)))
+                        ACN(IX:1, LinkH(1, BC:Val(FL:1)))
+                        ACN(WC:1, LinkH(1, AG:Val(FL:1)))
+                    ELSE
+                        ACN(ID:1, 0)
+                        ACN(PD:1, 0)
+                        ACN(CM:1, LinkH(1, AE:Val(FL:1)))
+                        ACN(WH:1, 0)
+                        ACN(IX:1, 0)
+                        ACN(WC:1, LinkH(1, AG:Val(FL:1)))
+                    ENDIF
+                    IF NoVacio(LinkH(1, B:Val(FL:1)))
+                        ACT(TO:1, Pad(LinkH(1, B:Val(FL:1)), 6))
+                    ENDIF
+                    ***---NrMov
+                    ACN(NM:1, 0)
+                    ACD(MF:1, Dialogo.Fecha1)
+                    IF Val(ID:1) > 0 Y Not Incluido(Val(TO:1), 'MMFCMV|MMFRN|MMSCMV')
+                        ***---Interes Devengado
+                        ***---Armo registro
+                        IF Eqstr(LinkH(1, EG:Val(FL:1)), 'Vehiculo')
+                            ACT(LY:1, Var('INTSWIDVEH'))
+                            ***---Para Swaps de Vehiculo el signo es +
+                            ACT(TR:2, 'DEP')
+                            ACN(SG:1, 1)
+                        ELSE
+                            IF Eqstr(LinkH(1, EG:Val(FL:1)), 'Contraparte')
+                                ACT(LY:1, Var('INTSWIDCON'))
+                                ***---Para Swaps de Contraparte el signo es -
+                                ACT(TR:2, 'RET')
+                                ACN(SG:1, -1)
+                            ELSE
+                                ACT(LY:1, Var('INTINTEDEV'))
+                                IF Incluido(Val(TO:1), 'MMCP|MMO|MMCCR')
+                                    ACT(TR:2, 'RET')
+                                    ACN(SG:1, -1)
+                                ELSE
+                                    ACT(TR:2, 'DEP')
+                                    ACN(SG:1, 1)
+                                ENDIF
+                            ENDIF
+                        ENDIF
+                        ACN(CN:1, Val(ID:1))
+                        ACN(BD:3, 1)
+                        ***---Arma registro
+                        (.'INTCONTAB7'.)
+                        ***---Tipo de Movimiento
+                        ACN(Z:1, 1)
+                        IF Val(ZZ:1) = 0 O Val(ZZ:1) = 1
+                            ***---Inserto el registro en MOVIMIENTOS
+                            (.'INTCONTAB3'.)
+                        ENDIF
+                    ENDIF
+                    IF Val(PD:1) <> 0
+                        ***---Prima o Descuento de ON
+                        ***---Armo registro
+                        ACT(LY:1, Var('INTPRIDTO'))
+                        ACN(CN:1, Val(PD:1))
+                        ***---Tipo de Movimiento
+                        ***---Para MMON y MMONM siempre es +
+                        ACT(TR:2, 'DEP')
+                        ACN(SG:1, 1)
+                        ***---Arma registro
+                        (.'INTCONTAB7'.)
+                        ACN(Z:1, 1)
+                        ACN(BD:3, 1)
+                        IF Val(ZZ:1) = 0 O Val(ZZ:1) = 1
+                            ***---Inserto el registro en MOVIMIENTOS
+                            (.'INTCONTAB3'.)
+                        ENDIF
+                    ENDIF
+                    IF Val(WH:1) > 0
+                        ***---WHT Devengado
+                        ***---Armo registro
+                        ACT(LY:1, Var('INTWHDEV'))
+                        ACT(TR:2, 'DEP')
+                        ACN(SG:1, 1)
+                        ACN(CN:1, Val(WH:1))
+                        ACN(BD:3, 1)
+                        ***---Arma registro
+                        (.'INTCONTAB7'.)
+                        ***---Tipo de Movimiento
+                        ACN(Z:1, 1)
+                        IF Val(ZZ:1) = 0 O Val(ZZ:1) = 1
+                            ***---Inserto el registro en MOVIMIENTOS
+                            (.'INTCONTAB3'.)
+                        ENDIF
+                    ENDIF
+                    IF Val(CM:1) > 0 Y Eqstr(ItemLista(Val(LS:3), Num(ItemLista(Val(LC:1), &j))+1), LinkH(1, AA:Val(FL:1)))
+                        ***---Comision Devengada de COMISIONES2
+                        ***---Armo registro
+                        ACT(LY:1, Var('INTCOMDEV'))
+                        ACN(CN:1, Val(CM:1))
+                        ACT(CQ:1, 'COMISI')
+                        ACN(QQ:1, 1)
+                        ***---Tipo de Movimiento
+                        ACT(TR:2, 'DEP')
+                        ACN(SG:1, 1)
+                        ***---Arma registro
+                        (.'INTCONTAB7'.)
+                        ACN(Z:1, 1)
+                        ACN(BD:3, 0)
+                        IF Val(ZZ:1) = 0 O Val(ZZ:1) = 1
+                            ***---Inserto el registro en MOVIMIENTOS
+                            (.'INTCONTAB3'.)
+                        ENDIF
+                    ENDIF
+                    IF Val(CM:1) > 0 Y Incluido(LinkH(1, AA:Val(FL:1)), Val(LN:1)) Y &j = 1
+                        ***---Comision Devengada CEN o CEC
+                        ***---Armo registro
+                        IF Buscar('CEC', LinkH(1, AA:Val(FL:1)))
+                            ACT(LY:1, Var('INTCECDEV'))
+                        ELSE
+                            ACT(LY:1, Var('INTCENDEV'))
+                        ENDIF
+                        ACN(CN:1, Val(CM:1))
+                        ACT(CQ:1, '')
+                        ACN(QQ:1, 0)
+                        ***---Tipo de Movimiento
+                        ACT(TR:2, 'DEP')
+                        ACN(SG:1, 1)
+                        ***---Arma registro
+                        (.'INTCONTAB7'.)
+                        ACN(Z:1, 1)
+                        ACN(BD:3, 0)
+                        IF Val(ZZ:1) = 0 O Val(ZZ:1) = 1
+                            ***---Inserto el registro en MOVIMIENTOS
+                            (.'INTCONTAB3'.)
+                        ENDIF
+                    ENDIF
+                    IF Val(WC:1) > 0 Y Eqstr(ItemLista(Val(LS:3), Num(ItemLista(Val(LC:1), &j))+1), LinkH(1, AA:Val(FL:1)))
+                        ***---WH Comision
+                        ***---Armo registro
+                        ACT(LY:1, Var('INTWHCOMDE'))
+                        ACN(CN:1, Val(WC:1))
+                        ACT(CQ:1, 'COMISI')
+                        ACN(QQ:1, 1)
+                        ***---Tipo de Movimiento
+                        ACT(TR:2, 'DEP')
+                        ACN(SG:1, 1)
+                        ***---Arma registro
+                        (.'INTCONTAB7'.)
+                        ACN(Z:1, 1)
+                        ACN(BD:3, 0)
+                        IF Val(ZZ:1) = 0 O Val(ZZ:1) = 1
+                            ***---Inserto el registro en MOVIMIENTOS
+                            (.'INTCONTAB3'.)
+                        ENDIF
+                    ENDIF
+                    IF Val(IX:1) <> 0
+                        Message('***---Resultado por Indice '~Fstr(val(ix1),0,2))
+                        ***---Armo registro
+                        ACT(LY:1, Var('IDXRESULT'))
+                        ACN(CN:1, Val(IX:1))
+                        ACN(QQ:1, 2)
+                        ***---Tipo de Movimiento
+                        ACT(TR:2, 'DEP')
+                        ACN(SG:1, 1)
+                        ***---Arma registro
+                        (.'INTCONTAB7'.)
+                        ACN(Z:1, 1)
+                        ACN(BD:3, 1)
+                        IF Val(ZZ:1) = 0 O Val(ZZ:1) = 1
+                            ***---Inserto el registro en MOVIMIENTOS
+                            (.'INTCONTAB3'.)
+                        ENDIF
+                    ENDIF
+                ENDIF
+                IF Eqstr('FIN DEL INFORME', Copy(LinkH(1, A:Val(FL:1)), 1, 15))
+                    CerrarLink(1)
+                    Break
+                ENDIF
+            Proximo
+        Proximo
+    Proximo
+Proximo
+

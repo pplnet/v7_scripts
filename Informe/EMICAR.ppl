@@ -1,0 +1,167 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Especie1 : 'Especie'                 ;;;;;;NOVACIO(Dialogo.Especie1) y DESCIENDEDEESPECIE(Dialogo.Especie1, 'PRIVA');'Debe ingresar una Especie valida';NO; 
+*    Especie1 : 'Especie'                 ;;;;;;NOVACIO(Dialogo.Especie1) ;'Debe ingresar una Especie valida';NO; 
+   Cliente1 : 'Cliente'                 ;1;2;;;;NoVacio(Dialogo.CLIENTE1);'Debe ingresar un Cliente';NO;
+   Fecha1   : 'Record_Date'             ;2;1;;;;Dialogo.Fecha1>0;'Debe ingresar una Record_Date valida'; NO; FSys
+   Fecha2   : 'F.Pago     '             ;;;;;;Dialogo.Fecha2>0 y Dialogo.Fecha2>=Dialogo.Fecha1;'Debe ingresar una F.Pago valida';NO;FSys
+   Mercado1 : 'Casa_Custodia'           ;;;;;
+   Check1   :  'Div.Efec.'              ;5;1;;
+   Precio1  :  'Porc.'                  ;5;2;;;Dialogo.Check1=1;Dialogo.Precio1>=0;'El Porcentaje debe ser Positivo';NO;0
+   Especie2 :  'Moneda'                 ;6;2;;;Dialogo.Check1=1;Vacio(Dialogo.Especie2) o DesciendeDeEspecie(Dialogo.Especie2,'MONEDA');'Debe Ingresar una Moneda';NO;CotizaEn(Dialogo.Especie1);CotizaEn(Dialogo.Especie1)
+   Check2   :  'Div.Acc.'               ;7;1;;
+   Precio2  :  'Porc.'                  ;7;2;;;Dialogo.Check2=1;Dialogo.Precio2>=0;'El Porcentaje debe ser Positivo';NO;0
+   Check3   :  'Revaluo'                ;8;1;;;;
+   Precio9  :  'Porc.'                  ;8;2;;;Dialogo.Check3=1;Dialogo.Precio9>=0;'El Porcentaje debe ser Positivo';NO;;IIF(Dialogo.Check3=0,0)
+   Check4   :  'Canje'                  ;9;1;;;;
+   Precio10 :  'Porc.'                  ;9;2;;;Dialogo.Check4=1;Dialogo.Precio10>=0 y [Dialogo.Check4=0 o [Dialogo.Check4=1 y Dialogo.Precio10>0]];'El Porcentaje debe ser Positivo';NO;;IiF(Dialogo.Check4=0,0)
+   Especie3 :  'Esp.Canje'              ;10;1;;;Dialogo.Check4=1;[Vacio(Dialogo.Especie3) y Dialogo.Check4=0] o [NoVacio(Dialogo.Especie3)  y Dialogo.Check4=1 y DesciendeDeEspecie(Dialogo.Especie3,'TITULO')];'Debe Ingresar una Especie para el Canje';NO;;IiF(Dialogo.Check4=0,'')
+  
+   Check10  : 'Mensaje preaviso'        ;;;;NO;NO;;;;1;
+
+FinDialogo
+
+
+IF NOT OK
+   Cancelar
+ENDIF
+
+ACT(aa1, BuscarCampo('Clientes','RecibePreaviso','Codigo',Dialogo.Cliente1))
+IF Not EqStr(Val(aa1),'SI')
+   *MessageBox('No es un cliente que recibe preaviso')
+   *Cancelar
+       Cancelar('No es un cliente que recibe preaviso')
+ ENDIF
+
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,12,B")
+
+(.'LOGO'.)
+
+SQL.ADD(" SELECT DISTINCT S.Cliente, C.RazonSocial, C.Direccion, C.CodigoPostal, C.Localidad, ")
+SQL.ADD("                 S.Cuenta, E.Nombre ")
+SQL.ADD(" FROM   "~DBO~".SALDOS S, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E")
+SQL.ADD(" WHERE  S.Cliente = C.Codigo ")
+SQL.ADD("        AND   S.Cliente = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("        AND   S.Especie = E.Codigo ")
+SQL.ADD("        AND   S.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD("        AND   S.Saldo <> 0 ")
+IF NoVacio(Dialogo.Mercado1)
+   SQL.ADD("     AND   S.Mercado = '"~Dialogo.Mercado1~"' ")
+ENDIF
+
+ACN(ok1, 0)
+Recorrer SQL
+   ACN(ok1,1)
+   SetFilaActual(15)
+   If Dialogo.Check1=1 o Dialogo.Check2=1
+      ACT(h:fac, "Aviso de Pago de Dividendos")
+   Endif
+   If Dialogo.Check4=1
+      ACT(h:fac, "Aviso de Canje de Titulos")
+   Endif
+   If Dialogo.Check3=1
+      ACT(h:fac, "Aviso de Revaluo de Titulos")
+   Endif
+
+   SetFont(h:fac, 3)
+
+   SetFilaActual(fac+2)
+   ACT(h:fac, "Buenos Aires, "~Fstr(Dia(FSys),0,0)~" de "~Meses(FSys)~" de "~Fstr(Anio(FSys),0,0))
+   SetFont(h:fac, 1)
+   
+   SetFilaActual(fac+6)
+   ACT(a:fac, "El dia "~Fstr(Dia(Dialogo.Fecha2),0,0)~" de "~Meses(Dialogo.Fecha2)~" de "~Fstr(Anio(Dialogo.Fecha2),0,0)~", se procedera al Pago de Dividendos correspondiente a la Especie "~Dialogo.Especie1~" ("~FBN['Nombre']~").")
+   SetFont(a:fac, 1)
+
+*-DIVIDENDOS EN EFVO.
+   IF Dialogo.Check1=1
+      *- Cuenta de Efectivo 
+      ACT(z1, SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Dialogo.Cliente1~"' AND Estado='HAB' AND TipoCuenta IN ('CC', 'CA') AND Especies LIKE '%"~Dialogo.Especie2~"%'  "))
+      IF CeldaVacia(z1)
+         ACT(z1, SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(g:fac)~"' AND Estado = 'HAB'  AND TipoCuenta IN ('CC', 'CA') AND Especies LIKE '%"~IIf(EqStr(Dialogo.Especie2,VAR('MONELOCA')),VAR('MONEEXTR'),VAR('MONELOCA'))~"%' "))
+      ENDIF
+      IF CeldaVacia(z1)
+         *- Modulo 23
+         ACT(z1, VAR('CTAMOD23'))
+      EndIf
+      ifa
+      ACT(a:fac, "  en "~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie2)~". ")
+      SetFont(a:fac, 1)
+      ifa
+      ACT(a:fac, "El pago en Efectivo ser  acreditado en la cuenta "~Val(z1)~" ("~BuscarCampo('Cuentas','Nombre','Codigo',Val(z1))~"). El porcentaje del dividendo ser  del "~FStr(Dialogo.Precio1,0,5)~" %.")
+      SetFont(a:fac, 1)
+   EndIf
+
+*-DIVIDENDOS EN ACCIONES
+   IF Dialogo.Check2=1
+      ACT(z1, FBN['Cuenta'])
+      IF CeldaVacia(z1)
+         ACT(z1, SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Dialogo.Cliente1~"' AND Estado = 'HAB'  AND TipoCuenta = 'CUS' AND (Especies LIKE '%"~Val(a:fac)~"%' OR Especies LIKE '%TITULO%') "))
+         IF CeldaVacia(z1)
+            ACT(z1, SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Dialogo.Cliente1~"' AND Estado = 'HAB'  AND TipoCuenta = 'CUS' AND Especies LIKE '%PRIVA%'"))
+         ENDIF
+      ENDIF
+
+      ACT(a:fac, Val(a:fac)~" ")
+      ifa
+      ACT(a:fac, "El pago en Acciones debe ser acreditado en la cuenta "~Val(z1)~" ("~BuscarCampo('Cuentas','Nombre','Codigo',Val(z1))~"). El porcentaje del dividendo es del "~FStr(Dialogo.Precio2,0,5)~" % .")
+      SetFont(a:fac, 1)
+   ENDIF
+
+*-REVALUO
+   IF Dialogo.Check3=1
+      ACT(z1, FBN['Cuenta'])
+
+      ACT(a:fac, Val(a:fac)~" ")
+      ifa
+*      ACT(a:fac, "El porcentaje del revaluo es del "~FStr(Dialogo.Precio9,0,5)~" % .")
+      ACT(a:fac-1,'')
+      ACT(a:fac, "El dia "~Fstr(Dia(Dialogo.Fecha2),0,0)~" de "~Meses(Dialogo.Fecha2)~" de "~Fstr(Anio(Dialogo.Fecha2),0,0)~", se procedera a realizar el revaluo de titulos correspondiente a la especie "~Dialogo.Especie1~" ("~FBN['Nombre']~").")
+      ifa
+      ACT(a:fac, "El porcentaje del revaluo sera del "~FStr(Dialogo.Precio9,0,5)~" % ." )
+      SetFont(a:fac-1..a:fac, 1)
+   ENDIF
+
+*-CANJE
+   IF Dialogo.Check4=1
+      ACT(z1, FBN['Cuenta'])
+
+      ACT(a:fac, Val(a:fac)~" ")
+      ifa
+*      ACT(a:fac, "El pago de la nueva especie sera acreditada en la cuenta "~Val(z1)~" ("~BuscarCampo('Cuentas','Nombre','Codigo',Val(z1))~"). El porcentaje del dividendo es del "~FStr(Dialogo.Precio10,0,5)~" % .")
+      ACT(a:fac-1, '')
+      ACT(a:fac, "El dia "~Fstr(Dia(Dialogo.Fecha2),0,0)~" de "~Meses(Dialogo.Fecha2)~" de "~Fstr(Anio(Dialogo.Fecha2),0,0)~", se procedera a realizar el canje de titulos correspondiente a la especie "~Dialogo.Especie1~" ("~FBN['Nombre']~") por "~Dialogo.Especie3~" ("~buscarcampo('ESPECIES','Nombre','Codigo',Dialogo.Especie3)~") .")
+      ifa
+      ACT(a:fac, "El pago de la nueva especie sera acreditado en la cuenta '"~Val(z1)~"'. El porcentaje del canje sera del "~FStr(Dialogo.Precio10,0,5)~" % ." )
+      SetFont(a:fac-1..a:fac, 1)
+   ENDIF
+   IF Dialogo.Check1=1
+      ifa
+   ENDIF
+
+   SetFilaActual(fac+10)
+   ACT(h:fac, "Sres.:")
+   SetFont(h:fac, 2)
+   ifa
+   ACT(h:fac, copy(FBN['RazonSocial'],1,25))
+   SetFont(h:fac, 2)
+   ifa
+   ACT(h:fac, FBN['Direccion'])
+   SetFont(h:fac, 2)
+   ifa
+   ACT(h:fac, "("~FBN['CodigoPostal']~") "~FBN['Localidad'])
+   SetFont(h:fac, 2)
+
+   SetFilaActual(fac+5)
+Proximo
+
+If Val(ok1)=0
+   HojaVisible(NO)
+Endif
+
+ACO(1,2)
+Impresion(1,1)
+LimitesVision(l:fac)

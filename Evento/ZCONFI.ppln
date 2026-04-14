@@ -1,0 +1,272 @@
+MostrarCuadroDeMensajes()
+creardialogo
+fecha1:'FechaValor';;;;;;dialogo.fecha1 <> 0;'Debe Ingresar la Fecha';NO;Habiles(FSys(), -0, 'ARG', SI)
+fecha2:'FechaConf';;;;;;dialogo.fecha2 <> 0;'Debe Ingresar la Fecha de Confirmacion';NO;FSys()
+cliente1:'Contraparte';;;;;;
+cuenta1:'Cuenta';;;;;;(NoVacio(dialogo.cliente1) y NoVacio(dialogo.cuenta1) y Eqstr(BuscarCampo('CUENTAS', 'Cliente', 'Codigo', dialogo.cuenta1), dialogo.cliente1)) o (Vacio(dialogo.cliente1)) o (Vacio(dialogo.cuenta1));'La cuenta no pertenece al cliente';NO;
+especie1:'Moneda';;;;;;;;;;
+vehiculo1: 'Vehiculo';;;;;;NoVacio(dialogo.vehiculo1);'Ingrese un vehiculo';NO;Var('VEHICULODE');
+mercado1:'Mercado';;;;;;NoVacio(dialogo.mercado1);'Debe ingresar un Mercado';NO;Var('MERNETEODE');;;;;" NETEA='SI' "
+nrtrans1:'Voucher';;;;;;;;;;;
+check1:'Batch';1;;;NO;NO;;;;0;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Acn(z1, 0)
+
+Message('Generando datos de confirmacion')
+Sqladd(" SELECT DISTINCT T.Cuenta2, T.Cuenta1, T.NrTrans, T.Fecha1, T.Fecha2, T.Cliente1, T.Especie,           ")
+Sqladd(" T.Cantidad1, T.RB6, T.TipoTr2, T.Ley4 Rueda                                                           ")
+Sqladd(" FROM "~Dbo()~".TRANSACCIONES2 T INNER JOIN "~Dbo()~".OPERACIONESBITS B ON T.NrTrans = B.NrOperacion       ")
+Sqladd(" INNER JOIN "~Dbo()~".ESPECIES E ON T.Especie = E.Codigo     ")
+Sqladd(" INNER JOIN "~Dbo()~".MERCADOS M2 ON T.Mercado1 = M2.Codigo  ")
+Sqladd(" WHERE  E.Tipo    = 'MON'                           ")
+Sqladd(" AND    B.Valor   = '1'                             ")
+Sqladd(" AND    B.NrBit in (3,6,8)                          ")
+Sqladd(" AND    T.TipoTr2 in ('DEP','RET')                  ")
+Sqladd(" AND    T.Mercado1 = '"~dialogo.mercado1~"'         ")
+Sqladd(" AND   (T.RB6 IN (0, -1, 2) OR T.RB6 IS NULL) ")
+Sqladd(" AND   T.Fecha1 <= '"~IdxDate(dialogo.fecha1)~"'    ")
+Sqladd(" AND ((M2.Netea='SI') OR (M2.Netea='NO' AND T.Ley4 IN ("~Pipe2Comillas(Var('RUECPC1'))~"))) ")
+if (NoVacio(dialogo.cliente1))
+Sqladd("AND T.Cliente1 = '"~dialogo.cliente1~"'          ")
+endif
+if (NoVacio(dialogo.cuenta1))
+Sqladd("AND (T.Cuenta1 = '"~dialogo.cuenta1~"' or T.Cuenta2 = '"~dialogo.cuenta1~"')")
+endif
+if (NoVacio(dialogo.especie1))
+Sqladd("AND T.Especie = '"~dialogo.especie1~"'           ")
+endif
+if (NoVacio(dialogo.vehiculo1))
+Sqladd("AND T.Vehiculo1 = '"~dialogo.vehiculo1~"'        ")
+endif
+if (NoVacio(dialogo.nrtrans1))
+Sqladd("AND T.NrTrans = '"~dialogo.nrtrans1~"'          ")
+endif
+
+Sqladd(" ORDER BY T.Cuenta2, T.Cuenta1                      ")
+Watch(Sqlbatch())
+recorrer sql
+if (NoVacio(Fbn('Cuenta2')))
+Act(a:fac, Fbn('Cuenta2'))
+else
+Act(a:fac, Fbn('Cuenta1'))
+endif
+Act(b:fac, Fbn('NrTrans'))
+Acd(c:fac, Fbn('Fecha1'))
+Acd(d:fac, Fbn('Fecha2'))
+Act(e:fac, Fbn('Cliente1'))
+Act(f:fac, Fbn('Especie'))
+Acn(g:fac, Fbn('Cantidad1'))
+Acn(u:fac, Fbn('RB6'))
+Act(v:fac, Fbn('TipoTr2'))
+Act(y:fac, Fbn()['Rueda'])
+if (Fbn('RB6') = 1)
+Act(t:fac, 'Confirmada')
+else
+if (Fbn('RB6') = 2)
+Act(t:fac, 'Falla')
+else
+Act(t:fac, 'Pendiente')
+endif
+endif
+Acn(w:fac, 0)
+if (Eqstr(Fbn('TipoTr2'), 'RET'))
+if (Incluido(Val(y:fac), Var('RUECPC1')))
+Act(sg:fac, 'Pago')
+else
+Act(sg:fac, 'Cobro')
+endif
+else
+if (Incluido(Val(y:fac), Var('RUECPC1')))
+Act(sg:fac, 'Cobro')
+else
+Act(sg:fac, 'Pago')
+endif
+endif
+if (dialogo.check1 = 1)
+Acn(w:fac, 1)
+endif
+Scn(z1, 1)
+proximo
+
+if (dialogo.check1 = 0)
+if (Val(z1) = 0)
+Cancelar('No se encontraron Movimientos para Confirmar')
+endif
+
+crearlistbox;'Arial,8,';'Movimientos a Confirmar'
+'Procesa';w1..w:fac;SI;SI;;80;check;RGB(220, 220, 193)
+'Accion';x1..x:fac;SI;(Val(w:flb) = 0 o Val(x:flb) = 0 o Val(x:flb) = 2) o (Val(x:flb) = 1 y Val(c:flb) < dialogo.fecha2);'No se pueden Fallar Vouchers del Dia';80;combo;'Confirma|Falla|Pendiente';RGB(220, 220, 193)
+'Estado';t1..t:fac;NO;SI;;80;string;;RGB(180, 180, 193)
+'';sg:1..sg:fac;NO;;;50;string;;RGB(180, 180, 193)
+'Cuenta';a1..a:fac;NO;SI;;100;string;;RGB(180, 180, 193)
+'Nr. Trans';b1..b:fac;NO;SI;;100;string;;RGB(180, 180, 193)
+'F.Ingreso';c1..c:fac;NO;SI;;80;fecha;RGB(180, 180, 193)
+'F.Cobro';d1..d:fac;NO;SI;;80;fecha;RGB(180, 180, 193)
+'Cliente';e1..e:fac;NO;SI;;100;string;;RGB(180, 180, 193)
+'Especie';f1..f:fac;NO;SI;;100;string;;RGB(180, 180, 193)
+'Cantidad';g1..g:fac;NO;SI;;80;numero;'##,###,###.####';RGB(180, 180, 193)
+finlistbox
+
+if (not ok)
+Cancelar()
+endif
+else
+if (Val(z1) = 0)
+Cancelar()
+endif
+endif
+
+Message('Procesando datos')
+recorrer&j 1, Fac()
+if (Val(w:&j) = 1)
+Message(Val(b:&j))
+if (Val(x:&j) = 0)
+Sqladd("Select NrOperacion from "~Dbo()~".MOVEJECUTADOS ")
+Sqladd(" where NrTrans2     = '"~Val(b:&j)~"' ")
+Sqladd("   and NrOperacion <> '"~Val(b:&j)~"'")
+Sqladd("   and Cantidad     < 0 ")
+Sqladd(" order by NrOperacion ")
+
+recorrer sql
+Message('1-Actualiza '~Fbn()['NrOperacion'])
+Dfa()
+Sqladd("UPDATE "~Dbo()~".OPERACIONES ")
+Sqladd("  SET RB10        = '1',  ")
+Sqladd("      FechaPrecan = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd("Where NrOperacion = '"~Fbn()['NrOperacion']~"' ")
+Sqladd("  and TipoOp     In ('TIC','TIV','TIFC','TIFV','TICO','TIPO','TCOPRI') ")
+Sqlnew()
+Sqlexec()
+
+Message('2-Recalcula datos '~Fbn()['NrOperacion'])
+modificaroperacion(Fbn()['NrOperacion'], 0, NO, NO, SI, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, 0)
+Message('3-fin recalculo '~Fbn()['NrOperacion'])
+proximo
+Message('Actualizacion limites')
+Sqladd("Insert Into "~Dbo()~".MOVLIMITES ")
+Sqladd(" (FechaMov, Cliente, Limite, Especie, FechaLim, Monto, NrOperacion,  ")
+Sqladd("  Descripcion, Bits, Vehiculo ) ")
+Sqladd(" Select M.FechaMov, M.Cliente, M.Limite, M.Especie, ")
+Sqladd("        M.FechaLim, (M.Monto*(-1)), M.NrOperacion,  ")
+Sqladd("        'Desafectacion Falla', M.Bits, M.Vehiculo ")
+Sqladd("   from "~Dbo()~".MOVLIMITES M ")
+Sqladd("Where NrOperacion = '"~Val(b:&j)~"' ")
+Sqlnew()
+
+Message('Actualizacion falla')
+Sqladd(" DELETE FROM "~Dbo()~".MOVEJECUTADOS ")
+Sqladd(" WHERE NrOperacion = '"~Val(b:&j)~"' AND Transaccion = 'Falla' ")
+Sqlnew()
+
+Message('Actualizacion instancias '~Val(b:&j))
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS SET Valor = 1 WHERE NrOperacion = '"~Val(b:&j)~"' and NrBit=70 ")
+Sqlnew()
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS SET Valor = 0 WHERE NrOperacion = '"~Val(b:&j)~"' and NrBit in (3,6,8) ")
+Sqlnew()
+Sqladd("UPDATE "~Dbo()~".TRANSACCIONES2 SET RB6 = 1, ")
+Sqladd("                               Fecha5 = '"~IdxDate(dialogo.fecha2)~"', ")
+Sqladd("                               FechaConfir = '"~IdxDate(FSys())~"' ")
+Sqladd(" WHERE NrTrans = '"~Val(b:&j)~"' ")
+Sqlnew()
+Sqlexec()
+else
+if (Val(x:&j) = 1)
+Message('Afectacion limites')
+Sqladd("Select NrOperacion from "~Dbo()~".MOVEJECUTADOS ")
+Sqladd(" where NrTrans2     = '"~Val(b:&j)~"' ")
+Sqladd("   and NrOperacion <> '"~Val(b:&j)~"'")
+Sqladd("   and Cantidad     < 0 ")
+Sqladd(" order by NrOperacion ")
+
+recorrer sql
+Dfa()
+Message('Afectando limites '~Val(b:&j))
+Sqladd("Insert Into "~Dbo()~".MOVLIMITES ")
+Sqladd(" (FechaMov, Cliente, Limite, Especie, FechaLim, Monto, NrOperacion,  ")
+Sqladd("  Descripcion, Bits, Vehiculo ) ")
+Sqladd(" Select M.FechaMov, M.Cliente, M.Limite, M.Especie, ")
+Sqladd("        '"~IdxDate(dialogo.fecha2)~"', M.Monto, '"~Val(b:&j)~"',  ")
+Sqladd("        'Afectacion Falla', M.Bits, M.Vehiculo ")
+Sqladd("   from "~Dbo()~".MOVLIMITES M ")
+Sqladd("Where NrOperacion = '"~Fbn()['NrOperacion']~"' ")
+Sqladd("  and FechaLim is not Null ")
+Sqlnew()
+Sqlexec()
+proximo
+
+Message('Afectando movimientos de fallas '~Val(b:&j))
+Sqladd("INSERT INTO "~Dbo()~".MOVEJECUTADOS ")
+Sqladd("(NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+Sqladd("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+Sqladd("Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+Sqladd("NrMov, NrLiq, Status, NrInstan, FechaEje, ")
+Sqladd("UsuarioEje, Cuenta, Transaccion, Cantidad, Cupon")
+Sqladd(") ")
+Sqladd("select ")
+Sqladd("NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+Sqladd("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+Sqladd("'"~'Falla AC'~Val(b:&j)~"', Bits, NrGrupo, Concepto, NrGrupo2, ")
+Sqladd("NrMov, NrLiq, Status, -1, '"~IdxDate(FSys())~"', ")
+Sqladd("'"~UsuarioActivo()~"', Cuenta, 'Falla', -Cantidad, Cupon")
+Sqladd("from "~Dbo()~".MOVEJECUTADOS ")
+Sqladd("where NrOperacion = '"~Val(b:&j)~"' ")
+Sqlnew()
+
+Message('Actualizacion instancias de fallas '~Val(b:&j))
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS SET Valor = 1 WHERE NrOperacion = '"~Val(b:&j)~"' and NrBit=8 ")
+Sqlnew()
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS SET Valor = 0 WHERE NrOperacion = '"~Val(b:&j)~"' and NrBit in (3,6) ")
+Sqlnew()
+Sqladd("UPDATE "~Dbo()~".TRANSACCIONES2 SET RB6      = 2, ")
+Sqladd("                               FechaTransp = '"~IdxDate(dialogo.fecha2)~"', ")
+Sqladd("                               FechaFalla  = '"~IdxDate(FSys())~"' ")
+Sqladd(" WHERE NrTrans = '"~Val(b:&j)~"' ")
+Sqlnew()
+Sqlexec()
+else
+if (Val(u:&j) = 2)
+Message('Re afectando limites '~Val(b:&j))
+Sqladd("Insert Into "~Dbo()~".MOVLIMITES ")
+Sqladd(" (FechaMov, Cliente, Limite, Especie, FechaLim, Monto, NrOperacion,  ")
+Sqladd("  Descripcion, Bits, Vehiculo ) ")
+Sqladd(" Select M.FechaMov, M.Cliente, M.Limite, M.Especie, ")
+Sqladd("        M.FechaLim, (M.Monto*(-1)), M.NrOperacion,  ")
+Sqladd("        'Desafectacion Falla', M.Bits, M.Vehiculo ")
+Sqladd("   from "~Dbo()~".MOVLIMITES M ")
+Sqladd("Where NrOperacion = '"~Val(b:&j)~"' ")
+Sqlnew()
+
+Message('Actualizando movimientos por fallas '~Val(b:&j))
+Sqladd(" DELETE FROM "~Dbo()~".MOVEJECUTADOS ")
+Sqladd(" WHERE NrOperacion = '"~Val(b:&j)~"' AND Transaccion = 'Falla' ")
+Sqlnew()
+
+Message('Actualizando movimientos por fallas '~Val(b:&j))
+if (Eqstr(Val(v:&j), 'DEP'))
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS SET Valor = 1 WHERE NrOperacion = '"~Val(b:&j)~"' and NrBit=3 ")
+else
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS SET Valor = 1 WHERE NrOperacion = '"~Val(b:&j)~"' and NrBit=6 ")
+endif
+Sqlnew()
+Sqladd("UPDATE "~Dbo()~".OPERACIONESBITS SET Valor = 0 WHERE NrOperacion = '"~Val(b:&j)~"' and NrBit=8 ")
+Sqlnew()
+Sqladd("UPDATE "~Dbo()~".TRANSACCIONES2 SET RB6 = 0, FechaFalla = Null WHERE NrTrans = '"~Val(b:&j)~"' ")
+Sqlnew()
+Sqlexec()
+endif
+endif
+endif
+endif
+proximo
+
+if (dialogo.check1 = 1)
+Message('Fin del Matcheo.')
+else
+Messagebox('Fin del Matcheo.')
+endif
+

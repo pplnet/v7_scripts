@@ -1,0 +1,222 @@
+﻿if EqStr(Copy(Val(A:FAC),28,4),'2101')
+  *******************************************************************************************
+  * Recibi un Registro de Actualizacion de Titulos (2101)                                   *
+  *******************************************************************************************
+***///*** Tenia if SI
+  if NO
+    * Version BKB. Genera registro en ESPECIESSIOPEL
+    if EqStr(Var('LOGEAMAE'),'SI')
+      AbrirASCII(Val(z2)~'\REC-2101.txt',0)
+      EscribirASCII(Val(a:FAC))
+      CerrarASCII
+    endif
+*    (*.'GENESSIOP'.)
+  else
+    BorrarCeldas(P2..P14)
+    ACT(P2, Copy(Val(A:FAC),32,5))
+    ACT(P3, BuscarCampo('ESPECIES','Codigo','CodMAEContado',Val(P2)))
+    ACN(P11,BuscarCampo('ESPECIES','VTeorico','CodMAEContado',Val(P2)))
+    if Vacio(Val(P3))
+      Message('----- No encontrada Especie '~Val(P2)~' para actualizar')
+    else
+      if Incluido(Copy(Val(A:FAC),37,1),'3')
+        Message('----- Modificacion Especie :'~Val(P2))
+        *********************************************
+        * Variables
+        * P4  Tiene Cupon Si=1 / No=0
+        * P5  Moneda en que cotiza USD /ARP
+        * P6  Habilitada HAB / Deshabilitado DES
+        * P7  Lamina Minima
+        * P8  Volumen Minimo
+        * P9  Cupon
+        * P10 Tasa Interes Vigente
+        * ********************************************
+        * Tiene Cupon
+        if EqStr(Copy(Val(A:FAC),68,1),'1')
+          ACT(P4, '0')
+        else
+          ACT(P4, '1')
+        endif
+        * Moneda
+        if EqStr(Copy(Val(A:FAC),75,1),'D')
+          ACT(P5, 'USD')
+        else
+          ACT(P5, 'ARP')
+        endif
+        * Habilitado
+        if EqStr(Copy(Val(A:FAC),96,1),'0')
+          ACT(P6, 'HAB')
+        else
+          ACT(P6, 'DES')
+        endif
+        * Lamina Minima
+        ACN(P7, Num(Copy(Val(A:FAC),111,7)))
+        * Volumen Minimo
+        ACN(P8, Num(Copy(Val(A:FAC),111,7)))
+        * Cupon Corriente
+        ACN(P9, Num(Copy(Val(A:FAC),118,3)))
+        * Tasa Interes Vigente
+        if Not Eqstr(Copy(Val(A:FAC),32,4),'PARD')
+          ACN(P12, Num(Copy(Val(A:FAC),157,8)))
+          ACN(P13, Val(P12)/1000000)
+          if DesciendeDeEspecie(Val(P3),'DEUDA')
+            ACN(P14, Val(P13)*2)
+            ACN(P10, Val(P14)/Val(P11))
+          else
+            ACN(P10, Val(P13)*2)
+          endif
+        endif
+*******************
+* No Actualiza    *
+*******************
+*        SQL.ADD("Update "~DBO~".ESPECIES ")
+*        SQL.ADD("   Set ZeroCoupon    = '"~Val(P4)~"', ")
+*        SQL.ADD("       Cotiza        = '"~Val(P5)~"', ")
+*        SQL.ADD("       Status        = '"~Val(P6)~"', ")
+*        SQL.ADD("       LaminaMinima  = "~Val(P7)~", ")
+*        SQL.ADD("       VolumenMinimo = "~Val(P8)~", ")
+*        SQL.ADD("       Cupon         = "~Val(P9)~" ")
+*        if Not Eqstr(Copy(Val(A:FAC),32,4),'PARD')
+*          SQL.ADD(" , TasaIntVigente  = "~Val(P10)~" ")
+*        endif
+*        SQL.ADD(" where Codigo = '"~Val(P3)~"' ")
+*        SQL.NEW
+*        SQL.EXEC
+*******************
+      else
+        Message('----- Mensaje Actualizacion de Titulos ignorado')
+      endif
+    endif
+  endif
+else
+  if EqStr(Copy(Val(A:FAC),28,4),'2102')
+    *******************************************************************************************
+    * Recibi un Registro de Actualizacion de Porcion Variable (2102)                          *
+    *******************************************************************************************
+    ACN(y1, 0)
+IF NO
+    SQL.ADD("Select 1 from "~DBO~".MAEVARTIT ")
+    SQL.ADD(" where Mercado        = '"~Copy(Val(A:FAC),5,1)~"' ")
+    SQL.ADD("   and CodNegociacion = '"~Copy(Val(A:FAC),33,1)~"' ")
+    SQL.ADD("   and CodTitulo      = '"~Copy(Val(A:FAC),34,5)~"' ")
+    SQL.ADD("   and Moneda         = '"~Copy(Val(A:FAC),39,1)~"' ")
+    SQL.ADD("   and Variable       = '"~Copy(Val(A:FAC),40,7)~"' ")
+    recorrer SQL
+      DFA
+      SCN(y1, 1)
+    proximo
+    if EqStr(Copy(Val(A:FAC),32,1),'1')
+      * Baja
+      if Val(y1)=1
+        SQL.ADD("update "~DBO~".MAEVARTIT ")
+        SQL.ADD("   Set Status         = 'DES' ")
+        SQL.ADD(" where Mercado        = '"~Copy(Val(A:FAC),5,1)~"' ")
+        SQL.ADD("   and CodNegociacion = '"~Copy(Val(A:FAC),33,1)~"' ")
+        SQL.ADD("   and CodTitulo      = '"~Copy(Val(A:FAC),34,5)~"' ")
+        SQL.ADD("   and Moneda         = '"~Copy(Val(A:FAC),39,1)~"' ")
+        SQL.ADD("   and Variable       = '"~Copy(Val(A:FAC),40,7)~"' ")
+        SQL.NEW
+        SQL.EXEC
+      else
+        if Val(y1)=0
+          Message('----- No existe Porcion Variable para dar de Baja.')
+        else
+          Message('----- Existe mas de una Porcion Variable para dar de Baja.')
+        endif
+      endif
+    else
+      if EqStr(Copy(Val(A:FAC),32,1),'2')
+        * Alta
+        if Val(y1)=0
+          SQL.ADD("Insert into "~DBO~".MAEVARTIT ( ")
+          SQL.ADD(" Mercado, ")
+          SQL.ADD(" CodNegociacion, ")
+          SQL.ADD(" CodTitulo, ")
+          SQL.ADD(" Moneda, ")
+          SQL.ADD(" Variable, ")
+          SQL.ADD(" FechaVto, ")
+          SQL.ADD(" Status ")
+          SQL.ADD(" ) Values ( ")
+          SQL.ADD(" '"~Copy(Val(A:FAC),5,1)~"' ")
+          SQL.ADD(" '"~Copy(Val(A:FAC),33,1)~"' ")
+          SQL.ADD(" '"~Copy(Val(A:FAC),34,5)~"' ")
+          SQL.ADD(" '"~Copy(Val(A:FAC),39,1)~"' ")
+          SQL.ADD(" '"~Copy(Val(A:FAC),40,7)~"' ")
+          SQL.ADD(" '"~Copy(Val(A:FAC),47,8)~"' ")
+          SQL.ADD(" 'HAB' ")
+          SQL.ADD(" ) ")
+          SQL.NEW
+          SQL.EXEC
+        else
+          Message('----- Alta Porcion Variable duplicada.')
+        endif
+      else
+        if EqStr(Copy(Val(A:FAC),32,1),'3')
+          * Modificacion
+          if Val(y1)=1
+            SQL.ADD("Update "~DBO~".MAEVARTIT ")
+            SQL.ADD("   Set Status         = 'DES' ")
+            SQL.ADD(" where CodNegociacion = '"~Copy(Val(A:FAC),33,1)~"' ")
+            SQL.ADD("   and CodTitulo      = '"~Copy(Val(A:FAC),34,5)~"' ")
+            SQL.ADD("   and Moneda         = '"~Copy(Val(A:FAC),39,1)~"' ")
+            SQL.ADD("   and Variable       = '"~Copy(Val(A:FAC),40,7)~"' ")
+            SQL.NEW
+            SQL.EXEC
+          else
+            if Val(y1)=0
+              Message('----- No existe Porcion Variable para dar de Baja.')
+            else
+              Message('----- Existe mas de una Porcion Variable para dar de Baja.')
+            endif
+          endif
+        else
+          Message('----- Mensaje Actualizacion de Porcion Variable ignorado')
+        endif
+      endif
+    endif
+ENDIF
+  else
+    if EqStr(Copy(Val(A:FAC),28,4),'2103')
+      ***************************************************************************************
+      * Recibi un Registro de Actualizacion de Valor Residual (2103)                        *
+      ***************************************************************************************
+      BorrarCeldas(P2..P7)
+      ACT(P3, BuscarCampo('ESPECIES','Codigo','CodMAEContado',Val(P2)))
+      if Vacio(Val(P3))
+        Message('----- No encontrada Especie '~Val(P2)~' para actualizar')
+      else
+        if Incluido(Copy(Val(A:FAC),37,1),'3')
+          Message('----- Modificacion Valor Residual :'~Val(P2))
+          *********************************************
+          * Variables
+          * P4  Cupon Desde
+          * P5  Cupon Hasta
+          * P6  Valor Residual
+          * ********************************************
+          * Cupon Desde
+          ACN(P4, Num(Copy(Val(A:FAC),37,3)))
+          * Cupon Hasta
+          ACN(P5, Num(Copy(Val(A:FAC),40,3)))
+          * Valor residual
+          ACN(P7, Num(Copy(Val(A:FAC),157,8)))
+          ACN(P6, Val(P7)/100000000)
+*******************
+* No Actualiza    *
+*******************
+*          SQL.ADD("Update "~DBO~".ESPECIES ")
+*          SQL.ADD("   Set Vteorico =  "~Val(P6)~" ")
+*          SQL.ADD(" where Codigo   =  '"~Val(P3)~"' ")
+*          SQL.ADD("   and Cupon    >= "~Val(P4)~" ")
+*          SQL.ADD("   and Cupon    <= "~Val(P5)~"")
+*          SQl.NEW
+*          SQL.EXEC
+*******************
+        else
+          Message('----- Mensaje Actualizacion de Valor Residual ignorado')
+        endif
+      endif
+    else
+      Message('----- Mensaje Actualizacion Especies incorrecto')
+    endif
+  endif
+endif

@@ -1,0 +1,1630 @@
+﻿HojaVisible(SI)
+MostrarcuadrodeMensajes
+CrearDialogo
+  Fecha1: 'Fecha'        ;;;;SI;;Dialogo.Fecha1<=FSYS;'Fecha Inválida';;Fsys;
+  Check1: 'Controles'    ;;;;SI;SI;;;;1;
+  Check2: 'Reporte'      ;;;;NO;NO;;;;0;
+  Check3: 'Regenera Pos' ;;;;NO;NO;;;;1
+FinDialogo
+
+if Not Ok
+   Cancelar
+endif
+
+CrearFont(1,"Arial,14,B")
+CrearFont(2,"Arial,10,B")
+CrearFont(3,"Arial,8,B")
+CrearFont(4,"Arial,8,")
+AgregarBMP(a1,Exe('LOGO'),90)
+
+SetFilaActual(3)
+*MAC modo reporte
+if Dialogo.check2 = 0
+   ACT(d:fac,'Cierre del dia al '~Dialogo.Fecha1)
+else
+   ACT(d:fac,'Simulacion de Cierre al '~Dialogo.Fecha1)
+endif
+SetFont(d:fac..d:fac,1)
+SetFilaActual(fac+3)
+
+* Puede correr la contabilidad
+acn(z:2,0)
+act(z:4,'')
+
+*MAC modo reporte
+if Dialogo.check2 = 0
+    #ifdef MLASA
+    #else
+        EjecutarEvento('CIEINT', Vehiculo1=Var('VEHICULODE'), Fecha1=Fsys, Check1=1, NrOperacion1='')
+    #endif
+else
+    act(a:fac,'No se ejecuto Calculo de intereses TIDE/TIPO/TICO/TICT por Simulacion cierre')
+    SetFont(a:fac,2)
+    ifa
+    ifa
+endif
+
+act(z:8,VAR('JERTITULOS'))
+
+act(a:fac,'Cotizaciones')
+SetFont(a:fac,2)
+ifa
+* Temporario. Sacar cuando el servicio de precios se ocupe de Precio1
+#ifdef BACS
+    if Dialogo.check2 = 1
+       Message('Actualizando precios IntraDay')
+       SQL.ADD("UPDATE "~DBO~".COTIZACIONES   ")
+       SQL.ADD("   SET Precio1=PrecioContable ")
+       SQL.ADD(" WHERE Mercado='"~VAR('AMBBYMA')~"'")
+       SQL.ADD("   AND Fecha="~IdxDate2(Dialogo.Fecha1))
+       SQL.ADD("   AND Round(Isnull(PrecioContable,0),8)<>Round(0,8) ")
+       SQL.New
+       SQL.Exec
+    endif   
+#endif
+If EqStr(var('USACOTNIIF'),'SI')
+    ACT(A:fac,'Especie')
+    ACT(B:fac,'Nombre')
+    ACT(C:fac,'Mon. Cotiza')
+    ACT(D:fac,'Fecha Cotizacion')
+    ACT(E:fac,'Fecha Ult Cotiz.')
+    ACT(F:fac,'Precio')
+    ACT(G:fac,'Tipo Val. Act.')
+    ACT(H:fac,'Cartera')
+    *ACT(I:fac,'Mercado')
+    *ACT(J:fac,'Plazo')
+    ACT(I:fac,'Observacion')
+    SetFont(a:fac..I:fac,3)
+    AgregarMarco(a:fac..i:fac,2,0,EXE('COLOR6'))
+ELSE
+    ACT(a:fac,'Especie')
+    ACT(b:fac,'Nombre')
+    ACT(c:fac,'Cotizacion')
+    ACT(d:fac,'Fecha')
+    ACT(e:fac,'Moneda')
+    ACT(f:fac,'Observacion')
+    SetFont(a:fac..f:fac,3)
+    AgregarMarco(a:fac..f:fac,2,0,EXE('COLOR6'))
+ENDIF
+ifa 
+*
+******Agregamos la regeneracion para el control de cotizacione que se hace despues
+*If EqStr(Var('ACTPOS'),'SI') Y Dialogo.Check3 = 1
+*    * Revaluar operaciones y transacciones en dolares
+*    Message('Regenera posiciones de Ops/Tr en dolares')
+*    EjecutarEvento('REGPOS', Fecha1=Dialogo.Fecha1,Check1=1)
+*
+*    * Reset Precio
+*    Message('Resetea precio posicion')
+*    EjecutarEvento('RESPCO', Fecha1=Dialogo.Fecha1,Especie1='',Check3=1,Check4=1,Check1=1,Check2=1 )
+*EndIf
+
+* Cotizacion
+If EqStr(var('USACOTNIIF'),'SI') 
+    acn(w:1,fac)
+    ACT(a:fac,VAR('MONEEXTR'))
+    ACT(b:fac,SQL("SELECT Nombre FROM "~DBO~".ESPECIES WHERE Codigo='"~VAL(a:fac)~"'"))
+    ACN(f:fac, SQL("SELECT PrecioContable FROM "~DBO~".COTIZACIONES WHERE Codigo='USD' and Fecha="~IdxDate2(Dialogo.Fecha1)~" and CallPut='CON' And Moneda='"~VAR('MONELOCA')~"' "))
+    if Val(f:fac)=0
+        ACT(i:fac,'No hay cotizacion de USD para la fecha')
+        * No puede correr la contabilidad
+        acn(z:2,1)
+        act(z:4,val(z:4) ~'USD ')
+    else
+        ACD(d:fac, Dialogo.Fecha1)
+        ACT(c:fac,VAR('MONELOCA'))
+    endif
+    
+    ifa
+    let &especieCoti 'COMA35'
+    ACT(a:fac,&especieCoti)
+    ACT(b:fac,SQL("SELECT Nombre FROM "~DBO~".ESPECIES WHERE Codigo='"~&especieCoti~"'"))
+    ACN(f:fac, SQL("SELECT PrecioContable FROM "~DBO~".COTIZACIONES WHERE Codigo='"~&especieCoti~"' and Fecha="~IdxDate2(Dialogo.Fecha1)~" and CallPut='CON' And Moneda='"~VAR('MONELOCA')~"' "))
+    if Val(f:fac)=0
+        ACT(i:fac,'No hay cotizacion de '~&especieCoti~' para la fecha')
+        * No puede correr la contabilidad
+        acn(z:2,1)
+        act(z:4,val(z:4) ~&especieCoti~' ')
+    else
+        ACD(d:fac, Dialogo.Fecha1)
+        ACT(c:fac,VAR('MONELOCA'))
+    endif
+    ifa
+Else
+    acn(w:1,fac)
+    ACT(a:fac,VAR('MONEEXTR'))
+    ACT(b:fac,SQL("SELECT Nombre FROM "~DBO~".ESPECIES WHERE Codigo='"~VAL(a:fac)~"'"))
+    ACN(c:fac, SQL("SELECT PrecioContable FROM "~DBO~".COTIZACIONES WHERE Codigo='USD' and Fecha="~IdxDate2(Dialogo.Fecha1)~" and CallPut='CON' And Moneda='"~VAR('MONELOCA')~"' "))
+    if Val(c:fac)=0
+      ACT(f:fac,'No hay cotizacion de USD para la fecha')
+      * No puede correr la contabilidad
+      acn(z:2,1)
+      act(z:4,val(z:4) ~'USD ')
+    else
+      ACD(d:fac, Dialogo.Fecha1)
+      ACT(e:fac,VAR('MONELOCA'))
+    endif
+    *SetFont(a:fac,2)
+    ifa   
+EndIf
+
+* Chequeando cotizaciones
+If EqStr(var('USACOTNIIF'),'SI')
+    (.'CONCOTNIIF'.)
+    let &especie  ''
+    let &book     ''
+    let &fechaOp  ''
+    let &fechaVto '' 
+    let &tipoAsi  ''
+    let &cantidadCotiControl 0  
+    let &cantidadPorCorteControl 0
+    let &yaSeControlo 0 
+    Recorrer SQL       
+        let &cantidadCotiControl &cantidadCotiControl+1
+        If (Not EqStr(&especie, fbn('Especie')) OR Not EqStr(&book,fbn('book1')) OR Not EqStr(&fechaOp,fbn('FechaOp')) OR Not EqStr(&fechaVto,fbn('FechaVto')) OR Not EqStr(&tipoAsi,fbn('TipoAsi'))) OR (Vacio(&especie) OR Vacio(&book) OR Vacio(&fechaOp) OR Vacio(&fechaVto) OR Vacio(&tipoAsi)) 
+            If Not (EqStr(&especie, fbn('Especie')) Y EqStr(&book,fbn('book1')))
+                ****Por duplicidad de datos guardo en ZZ las fechas ya procesadas, cuando cambia especie/book blanqueo las fechas
+                If &cantidadPorCorteControl<>0
+                    Recorrer&i 1, &cantidadPorCorteControl
+                        ACD(ZZ:&i,0)
+                    Proximo
+                EndIf
+                let &cantidadPorCorteControl 0
+            EndIf
+            let &especie fbn('Especie')
+            let &especieNombre fbn('Nombre')
+            let &especieCotiza fbn('Cotiza')
+            let &book fbn('book1')
+            let &fechaOp fbn('FechaOp')
+            let &fechaVto fbn('FechaVto')  
+            let &tipoAsi  fbn('TipoAsi')  
+            let &valuacion ''
+            If EqStr(fbn('TipoAsi'),'LIQ') and Incluido(fbn('TipoOp'), 'TICT|TIDE|TICO|TIPO|TIC|TIV|')
+                IF Incluido(fbn('TipoOp'), 'TICT|TIDE|TICO|TIPO|')
+                    let &fechaControlar fbn('FechaOp')-1
+                    (.'FECONTROL'.)
+                    If &yaSeControlo=0
+                        Let &PrecioNIIF CotizacionNIIF(&especie, fbn('FechaOp')-1, &book)
+                        let &fechaCotizacion fbn('FechaOp')-1
+                        **Controlo que no esté en 0 o NULL la cotizacion, si no levanto flag
+                        IF Vacio(&PrecioNIIF) 
+                            acn(z:2,1)
+                            act(z:4,val(z:4) ~'CN1 ')
+                            let &cotizacion 0
+                        Else
+                            If &PrecioNIIF.PrecioCotizacionDeterminada = 0
+                                acn(z:2,1)
+                                act(z:4,val(z:4) ~'CN2 ')
+                                let &cotizacion 0
+                            ELSE
+                                let &cotizacion &PrecioNIIF.PrecioCotizacionDeterminada
+                                let &valuacion ValuacionNIIF(&especie, Dat(fbn('FechaOp')-1), &book, 0)
+                            ENDIF
+                        ENDIF
+                        (.'DATOCOTESP'.)
+                    Else
+                        dfa
+                    EndIf
+                ENDIF
+                
+                IF Incluido(fbn('TipoOp'), 'TICT|TIDE|TICO|TIPO|TIC|TIV|') Y #ESLIQVTO 
+                    **Liquidacion al Vto para operacion 'TICT','TIDE','TICO','TIPO','TIC','TIV'
+                    If fbn('FechaOp') = fbn('FechaVto')
+                        dfa
+                    Else
+                        Recorrer&i fbn('FechaOp'),fbn('FechaVto')-1
+                            let &fechaRevaluo Fecha(&i)
+                            If Fecha(&i) <> fbn('FechaOp')
+                                ***Tengo que hacer esta distincion porque en el 2do recorrer necesito aumentar el ifa
+                                ***para no perder datos ya que en el recorrer hay 2 lineas (2 ifa)
+                                ifa
+                            EndIf
+                            **Estos son los controles por cotizacionesNiif que se usan en REVALOP
+                            let &fechaControlar &fechaRevaluo
+                            (.'FECONTROL'.)
+                            If &yaSeControlo=0
+                                Let &PrecioNIIF CotizacionNIIF(&especie, &fechaRevaluo, &book)
+                                let &fechaCotizacion &fechaRevaluo
+                                **Controlo que no esté en 0 o NULL la cotizacion, si no levanto flag
+                                IF Vacio(&PrecioNIIF) 
+                                    acn(z:2,1)
+                                    act(z:4,val(z:4) ~'CN3 ')
+                                    let &cotizacion 0
+                                Else
+                                    If &PrecioNIIF.PrecioCotizacionDeterminada = 0
+                                        acn(z:2,1)
+                                        act(z:4,val(z:4) ~'CN4 ')
+                                        let &cotizacion 0
+                                    ELSE
+                                        let &cotizacion &PrecioNIIF.PrecioCotizacionDeterminada
+                                        let &valuacion ValuacionNIIF(&especie, Dat(&fechaRevaluo), &book, 0)
+                                    ENDIF
+                                ENDIF
+                                (.'DATOCOTESP'.)
+                            Else
+                                dfa
+                            EndIf
+                            ifa
+                            let &valuacion ''
+                            let &fechaCotizacion &fechaRevaluo-1
+                            let &fechaControlar &fechaRevaluo-1
+                            (.'FECONTROL'.)
+                            If &yaSeControlo=0 
+                                Let &PrecioNIIF CotizacionNIIF(&especie, &fechaRevaluo-1, &book)
+                                **Controlo que no esté en 0 o NULL la cotizacion, si no levanto flag
+                                IF Vacio(&PrecioNIIF) 
+                                    acn(z:2,1)
+                                    act(z:4,val(z:4) ~'CN5 ')
+                                    let &cotizacion 0
+                                Else
+                                    If &PrecioNIIF.PrecioCotizacionDeterminada = 0
+                                        acn(z:2,1)
+                                        act(z:4,val(z:4) ~'CN6 ')
+                                        let &cotizacion 0
+                                    ELSE
+                                        let &cotizacion &PrecioNIIF.PrecioCotizacionDeterminada
+                                        let &valuacion ValuacionNIIF(&especie, Dat(&fechaRevaluo-1), &book, 0)
+                                    ENDIF
+                                ENDIF
+                                (.'DATOCOTESP'.)
+                            Else
+                                dfa
+                            EndIf
+                        Proximo 
+                    EndIf
+                Else
+                    dfa
+                ENDIF
+            ELSE
+                IF EqStr(fbn('TipoAsi'),'DEV')
+                    **Busco cotizacionniif igual que en el CONT15
+                    IF Eqstr(fbn('Tipo'), 'Hoy')
+                        let &fechaControlar Dialogo.Fecha1
+                        (.'FECONTROL'.)
+                        If &yaSeControlo=0 
+                            Let &PrecioNIIF CotizacionNIIF(fbn('Especie'), Dialogo.Fecha1, fbn('Book1'))
+                            let &fechaCotizacion Dialogo.Fecha1
+                            **Controlo que no esté en 0 o NULL la cotizacion, si no levanto flag
+                            IF Vacio(&PrecioNIIF) 
+                                acn(z:2,1)
+                                act(z:4,val(z:4) ~'CN7 ')
+                                let &cotizacion 0
+                            Else
+                                If &PrecioNIIF.PrecioCotizacionDeterminada = 0
+                                    acn(z:2,1)
+                                    act(z:4,val(z:4) ~'CN8 ')
+                                    let &cotizacion 0
+                                ELSE
+                                    let &cotizacion &PrecioNIIF.PrecioCotizacionDeterminada
+                                    IF Eqstr(fbn('Tipo'), 'Hoy')
+                                        let &valuacion ValuacionNIIF(&especie, Dat(Dialogo.Fecha1), &book, 0)
+                                    ELSE
+                                        let &valuacion ValuacionNIIF(&especie, Dat(Dialogo.Fecha1-1), &book, 0)
+                                    ENDIF
+                                ENDIF
+                            ENDIF
+                            (.'DATOCOTESP'.)
+                        Else
+                            dfa
+                        EndIf
+                    ELSE
+                        let &fechaControlar Dialogo.Fecha1-1
+                        (.'FECONTROL'.)
+                        If &yaSeControlo=0 
+                            Let &PrecioNIIF CotizacionNIIF(fbn('Especie'), Dialogo.Fecha1-1, fbn('Book1'))
+                            let &fechaCotizacion Dialogo.Fecha1-1
+                            **Controlo que no esté en 0 o NULL la cotizacion, si no levanto flag
+                            IF Vacio(&PrecioNIIF) 
+                                acn(z:2,1)
+                                act(z:4,val(z:4) ~'CN7 ')
+                                let &cotizacion 0
+                            Else
+                                If &PrecioNIIF.PrecioCotizacionDeterminada = 0
+                                    acn(z:2,1)
+                                    act(z:4,val(z:4) ~'CN8 ')
+                                    let &cotizacion 0
+                                ELSE
+                                    let &cotizacion &PrecioNIIF.PrecioCotizacionDeterminada
+                                    IF Eqstr(fbn('Tipo'), 'Hoy')
+                                        let &valuacion ValuacionNIIF(&especie, Dat(Dialogo.Fecha1), &book, 0)
+                                    ELSE
+                                        let &valuacion ValuacionNIIF(&especie, Dat(Dialogo.Fecha1-1), &book, 0)
+                                    ENDIF
+                                ENDIF
+                            ENDIF
+                            (.'DATOCOTESP'.)
+                        Else
+                            dfa
+                        EndIf
+                    ENDIF
+
+                ELSE     
+                    IF EqStr(fbn('TipoAsi'),'VTO')
+                        If EqStr(&especie,'USD')
+                            Let &PrecioNIIF &cotiUSD   
+                            let &fechaCotizacion Dialogo.Fecha1-1
+                            IF Vacio(&PrecioNIIF) 
+                                acn(z:2,1)
+                            EndIf
+                            (.'DATOCOTESP'.)
+                        Else
+                            let &fechaControlar Dialogo.Fecha1-1
+                            (.'FECONTROL'.)
+                            If &yaSeControlo=0 
+                                Let &PrecioNIIF CotizacionNIIF(&especie, Dialogo.Fecha1-1, &book)
+
+                                let &fechaCotizacion Dialogo.Fecha1-1
+                                **Controlo que no esté en 0 o NULL la cotizacion, si no levanto flag
+                                IF Vacio(&PrecioNIIF) 
+                                    acn(z:2,1)
+                                    act(z:4,val(z:4) ~'CN9 ')
+                                    let &cotizacion 0
+                                Else
+                                    If &PrecioNIIF.PrecioCotizacionDeterminada = 0
+                                        acn(z:2,1)
+                                        act(z:4,val(z:4) ~'CN10 ')
+                                        let &cotizacion 0
+                                    ELSE
+                                        let &cotizacion &PrecioNIIF.PrecioCotizacionDeterminada
+                                        let &valuacion ValuacionNIIF(&especie, Dat(Dialogo.Fecha1-1), &book, 0)
+                                    ENDIF
+                                ENDIF
+                                (.'DATOCOTESP'.)
+                            Else
+                                dfa
+                            EndIf
+                        EndIf
+                    ELSE
+                        **Estos son los controles por cotizacionesNiif que se usan en REVALOP
+                        let &fechaRevaluo Dialogo.Fecha1
+                        let &fechaControlar &fechaRevaluo
+                        (.'FECONTROL'.)
+                        If &yaSeControlo=0                        
+                            Let &PrecioNIIF CotizacionNIIF(&especie, &fechaRevaluo, &book)
+                            let &fechaCotizacion &fechaRevaluo
+                            **Controlo que no esté en 0 o NULL la cotizacion, si no levanto flag
+                            IF Vacio(&PrecioNIIF) 
+                                acn(z:2,1)
+                                act(z:4,val(z:4) ~'CN11 ')
+                                let &cotizacion 0
+                            Else
+                                If &PrecioNIIF.PrecioCotizacionDeterminada = 0
+                                    acn(z:2,1)
+                                    act(z:4,val(z:4) ~'CN12 ')
+                                    let &cotizacion 0
+                                ELSE
+                                    let &cotizacion &PrecioNIIF.PrecioCotizacionDeterminada
+                                    let &valuacion ValuacionNIIF(&especie, Dat(&fechaRevaluo), &book, 0)
+                                ENDIF
+                            ENDIF
+                            (.'DATOCOTESP'.)
+                        Else
+                            dfa
+                        EndIf
+                        ifa
+                        
+                        let &valuacion ''
+                        let &fechaControlar &fechaRevaluo-1
+                        (.'FECONTROL'.)
+                        If &yaSeControlo=0 
+                            Let &PrecioNIIF CotizacionNIIF(&especie, &fechaRevaluo-1, &book)
+                            let &fechaCotizacion &fechaRevaluo-1
+                            **Controlo que no esté en 0 o NULL la cotizacion, si no levanto flag
+                            IF Vacio(&PrecioNIIF) 
+                                acn(z:2,1)
+                                act(z:4,val(z:4) ~'CN13 ')
+                                let &cotizacion 0
+                            Else
+                                If &PrecioNIIF.PrecioCotizacionDeterminada = 0
+                                    acn(z:2,1)
+                                    act(z:4,val(z:4) ~'CN14 ')
+                                    let &cotizacion 0
+                                ELSE
+                                    let &cotizacion &PrecioNIIF.PrecioCotizacionDeterminada
+                                    let &valuacion ValuacionNIIF(&especie, Dat(&fechaRevaluo-1), &book, 0)
+                                ENDIF
+                            ENDIF
+                            (.'DATOCOTESP'.)
+                        Else
+                            dfa
+                        EndIf
+                    ENDIF   
+                ENDIF
+            ENDIF
+        Else
+            dfa
+        EndIf
+    Proximo
+    ifa
+    ifa
+    if val(z:2)=0
+       ACT(a:fac,'Cotizaciones NIIF Ok ' ~FsTr(&cantidadCotiControl,0,0))
+       SetFont(a:fac,2)
+    else   
+        *ACT(a:fac,'Cotizaciones NIIF con error '~Copy(val(z:4),1,60)~iif(Longitud(val(z:4))>60,'...',''))
+        ACT(a:fac,'Cotizaciones NIIF con error '~FsTr(&cantidadCotiControl,0,0))
+        SetFont(a:fac,2)
+    endif
+ELSE
+    (.'QESPECIES'.)
+    acn(z:5,0)
+    Recorrer SQL
+        Message('Buscando cotizacion especie '~FBN['Especie'])
+        ACT(a:fac,FBN['Especie'])
+        ACT(b:fac,FBN['Nombre'])
+        ACD(d:fac, SQL("SELECT Max(Fecha) FROM "~DBO~".COTIZACIONES WHERE Codigo='"~FBN['Especie']~"' and Fecha>="~IdxDate2(Habiles(Dialogo.Fecha1,-3,'ARG'))~" and Fecha<="~IdxDate2(Dialogo.Fecha1)~" and CallPut='CON' "))
+        if Val(d:fac)=0
+           BorrarCeldas(d:fac..d:fac)
+           ACN(c:fac, 0)
+        else
+           SQL.ADD("SELECT Precio1, Moneda FROM "~DBO~".COTIZACIONES WHERE Codigo='"~FBN['Especie']~"' and Fecha>="~IdxDate2(val(d:fac))~" and Fecha<="~IdxDate2(Dialogo.Fecha1)~" and CallPut='CON' ")
+           Recorrer SQL
+              DFA
+              ACN(c:fac, FBN['Precio1'])
+              ACT(e:fac, FBN['Moneda'])
+           Proximo  
+        endif   
+        if val(c:fac)=0
+          *Debe actuar como 'Warning' para BIND
+          #ifdef BIND
+            acn(z:2, Val(z:2))
+            ACT(f:fac,'Warning: No hay cotizacion para la fecha')
+          #else
+            ACT(f:fac,'No hay cotizacion para la fecha')
+            * No puede correr la contabilidad
+            acn(z:2,1)
+            if Val(z:5)=0
+              act(z:4,val(z:4) ~'COT2 ')
+              acn(z:5,1)
+            endif   
+          #endif
+        endif
+        #ifdef MLASA
+          ACD(u:fac, BuscarCampo('ESPECIES','Fecha','Codigo',FBN['Especie']))
+          if Val(u:fac)<Dialogo.Fecha1
+            if NoVacio(Val(f:fac))
+              ACT(f:fac, Val(f:FAC)~' - ')
+            endif
+            ACT(f:fac, Val(f:FAC)~'Especie ya madurada el '~Fecha(Val(u:fac)))
+          endif
+        #endif
+        
+    Proximo
+    SetFont(a:val(w:1)..f:fac,4)
+    FormatoCeldas(c:val(w:1)..c:fac,Exe('F7'))
+    if val(z:2)=0
+      ifa
+      ifa
+      ACT(a:fac,'Cotizaciones Ok')
+      SetFont(a:fac,2)
+    endif
+EndIf
+ifa
+ifa
+ifa
+* Informe de ops pendiente de liquidacion
+act(a:fac,'Pendientes de Liquidacion')
+SetFont(a:fac,2)
+ifa
+ACT(a:fac,'FechaMov')
+ACT(b:fac,'Tipo')
+ACT(c:fac,'NroOp')
+ACT(d:fac,'Cliente')
+ACT(e:fac,'Especie')
+ACT(f:fac,'Cantidad')
+ACT(g:fac,'Cuenta')
+ACT(h:fac,'Leyenda')
+ACT(i:fac,'Instancia')
+SetFont(a:fac..i:fac,3)
+AgregarMarco(a:fac..i:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+
+SQL.ADD("SELECT M.*, O.TipoOp, OB.NrBit ")
+SQL.ADD("  from "~DBO~".MOVPENDIENTES M, "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB  ")
+SQL.ADD(" WHERE O.NrOperacion=M.NrOperacion ")
+SQL.ADD("   AND M.FechaMov<="~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("   AND M.NrSaldo=1 ")
+SQL.ADD("   AND O.NrOperacion=OB.NrOperacion ")
+SQL.ADD("   AND OB.Valor=1 ")
+SQL.ADD("   AND OB.NrBit not in(70) ")
+SQL.ADD("   AND O.TipoOp in('TIC','TIV','TCOPRI','FXC','FXV','FXJ','FXCF','FXVF','CAUC','MMCO','MMCT','TICO','TIPO','TICT','TIDE') ")
+SQL.ADD(" ORDER BY FechaMov ")
+acn(z:5,0)
+Recorrer SQL
+  * No puede correr la contabilidad
+  *Debe actuar como 'Warning' para BIND
+  #ifdef BIND
+    acn(z:2,val(z:2))
+  #else
+    acn(z:2,1)
+    if Val(z:5)=0
+      act(z:4,val(z:4) ~'PENL ')
+      acn(z:5,1)
+    endif   
+  #endif
+  ACD(a:fac,FBN['FechaMov'])
+  ACT(b:fac,FBN['TipoOp'])
+  ACT(c:fac,FBN['NrOperacion'])
+  ACLO(c:fac,FBN['NrOperacion'])
+  ACT(d:fac,FBN['Cliente'])
+  ACT(e:fac,FBN['Especie'])
+  ACN(f:fac,FBN['Cantidad'])
+  ACT(g:fac,FBN['Cuenta'])
+  ACT(h:fac,FBN['Leyenda'])
+  ACT(i:fac,SQL("SELECT Nombre FROM "~DBO~".INSTANCIAS WHERE Tabla='OPERACIONES' and NrInstancia="~FSTR(FBN['NrBit'],1,0)~""))
+  #ifdef BIND
+    ACT(j:fac,'Warning')
+  #endif
+Proximo
+SetFont(a:val(w:1)..i:fac,4)
+FormatoCeldas(f:val(w:1)..f:fac,Exe('F2'))
+ifa
+ifa
+
+* Informe de ops pendiente de confirmacion AC/MC
+act(a:fac,'Pendientes de Confirmacion de Liquidacion ')
+SetFont(a:fac,2)
+ifa
+act(a:fac,'Mercados Neteados ')
+SetFont(a:fac,3)
+ifa
+ACT(a:fac, 'Cod CV')
+ACT(b:fac, 'Especie')
+ACT(c:fac, 'Nombre')
+ACT(d:fac, 'Cantidad')
+ACT(e:fac, 'Cuenta')
+ACT(f:fac, 'Transaccion')
+ACT(g:fac, 'Tipo')
+ACT(h:fac, 'Cuenta')
+SetFont(a:fac..h:fac,3)
+AgregarMarco(a:fac..h:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+
+SQL.ADD(" Select T.Especie, T.Cantidad1, T.Cuenta1, T.NrTrans, T.TipoTr2, T.Vehiculo1, T.Cuenta1, T.Cuenta2, T.Book1, ")
+SQL.ADD(" E.CodNumCajaValores, E.Nombre ")
+SQL.ADD(" from "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS B,"~DBO~".ESPECIES E  Where ") 
+SQL.ADD("T.Especie = E.Codigo      and                 ")
+SQL.ADD("T.NrTrans = B.NrOperacion and                 ")
+SQL.ADD("B.NrBit = 12              and                 ")
+SQL.ADD("B.Valor = '1'             and                 ")
+SQL.ADD("T.Fecha1 <= "~IdxDate2(Dialogo.Fecha1)~"  ")
+SQL.ADD(" Order By T.NrTrans                           ")
+acn(z:5,0)
+Recorrer SQL
+  * No puede correr la contabilidad
+  acn(z:2,1)
+  if Val(z:5)=0
+    act(z:4,val(z:4) ~'LIQN ')
+    acn(z:5,1)
+  endif   
+  ACT(a:fac, FBN['CodNumCajaValores'])
+  ACT(b:fac, FBN['Especie'])
+  ACT(c:fac, FBN['Nombre'])
+  ACN(d:fac, FBN['Cantidad1'])
+  ACT(e:fac, FBN['Cuenta1'])
+  ACT(f:fac, FBN['NrTrans'])
+  ACLT(f:fac, FBN['NrTrans'])
+  ACT(g:fac, FBN['TipoTr2'])
+  ACT(h:fac, FBN['Cuenta2'])
+Proximo
+SetFont(a:val(w:1)..h:fac,4)
+FormatoCeldas(d:val(w:1)..d:fac,Exe('F2'))
+ifa
+ifa
+
+act(a:fac,'Mercados NO Neteados ')
+SetFont(a:fac,3)
+ifa
+
+ACT(a:Fac,'Transaccion')
+ACT(b:Fac,'Tipo')
+ACT(c:Fac,'Fecha1')
+ACT(d:Fac,'Fecha2')
+ACT(e:Fac,'Cliente')
+ACT(f:Fac,'Mercado')
+ACT(g:Fac,'Especie')
+ACT(h:Fac,'Cantidad')
+ACT(i:Fac,'Cuenta1')
+ACT(j:Fac,'Cuenta2')
+ACT(k:Fac,'Operacion Ref.')
+ACT(l:Fac,'Usuario')
+SetFont(a:fac..l:fac,3)
+AgregarMarco(a:fac..l:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+
+* Pendientes CV
+SQL.ADD("Select T.Cliente1, M.Especie, M.NrTrans2, M.Mercado, T.TipoTr2, IsNull(T.Cantidad1,0) Cantidad1, T.UsrInput, ")
+SQL.ADD("       T.Vehiculo1, T.Cuenta1, T.Cuenta2, T.Fecha1, T.Fecha2, T.NrOperacionRef4, T.NrOperacionRef1           ")
+SQL.ADD("from "~DBO~".MOVEJECUTADOS M  with (NOLOCK Index = INDME5),"~DBO~".TRANSACCIONES2 T,                         ")
+SQL.ADD("     "~DBO~".ESPECIES E, "~DBO~".CLIENTES C, "~DBO~".OPERACIONESBITS OB                                      ")
+SQL.ADD("where ((T.TipoTr2 ='COMP' AND M.NrTrans2 = T.NrTrans) OR (T.TipoTr2 <>'COMP' AND M.NrOperacion = T.NrTrans)) ")
+SQL.ADD("  AND M.Especie=E.Codigo                                                                                     ")
+SQL.ADD("  AND M.Cliente=C.Codigo                                                                                     ")
+
+SQL.ADD("  AND T.NrTrans=OB.NrOperacion AND M.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"'             ")
+SQL.ADD("  AND T.Fecha2 = '"~IdxDate(Dialogo.Fecha1)~"' AND OB.NrBit in(14) AND OB.Valor='1'           ")
+
+*- Extrabursatil                                                                                   
+SQL.ADD(" and M.NrGrupo <> '15'                                                                    ")
+SQL.ADD(" and T.TipoTr2 in ('DEP','RET','COMP','MATCH')                                            ")
+
+* Para que no los informe como dobles
+SQL.ADD(" and ((M.Cliente<>T.Vehiculo1 and T.TipoTr2='MATCH') or (T.TipoTr2<>'MATCH'))  ")
+
+SQL.ADD(" order by M.NrTrans2 ")
+watch(SQL.BATCH())
+acn(z:5,0)
+Recorrer SQL
+  * No puede correr la contabilidad
+  acn(z:2,1)
+  if Val(z:5)=0
+    act(z:4,val(z:4) ~'LIQ2 ')
+    acn(z:5,1)
+  endif   
+  ACT(a:Fac,FBN['NrTrans2'])
+  ACT(b:Fac,FBN['TipoTr2'])
+  ACD(c:Fac,FBN['Fecha1'])
+  ACD(d:Fac,FBN['Fecha2'])
+  ACT(e:Fac,fbn['Cliente1'])
+  ACT(f:Fac,FBN['Mercado'])
+  ACT(g:Fac,fbn['Especie'])
+  ACN(h:Fac,FBN['Cantidad1'])
+  ACT(i:Fac,FBN['Cuenta1'])
+  ACT(j:Fac,FBN['Cuenta2'])   
+  ACT(k:Fac,FBN['NrOperacionRef1'])
+  ACT(l:Fac,FBN['UsrInput'])
+Proximo
+SetFont(a:val(w:1)..l:fac,4)
+FormatoCeldas(h:val(w:1)..h:fac,Exe('F2'))
+ifa
+ifa
+
+* FJL 27/05/19 - Nuevo Control Isssue EXTBOFA-3637 / BOFAV6-3717
+* Informe de Movs No Operativos
+act(a:fac,'Movs No operativos en Instancias Intermedias')
+SetFont(a:fac,2)
+ifa
+ACT(a:fac, 'Fecha Tr.')
+ACT(b:fac, 'Especie')
+ACT(c:fac, 'Nombre')
+ACT(d:fac, 'Cantidad')
+ACT(e:fac, 'Cuenta')
+ACT(f:fac, 'Transaccion')
+ACT(g:fac, 'Tipo')
+ACT(h:fac, 'Instancia')
+SetFont(a:fac..h:fac,3)
+AgregarMarco(a:fac..h:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+
+SQL.ADD("Select T.Especie, T.Cantidad1, T.Cuenta1, T.NrTrans, T.TipoTr2, T.Vehiculo1, T.Cuenta1, T.Cuenta2, T.Book1, T.Fecha1, ")
+SQL.ADD("       E.Nombre, B.NrBit, I.Nombre NomInst ")
+SQL.ADD("  from "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS B,"~DBO~".ESPECIES E, "~DBO~".INSTANCIAS I ") 
+SQL.ADD(" where T.Especie = E.Codigo      ")
+SQL.ADD("   and T.NrTrans = B.NrOperacion ")
+SQL.ADD("   and I.NrInstancia = B.NrBit ")
+SQL.ADD("   and I.Tabla       = 'TRANSACCIONES2' ")
+SQL.ADD("   and T.TipoTr2 in ('DENOP','RENOP','TRNOP') ")
+SQL.ADD("   and T.Fecha1 <= "~IdxDate2(Dialogo.Fecha1)~"  ")
+* FJL 19/06/19 - Nuevo Control Isssue EXTBOFA-3637 / BOFAV6-3717 - Ahora puden estar en Anulacion
+*SQL.ADD("   and B.NrBit <> 70          ")
+SQL.ADD("   and B.NrBit Not in (70,30) ")
+SQL.ADD("   and B.Valor = '1'          ")
+SQL.ADD(" Order By T.NrTrans,B.NrBit ")
+watch(SQL.BATCH())
+acn(z:5,0)
+Recorrer SQL
+  * No puede correr la contabilidad
+  acn(z:2,1)
+  if Val(z:5)=0
+    act(z:4,val(z:4) ~'MNOP ')
+    acn(z:5,1)
+  endif   
+  ACD(a:fac, FBN['Fecha1'])
+  ACT(b:fac, FBN['Especie'])
+  ACT(c:fac, FBN['Nombre'])
+  ACN(d:fac, FBN['Cantidad1'])
+  ACT(e:fac, FBN['Cuenta1'])
+  ACT(f:fac, FBN['NrTrans'])
+  ACLT(f:fac, FBN['NrTrans'])
+  ACT(g:fac, FBN['TipoTr2'])
+  ACT(h:fac, FBN['NrBit']~' - '~FBN['NomInst'])
+Proximo
+SetFont(a:val(w:1)..h:fac,4)
+FormatoCeldas(d:val(w:1)..d:fac,Exe('F2'))
+ifa
+ifa
+
+* Cerrar SIOPEL
+*MAC modo reporte
+if Dialogo.check2 = 0
+    EjecutarEvento('DESMAE',Check1=1)
+    act(a:fac,'Siopel desconectado')
+    SetFont(a:fac,2)
+    ifa
+    ifa
+else
+    act(a:fac,'Siopel No se desconecto por Simulacion cierre')
+    SetFont(a:fac,2)
+    ifa
+    ifa
+endif
+
+*MAC modo reporte
+if Dialogo.check2 = 0
+    EjecutarEvento('ANUOPE')
+    acn(z:6,0)
+    SQL.ADD(" Select O.NrOperacion From "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB Where O.NrOperacion = OB.NrOperacion and OB.NrBit=30 and OB.Valor = 1 ")
+    Recorrer SQL
+      dfa
+      ACT(z:7, val(z:7)~FBN['NrOperacion']~' ')
+      acn(z:6,1)
+    Proximo
+    if val(z:6)=1
+       ACT(a:fac,'Hay operaciones a eliminar liquidadas: '~val(z:7))
+       SetFont(a:fac,2)
+       ifa
+       ifa
+       * No puede correr la contabilidad
+       acn(z:2,1)
+       act(z:4,val(z:4) ~'ANUO ')
+    else   
+       ACT(a:fac,'Operaciones en anulacion eliminadas ')
+       SetFont(a:fac,2)
+       ifa
+       ifa
+    endif   
+else
+    acn(z:6,0)
+    SQL.ADD(" Select O.NrOperacion From "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB Where O.NrOperacion = OB.NrOperacion and OB.NrBit=30 and OB.Valor = 1 ")
+    Recorrer SQL
+      dfa
+      ACT(z:7, val(z:7)~FBN['NrOperacion']~' ')
+      acn(z:6,1)
+    Proximo
+    if val(z:6)=1
+       ACT(a:fac,'Hay operaciones a eliminar liquidadas: '~val(z:7))
+       SetFont(a:fac,2)
+       ifa
+       ifa
+       * No puede correr la contabilidad
+       acn(z:2,1)
+       act(z:4,val(z:4) ~'ANUO ')
+    else
+       ACT(a:fac,'Operaciones en anulacion No eliminadas por Simulacion cierre. Estado OK')
+       SetFont(a:fac,2)
+       ifa
+       ifa
+    endif
+endif
+
+IF Not Incluido('MTM', VAR('NOPRECIE'))
+    * Chequeo de MTM
+    acn(z:3, 0)
+    SQL.ADD("Select 1 FaltaMTM, O.Mercado4 ")
+    SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B, "~DBO~".MERCADOS M ")
+    SQL.ADD(" Where O.FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   AND O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   AND O.Mercado4=M.Codigo ")
+    * Se verifica que las ops cuyos MTM se liquidan o no (manuales) esten cargados
+    *    SQL.ADD("   AND O.MB4 = 1 ")
+    SQL.ADD("   AND O.MB4 in(1,2) ")
+    SQL.ADD("   AND O.TipoOp IN ('FXCF','FXVF','TICF','TIVF') ")
+    SQL.ADD("   and O.NrOperacion = B.NrOperacion ")
+    SQL.ADD("   and Not B.NrBit = 30 ")
+    SQL.ADD("   and B.Valor       = '1' ")
+    * Verifica todos los MTM manual y autom.
+    *SQL.ADD("   and M.MTM in(1,2)")
+    SQL.ADD("   and not Exists( ")
+    SQL.ADD("                  SELECT 1 FROM "~DBO~".MTM MT ")
+    SQL.ADD("                   WHERE Fecha="~IdxDate2(Dialogo.Fecha1))
+    SQL.ADD("                     and TipoMTM='MTM' ")
+    SQL.ADD("                     and Estado='PRO' ")
+    SQL.ADD("                     and MT.Mercado=O.Mercado4)")
+    SQL.ADD(" GROUP BY O.Mercado4 ")
+    watch(SQL.BATCH())
+    acn(z:5,0)
+    Recorrer SQL
+      *dfa
+      if FBN['FaltaMTM']=1
+        ACT(a:fac,'No se ejecuto correctamente el MTM del dia para '~FBN['Mercado4'])
+        SetFont(a:fac,2)
+        * No puede correr la contabilidad
+        acn(z:2,1)
+        if Val(z:5)=0
+          act(z:4,val(z:4) ~'MTM  ')
+          acn(z:5,1)
+        endif   
+        * MTM Erroneo
+        acn(z:3,1)
+      Endif
+    Proximo    
+    if val(z:3)=0
+       ACT(a:fac,'Se ejecuto correctamente el MTM del dia')
+    endif
+    SetFont(a:fac,2)
+    ifa
+    ifa
+Else
+    ACT(a:fac,'Se invalidó el MTM del dia')
+    SetFont(a:fac,2)
+    ifa
+    ifa
+Endif
+    
+* Chequeo de FIX
+acn(z:3, 0)
+SQL.ADD("Select 1 FaltaFix, O.Mercado4 ")
+SQL.ADD("  from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B, "~DBO~".MERCADOS M ")
+SQL.ADD(" WHERE O.Mercado4=M.Codigo ")
+SQL.ADD("   AND O.FechaVto = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   AND O.TipoOp IN ('FXCF','FXVF','TICF','TIVF') ")
+SQL.ADD("   and O.NrOperacion = B.NrOperacion ")
+SQL.ADD("   and Not B.NrBit = 30 ")
+SQL.ADD("   and B.Valor       = '1' ")
+SQL.ADD("   and not Exists( ")
+SQL.ADD("                  SELECT 1 FROM "~DBO~".MTM MT ")
+SQL.ADD("                   WHERE Fecha="~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("                     and TipoMTM='FIX' ")
+SQL.ADD("                     and Estado='PRO' ")
+SQL.ADD("                     and MT.Mercado=O.Mercado4)")
+SQL.ADD(" GROUP BY O.Mercado4 ")
+acn(z:5,0)
+
+Recorrer SQL
+   dfa
+   if FBN['FaltaFix']=1
+      ACT(a:fac,'No se ejecuto correctamente el Fixing del dia para '~FBN['Mercado4'])
+        * No puede correr la contabilidad
+        acn(z:2,1)
+        if Val(z:5)=0
+         act(z:4,val(z:4) ~'FIX  ')
+         acn(z:5,1)
+      endif   
+      * MTM Erroneo
+      acn(z:3,1)
+   Endif
+Proximo 
+if val(z:3)=0
+   ACT(a:fac,'Se ejecuto correctamente el Fixing del dia')
+endif
+SetFont(a:fac,2)
+
+ifa
+ifa
+act(a:fac,'Operaciones con cambios Pendientes de autorizar ')
+SetFont(a:fac,2)
+ifa
+   
+
+** Control de Operaciones con cambios Pendientes de autorizar
+SQL.ADD("SELECT NrOperacion, Cliente1, Especie, ContraEspecie, FechaOp, FechaVto, TasaEspecie, ")   
+SQL.ADD("       Arancel4, FechaAltaSisExterno, MercadoRB,Mercado4 ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES ")   
+SQL.ADD(" WHERE Tipoop in('FXCF','FXVF')")   
+SQL.ADD(" and MercadoRB='1' ")
+SQL.ADD(" ORDER BY Mercado4, FechaVto, NrOperacion ")
+watch(SQL.BATCH())
+act(a:fac,'Nro.Operacion')
+act(b:fac,'Cliente')
+act(c:fac,'Especie')
+act(d:fac,'ContraEspecie')
+act(e:fac,'FechaOp')
+act(f:fac,'FechaVto')
+act(g:fac,'Mercado')
+act(h:fac,'Fecha Vto Nueva')
+act(i:fac,'Especie Nueva')
+SetFont(a:fac..i:fac,3)
+AgregarMarco(a:fac..i:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+acn(z:5,0)
+Recorrer SQL
+  act(a:fac,FBN['NrOperacion'])
+  act(b:fac,FBN['Cliente1'])
+  act(c:fac,FBN['Especie'])
+  act(d:fac,FBN['ContraEspecie'])
+  act(e:fac,FBN['FechaOp'])
+  acd(f:fac,FBN['FechaVto'])
+  act(g:fac,FBN['Mercado4'])
+  acd(h:fac,FBN['FechaAltaSisExterno'])
+  act(i:fac,FBN['Arancel4'])
+
+  * No puede correr la contabilidad
+  acn(z:2,1)
+  if Val(z:5)=0
+    act(z:4,val(z:4) ~'AUTO ')
+    acn(z:5,1)
+  endif   
+Proximo
+SetFont(a:val(w:1)..j:fac,4)
+ifa
+ifa
+
+act(a:fac,'Operaciones en instancias incorrectas ')
+SetFont(a:fac,2)
+ifa
+** Control de Operaciones en instancias incorrectas
+SQL.ADD("SELECT I.NrInstancia, I.Nombre, O.NrOperacion, O.Cliente1, O.Especie, O.CB2, O.CB5  ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB , "~DBO~".INSTANCIAS I ")   
+SQL.ADD(" WHERE O.NrOperacion=OB.NrOperacion ")
+SQL.ADD("   and OB.NrBit in(9) ")
+SQL.ADD("   and OB.Valor=1 ")
+SQL.ADD("   and I.Tabla='OPERACIONES' and I.NrInstancia=NrBit ")
+SQL.ADD(" ORDER BY I.Nombre, O.NrOperacion ")
+watch(SQL.BATCH())
+act(a:fac,'Nro.Operacion')
+act(b:fac,'Cliente')
+act(c:fac,'Especie')
+act(d:fac,'Instancia')
+SetFont(a:fac..d:fac,3)
+AgregarMarco(a:fac..d:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+acn(z:5,0)
+
+Recorrer SQL
+    act(a:fac,FBN['NrOperacion'])
+    act(b:fac,FBN['Cliente1'])
+    act(c:fac,FBN['Especie'])
+    act(d:fac,FBN['NrInstancia']~' - '~FBN['Nombre'])
+
+    * No puede correr la contabilidad
+    
+    acn(z:2,1)
+    
+    if Val(z:5)=0
+       act(z:4,val(z:4) ~'IICO ')
+       acn(z:5,1)
+    endif   
+Proximo
+SetFont(a:val(w:1)..j:fac,4)
+ifa
+ifa
+
+#ifdef BIND
+    Message('Revisando fecha de inicio de saldo')
+    if Dialogo.check2 = 0
+       act(a:fac,'Fechas de inicio de saldo revisadas')
+       SetFont(a:fac,2)
+       EjecutarEvento('BLFECH', Fecha1=Dialogo.Fecha1)
+       ifa
+       ifa
+    else
+        act(a:fac,'No se corrió la revision fecha de inicio de saldo ')
+        SetFont(a:fac,2)
+        ifa
+        ifa
+    endif
+#endif
+
+Message('Informes ICL Disponible Negativo - CONU Vda con PICO Vig')
+act(a:fac,'Prestamos ICL Saldo Negativo ')
+SetFont(a:fac,2)
+ifa
+** Control de Saldo Negativo en CONU
+SQL.ADD("SELECT NrOperacion, Cantidad, FechaOp, FechaVto, CB1, ")
+SQL.ADD(" (Select "~DBO~".SaldoCONU(NrOperacion,'"~IdxDate(Dialogo.Fecha1)~"',1)) as Saldo ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES  ")   
+SQL.ADD(" WHERE TipoOp In ('CONU') and   FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' and (FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"'  or CB1=1) ")
+SQL.ADD("  and (Select "~DBO~".SaldoCONU(NrOperacion,'"~IdxDate(Dialogo.Fecha1)~"',1))<0 ")
+
+act(a:fac,'Nro.Operacion')
+act(b:fac,'Cantidad')
+act(c:fac,'Fecha Op')
+act(d:fac,'Fecha Vto')
+act(e:fac,'Saldo CONU')
+SetFont(a:fac..e:fac,3)
+AgregarMarco(a:fac..e:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+acn(z:5,0)
+
+Recorrer SQL
+    act(a:fac,FBN['NrOperacion'])
+    act(b:fac,FBN['Cantidad'])
+    act(c:fac,FBN['FechaOp'])
+    act(d:fac,iif(FBN['CB1']=0,FBN['FechaVto'],'EverGreen'))
+    act(e:fac,FBN['Saldo'])
+    
+     * No puede correr la contabilidad 
+     
+     acn(z:2,1)
+     
+     if Val(z:5)=0
+        act(z:4,val(z:4) ~'SNEG ')
+        acn(z:5,1)
+     endif   
+     
+Proximo
+SetFont(a:val(w:1)..j:fac,4)
+ifa
+ifa
+
+act(a:fac,'Prestamos ICL Vencimiento Posterior a CONU ')
+SetFont(a:fac,2)
+ifa
+** Control de FechaPago PICO 
+SQL.ADD("SELECT O.NrOperacion PICO, O.TipoOp , O.Cantidad, O.Cliente1, O.FechaOp, O.FechaPago, OC.NrOperacion CONU, OC.FechaVto  ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES O, "~DBO~".OPERACIONES OC  ")   
+SQL.ADD(" WHERE O.OperacionRef=OC.NrOperacion ")
+SQL.ADD("   and O.FechaPago > OC.FechaVto ")
+SQL.ADD("   and OC.CB1=0 and OC.FechaVto <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" ORDER BY O.NrOperacion, O.FechaPago ")
+
+act(a:fac,'Nro.Operacion')
+act(b:fac,'Tipo  Op.')
+act(c:fac,'Cliente')
+act(d:fac,'Cantidad')
+act(e:fac,'Fecha Conc')
+act(f:fac,'Fecha Pago')
+act(g:fac,'Nro.CONU')
+act(h:fac,'Fecha Vto CONU')
+
+SetFont(a:fac..h:fac,3)
+AgregarMarco(a:fac..h:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+
+Recorrer SQL
+    act(a:fac,FBN['PICO'])
+    act(b:fac,FBN['TipoOp'])    
+    act(c:fac,FBN['Cliente1'])
+    acn(d:fac,FBN['Cantidad'])
+    act(e:fac,FBN['FechaOp'])
+    act(f:fac,FBN['FechaPago'])
+    act(g:fac,FBN['CONU'])    
+    act(h:fac,FBN['FechaVto'])
+    
+    * No puede correr la contabilidad --- verificar si aplica
+    * acn(z:2,1)
+Proximo
+SetFont(a:val(w:1)..j:fac,4)
+ifa
+ifa
+
+act(a:fac,'Prestamos ICL Tasas y Spread Faltantes ')
+SetFont(a:fac,2)
+ifa
+** Tasa Variable
+SQL.ADD("SELECT Distinct(TipoTasa), Especie ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES  ")   
+SQL.ADD(" WHERE TipoOp In ('CONU') and  TipoTasa <> '' ")
+SQL.ADD("  and FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' and (FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"'  or CB1=1) ")
+SQL.ADD("  and (Select "~DBO~".SaldoCONU(NrOperacion,'"~IdxDate(Dialogo.Fecha1)~"',2))>0 ")
+SQL.ADD(" group by Especie,TipoTasa ")
+
+act(a:fac,'Cod. Tasa')
+act(b:fac,'Moneda')
+
+SetFont(a:fac..b:fac,3)
+AgregarMarco(a:fac..b:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+acn(z:5,0)
+   
+Recorrer SQL
+   if SQL("Select 1 from "~DBO~".TASASDIA where TipoTasa = '"~FBN['TipoTasa']~"' and Especie = '"~FBN['Especie']~"' and Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ") <>  1
+      act(a:fac,FBN['TipoTasa'])
+      act(b:fac,FBN['Especie'])
+      * No puede correr la contabilidad 
+      acn(z:2,1)
+      if Val(z:5)=0
+        act(z:4,val(z:4) ~'TVAR ')
+        acn(z:5,1)
+      endif   
+   Else
+      DFA
+   Endif   
+Proximo
+
+SetFont(a:val(w:1)..c:fac,4)
+ifa
+ifa
+** Spread Variable
+
+SQL.ADD("SELECT Distinct(Especie1), Especie ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES  ")   
+SQL.ADD(" WHERE TipoOp In ('CONU') and Especie1 <> '' ")
+SQL.ADD("  and   FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' and (FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"'  or CB1=1) ")
+SQL.ADD("  and (Select "~DBO~".SaldoCONU(NrOperacion,'"~IdxDate(Dialogo.Fecha1)~"',2))>0 ")
+SQL.ADD(" group by Especie,Especie1 ")
+
+
+act(a:fac,'Cod. Spread')
+act(b:fac,'Moneda')
+
+SetFont(a:fac..b:fac,3)
+AgregarMarco(a:fac..b:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+acn(z:5,0)
+   
+Recorrer SQL
+
+   if SQL("Select 1 from "~DBO~".COTIZACIONES where Codigo = '"~FBN['Especie1']~"' and Moneda = '"~FBN['Especie']~"' and Fecha = '"~IdxDate(Dialogo.Fecha1)~"' and (CallPut='CON' or CallPut is Null) ") <>  1
+      act(a:fac,FBN['Especie1'])
+      act(b:fac,FBN['Especie'])
+      * No puede correr la contabilidad 
+       acn(z:2,1)
+       
+       if Val(z:5)=0
+         act(z:4,val(z:4) ~'SPRE ')
+         acn(z:5,1)
+      endif   
+   Else 
+      DFA   
+   Endif   
+
+Proximo
+
+SetFont(a:val(w:1)..c:fac,4)
+ifa
+ifa
+
+*i*f EQSTR(VAR('INSTALACIO'),'MLASA')
+#ifdef MLASA
+   * Informe de Limites Perfilamiento Clientes 
+   act(a:fac,'Limites Perfilamiento Clientes')
+   SetFont(a:fac,2)
+   ifa
+   ACT(a:FAC, 'Cliente')
+   ACT(b:FAC, 'Limite')
+   ACT(c:FAC, 'Descripcion')
+   ACT(d:FAC, 'Moneda')
+   ACT(e:FAC, 'Estado')
+   ACT(f:FAC, 'Consumido')
+   ACT(g:FAC, 'Asignado')
+   ACT(h:FAC, 'Exceso')
+
+   SetFont(a:fac..h:fac,3)
+   AgregarMarco(a:fac..h:fac,2,0,EXE('COLOR6'))
+   acn(w:1,fac+1)
+
+   SQL.ADD(" Select * from ( ")
+   SQL.ADD("Select ClienteLC, limiteLC, MConsumido, ISNULL(LA.FVencimiento,'1900-03-03') FVto,ISNULL(LA.Cliente,'NOASIGNADO') ClienteLA, ISNULL(LA.Monto,0) MAsignado, TL.Descripcion ")
+   SQL.ADD("From (select LC.Cliente ClienteLC, LC.limite LimiteLC, SUM(LC.Monto) as MConsumido from "~DBO~".LIMCONSUMIDOS LC ")
+   SQL.ADD("       where LC.Limite in ('VOLOPE','CANOPE') ")
+   SQL.ADD("       Group by Cliente,Limite) as Aux ")
+   SQL.ADD(" Left JOIN "~DBO~".LIMASIGNADOS LA WITH (NOLOCK) ON  LA.Cliente=ClienteLC and LA.Limite = LimiteLC ")
+   SQL.ADD(" Left JOIN "~DBO~".TIPOSLIMITE TL WITH (NOLOCK) ON TL.Codigo= LimiteLC ")
+   SQL.ADD("  ) as Aux1  ")
+   SQL.ADD("  where (MConsumido > MAsignado) or Fvto < '"~IdxDate(Dialogo.Fecha1)~"' ")
+   SQL.ADD(" Order by ClienteLC, limiteLC ")
+   Recorrer SQL
+    
+      ACT(a:fac, FBN['ClienteLC'])
+      ACT(b:fac, FBN['LimiteLC'])
+      ACT(c:fac, FBN['Descripcion'])    
+      ACT(d:fac, 'USD')
+      if Not EqStr(FBN['ClienteLA'],'NOASIGNADO')
+      *  Asignado Cliente
+         if FBN('FVto')<FSys
+            ACT(e:fac, 'Vencido el '~Fecha(FBN('FVto')))
+         else
+            ACT(e:fac, 'Vigente')
+         endif
+     else
+     *   Sin Limite Asignado
+         ACT(e:fac, 'No Asignado')
+     endif
+  
+     * Consumido
+     ACN(f:fac, FBN('MConsumido'))
+     * Asignado
+     ACN(g:fac, FBN('MAsignado'))
+  
+     if Val(f:FAC)>Val(g:FAC)
+        ACN(h:FAC, Val(f:FAC)-Val(g:FAC))
+     endif
+  Proximo
+
+  SetFont(a:val(w:1)..h:fac,4)
+  FormatoCeldas(f:val(w:1)..h:fac,Exe('F2'))
+  ifa
+  ifa
+#endif
+
+** Ordenes OTIC / OTIV mueve instancias Ejecutada(9), Vencida(10) y Anulada Remanente(11) a terminal (170)
+
+*MAC modo reporte
+if Dialogo.check2 = 0
+    SQL.ADD("SELECT ORD.NrOrden, B.NrBit  ")
+    SQL.ADD("  FROM "~DBO~".ORDENES ORD, "~DBO~".OPERACIONESBITS B ")
+    SQL.ADD(" WHERE ORD.NrOrden=B.NrOperacion ")
+    SQL.ADD("   AND ORD.FechaOrden="~IdxDate2(Dialogo.Fecha1))
+    SQL.ADD("   AND ORD.TipoOrden in('OTIC','OTIV') ")
+    SQL.ADD("   AND B.NrBit in( 9,10,11 ) ")
+    SQL.ADD("   AND B.Valor=1 ")
+    watch(SQL.BATCH())
+    Recorrer SQL
+        dfa
+       EjecutarEvento('CBOINS', String1=FBN['NrOrden'], Radio1=1, Radio2=0, Entero1=FBN['NrBit'], Entero2=170)   
+    Proximo
+else
+    act(a:fac,'No cambio ordenes de Instancia por Simulacion cierre')
+    SetFont(a:fac,2)
+    ifa
+    ifa
+endif
+
+** Control de Ordenes OTIC / OTIV en instancias incorrectas
+act(a:fac,'Ordenes en instancias incorrectas ')
+SetFont(a:fac,2)
+ifa
+act(a:fac,'Orden')
+act(b:fac,'Fecha Orden')
+act(c:fac,'Cliente')
+act(d:fac,'Especie')
+act(e:fac,'Instancia')
+SetFont(a:fac..e:fac,3)
+AgregarMarco(a:fac..e:fac,2,0,EXE('COLOR6'))
+acn(w:1,fac+1)
+
+SQL.ADD("SELECT I.NrInstancia, I.Nombre, O.TipoOrden, O.NrOrden, O.FechaOrden, O.Cliente, O.Especie, O.CB2, O.CB5  ")
+SQL.ADD("  FROM "~DBO~".ORDENES O, "~DBO~".OPERACIONESBITS OB , "~DBO~".INSTANCIAS I ")   
+SQL.ADD(" WHERE O.NrOrden=OB.NrOperacion ")
+SQL.ADD("   and O.TipoOrden in('OTIC','OTIV') ")
+SQL.ADD("   and O.FechaOrden<="~Dialogo.Fecha1)
+SQL.ADD("   and OB.NrBit Not in(170,30) ")
+SQL.ADD("   and OB.Valor=1 ")
+SQL.ADD("   and I.Tabla='ORDENES' and I.NrInstancia=NrBit ")
+SQL.ADD(" ORDER BY I.Nombre, O.NrOrden ")
+watch(SQL.BATCH())
+acn(z:5,0)
+Recorrer SQL
+  act(a:fac,FBN['TipoOrden']~' - '~FBN['NrOrden'])
+  act(b:fac,FBN['FechaOrden'])
+  act(c:fac,FBN['Cliente'])
+  act(d:fac,FBN['Especie'])
+  act(e:fac,FBN['NrInstancia']~' - '~FBN['Nombre'])
+  * No puede correr la contabilidad
+  acn(z:2,1)
+  if Val(z:5)=0
+    act(z:4,val(z:4) ~'OICO ')
+    acn(z:5,1)
+  endif   
+Proximo
+SetFont(a:val(w:1)..j:fac,4)
+ifa
+ifa
+
+** Control de Ordenes TMANIF en instancias incorrectas
+SQL.ADD("SELECT I.NrInstancia, I.Nombre, O.TipoOrden, O.NrOrden, O.Cliente, O.Especie, O.CB2, O.CB5  ")
+SQL.ADD("  FROM "~DBO~".ORDENES O, "~DBO~".OPERACIONESBITS OB , "~DBO~".INSTANCIAS I ")   
+SQL.ADD(" WHERE O.NrOrden=OB.NrOperacion ")
+SQL.ADD("   and O.TipoOrden in('TMANIF') ")
+SQL.ADD("   and O.FechaOrden<="~Dialogo.Fecha1)
+SQL.ADD("   and ((O.FechaOrden <="~IdxDate2(Dialogo.Fecha1)~" and O.FechaVto> "~IdxDate2(Dialogo.Fecha1)~" and OB.NrBit not in(104,170,30)  and OB.Valor=1 ) ")
+SQL.ADD("       or(O.FechaVto>= "~IdxDate2(Dialogo.Fecha1)~" and OB.NrBit not in(170,30) and OB.Valor=1)) ")
+SQL.ADD("   and I.Tabla='ORDENES' and I.NrInstancia=NrBit ")
+SQL.ADD(" ORDER BY I.Nombre, O.NrOrden ")
+watch(SQL.BATCH())
+acn(z:5,0)
+Recorrer SQL
+    act(a:fac,FBN['TipoOrden']~' - '~FBN['NrOrden'])
+    act(b:fac,FBN['Cliente'])
+    act(c:fac,FBN['Especie'])
+    act(d:fac,FBN['NrInstancia']~' - '~FBN['Nombre'])
+    * No puede correr la contabilidad
+    acn(z:2,1)
+    if Val(z:5)=0
+       act(z:4,val(z:4) ~'TMIC ')
+       acn(z:5,1)
+    endif   
+Proximo
+SetFont(a:val(w:1)..j:fac,4)
+ifa
+
+if SQL("SELECT 1 WHERE Exists(Select 1 FROM "~DBO~".OPERACIONES WHERE TipoOp in ('TIC','TIV')) ")=1
+    * Se Corrio el cierre garantizado
+    if SQL("SELECT Count(*) from "~DBO~".FLAGSMERCADO WHERE Fecha="~IdxDate2(Dialogo.Fecha1)~" and Registro='CGAR' and Estado='PRO' and Paso in (0,1) ")=2
+       act(a:fac, 'Cierre Rueda Garantizado Ok')
+       SetFont(a:fac,2)
+       ifa
+       ifa
+    else
+       act(a:fac, 'Falta correr el cierre de la Rueda Garantizada')
+       SetFont(a:fac,2)
+       * No puede correr la contabilidad
+       acn(z:2,1)
+       ifa
+       ifa
+       act(z:4,val(z:4) ~'CGAR ')
+    endif 
+endif
+
+* Se Corrio el cierre licitaciones
+*Falta
+
+* FJL 16/01/23 - Control operaciones con mas de un cupon
+#ifdef MLASA
+    act(a:fac,'Operaciones de titulos operadas con distinto Cupon')
+    SetFont(a:fac,2)
+    ifa
+    ifa
+    act(a:fac,'Operacion')
+    act(b:fac,'TipoOp')
+    act(c:fac,'Fecha Op.')
+    act(d:fac,'Fecha Vto.')
+    act(e:fac,'Cliente')
+    act(f:fac,'Especie')
+    act(g:fac,'Cupon')
+    SetFont(a:fac..g:fac,3)
+    AgregarMarco(a:fac..g:fac,2,0,EXE('COLOR6'))
+    acn(w:1,fac+1)
+    SQL.ADD("SELECT Especie, Cupon1 ")
+    SQL.ADD("  FROM "~DBO~".OPERACIONES  ")   
+    SQL.ADD(" WHERE TipoOp  In ('TIC','TIV') ")
+    * FJL 22/03/23 - A pedido de Gustavo solo Ops del dia
+    *  SQL.ADD("   and FechaOp >= '"~IdxDate(Dialogo.Fecha1-7)~"' ")
+    *  SQL.ADD("   and FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   and FechaOp = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" group BY Especie, Cupon1 ")
+    SQL.ADD(" ORDER BY Especie, Cupon1 ")
+    watch(SQL.BATCH())
+    Recorrer SQL
+        DFA
+        if EqStr(fbn('Especie'),Val(v:1)) y Not EqStr(fbn('Especie'),Val(v:2))
+            ACT(v:2, fbn('Especie'))
+            SQL.ADD("SELECT * ")
+            SQL.ADD("  FROM "~DBO~".OPERACIONES  ")
+            SQL.ADD(" WHERE TipoOp  In ('TIC','TIV') ")
+            SQL.ADD("   and Especie = '"~fbn('Especie')~"' ")
+            * FJL 22/03/23 - A pedido de Gustavo solo Ops del dia
+            *      SQL.ADD("   and FechaOp >= '"~IdxDate(Dialogo.Fecha1-7)~"' ")
+            *      SQL.ADD("   and FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+            SQL.ADD("   and FechaOp = '"~IdxDate(Dialogo.Fecha1)~"' ")
+            SQL.ADD(" ORDER BY Especie, Cupon1, NrOperacion ")
+            Recorrer SQL
+                SCN(v:3, 1)
+                act(a:fac, FBN['NrOperacion'])
+                act(b:fac, FBN['TipoOp'])
+                acd(c:fac, FBN['FechaOp'])
+                acd(d:fac, FBN['FechaVto'])
+                act(e:fac, FBN['Cliente1'])
+                act(f:fac, FBN['Especie'])
+                act(g:fac, FBN['Cupon1'])
+            Proximo
+        endif
+        ACT(v:1, fbn('Especie'))
+    Proximo
+    if Val(v:3)=0
+        ifa
+        act(a:fac, 'No hay Operaciones con posible conflicto.')
+    endif
+    SetFont(a:val(w:1)..e:fac,4)
+    ifa
+    ifa
+#endif     
+
+*MAC 18/07/2023-la regeneraicon de saldos de moneda
+IF Dialogo.check2 = 0
+    *EjecutarEvento('SALD81', Fecha1=Habiles(Dialogo.Fecha1,1,'ARG',SI),Fecha2=PriDeMes(Habiles(Dialogo.Fecha1,-1,'ARG',SI),SI) )
+    EjecutarEvento('SALD81', Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha1)
+else
+    act(a:fac,'No ejecuto la regeneración de saldos de moneda por Simulacion cierre')
+    SetFont(a:fac,2)
+    ifa
+    ifa
+endif
+
+*Control partidas
+act(a:fac,'Operaciones no asignadas a partidas ')
+SetFont(a:fac,2)
+ifa
+act(a:fac,'NrOperacion')
+act(b:fac,'FechaOp')
+act(c:fac,'Especie')
+act(d:fac,'Cliente')
+SetFont(a:fac..d:fac,3)
+AgregarMarco(a:fac..d:fac,2,0,EXE('COLOR6'))
+
+*Me fijo si hay Books que usan partidas
+let &book     ''
+(.'BOOKPARTID'.)
+Recorrer SQL
+    DFA
+    ACT(BK:1, Val(BK:1)~'|'~fbn('Books'))
+Proximo
+
+IF Elementos(Val(BK:1)) > 0
+    *Hay Books que usan partidas
+    *Verifico que no haya operaciones no asignadas a Partidas
+    let &opsNoAsignadasPartidas 0
+    (.'OPNOASPAR'.)
+    Recorrer SQL
+        let &opsNoAsignadasPartidas &opsNoAsignadasPartidas+1
+        act(a:fac,fbn('NrOperacion'))
+        act(b:fac,fbn('FechaOp'))
+        act(c:fac,fbn('Especie'))
+        act(d:fac,fbn('Cliente1'))
+    Proximo
+    
+    IF &opsNoAsignadasPartidas > 0
+        ACN(Z:2,1)
+        ACT(z:4,val(z:4) ~'PART ')
+    ENDIF
+    ifa
+    ifa
+ENDIF
+ifa
+ifa
+
+**Control de precios BYMA
+(.'CHECKPREBY'.)
+ifa
+ifa
+**Chequea instancias intermedias de cuentas remuneradas
+ACT(a:FAC, 'Operaciones de cuentas remuneradas en instancias intermedias')
+SetFont(a:fac,2)
+IFA
+IFA
+(.'CIERREM'.)
+IF &cuentasrem > 0
+    ACN(Z:2,1)
+    ACT(z:4,val(z:4) ~'IREM')
+ENDIF
+*MAC modo reporte
+if Dialogo.check2 = 0
+    if Val(z:2)>=1 y Dialogo.Check1=1
+        ACT(a:fac,'No es posible correr la contabilidad')
+        SetFont(a:fac,2)
+        Messagebox('El precierre ha sido cancelado por falta de datos')
+
+        ifa
+    else
+        *    Se pasó a la generacion contable
+        *    * Revaluar operaciones y transacciones en dolares
+        *    Message('Regenera posiciones de Ops/Tr en dolares')
+        *    EjecutarEvento('REGPOS', Fecha1=Dialogo.Fecha1,Check1=1)
+        *   * Reset Precio
+        *   Message('Resetea precio posicion')
+        *   EjecutarEvento('RESPCO', Fecha1=Dialogo.Fecha1,Especie1='',Check3=1,Check4=1,Check1=1,Check2=1 )
+        * Pasa Operaciones a Compliance
+        Message('Moviendo Operaciones a Compliance')
+        EjecutarEvento('MOOPAU', Fecha1=Dialogo.Fecha1, Check1=1 )
+        Message('Actualizando operaciones de cuentas remuneradas')
+        EjecutarEvento('FINREM', Fecha1=Dialogo.Fecha1,Fecha2=Habiles(Dialogo.Fecha1,1,Var('FERIDEF'))-1)
+       
+        
+        * Corte
+        Message('Genera corte automatico')
+        EjecutarEvento('CORTE7', Fecha1=Dialogo.Fecha1 )
+
+        Message('Calculo diario Interes ICL')
+        EjecutarEvento('ICLDEV', Fecha1=Dialogo.Fecha1,Fecha2=Habiles(Dialogo.Fecha1,1,'ARG',SI)-1,Fecha3=Habiles(Dialogo.Fecha1,1,'USA',SI)-1,Vehiculo1=Var('VEHICULODE') )
+        EjecutarEvento('CONT0',Fecha1=Dialogo.Fecha1,Vehiculo1=Var('VEHICON'),Radio1=4,Radio2=Var('RETIDIARIO'),Check1=1)
+        ACT(a:fac,'Contabilidad generada')
+        ***---Inicializo Variable de Control de corridas contables
+        SQL.ADD(" Update "~DBO~".VARIABLES Set Valor='NO' Where Codigo='CONTAPROCE' ")
+        SQL.NEW
+        SQL.EXEC
+
+        LinkearHoja('ASIDES',1,Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha1,NrUnicoAsiento1='',Lista1='',Lista2='')
+        SetFont(a:fac,2)
+        ifa
+        ifa
+        *    i*f Eqstr(VAR('INSTALACIO'),'MLASA')
+        #ifdef MLASA
+          Message('Actualizando Especies por PME')
+          EjecutarEvento('PMEUPD', Lista1='' )
+        #endif
+        
+        *  i*f Eqstr(VAR('INSTALACIO'),'MLASA') y NO
+        #ifdef MLASA
+           if NO
+              * Copiativos Hojas Moviles
+              Message('Libro de Cartera')
+              LinkearHoja('LIBCAR',1,Fecha1=Fsys,Radio1=1,Radio2=1,Vehiculo1=VAR('VEHICULODE'))
+              CerrarHoja('LIBCAR',1)
+           
+              Message('Libro de Caja')    
+              LinkearHoja('LICAJC',1,Fecha1=Fsys,Fecha2=Fsys,Radio1=1,Radio2=1,Vehiculo1=VAR('VEHICULODE'),Check1=1,ListaTabla1='',ListaTabla2='')
+              CerrarHoja('LICAJC',1)    
+           
+              Message('Copiativo Boletos MAE -ROFEX')    
+              LinkearHoja('COPIAT',1,Fecha1=Fsys,Fecha2=Fsys,Radio1=1,Radio2=1,Vehiculo1=VAR('VEHICULODE'),Especie1='ARP')
+              CerrarHoja('COPIAT',1)
+           ENDIF
+        #endif
+        *Cierre de Reportes opcional dependiendo el valor de la variable CIEREPO *      
+        
+        *Llamada a interfaces CMF  
+        #ifdef CMF
+            *Llamada a Interfaz contable
+            EjecutarEvento('INTCON',Fecha1=Dialogo.Fecha1,Directorio1=VAR('PATHINTCON'),Check1=1,Check2=1)
+            ACT(a:fac,'Interface contable ejecutada')
+            SetFont(a:fac,2)
+          
+            *Llamada a Interfaz Envio Operaciones de Call
+            EjecutarEvento('INTCAL',Fecha1=Dialogo.Fecha1,Directorio1=VAR('PATHINTCAL'),Check1=1)
+            ACT(a:fac,'Interfaz de call ejecutada')
+            SetFont(a:fac,2)
+            
+            *Llamada a Interfaz Lavado de Dinero
+            EjecutarEvento('INTLAV',Fecha1=Dialogo.Fecha1,Directorio1=VAR('PATHINTLAV'),Check1=1)
+            ACT(a:fac,'Interfaz de lavado ejecutada')
+            SetFont(a:fac,2)
+            
+            *Llamada a Interfaz Envio Operaciones de CREM
+            EjecutarEvento('INTREM',Directorio1=Var('PATHINTREM'),Fecha1=Dialogo.Fecha1,Check1=0,Lista1='', Dialogo.Check2=1)
+            ACT(a:fac,'Interfaz de Cuentas Remuneradas ejecutada')
+            SetFont(a:fac,2)
+
+            
+        #endif
+        
+        if EQSTR(VAR('RECALTASA'),'SI') 
+            EjecutarEvento('MODTAS',Fecha1=Dialogo.Fecha1)
+            ACT(a:fac,'Se revisaron las tasas de transferencia')
+            SetFont(a:fac,2)
+        endif
+        
+        if EQSTR(VAR('CIEREPO'),'SI') 
+        Message('Generando auditoria de cierre')
+            LinkearHoja('LOGCIE',1,Fecha1=Dialogo.Fecha1)
+            ACT(a:fac,'Listados de auditoria emitidos')
+            SetFont(a:fac,2)
+            ifa
+        else
+            Message('Auditoria de cierre no generada')
+            ACT(a:fac,'Listados de auditoria no fueron emitidos')
+            SetFont(a:fac,2)
+            ifa
+        endif
+            
+        If Dialogo.Check1=0 y val(z:2)>=1
+           * Cierra forzado con error
+           ifa
+           ACT(a:fac,'Se ejecutaron los procesos de cierre manualmente con errores ')
+           SetFont(a:fac,2)
+        endif
+        * No se puede hacer por UPD
+        * Cambio de fecha
+        if EqStr(var('CAMBIOFECH'),'SI') 
+           ACD(x:1,HABILES(Dialogo.Fecha1,1,'ARG'))
+*           sql.add(" Update  "~DBO~".Variables Set valor = '"~val(x:1)~"' where codigo = 'FECHASYS' ")
+*           sql.new
+*           sql.exec
+           AbrirDia(val(x:1),SI,NO)
+           ifa
+           ifa
+           ACT(a:fac,'Se cambio el dia al '~val(x:1))
+           SetFont(a:fac,2)
+        endif        
+    endif
+    **Procesos Post Cierre
+    Message('Capitalizacion Interes ICL')
+    EjecutarEvento('ICLDIA', Fecha1=Habiles(Dialogo.Fecha1,1,'ARG',SI),Fecha2=PriDeMes(Habiles(Dialogo.Fecha1,-1,'ARG',SI),SI),Fecha3=FinDeMes(Habiles(Dialogo.Fecha1,-1,'ARG',SI),SI),Fecha4=PriDeMes(Dialogo.Fecha1,NO,'ARG'),Vehiculo1=Var('VEHICULODE') )
+
+    
+     **Cambio de Fecha
+    
+
+    
+    
+else
+    #ifdef MLASA
+    #else
+       IF VACIO(TRIM(val(z:4)))
+          Messagebox('No hay Faltantes ')    
+       else
+          Messagebox('Faltantes *'~val(z:4)~'*')    
+       endif   
+    #endif
+    act(a:fac,'No ejecuto Ejecuto el cierre del dia por Simulacion cierre')
+    SetFont(a:fac,2)
+    ifa
+    ifa
+endif
+
+ACO(1,10)
+ACO(2,15)
+ACO(3,10)
+ACO(4,12)
+ACO(5,10)
+ACO(6,15)
+ACO(7,10)
+ACO(8,10)
+ACO(9,20)
+ACO(10,10)
+ACO(11,20)
+
+LimitesVision(n:fac+2)
+AutoFit(SI)
+
+

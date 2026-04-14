@@ -1,0 +1,89 @@
+MostrarCuadroDeMensajes()
+creardialogo
+fecha1: 'Fecha';1;;;;;;;;FSys()
+lista1: 'Vehiculos';3;;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), SQLSet("Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo = '"~UsuarioActivo()~"'"))
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Message('--- Reversa de Asientos de Resultado ---')
+
+Sqladd("select Min(FechaOp) MinFechaOp,Especie,Vehiculo1 from ( ")
+Sqladd("select FechaOp,Especie,Vehiculo1 from "~Dbo()~".OPERACIONES where ")
+Sqladd("FechaCargaSys =  '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd("AND FechaOp < FechaCargaSys ")
+Sqladd("AND TipoOp in ('FCR','FCS','SECS','SEVS') ")
+Sqladd("AND (CantImpresiones3 Is Null OR CantImpresiones3 = '' OR CantImpresiones3 = ' ') ")
+Sqladd("UNION ")
+Sqladd("select FechaOp,Especie,Vehiculo1 from "~Dbo()~".BOPERACIONES ")
+Sqladd("where CONVERT (Char(10), FechaDel, 103) = '"~Fecha(dialogo.fecha1, 'DD/MM/YYYY')~"' ")
+Sqladd("AND FechaOp < '"~IdxDate(dialogo.fecha1)~"'")
+Sqladd("AND TipoOp in ('FCR','FCS','SECS','SEVS') ")
+Sqladd("AND (CantImpresiones3 Is Null OR CantImpresiones3 = '' OR CantImpresiones3 = ' ') ")
+Sqladd(") a Group By Vehiculo1, Especie ")
+recorrer sql
+Act(vh:1, Fbn('Vehiculo1'))
+Act(es:1, Fbn('Especie'))
+Sqladd(" Select A.FechaValor,A.NrUnicoAsiento from "~Dbo()~".ASIENTOSCON A, "~Dbo()~".ASIENTOSCON1 A1, "~Dbo()~".MODELOSASIENTO MA where ")
+Sqladd(" A.NrUnicoAsiento = A1.NrUnicoAsiento AND A.Modelo = MA.Codigo ")
+Sqladd(" AND A.FechaValor >= '"~IdxDate(Fbn('MinFechaOp'))~"' ")
+Sqladd(" AND A.Vehiculo = '"~Fbn('Vehiculo1')~"' AND A.Estado='E' ")
+Sqladd(" AND A1.Alias7 = '"~Fbn('Especie')~"' AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIRZ'))~") ")
+Sqladd(" AND (A.NrAsiento Is Null OR A.NrAsiento = '' OR  A.NrAsiento = ' ') ")
+Sqladd(" Group By A.FechaValor,A.NrUnicoAsiento ")
+recorrer sql
+Ejecutarevento('CONT46', 'fecha1', dialogo.fecha1, 'fecha2', Fbn('FechaValor'), 'nrunicoasiento1', Fbn('NrUnicoAsiento'))
+Sqladd(" Select NrOperacion, 0 BD1 from "~Dbo()~".OPERACIONES where ")
+Sqladd(" FechaCargaSys =  '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND FechaOp < FechaCargaSys ")
+Sqladd(" AND TipoOp in ('FCR','FCS','SECS','SEVS') ")
+Sqladd(" AND (CantImpresiones3 Is Null OR CantImpresiones3 = '' OR CantImpresiones3 = ' ') ")
+Sqladd(" AND Vehiculo1 = '"~Val(vh:1)~"' ")
+Sqladd(" AND Especie = '"~Val(es:1)~"' ")
+Sqladd(" UNION ")
+Sqladd(" Select NrOperacion, 1 BD1 from "~Dbo()~".BOPERACIONES ")
+Sqladd(" where CONVERT (Char(10), FechaDel, 103) = '"~Fecha(dialogo.fecha1, 'DD/MM/YYYY')~"' ")
+Sqladd(" AND FechaOp < '"~IdxDate(dialogo.fecha1)~"'")
+Sqladd(" AND TipoOp in ('FCR','FCS','SECS','SEVS') ")
+Sqladd(" AND (CantImpresiones3 Is Null OR CantImpresiones3 = '' OR CantImpresiones3 = ' ') ")
+Sqladd(" AND Vehiculo1 = '"~Val(vh:1)~"' ")
+Sqladd(" AND Especie = '"~Val(es:1)~"' ")
+recorrer sql
+if (Fbn('BD1') = 0)
+Sqladd(" Update "~Dbo()~".OPERACIONES ")
+else
+Sqladd(" Update "~Dbo()~".BOPERACIONES ")
+endif
+Sqladd(" Set CantImpresiones3 = 1 ")
+Sqladd(" Where NrOperacion = '"~Fbn('NrOperacion')~"' ")
+Sqlnew()
+Sqlexec()
+proximo
+proximo
+proximo
+
+Sqladd(" SELECT Min(FechaOp) MinFechaOp,Especie,Vehiculo1 FROM ( ")
+Sqladd(" SELECT O.FechaOp , O.Especie Especie, O.Vehiculo1 Vehiculo1")
+Sqladd(" FROM "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".OPERACIONES O, "~Dbo()~".MOVEJECUTADOS M ")
+Sqladd(" WHERE T.NrOperacionRef1 = O.NrOperacion ")
+Sqladd(" AND   T.Especie NOT IN ("~Pipe2Comillas(Descendientes('ESPECIES', 'MONEDA'))~")  ")
+Sqladd(" AND   T.NrTrans     =  M.NrTrans2 ")
+Sqladd(" AND O.TipoOp in ('FCR','FCS','SECS','SEVS') ")
+Sqladd(" and T.TipoTr2 in ('DEP','RET') ")
+Sqladd(" AND M.NrOperacion = O.NrOperacion ")
+Sqladd(" AND M.NrSaldo = 1 ")
+Sqladd(" AND T.Cantidad1 > 0 ")
+Sqladd(" AND T.Vehiculo1 IN ("~Pipe2Comillas(Var('VLIQUIDA')~Var('VLIQUIDA2'))~") ")
+Sqladd(" AND T.Fecha1 = '"~IdxDate(dialogo.fecha1)~"' AND T.Fecha2 < '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" ) query Group By Vehiculo1, Especie ")
+recorrer sql
+recorrer&i Fbn('MinFechaOp'), Habiles(dialogo.fecha1, -1)
+if (EsHabil(&i))
+Ejecutarevento('ANUASI', 'fecha1', &i, 'fecha2', &i, 'lista2', Fbn('Vehiculo1'), 'lista3', Fbn('Especie'), 'listatabla1', '', 'lista1', Var('TIPASIRZ'))
+Ejecutarevento('CONT47', 'fecha1', (&i), 'lista1', Fbn('Vehiculo1'), 'lista2', Fbn('Especie'))
+endif
+proximo
+proximo
+

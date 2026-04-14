@@ -1,0 +1,424 @@
+﻿* UPFRN - Modificacion de FRN y Sindicados MV
+* Hojavisible(si)
+CrearDialogo
+  NrOperacion1 : "Operacion"             ;1;1;;;;Incluido(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'MMFCMV|MMSCMV|');'La Operacion seleccionada no es un FRN o Sindicado Cabecera MV';NO;;;SQLSET("SELECT NrOperacion FROM "~DBO~".OPERACIONES Where TipoOp IN ('MMSCMV','MMFCMV') Order By NrOperacion")
+  Entero2      : "Ult_Cuota"             ;2;2;;NO;;;;;;BuscarCampo('Operaciones','Cuotas1','NrOperacion',Dialogo.NrOperacion1)
+  Cantidad2    : 'Cap_Utilizado'         ;2;1;;NO;;;;;;BuscarCampo('Operaciones','TotalBrutoCli2','NrOperacion',Dialogo.NrOperacion1);
+  Cantidad1    : 'Sum(Tasa_Amort)'       ;;;;NO;;;;;;SQL("SELECT Sum(Tasa1) as SumTasa FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota<"~Fstr(Dialogo.Entero2,0,0)~" ");
+  Fecha3       : "A Partir de"           ;1;2;;Dialogo.Check3=1;Dialogo.Check3=1;NOVACIO(Dialogo.Fecha3);'Fecha Incorrecta';NO;Fsys;
+  Check1       : "Capital   ?"           ;5;1;;;;;;;;;
+  Check2       : "Fecha Vto ?"           ;;;;;EqStr(BuscarCampo('Operaciones','RB9','NrOperacion',Dialogo.NrOperacion1),'1');;;;;;
+  Check3       : "DayCount  ?"           ;;;;;;;;
+  Check4       : "Tipo Tasa ?"           ;;;;;;;;;;;
+  Entero1      : "Cuota_A_Mod"           ;5;2;;;;Dialogo.Entero1<=Dialogo.Entero2;'El Nro. de Cuota es Invalido';NO;;;
+  Check5       : "Spread    ?"           ;;;;;Dialogo.Entero1>0;;;;;;
+  Check7       : "TTN?"                  ;;;;;Dialogo.Entero1>0;;;;;;
+  Check9       : "Tasa_Amort?"           ;;;;;Dialogo.Entero1=Dialogo.Entero2;;;;0;;
+  Check10      : "Definitivo?"           ;;;;;Dialogo.Entero1=Dialogo.Entero2 y Dialogo.Check9=1;;;;0;;
+  Radio1       : "Fin_Per|No|Si"         ;;;;;Dialogo.Entero1=Dialogo.Entero2;;;;0;;
+  Radio2       : "Settlement|No|Si"      ;;;;;Dialogo.Entero1=Dialogo.Entero2;;;;0;;
+  Radio3       : "Tasa_Int|No|Si"        ;;;;;Dialogo.Entero1=Dialogo.Entero2;;;;0;;
+  Radio4       : "Interes|No|Si"         ;;;;;Dialogo.Entero1=Dialogo.Entero2 y Dialogo.Check3+Dialogo.Check5+Dialogo.Check9+Dialogo.Radio1+Dialogo.Radio3=0;;;;0;;  
+  Fecha7       : 'FechaCargaSys'         ;;;;NO;;;;;;BuscarCampo('Operaciones','FechaCargaSys','NrOperacion',Dialogo.NrOperacion1);
+FinDialogo
+
+If not Ok
+ Cancelar
+EndIf
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+* Verifico que se encuentre en Back Office o Terminal 
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+
+*- Solamente valido que se encuentre en back office o terminal si 
+*- no ejecuta el evento el dia de la carga de la operacion y la instancia actual es concertacion
+If VAL(X1)<>20 y VAL(X1)<>50 y Not [Dialogo.Fecha7=Fsys y VAL(X1)=1]
+   *-- Busco la instancia actual
+   Cancelar("La Operacion "~Dialogo.NrOperacion1~" Debe estar en BackOffice o Terminal. Instancia Actual="~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+ACN(xx1,0)
+If Dialogo.Fecha7=Fsys y VAL(X1)=1
+   *- Seteo xx1 para que no se pase a supervision especial
+   ACN(xx1,1)
+EndIf
+
+SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+SQL.ADD("where OperacionRef = '"~Dialogo.NrOperacion1~"' ")
+
+Recorrer SQL
+   * Verifico que se encuentre en Back Office o Terminal
+   ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~FBN['NrOperacion']~"' AND Valor='1'") )
+
+   If VAL(X1)<>20 y VAL(X1)<>50 y Not [Dialogo.Fecha7=Fsys y VAL(X1)=1]
+      *-- Busco la instancia actual
+      Cancelar("La Operacion "~FBN['NrOperacion']~" Debe estar en BackOffice o Terminal. Instancia Actual="~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+   EndIf
+Proximo 
+
+ACT(A1,Dialogo.NrOperacion1)
+ACD(A2,Dialogo.Fecha3)
+
+* A3: Capital A4: Fecha Vto A5: DayCount A6: Tipo Tasa A7: Spread A8: Tasa_IVA  A9: TTN
+* A10: Tasa_WH   A11: Tasa_Amort A12: Fin_Per A13: Settlement A14: Tasa_Int A15: Interes
+ACN(A3,Dialogo.Check1)
+ACN(A4,Dialogo.Check2)
+ACN(A5,Dialogo.Check3)
+ACN(A6,Dialogo.Check4)
+ACN(A7,Dialogo.Check5)
+ACN(A9,Dialogo.Check7)
+
+ACN(A11,Dialogo.Check9)
+ACN(A12,Dialogo.Radio1)
+ACN(A13,Dialogo.Radio2)
+ACN(A14,Dialogo.Radio3)
+ACN(A15,Dialogo.Radio4)
+ACN(A16,Dialogo.Entero1)
+ACN(A17,Dialogo.Check10)
+ACN(A21,Dialogo.Cantidad2)
+ACN(A22,Dialogo.Entero2)
+ACN(A23,Dialogo.Cantidad1)
+
+If val(a3)+val(a4)+val(a5)+val(a6)+val(a7)+val(a9)+val(a11)+val(a12)+val(a13)+val(a14)+val(a15)+val(a17)=0
+   Cancelar('No selecciono ningun cambio, El proceso sera Cancelado !!!')
+EndIf
+
+CrearDialogo
+  NrOperacion1: "Operacion"          ;1;1;;NO;;;;;VAL(A1);
+  Cantidad2   : 'Capital Actual'     ;2;2;;NO;VAL(a3)=1;;;;;BuscarCampo('Operaciones','Cantidad','NrOperacion',Dialogo.NrOperacion1);
+  Cantidad1   : 'Capital Nuevo'      ;2;1;;  ;VAL(a3)=1;Val(a3)=0 o [Dialogo.Cantidad1>=VAL(a21)] ;'El Nuevo Capital no debe ser Inferior al Capital Utilizado '~Fstr(val(a21),0,2);NO;;;
+  Fecha2      : 'Vto Actual'         ;3;2;;NO;VAL(a4)=1;;;;;BuscarCampo('Operaciones','FechaVto','NrOperacion',Dialogo.NrOperacion1);
+  Fecha1      : 'Vto Nuevo'          ;3;1;;  ;VAL(a4)=1;VAL(a4)=0 o SQL("SELECT Fecha2 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" ") <=Dialogo.Fecha1;'El Nuevo Vencimiento debe ser Superior al Vencimiento Actual';NO;;;
+  Radio2      : 'DC_Actual|ActAct|Act365F|Act360|360360|30E360'        ;4;1;;NO;VAL(a5)=1;;;;BuscarCampo('Operaciones','RB8','NrOperacion',Dialogo.NrOperacion1);
+  Radio1      : 'DC_Nuevo|ActAct|Act365F|Act360|360360|30E360'         ;5;1;;  ;VAL(a5)=1;VAL(a5)=0 o Dialogo.Radio1>=0;'Day Count Incorrecto';NO;;
+  TipoTasa2   : 'TTasa Actual'       ;6;2;;NO;VAL(a6)=1;;;;;BuscarCampo('Operaciones','TipoTasa','NrOperacion',Dialogo.NrOperacion1);
+  TipoTasa1   : 'TTasa Nueva'        ;6;1;;  ;VAL(a6)=1;VAL(a6)=0 o NoVacio(Dialogo.TipoTasa1);'El Tipo de Tasa es Incorrecto';NO;;
+  Precio2     : 'Spread Actual'      ;7;2;;NO;VAL(a7)=1 y [[NoVacio(Dialogo.TipoTasa1) y Not EqStr('FIJA',Dialogo.TipoTasa1)] o Not EqStr('FIJA',Dialogo.TipoTasa2)];;;;;SQL("SELECT Precio4 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" ");
+  Precio1     : 'Spread Nuevo'       ;7;1;;  ;VAL(a7)=1 y [[NoVacio(Dialogo.TipoTasa1) y Not EqStr('FIJA',Dialogo.TipoTasa1)] o Not EqStr('FIJA',Dialogo.TipoTasa2)];;;NO;;Iif(EqStr('FIJA',Dialogo.TipoTasa1),0,Dialogo.Precio1);
+  Precio8     : 'TTN_Act'            ;10;2;;NO;Val(a9)=1;;;;SQL("SELECT Total3 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" "); ;
+  Precio7     : 'TTN'                ;10;1;;  ;Val(a9)=1;Val(a9)=0 o [Dialogo.Precio7>=VAR('RTTN1') y Dialogo.Precio7<=VAR('RTTN2') y Dialogo.Precio8<>0];'TTN es cero o esta Fuera de Rango '~VAR('RTTN1')~' y '~VAR('RTTN2')~' ...';NO;
+  Precio9     : 'Tasa_Amort_Act'     ;11;2;;NO;Val(a11)=1;;;;SQL("SELECT Tasa1 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" ");
+  Precio10    : 'Tasa_Amort_Nuevo'   ;11;1;;  ;Val(a11)=1;Val(a11)=0 o [Dialogo.Precio9<=(100-VAL(a23))];'El % de Amortizacion no debe superar el : '~Fstr(100-VAL(a23),0,2);NO;;;
+  Radio3      : 'Definitivo|Si|No'   ;12;2;;NO;Val(a17)=1;;;;SQL("SELECT RB9 FROM "~DBO~".OPERACIONES Where NrOperacion='"~Dialogo.NrOperacion1~"' ");
+  Radio4      : 'Definitivo|Si|No'   ;12;1;;  ;Val(a17)=1;Val(a17)=0 o [Dialogo.Radio4<>Dialogo.Radio3 y [Dialogo.Radio4=1 o [Dialogo.Radio4=0 y Dialogo.Precio10+VAL(a23)=100]]];'Condicion de Definitivo Incorrecta';NO;;
+  Fecha3      : 'Fin_Per_Actual'     ;13;2;;NO;VAL(a12)=1;;;;;SQL("SELECT Fecha2 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" ");
+  Fecha4      : 'Fin_Per_Nuevo'      ;13;1;;  ;VAL(a12)=1;VAL(a12)=0 o [[NoVacio(Dialogo.Fecha1) y Dialogo.Fecha4<=Dialogo.Fecha1] o Dialogo.Fecha4<=Dialogo.Fecha2];'El Nuevo Vencimiento debe ser Superior al Vencimiento Actual del Settlement ';NO;;;
+  Fecha5      : 'Settlement_Actual'  ;14;2;;NO;VAL(a13)=1;;;;;SQL("SELECT Fecha3 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" ");
+  Fecha6      : 'Settlement_Nuevo'   ;14;1;;  ;VAL(a13)=1;VAL(a13)=0 o [ESHABIL(Dialogo.Fecha6,BuscarCampo('Operaciones','TablaFeriados1','NrOperacion',VAL(a1)))];'La Fecha de Settlement debe ser Dia Habil';NO;;;
+  Cantidad3   : 'Tasa_Int_Actual'    ;15;2;;NO;VAL(a14)=1;;;;;SQL("SELECT Precio2 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" ");
+  Cantidad4   : 'Tasa_Int_Nuevo'     ;15;1;;  ;VAL(a14)=1;VAL(a14)=0 o [Dialogo.Cantidad4<>0 y Dialogo.Cantidad4>=VAR('RTASA1') Y Dialogo.Cantidad4<=VAR('RTASA2')];'Tasa es cero o esta Fuera de Rango:'~VAR('RTASA1')~" Y "~VAR('RTASA2');NO;;;;;'###,###.######'
+  Cantidad5   : 'Interes_Actual'     ;16;2;;NO;VAL(a15)=1;;;;;SQL("SELECT Cantidad3 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" ");
+  Cantidad6   : 'Interes_Nuevo'      ;16;1;;  ;VAL(a15)=1;VAL(a15)=0 o [Dialogo.Cantidad6<>0 y ROUND(Dialogo.Cantidad6,2)<=ROUND((Dialogo.Cantidad7*(1+Var('PORVAR')/100)),2) y ROUND(Dialogo.Cantidad6,2)>=ROUND((Dialogo.Cantidad7*(1-Var('PORVAR')/100)),2)];'Interes es cero o esta Fuera de Rango: '~FSTR(ROUND(Dialogo.Cantidad7*(1-Var('PORVAR')/100),2),0,2)~' y '~FSTR(ROUND(Dialogo.Cantidad7*(1+Var('PORVAR')/100),2),0,2);NO;;;
+  Cantidad7   : 'Interes_MOD'        ;16;2;;NO;NO;;;;;SQL("SELECT Precio5 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" ");
+  TipoOp1     :                      ;1;2;;NO;NO;;;;;BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1)
+  Fecha7      : 'FechaOperacion'     ;1;1;;NO;NO;;;;;BuscarCampo('Operaciones','FechaOp','NrOperacion',Dialogo.NrOperacion1);
+FinDialogo
+
+If Not Ok
+ Cancelar
+EndIf
+
+
+*- x1: Set del Update
+ACT(x1,'')
+ACT(z1,'')
+If val(a3)=1
+   *-- Calculo el Nuevo Importe de Exposure Fee
+   ACN(b2,SQL("Select Tasa1 from "~DBO~".COMISIONES2 where NrOperacion='"~Dialogo.NrOperacion1~"' AND Tipo='5' "))
+   ACN(b3,Dialogo.Cantidad1*Val(b2)/100)
+   ACT(z1,"Cantidad="~Fstr(Dialogo.Cantidad1,0,2)~",PrecioEj="~Fstr(Val(b3)+Dialogo.Cantidad1,0,2)~",TotalComisiones="~Fstr(Val(b3),0,2)~" ")     
+
+   ACN(z2, SQL(" SELECT TotalNetoCli3 FROM "~DBO~".OPERACIONES WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ") )
+   ACN(z2, Dialogo.Cantidad1 - Dialogo.Cantidad2 + Val(z2) )
+   ACT(z1,val(z1)~",TotalNetoCli3="~Fstr(Val(z2),0,2) ) 
+
+   If EqStr(Dialogo.TipoOp1,'MMFCMV')
+      * Modifico el VN Actual Utilizado en Precancelacion 
+      ACT(z1,val(z1)~",TotalBrutoCli3=TotalBrutoCli3+"~Fstr(Dialogo.Cantidad1-Dialogo.Cantidad2,0,2)~" ")
+   EndIf
+EndIf
+
+* Definitivo para Cabecera es RB9
+If val(a17)=1
+   If NoVacio(val(z1))
+      ACT(z1,val(z1)~',')       
+   EndIf
+   ACT(z1,val(z1)~" RB9='"~Fstr(Dialogo.Radio4,0,0)~"' ")   
+EndIf
+
+If val(a4)=1
+   If NoVacio(val(x1))
+      ACT(x1,val(x1)~',')       
+   EndIf
+   ACN(b1,Dialogo.Fecha1-Dialogo.Fecha7)  
+   ACT(x1,val(x1)~"FechaVto='"~IdxDate(Dialogo.Fecha1)~"',Plazo="~FStr(val(b1),0,0)~" ")   
+EndIf
+
+If val(a5)=1
+   If NoVacio(val(x1))
+      ACT(x1,val(x1)~',')       
+   EndIf
+   ACT(x1,val(x1)~"RB8='"~Fstr(Dialogo.Radio1,0,0)~"' ")   
+EndIf
+
+If val(a6)=1
+   If NoVacio(val(x1))
+      ACT(x1,val(x1)~',')       
+   EndIf
+   ACT(x1,val(x1)~" TipoTasa='"~Dialogo.TipoTasa1~"' ")   
+EndIf
+
+ACT(x2,'')
+ACT(x4,'')
+
+*-- Modificacion de Cuotas 
+*-- Spread
+If val(a7)=1
+   If NoVacio(val(x2))
+      ACT(x2,val(x2)~',')       
+   EndIf
+   ACT(x2,val(x2)~" Precio4="~Fstr(Dialogo.Precio1,0,7)~" ")   
+EndIf
+
+*-- TTN
+If val(a9)=1
+   If NoVacio(val(x2))
+      ACT(x2,val(x2)~',')       
+   EndIf
+   ACT(x2,val(x2)~" Total3="~Fstr(Dialogo.Precio7,0,7)~" ")   
+EndIf
+
+*-- Tasa de Amortizacion
+If val(a11)=1
+   If NoVacio(val(x2))
+      ACT(x2,val(x2)~',')       
+   EndIf
+   ACT(x2,val(x2)~" Tasa1="~Fstr(Dialogo.Precio10,0,2)~" ")   
+
+   *-- Sumatoria de Tasas para Cabecera=> TotalBrutoCli1
+   If NoVacio(val(z1))
+      ACT(z1,val(z1)~',')       
+   EndIf
+   ACT(z1,val(z1)~" TotalBrutoCli1="~Fstr(Dialogo.Precio10+VAL(a23),0,2)~" ")   
+EndIf
+
+*-- Fin de Periodo
+If val(a12)=1
+   If NoVacio(val(x2))
+      ACT(x2,val(x2)~',')       
+   EndIf
+   ACN(x3,Dialogo.Fecha4-SQL("SELECT Fecha1 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" "))
+   ACT(x2,val(x2)~" Fecha2='"~IdxDate(Dialogo.Fecha4)~"',Plazo1="~Fstr(val(x3),0,0)~" ")   
+EndIf
+
+*-- Settlement
+If val(a13)=1
+   If NoVacio(val(x2))
+      ACT(x2,val(x2)~',')       
+   EndIf
+   ACT(x2,val(x2)~" Fecha3='"~IdxDate(Dialogo.Fecha6)~"' ")   
+EndIf
+
+*- Tasa de Interes
+If val(a14)=1
+   If NoVacio(val(x2))
+      ACT(x2,val(x2)~',')       
+   EndIf
+   ACT(x2,val(x2)~" Precio2="~Fstr(Dialogo.Cantidad4,0,7)~" ")   
+EndIf
+
+* Interes
+If val(a15)=1
+   *- ia1: Interes Anterior Cabecera 
+   *- ia2: Capital Anterior Cabecera 
+
+   acn(ia1,Dialogo.Cantidad5)
+   acn(ia2,SQL("SELECT Cantidad2 FROM "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(VAL(a22),0,0)~" "))
+
+   If NoVacio(val(x2))
+      ACT(x4,',')       
+   EndIf
+
+   ACT(x4,val(x4)~" Cantidad3="~Fstr(Dialogo.Cantidad6,0,7)~"  ")   
+EndIf
+
+If Vacio(VAL(x1)) y Vacio(VAL(x2)) y Vacio(VAL(z1)) y Vacio(VAL(x4)) 
+   Cancelar('La Seleccion de Operaciones Fue Nula !!!')
+EndIf
+
+Message('Modificando la Operaciones Cabecera'~Dialogo.NrOperacion1~' .... ')  
+
+If NoVacio(VAL(x1)) o NoVacio(val(z1))
+   SQL.ADD(" UPDATE "~DBO~".OPERACIONES Set ")
+   If NoVacio(val(z1))
+      SQL.ADD(" "~val(z1)~" ")
+   EndIf
+   If NoVacio(val(x1))
+      If NoVacio(val(z1))
+         SQL.ADD(",")
+      EndIf
+      SQL.ADD(" "~val(x1)~" ")
+   EndIf
+   SQL.ADD(" where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+   SQL.NEW
+EndIf
+
+If NoVacio(VAL(x2)) o NoVacio(VAL(x4))
+   
+   SQL.ADD(" UPDATE "~DBO~".CUOTAS Set ")
+   If NoVacio(val(x2))
+      SQL.ADD(" "~val(x2)~" ")
+   EndIf
+   If NoVacio(val(x4))
+      SQL.ADD(" "~val(x4)~" ")
+   EndIf
+   SQL.ADD(" where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+   SQL.ADD(" and NrCuota="~Fstr(VAL(a16),0,0)~" ")
+   SQL.NEW
+   SQL.EXEC
+EndIf
+
+
+If VAL(b3)<>0
+   * b4: Iva b5: wh b6: Imp.Interes b7:Total
+   BorrarCeldas(b4..b7)
+
+   SQL.ADD("Select * from "~DBO~".COMISIONES2 where NrOperacion='"~Dialogo.NrOperacion1~"' AND Tipo='5' ")
+   Recorrer SQL
+      acn(b4,Val(b3)*FBN['Tasa2']/100)
+      acn(b5,Val(b3)*FBN['Tasa3']/100)
+      acn(b6,Val(b3)*FBN['Precio1']/100)
+   Proximo
+
+   ACN(b7,Val(b3)+val(b5)+val(b6))
+    
+   SQL.ADD("Update "~DBO~".COMISIONES2 Set ")
+   SQL.ADD("Importe1="~Fstr(Val(b3),0,2)~",Importe2="~Fstr(Val(b4),0,2)~",Importe3="~Fstr(Val(b5),0,2)~",Precio2="~Fstr(Val(b6),0,2)~",Importe4="~Fstr(Val(b7),0,2)~" ")
+   SQL.ADD("where NrOperacion='"~Dialogo.NrOperacion1~"' AND Tipo='5' ")
+   SQL.NEW
+EndIf
+SQL.EXEC
+
+*-- Calculo los datos de las Cuotas de la  Operacion Cabecera a partir de la Fecha Desde
+*-- Recalculo si cambia daycount o cambia cuotas 
+If val(a5)=1 o val(a16)>0
+
+   * Z2: Condicion de Select de cuotas
+   ACT(z2," O.NrOperacion='"~Dialogo.NrOperacion1~"' ")
+
+   If val(a5)=1 y val(a16)>0
+      ACT(z2,val(z2)~" and (Fecha2>'"~IdxDate(Val(a2))~"' or NrCuota="~Fstr(val(a16),0,0)~") ")
+   EndIf
+
+   If val(a5)=1 y val(a16)=0
+      ACT(z2,val(z2)~" and Fecha2>'"~IdxDate(Val(a2))~"' ")
+   EndIf
+
+   If val(a5)=0 y val(a16)>0
+      ACT(z2,val(z2)~"and  NrCuota="~Fstr(val(a16),0,0)~" ")   
+   EndIf
+
+   (.'CUOTASFRN'.)
+
+   *-- Actualiza movimientos y limites
+   SQL.ActualizarMovimientos(Dialogo.NrOperacion1,SI)
+   SQL.EXEC
+EndIf
+
+If val(xx1)=0
+   * Actualizo la Instancia de la Operacion a Supervision
+   (.'MODIINSTAN'.)      
+EndIf
+
+
+* Definitivo para Items es RB5
+If val(a17)=1
+   If NoVacio(val(x1))
+      ACT(x1,val(x1)~',')       
+   EndIf
+   ACT(x1,val(x1)~" RB5='"~Fstr(Dialogo.Radio4,0,0)~"' ")   
+EndIf
+
+If NoVacio(Val(x1)) o NoVacio(Val(x2)) o NoVacio(Val(x4))
+
+   SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+   SQL.ADD("where OperacionRef = '"~Dialogo.NrOperacion1~"' ")
+
+   Recorrer SQL
+      Message('Modificando las Operaciones Relacionadas '~FBN['NrOperacion']~' .... ')  
+
+      If NoVacio(VAL(x1))
+         SQL.ADD(" UPDATE "~DBO~".OPERACIONES Set ")
+         SQL.ADD(" "~val(x1)~" ")
+         SQL.ADD(" where NrOperacion='"~FBN['NrOperacion']~"' ")
+         SQL.NEW
+      EndIf
+ 
+      *-- Calculo los datos de las Cuotas de las Operaciones Relacionadas a partir de la Fecha Desde
+      *-- Recalculo si cambia daycount o cambia cuotas 
+      If val(a5)=1 o val(a16)>0 
+         ACT(z2,' ')
+         ACT(x4,'')
+
+         * Z2: Condicion de Select de cuotas
+         If val(a5)=1 y val(a16)>0
+            ACT(z2,val(z2)~" and (Fecha2>'"~IdxDate(Val(a2))~"' or NrCuota="~Fstr(val(a16),0,0)~") ")
+         EndIf
+         If val(a5)=1 y val(a16)=0
+            ACT(z2,val(z2)~" and Fecha2>'"~IdxDate(Val(a2))~"' ")
+         EndIf
+         If val(a5)=0 y val(a16)>0
+            ACT(z2,val(z2)~"and  NrCuota="~Fstr(val(a16),0,0)~" ")   
+         EndIf
+
+         If val(a15)=1
+            *- Modifica el interes a mano
+            *- Prorrateo la  diferencia entre las participantes
+            acn(ia4,SQL("SELECT Cantidad2 FROM "~DBO~".CUOTAS Where NrOperacion='"~FBN['NrOperacion']~"' and NrCuota="~Fstr(val(a16),0,0)~" "))
+            acn(ia3,Dialogo.Cantidad6*val(ia4)/val(ia2))
+            If NoVacio(val(x2))
+               ACT(x4,',')       
+            EndIf
+            ACT(x4,val(x4)~" Cantidad3="~Fstr(val(ia3),0,7)~"  ")   
+         EndIf
+ 
+          
+         If NoVacio(VAL(x2)) o NoVacio(VAL(x4))    
+            SQL.ADD(" UPDATE "~DBO~".CUOTAS Set ")
+            If NoVacio(val(x2))
+               SQL.ADD(" "~val(x2)~" ")
+            EndIf
+            If NoVacio(val(x4))
+               SQL.ADD(" "~val(x4)~" ")
+            EndIf
+            SQL.ADD(" where NrOperacion='"~FBN['NrOperacion']~"' ")
+            SQL.ADD(" "~val(z2)~" ")
+            SQL.NEW
+         EndIf
+         SQL.EXEC         
+
+         * Z2: Condicion de Select de cuotas
+         ACT(z2," O.NrOperacion='"~FBN['NrOperacion']~"' "~VAL(Z2))
+
+         (.'CUOTASFRN'.)
+      EndIf
+
+      *** Actualiza movimientos y limites ****
+      SQL.ActualizarMovimientos(FBN['NrOperacion'],SI)
+      SQL.EXEC
+
+      ACT(i3,fbn['NrOperacion'])
+      If val(xx1)=0
+         (.'MODIINSTAN'.)      
+      EndIf
+   Proximo 
+
+EndIf
+

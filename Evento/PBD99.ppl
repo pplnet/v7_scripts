@@ -1,0 +1,59 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:    'D.Fecha'  ;1;1;;;;;;;FSYS
+  Vehiculo1: 'Vehiculo' ;2;1;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))] ;'Vehiculo Invalido';NO;BuscarCampo('USRVEHICULO','Vehiculo','Codigo',USUARIOACTIVO);;;;;iif(NoVacio(UsrVehiculos(UsuarioActivo)), " Codigo in (Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"') ")
+  Especie1:  'Moneda'   ;3;;;;;Eqstr(BuscarCampo('ESPECIES','Tipo','Codigo',Dialogo.Especie1),'MON');'Moneda Invalida';NO;'ARP';;;;;" Tipo = 'MON' "
+  Radio2:  'Tipo Cta|Cta.Cte|Interm|Recaud|C.Ahorro|Todos' ;4;1;;;;;;;4
+  Check1:  'Incluye Pagadoras';5;1;;;;;;;1
+  Lista1:    'Bancos'   ; 6;1;1;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CLIENTES WHERE Sector='BAN' ");
+  Lista2:    'Cuentas'  ;-0;2;1;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS  WHERE Cliente = '"~Dialogo.Vehiculo1~"' AND Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ");
+FinDialogo
+
+If Not OK
+   Cancelar
+Endif
+
+SQL.ADD(" SELECT /*+ RULE */ O.NrOperacion, M.*, 'T' Tipo, M.NrTrans2 ")
+SQL.ADD(" FROM "~DBO~".OPERACIONESBITS B, "~DBO~".OPERACIONES O, "~DBO~".MOVPENDIENTES M, ")
+SQL.ADD(" "~DBO~".CUENTAS C ")
+SQL.ADD(" WHERE O.NrOperacion = M.NrOperacion ")
+SQL.ADD(" AND   O.NrOperacion = B.NrOperacion ")
+SQL.ADD(" AND   M.Cuenta      = C.Codigo ")
+SQL.ADD(" AND   M.FechaMov <= "~Idxdate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND   M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   M.Especie      = '"~Dialogo.Especie1~"' ")
+SQL.ADD(" AND   B.NrBit = 17  ")
+SQL.ADD(" AND   B.Valor = '1' ")
+SQL.ADD(" UNION ")
+SQL.ADD(" SELECT /*+ RULE */ O.NrOperacion, M.*, 'O' Tipo, O.NrOperacion NrTrans2 ")
+SQL.ADD(" FROM "~DBO~".OPERACIONESBITS B, "~DBO~".TRANSACCIONES2 O, "~DBO~".MOVPENDIENTES M, ")
+SQL.ADD(" "~DBO~".CUENTAS C ")
+SQL.ADD(" WHERE O.NrOperacion = M.NrOperacion ")
+SQL.ADD(" AND   O.NrOperacion = B.NrOperacion ")
+SQL.ADD(" AND   M.Cuenta      = C.Codigo ")
+SQL.ADD(" AND   M.FechaMov <= "~Idxdate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND   M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   M.Especie      = '"~Dialogo.Especie1~"' ")
+SQL.ADD(" AND   B.NrBit = 17  ")
+SQL.ADD(" AND   B.Valor = '1' ")
+If Novacio(Dialogo.Lista1)
+  SQL.ADD(" AND C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+If Novacio(Dialogo.Lista2)
+  SQL.ADD(" AND C.Codigo IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT')")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC')")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA')")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif

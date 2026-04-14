@@ -1,0 +1,185 @@
+﻿***---ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1   : 'F.Desde'                ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO; FSys
+  Fecha2   : 'F.Hasta'                ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO; FSys
+  Especie1 : 'Especie'                ;;;;;;[[Dialogo.Radio1 = 1 O Dialogo.Radio1 = 2] Y DesciendeDeEspecie(Dialogo.Especie1,'MONEDA')] O Dialogo.Radio1 = 0 O Vacio(Dialogo.Especie1);'Especie inválida';NO;;;;;;IIF(Dialogo.Radio1 = 1 O Dialogo.Radio1 = 2," Codigo IN ("~Pipe2Comillas(Descendientes('ESPECIES', 'MONEDA'))~") ");
+  Radio1   : 'Fuente|Mercado|BNA|BCU' ;;;;;;;;;0;
+FinDialogo
+
+If Not OK
+  Cancelar
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+SetFilaActual(4)
+ACT(a:FAC+1, 'Fecha desde: '~Dialogo.Fecha1)
+ACT(a:FAC+2, 'Fecha hasta: '~Dialogo.Fecha2)
+If Vacio(Dialogo.Especie1) 
+  ACT(a:FAC+3, 'Especie:Todas ')
+Else
+  ACT(a:FAC+3,'Especie: '~Dialogo.Especie1)
+EndIf
+SetFilaActual(FAC+5)
+
+***----------------------INICIO MERCADO------------------------
+IF Dialogo.Radio1 = 0
+
+ACT(F:3, '        Cotizaciones de Mercado por Fecha')
+SetFont(F:3, 3)
+ACT(a:FAC, 'Especie')
+ACT(b:FAC, 'Fecha')
+ACT(c:FAC, 'Tipo')
+ACT(d:FAC, 'Fecha Ej.')
+ACT(e:FAC, 'Precio Ej.')
+ACT(f:FAC, 'Close')
+ACT(g:FAC, 'Ask')
+ACT(h:FAC, 'Bid')
+ACT(i:FAC, 'Last')
+ACT(j:FAC, 'Clean')
+ACT(k:FAC, 'Dirty')
+*ACT(j:FAC, 'ARP')
+*ACT(k:FAC, 'USD')
+*ACT(l:FAC, 'UYU')
+
+SetFont(a1..z:FAC,2)
+AlinearCeldas(a:FAC..k:FAC, 'C')
+AgregarMarco(a:FAC..k:fac,1,0,Exe('COLOR'))
+ACN(vv:1,FAC)
+
+SQL.ADD("Select Precio1,Precio2,Precio3,Precio4,Codigo,CallPut,FechaEj,PrecioEj,Fecha,Precio5,Precio6,Precio7 ")
+SQL.ADD("from "~DBO~".COTIZACIONES where ")
+SQL.ADD("Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+If NoVacio(Dialogo.Especie1)
+  SQL.ADD(" and Codigo like  '"~Dialogo.Especie1~"' ")
+EndIf
+SQL.ADD("and not (Codigo in ('"~VAR('MONELOCA')~"'))")
+SQL.ADD("order by Codigo,Fecha")
+
+Recorrer SQL
+    ACT(a:fac, fbn('Codigo'))
+    ACD(b:fac, fbn('Fecha'))
+    ACT(c:fac, 'Contado')
+    If Incluido(fbn('CallPut'),'CAL')
+      ACT(c:fac, 'Call')
+      ACT(d:fac, fbn('FechaEj'))
+      ACN(e:fac, fbn('PrecioEj'))
+    EndIf
+    If Incluido(fbn('CallPut'),'PUT')
+      ACT(c:fac, 'Put')
+      ACT(d:fac, fbn('FechaEj'))
+      ACN(e:fac, fbn('PrecioEj'))
+    EndIf
+    If Incluido(fbn('CallPut'),'FUT')
+      ACT(c:fac, 'Futuro')
+      ACT(d:fac, fbn('FechaEj'))
+    EndIf
+    ACN(f:fac, fbn('Precio1'))
+    ACN(g:fac, fbn('Precio2'))
+    ACN(h:fac, fbn('Precio3'))
+    ACN(i:fac, fbn('Precio4'))
+
+    IF DesciendeDeEspecie(fbn('Codigo'), 'PUBLIC') O DesciendeDeEspecie(fbn('Codigo'), 'CORP B') O DesciendeDeEspecie(fbn('Codigo'), 'EXTRAN')
+        ACN(aa:fac,SQL("Select Intereses from "~DBO~".INTERESESCORRIDOS where Fecha = '"~IdxDate(val(b:fac))~"' and Especie ='"~fbn('Codigo')~"' "))
+        If Incluido(BuscarCampo('Especies','InteresesC','Codigo',fbn('Codigo')),'CLE')
+            ACN(j:fac, val(f:fac))
+            ACN(k:fac, val(f:fac)-val(aa:fac))
+        Else
+            ACN(j:fac, val(f:fac)+val(aa:fac))
+            ACN(k:fac, val(f:fac))
+        EndIf
+    ENDIF
+    
+*    ACN(j:fac, fbn('Precio5'))
+*    ACN(k:fac, fbn('Precio6'))
+*    ACN(l:fac, fbn('Precio7'))
+Proximo
+
+SetFont(a10..z:FAC,1)
+ACO(1,7)
+ACO(4,8)
+ACO(5,8)
+ACO(6,8)
+ACO(7,8)
+ACO(8,8)
+ACO(9,8)
+*ACO(10,8)
+*ACO(11,8)
+*ACO(12,8)
+SetFilaActual(FAC+1)
+FormatoCeldas(e:Val(vv:1).. k:FAC,EXE('F8'))
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:FAC,2)
+LimitesVision(k:FAC+1)
+RangoTitulo(a:1..k:FAC+1, 9)
+SetPrintFit(3, 75.5)
+
+***----------------------FINAL MERCADO------------------------
+
+Else
+
+***----------------------INICIO BNA/BCU-----------------------
+
+If Dialogo.Radio1 = 1 O Dialogo.Radio1 = 2
+
+If Dialogo.Radio1 = 1
+  ACT(B:3, '            BNA por Fecha')
+  SetFont(B:3, 3)
+Else
+  ACT(B:3, '            BCU por Fecha')
+  SetFont(B:3, 3)
+EndIf
+ACT(a:FAC,'Especie')
+ACT(b:FAC,'Fecha')
+ACT(c:FAC,'Precio Compra')
+ACT(d:FAC,'Precio Venta')
+
+SetFont(a1..z:FAC,2)
+AlinearCeldas(a:FAC..d:FAC, 'C')
+AgregarMarco(a:FAC..d:fac,1,0,Exe('COLOR'))
+ACN(vv:1,FAC)
+
+SQL.ADD("Select Especie, Fecha, PrecioCompra, PrecioVenta ")
+If Dialogo.Radio1 = 1
+  SQL.ADD("from "~DBO~".CIERREBNA where ")
+Else
+  SQL.ADD("from "~DBO~".CIERREBCU where ")
+EndIf
+SQL.ADD("Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+If NoVacio(Dialogo.Especie1)
+  SQL.ADD(" and Especie like  '"~Dialogo.Especie1~"' ")
+EndIf
+SQL.ADD("and not (Especie in ('"~VAR('MONELOCA')~"'))")
+SQL.ADD("order by Especie, Fecha")
+
+Recorrer SQL
+  ACT(a:FAC, fbn('Especie'))
+  ACT(b:FAC, fbn('Fecha'))
+  ACN(c:FAC, fbn('PrecioCompra'))
+  ACN(d:FAC, fbn('PrecioVenta'))
+Proximo
+
+SetFont(a10..z:FAC,1)
+ACO(1,7)
+ACO(3,9)
+ACO(4,9)
+SetFilaActual(FAC+1)
+FormatoCeldas(c:Val(vv:1).. d:FAC,EXE('F8'))
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:FAC,2)
+LimitesVision(d:FAC+1)
+RangoTitulo(a:1..d:FAC+1, 9)
+SetPrintFit(3, 100)
+
+EndIf
+***----------------------FINAL BNA/BCU------------------------
+
+EndIf
+
+Impresion(1,1)

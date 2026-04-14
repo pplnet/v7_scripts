@@ -1,0 +1,177 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Vehiculo1    : "Vehiculo"     ;;;;;;EsTerminal(Dialogo.Vehiculo1, Vehiculos) o Vacio (Dialogo.Vehiculo1);'Debe ingresar un Vehiculo';NO;;;;;;"TipoVehiculo = 'DIV'";;
+  Fecha1       : "F.Desde"      ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;FSys
+  Fecha2       : "F.Hasta"      ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar la Fecha';NO;FSys
+  NrOperacion1 : "Nr.Operacion"
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,8,B")
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+
+SetFilaActual(4)
+
+ACT(g:2,'Fecha : '~Fecha(FSys))
+SetFont(g:2..g:2,1)
+
+ACT(a:FAC, "Movimientos por Operacion")
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(5)
+ACN(w1,FAC)
+
+if NoVacio(Dialogo.NrOperacion1)
+  ACT(a:fac+1, 'NrOperacion: '~Dialogo.NrOperacion1)
+else
+  if NoVacio(Dialogo.Vehiculo1)
+    ACT(a:FAC+1, 'Vehiculo : '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+  else
+    ACT(a:FAC+1, 'Vehiculo : Todos')
+  endif
+
+  ACT(a:FAC+3, 'Fecha Desde: '~Dialogo.Fecha1)
+  ACT(a:FAC+4, 'Fecha Hasta: '~Dialogo.Fecha2)
+endif
+
+SetFilaActual(FAC+6)
+
+ACT(a:FAC, 'Tipo Op.')
+ACT(b:FAC, 'Numero')
+ACT(c:FAC, 'F.Operacion')
+ACT(d:FAC, 'Vehiculo')
+ACT(e:FAC, 'Cliente')
+ACT(f:FAC, 'Especie')
+ACT(g:FAC, 'Cantidad')
+ACT(h:FAC, 'Precio / Tasa N.A.')
+
+ACT(d:FAC+1, 'F.Mov.')
+ACT(e:FAC+1, 'Cliente Afectado')
+ACT(f:FAC+1, 'Especie Afectada')
+ACT(g:FAC+1, 'Cupon')
+ACT(h:FAC+1, 'Cantidad')
+ACT(i:FAC+1, 'Precio')
+ACT(j:FAC+1, 'Saldo')
+ACT(k:FAC+1, 'T.Nego.')
+
+AlinearCeldas(a:FAC+1..f:FAC+1,'I')
+AlinearCeldas(h:FAC+1..j:FAC+1,'D')
+AlinearCeldas(a:FAC..f:FAC,'I')
+AlinearCeldas(g:FAC..h:FAC,'D')
+SetFont(a:Val(w1)..z:FAC+1,2)
+AgregarMarco(a:FAC..h:FAC,2,0,Exe('COLOR'))
+AgregarMarco(d:FAC+1..k:FAC+1,2,0,Exe('COLOR'))
+
+SetFilaActual(FAC+1)
+
+if NoVacio(Dialogo.NrOperacion1)
+  ACT(X1, "O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+else
+  ACT(X1, "FechaOp Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"'")
+endif
+
+SQL.ADD("SELECT *  ")  
+SQL.ADD("from "~DBO~".OPERACIONES O")
+SQL.ADD("where "~Val(X1))
+
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("and O.Vehiculo1='"~Dialogo.Vehiculo1~"'")
+EndIf
+
+SQL.ADD("order by O.TipoOp, O.NrOperacion")
+
+Recorrer SQL
+ 
+    Message('Recuperando Datos Operacion ...')
+
+    IF Not EqStr(FBN['NrOperacion'],Val(z1)) y Val (xx:99)=0
+       ifa
+       ACT(z1, FBN['NrOperacion'])
+       ACT(a:FAC, FBN['TipoOp'])
+       ACT(b:FAC, FBN['NrOperacion'])
+       ACLO(b:FAC, fbn('NrOperacion'))
+       ACD(c:FAC, FBN['FechaOp'])
+       ACT(d:FAC, fbn('Vehiculo1'))
+       ACT(e:FAC, Copy(BuscarCampo('CLIENTES','RazonSocial','Codigo',FBN['Cliente1']),1,30))
+       ACT(f:FAC, FBN['Especie']~' '~FBN['FechaEj']~' '~FBN['PrecioEj'])
+       ACN(g:FAC, FBN['Cantidad'])
+       ACN(h:FAC, FBN['Precio1'])
+       SetFont(a:FAC..y:FAC,2)
+       ifa
+    endif
+
+    
+   Message('Recuperando Mov. Posiciones  ...')
+
+   SQL.ADD("SELECT MP.NrOperacion, 'EJEC' as Estado, ")
+   SQL.ADD("       MP.FechaMov, MP.Cliente, MP.Especie, MP.Cupon, ")
+   SQL.ADD("       MP.Cantidad, MP.Precio,  MP.NrSaldo, MP.TipoNegocio ")  
+   SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".MOVPOSEJE MP ")
+   SQL.ADD("where O.NrOperacion = MP.NrOperacion ")
+   SQL.ADD("and O.NrOperacion = '"~fbn['NrOperacion']~"' ")
+
+   SQL.ADD("Union All ")
+
+   SQL.ADD("SELECT MP.NrOperacion, 'Pend' as Estado, ")
+   SQL.ADD("       MP.FechaMov, MP.Cliente, MP.Especie, MP.Cupon, ")
+   SQL.ADD("       MP.Cantidad, MP.Precio,  MP.NrSaldo, MP.TipoNegocio ")  
+   SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".MOVPOSPEN MP ")
+   SQL.ADD("where O.NrOperacion = MP.NrOperacion ")
+   SQL.ADD("and O.NrOperacion = '"~fbn['NrOperacion']~"' ")
+
+   SQL.ADD("order by MP.NrOperacion, Estado, MP.Especie, MP.NrSaldo  ")
+
+   Recorrer SQL
+       ACT(b:FAC, FBN['Estado'])
+       ACD(d:FAC, FBN['FechaMov'])
+       ACT(e:FAC, Copy(BuscarCampo('CLIENTES','RazonSocial','Codigo',FBN['Cliente']),1,30))
+
+       if Vacio(Val(e:FAC))
+          ACT(e:FAC, Copy(BuscarCampo('VEHICULOS','Descripcion','Codigo',FBN['Cliente']),1,30))
+       endif
+
+       ACT(f:FAC, FBN['Especie'])
+       ACT(g:FAC, FBN['Cupon'])
+       ACN(h:FAC, FBN['Cantidad'])
+       ACN(i:FAC, FBN['Precio'])
+       ACN(j:FAC, FBN['NrSaldo'])
+       ACT(k:FAC, FBN['TipoNegocio'])
+
+       SetFont(a:FAC..z:FAC,1)
+
+       IF EqStr(FBN['Estado'],'Pend')
+          ColorCeldas(a:FAC..L:FAC,clGREEN)
+      endif 
+      FormatoCeldas(i:fac..i:fac,Exe('F8'))
+      FormatoCeldas(j:fac..j:fac,"0")
+   proximo 
+
+Proximo
+
+ACO(1,5)
+ACO(2,6)
+ACO(3,7)
+ACO(4,7)
+ACO(5,18)
+ACO(6,10)
+ACO(7,8)
+ACO(8,10)
+ACO(9,10)
+ACO(10,7)
+ACO(11,7)
+ACO(12,7)
+ACO(13,7)
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(o:FAC)
+RangoTitulo(a:1..o:FAC, Val(w1)+3)

@@ -1,0 +1,165 @@
+ModoReproceso(ConDialogo())
+creardialogo
+fecha1:'Fecha';;;;;;NoVacio(dialogo.fecha1);'Debe Ingresar una Fecha';NO;FSys()
+especie1:'Especie';;;;;;;;;
+
+findialogo
+if (not ok)
+Cancelar()
+endif
+
+
+
+
+SetFilaActual(1)
+SetFilaActual(Fac() + 2)
+Acn(x1, Fac())
+
+Sqladd(" Select Codigo, DiasAnio, DiasMes, 0 TasaIntPIKsVigente, 0 TasaPIKsVigente, 'NO' DDPIKs ")
+Sqladd(" from "~Dbo()~".ESPECIES ")
+Sqladd(" where dbo.DESCIENDEDEESPECIE(Codigo,'TITULO') = 1 and Cupon is not NULL and (EsCupon='NO' OR EsCupon Is Null) ")
+Sqladd(" AND Fecha >= '"~IdxDate(dialogo.fecha1)~"' ")
+
+if (NoVacio(dialogo.especie1))
+Sqladd(" AND Codigo = '"~dialogo.especie1~"' ")
+endif
+
+recorrer sql
+Scn(x1, 1)
+Act(a:fac, Fbn('Codigo'))
+Acn(c:fac, 1)
+if (Eqstr(Fbn('DDPIKs'), 'SI'))
+if (Fbn('DiasAnio') = 360 y Fbn('DiasMes') = 30)
+if (dialogo.fecha1 = FinDeMes(dialogo.fecha1, NO) y dialogo.fecha1 < FinDeMes(dialogo.fecha1, SI))
+Acn(d:fac, Dif360(UltCupon2(Val(a:fac), dialogo.fecha1), Min(FinDeMes(dialogo.fecha1, SI), Habiles(dialogo.fecha1, 1, 'ARG', SI) - 1), 4))
+Acn(pl:1, Dif360(dialogo.fecha1, Min(FinDeMes(dialogo.fecha1, SI), Habiles(dialogo.fecha1, 1, 'ARG', SI) - 1), 4))
+else
+Acn(d:fac, Dif360(UltCupon2(Val(a:fac), dialogo.fecha1), dialogo.fecha1, 4))
+Acn(pl:1, 1)
+endif
+Acn(id:fac, Dif360(UltCupon2(Val(a:fac), dialogo.fecha1), dialogo.fecha1, 4))
+Acn(pl:2, 1)
+if (Val(d:fac) > Dif360(UltCupon2(Val(a:fac), dialogo.fecha1), dialogo.fecha1, 4))
+Acn(bd:1, 0)
+else
+Acn(bd:1, 1)
+endif
+else
+Acn(bd:1, 0)
+if (dialogo.fecha1 = FinDeMes(dialogo.fecha1, NO) y dialogo.fecha1 < FinDeMes(dialogo.fecha1, SI))
+Acn(d:fac, DifDias(UltCupon2(Val(a:fac), dialogo.fecha1), Min(FinDeMes(dialogo.fecha1, SI), Habiles(dialogo.fecha1, 1, 'ARG', SI) - 1), 'USA', NO))
+Acn(pl:1, DifDias(dialogo.fecha1, Min(FinDeMes(dialogo.fecha1, SI), Habiles(dialogo.fecha1, 1, 'ARG', SI) - 1), 'USA', NO))
+else
+Acn(d:fac, DifDias(UltCupon2(Val(a:fac), dialogo.fecha1), dialogo.fecha1, 'USA', NO))
+Acn(pl:1, 1)
+endif
+Acn(id:fac, DifDias(UltCupon2(Val(a:fac), dialogo.fecha1), dialogo.fecha1, 'USA', NO))
+Acn(pl:2, 1)
+endif
+Acn(e:fac, Cotizacion(Val(a:fac), null, null, null, dialogo.fecha1, 1, SI))
+if (Fbn('DiasAnio') = 360)
+Acn(da:1, 0)
+else
+if (Fbn('DiasAnio') = 365)
+Acn(da:1, 1)
+else
+Acn(da:1, 2)
+endif
+endif
+Acn(b:fac, Fbn('TasaIntPIKsVigente') * (Val(d:fac) / DiasA(Val(da:1), dialogo.fecha1)) + Fbn('TasaPIKsVigente') * Val(e:fac) * (Val(d:fac) / DiasA(Val(da:1), dialogo.fecha1)))
+Acn(di:fac, Fbn('TasaIntPIKsVigente') * (Val(d:fac) / DiasA(Val(da:1), dialogo.fecha1)) + Fbn('TasaPIKsVigente') * Val(e:fac) * (Val(id:fac) / DiasA(Val(da:1), dialogo.fecha1)))
+Acn(id:1, Fbn('TasaIntPIKsVigente') * (Val(d:fac) / DiasA(Val(da:1), dialogo.fecha1)) + Fbn('TasaPIKsVigente') * Val(e:fac) * (Val(pl:1) / DiasA(Val(da:1), dialogo.fecha1)))
+Acn(id:2, Fbn('TasaIntPIKsVigente') * (Val(d:fac) / DiasA(Val(da:1), dialogo.fecha1)) + Fbn('TasaPIKsVigente') * Val(e:fac) * (Val(pl:2) / DiasA(Val(da:1), dialogo.fecha1)))
+else
+if (dialogo.fecha1 = FinDeMes(dialogo.fecha1, NO) y dialogo.fecha1 < FinDeMes(dialogo.fecha1, SI))
+Acn(b:fac, InteresEspecie(Val(a:fac), Min(FinDeMes(dialogo.fecha1, SI), Habiles(dialogo.fecha1, 1, 'ARG', SI) - 1), Val(c:fac), null))
+else
+Acn(b:fac, InteresEspecie(Val(a:fac), dialogo.fecha1, Val(c:fac), null))
+endif
+Acn(di:fac, InteresEspecie(Val(a:fac), dialogo.fecha1, Val(c:fac), null))
+endif
+if (Val(b:fac) > 0)
+if (0 = Query("Select Count(*) from "~Dbo()~".INTERESESCORRIDOS where Especie = '"~Val(a:fac)~"' and Fecha = '"~IdxDate(dialogo.fecha1)~"' "))
+Sqladd("Insert into "~Dbo()~".INTERESESCORRIDOS ( ")
+Sqladd("   Fecha, Especie, Intereses, Cantidad ")
+Sqladd("   ) values ( ")
+Sqladd("   '"~IdxDate(dialogo.fecha1)~"', ")
+Sqladd("   '"~Val(a:fac)~"', ")
+Sqladd("   "~FStr(Val(b:fac), 1, 8)~", ")
+Sqladd("   "~FStr(Val(di:fac), 1, 8)~" ")
+Sqladd("   ) ")
+Sqlnew()
+Sqlexec()
+else
+Sqladd("Update "~Dbo()~".INTERESESCORRIDOS ")
+Sqladd("   Set Intereses = "~FStr(Val(b:fac), 1, 8)~", ")
+Sqladd("       Cantidad = "~FStr(Val(di:fac), 1, 8)~" ")
+Sqladd(" where Especie = '"~Val(a:fac)~"' ")
+Sqladd("   and Fecha = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqlnew()
+Sqlexec()
+endif
+endif
+proximo
+
+
+if (Val(x1) > 0 y 1 = 2)
+recorrer&i 4, Val(x1) + 3
+Acn(e:&i, ValorTeorico2(Val(a:&i), dialogo.fecha1))
+Acn(f:&i, EspecieDiasAnio(Val(a:&i)))
+Acn(g:&i, EspecieDiasMes(Val(a:&i)))
+Act(h:&i, BuscarCampo('ESPECIES', 'CuponFeriado', 'Codigo', Val(a:&i)))
+Acd(i:&i, UltCupon2(Val(a:&i), dialogo.fecha1))
+if (EsHabil(Val(i:&i), 'USA'))
+Acd(j:&i, Val(i:&i))
+else
+Acd(j:&i, Habiles(Val(i:&i), iif (Eqstr(Val(h:&i), 'SIG'), 1, iif (Eqstr(Val(h:&i), 'ANT'), -1, 0)), 'USA'))
+endif
+Acd(k:&i, BuscarCampo('ESPECIES', 'FechaCambioTasa', 'Codigo', Val(a:&i)))
+if (Val(k:&i) > Val(j:&i) y Val(k:&i) < dialogo.fecha1)
+Act(l:&i, 'Mix')
+Acn(m:&i, BuscarCampo('ESPECIES', 'TasaIntVigente', 'Codigo', Val(a:&i)))
+else
+Act(l:&i, 'Vigente')
+Acn(m:&i, BuscarCampo('ESPECIES', 'TasaIntVigente', 'Codigo', Val(a:&i)))
+endif
+Acn(m:&i, Val(m:&i) * 100)
+Acn(n:&i, DiasA(Val(f:&i), dialogo.fecha1))
+Acn(o:&i, Val(m:&i) / Val(n:&i) / 100)
+if (Val(o:&i) > 0)
+Acn(p:&i, Query("Select Count(*) from "~Dbo()~".INTERESESCORRIDOS where Especie = '"~Val(a:&i)~"' and Fecha = '"~IdxDate(dialogo.fecha1)~"' "))
+if (Val(p:&i) = 0)
+Act(q:&i, 'Insert')
+if (dialogo.check1 = 1)
+Sqladd("Insert into "~Dbo()~".INTERESESCORRIDOS ( ")
+Sqladd("   Fecha, Especie, Intereses ")
+Sqladd("   ) values ( ")
+Sqladd("   '"~IdxDate(dialogo.fecha1)~"', ")
+Sqladd("   '"~Val(a:&i)~"', ")
+Sqladd("   "~FStr(Val(o:&i), 1, 8)~" ")
+Sqladd("   ) ")
+Sqlnew()
+Sqlexec()
+endif
+else
+if (Val(p:&i) = 1)
+Act(q:&i, 'Update')
+if (dialogo.check1 = 1)
+Sqladd("Update "~Dbo()~".INTERESESCORRIDOS ")
+Sqladd("   Set Intereses = "~FStr(Val(o:&i), 1, 8)~" ")
+Sqladd(" where Especie = '"~Val(a:&i)~"' ")
+Sqladd("   and Fecha = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqlnew()
+Sqlexec()
+endif
+else
+Act(q:&i, 'Error - Mas de un registro')
+endif
+endif
+else
+Act(q:&i, 'Error - Intereses cero')
+endif
+proximo
+endif
+
+

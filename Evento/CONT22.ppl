@@ -1,0 +1,179 @@
+﻿CrearDialogo
+  Fecha1:       'Fecha'       ; 1;;;;;;;;fsys
+  *Lista1:       'Vehiculos'   ; 3;;;;;;;;;;SQLSET("Select Codigo from "~DBO~".VEHICULOS")
+  Vehiculo1:   'Vehiculo'     ;2;;;NO;;;;;Var('VEHICON')
+  ListaTabla1: 'Operaciones'  ;1;2;;;;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES' 
+  Check1:      'Contab.Procesada' ;;;;NO;NO;
+  Radio1:       'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos'   ; 4;1;;NO;NO;;;;4;
+FinDialogo
+
+If Not Ok
+   Raise('Evento Cancelado')
+Endif
+
+ACT(ME:1, Var('MONEEXTR'))
+ACT(ML:1, Var('MONELOCA'))
+ACN(NA:1, Var('ASINUM'))
+ACN(SL:1, Var('SALDOPOCON'))
+ACT(VC:1, Dialogo.Vehiculo1)
+Message('--- Asientos de Liquidacion ---')
+ACD(FE:1, Habiles(Dialogo.Fecha1,-Var('FVALORCONT'),'ARG'))
+
+message('Liquidacion de Comisiones y Derechos')
+***---Liquidacion de Comisiones y Derechos
+SQL.ADD(" Select T.NrTrans, T.TipoTr2, T.Fecha2 Fecha, T.Vehiculo1, Abs(M.Cantidad) as Cantidad, MA.Codigo CodAsi, ")
+SQL.ADD(" CL.Jerarquia, CL.PaisDir, Case when T.Tipotr2 = 'MATCH' Then T.Cuenta3 else T.Cuenta1 end Cuenta1, ")
+SQL.ADD(" O.TotalNetoCli1, O.PorDerechoMercado, O.ContraEspecie, O.Mercado4, ")
+SQL.ADD(" Case when T.Tipotr2 = 'MATCH' Then T.Cuenta4 else T.Cuenta2 end Cuenta2, ")
+SQL.ADD(" O.Cuenta3, Case when T.TipoTr2 = 'MATCH' then T.Especie1 else T.Especie end Especie, ")
+SQL.ADD(" O.TipoOp, O.NrOperacion, ")
+SQL.ADD(" '#Op:' + O.NrOperacion + ',' + RTrim(O.TipoOp) + ',' + RTrim(O.Especie) Leyenda, ")
+SQL.ADD(" O.Cliente1 Cliente, Abs(M.Cantidad) ImporteVoucher, M.Especie MonedaLiq, C.Mercado, O.TotalBrutoCli1, O.FechaVto, ")
+SQL.ADD(" M.Cuenta, T.Fecha2, T.Fecha1, O.FechaPago, O.FechaOp, O.Cliente1, O.Precio1, O.Plazo, O.Book1, C.CuentaContable2, ")
+SQL.ADD(" C.CuentaContable1, CL.CategDepositante, T.Cliente1 ClienteVoucher, O.TotalComisiones Comision, T.TipoTr2, ")
+SQL.ADD(" O.TotalAux3, O.TotalAux4, E.Tipo, E.MonedaEmision, E.Cotiza, Case when O.TipoOp = 'FXC' OR O.TipoOp='FXV' then O.Especie else O.ContraEspecie End Moneda, O.Cupon1, T.Fecha1, T.Fecha2, ME.Netea, ")
+SQL.ADD(" O.CB4, T.Cantidad26 ConceptoLiq, ")
+SQL.ADD(" CASE WHEN O.TipoOp ='DDV' OR O.TipoOp='DDC' THEN O.ImpGastos1 ELSE O.TotalAux2 END ComisionOp, ")
+SQL.ADD(" CASE WHEN O.TipoOp ='DDV' OR O.TipoOp='DDC' THEN O.ImpGastos2 ELSE O.TotalIva END IvaComision, ")
+SQL.ADD(" CASE WHEN O.TipoOp ='DDV' OR O.TipoOp='DDC' THEN O.TotalDerechos ELSE O.TotalGastos END DerechoMercado, ")
+SQL.ADD(" CASE WHEN O.TipoOp ='DDV' OR O.TipoOp='DDC' THEN O.TotalIva ELSE O.TotalIvaAdi END IvaDerechos, ")
+SQL.ADD(" E.Tipo TipoEspecie,TotalBrutoCli3, E.Issuer, E.Alias1 as EspBanTotal, O.Mercado2 MerLiqMon,O.Especie EspecieOp, T.Especie MonedaVou, O.TotalIntereses Interes, ")
+SQL.ADD(" MA.TipoAsiento, O.Mercado4 MerNegociacion, O.CB5 ")
+**++ Gian 22-08-24 issue 7532
+SQL.ADD(" FROM "~DBO~".OPERACIONES O ")
+SQL.ADD("    INNER JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo ")       
+SQL.ADD("    INNER JOIN "~DBO~".MODELOSASIENTO MA ON MA.TipoAsiento = '"~Var('TIPASILGAS')~"' ")
+SQL.ADD("    INNER JOIN "~DBO~".MOVEJECUTADOS M ON O.NrOperacion = M.NrOperacion AND(( M.Especie = O.ContraEspecie) OR (M.Especie=O.Especie AND O.TipoOp IN ('FXC','FXV'))) ")   
+SQL.ADD("    INNER JOIN "~DBO~".TRANSACCIONES2 T ON T.NrTrans = M.NrTrans2 ")
+SQL.ADD("    INNER JOIN "~DBO~".CUENTAS C ON M.Cuenta = C.Codigo ")  
+SQL.ADD("    INNER JOIN "~DBO~".CLIENTES CL ON O.Cliente1 = CL.Codigo ")  
+SQL.ADD("    INNER JOIN dbo.MERCADOS ME ON O.Mercado2 = ME.Codigo ")
+SQL.ADD("  Where O.NrOperacion = M.NrOperacion ")
+SQL.ADD("   AND (O.PaseCB = '0' OR O.PaseCB Is Null OR O.PaseCB = '' OR O.PaseCB = ' ') ")
+SQL.ADD("   AND T.NrTrans = M.NrTrans2 ")
+SQL.ADD("   AND(( M.Especie = O.ContraEspecie) OR (M.Especie=O.Especie AND O.TipoOp IN ('FXC','FXV')))")
+SQL.ADD("   AND M.NrSaldo = 1 ")
+**--Comisiones
+SQL.ADD("   AND T.Cantidad26 in ('1') ")
+**NrMov = 4 comisiones de TIC y TIV
+**NrMov = 11 y 12 comisiones de DDV
+**NrMov = 15 y 16 derechos de DDV
+SQL.ADD("   AND M.NrMov in (11,4,15) ")
+SQL.ADD("   AND C.Codigo  = M.Cuenta ")
+*SQL.ADD("   AND O.TipoOp = MA.TipoOp ")
+*SQL.ADD("   AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASILCOM'))~") ")
+SQL.ADD("   AND '|'+RTrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+SQL.ADD("   AND MA.Habilitado = 'SI' ")
+SQL.ADD("   AND T.TipoTr2 in ('RET','DEP','MATCH') ")
+SQL.ADD("   AND ((T.Fecha2 = '"~IdxDate(Dialogo.Fecha1)~"' AND ME.Netea = 'SI') OR (T.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' AND (ME.Netea Is Null OR ME.Netea = 'NO'))) ")
+SQL.ADD("   AND ((T.Fecha1 >= '"~IdxDate(Val(FE:1))~"' AND ME.Netea = 'SI') OR (T.Fecha2 >= '"~IdxDate(Val(FE:1))~"' AND (ME.Netea Is Null OR ME.Netea = 'NO'))) ")
+If Dialogo.Radio1 = 4
+    ***---Todo
+    SQL.ADD(" AND ((O.TipoOp IN ('TICT','TIDE','TICO','TIPO','TICF','TIVF','FXCF','FXVF','FXK','FXC','FXV')) ")
+    IF Eqstr(Var('INSTALACIO'),'MLASA')
+    ***---MLASA tiene su propia conta de TCOPRI 
+        SQL.ADD("   OR (O.TipoOp IN ('TIC','TIV')  ")
+    ELSE
+        SQL.ADD("   OR (O.TipoOp IN ('TIC','TIV','TCOPRI')  ")
+    ENDIF
+    SQL.ADD("       AND (O.PaseCB = '0' OR O.PaseCB Is Null OR O.PaseCB = '' OR O.PaseCB = ' ')) ")
+     **-**MM
+    SQL.ADD(" OR O.TipoOp IN ('MMCO','MMCT','DDV','DDC') ")
+    SQL.ADD(") ")
+ELSE
+    IF Dialogo.Radio1 = 0
+        ***---Securities => Acciones, Titulos y Futuros de Titulos
+        SQL.ADD(" AND ((O.TipoOp IN ('TICF','TIVF')) ")
+        IF Eqstr(Var('INSTALACIO'),'MLASA')
+            ***---MLASA tiene su propia conta de TCOPRI
+            SQL.ADD("   OR (O.TipoOp IN ('TIC','TIV')  ")
+        ELSE
+            SQL.ADD("   OR (O.TipoOp IN ('TIC','TIV','TCOPRI')  ")
+        ENDIF
+        SQL.ADD("       AND (O.PaseCB = '0' OR O.PaseCB Is Null OR O.PaseCB = '' OR O.PaseCB = ' '))) ")
+    ELSE
+        IF Dialogo.Radio1 = 1
+            ***---Fx Spot => Canje
+            SQL.ADD(" AND O.TipoOp IN ('FXK','FXC','FXV')")
+        ELSE
+            IF Dialogo.Radio1 = 2
+                ***---Fx Futuros => Futuros OCT rueda CPC2 contra terceros
+                SQL.ADD(" AND O.TipoOp IN ('FXCF','FXVF') ")
+            ELSE
+                IF Dialogo.Radio1 = 3
+                    ***---MM
+                    SQL.ADD(" AND O.TipoOp IN ('MMCO','MMCT','DDV','DDC') ")
+                ENDIF
+            ENDIF
+        ENDIF
+    ENDIF
+ENDIF
+Watch(sql.batch)
+Recorrer SQL
+**++ Gian 22-08-24 issue 7532
+    IF Eqstr(fbn('Netea'), 'SI') O fbn('CB5') = 1 O Eqstr(fbn('Cliente'),fbn('Vehiculo1'))
+        ACD(FV:1, fbn('Fecha1'))
+    ELSE
+        ACD(FV:1, fbn('Fecha2'))
+    ENDIF
+    **Datos para Interfaz
+    ACT(FV:2,fbn('FechaVto'))
+    **
+    ACD(FD:1, Dialogo.Fecha1)
+    ACT(VH:1, fbn('Vehiculo1'))
+    ACT(MN:99, fbn('MonedaLiq'))
+    ACT(BK:1, fbn('Book1'))
+    ACT(CP:99, fbn('Cupon1'))
+    ACT(TO:1, fbn('CodAsi'))
+    ACT(TI:1, fbn('TipoOp'))
+    ACT(NR:1, fbn('NrOperacion'))
+    ACT(NR:2, fbn('NrTrans'))  
+    ACN(CK:1, 0)
+    
+    If EqStr(Var('MERCTAPTE'),'NEG')
+        let &merCtaPte fbn('MerNegociacion')
+    Else
+        let &merCtaPte fbn('MerLiqMon')
+    EndIf
+    IF fbn('CB4') = 1
+        ***---obtengo la cuenta constable hasta tanto este el Mercado como parámetro en RelacionCuenta
+        IF Eqstr(fbn('Mercado4'), 'MAE')
+            IF Eqstr(fbn('ContraEspecie'), 'ARP')
+                ACT(CT:55, '321179003')
+            ELSE
+                ACT(CT:55, '325179003')
+            ENDIF
+        ELSE
+            IF Eqstr(fbn('ContraEspecie'), 'ARP')
+                ACT(CT:55, '321179004')
+            ELSE
+                ACT(CT:55, '325179004')
+            ENDIF
+        ENDIF
+    ENDIF
+    IF Incluido(fbn('TipoOp'), 'TICT|TIDE|TICO|TIPO') Y #ESLIQVTO
+        *-Suma de Devengados Contabilizados para la operacion
+        SQL.ADD("select SUM(Cantidad1) DevCont from ASIENTOSCON1 A1, ASIENTOSCON A ")
+        SQL.ADD("where A1.NrUnicoAsiento=A.NrUnicoAsiento ")
+        SQL.ADD("and A.NrOperacion = '"~fbn('NrOperacion')~"' ")
+        SQL.ADD("and A1.NrItem=1 ")
+        SQL.ADD("and (A.NrAsiento = ''  or A.NrAsiento is NULL) ")
+        SQL.ADD("and A.Modelo in (Select Codigo from MODELOSASIENTO where TipoAsiento IN ("~Pipe2Comillas(Var('TIPASDEV'))~")) ")
+        watch(sql.batch)
+        Recorrer SQL
+            ACN(DC:1, fbn('DevCont'))
+        Proximo
+    EndIf    
+    IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+        ACN(CK:1, 1)
+        IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrOperacion = '"~fbn('NrOperacion')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado IN ('E','A') AND NrTrans2 = '"~fbn('NrTrans')~"' AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+            ACN(CK:1, 0)
+        ENDIF
+    ENDIF
+    let &codAsi fbn('CodAsi')
+    IF Val(CK:1) = 0  
+        Message(fbn('NrOperacion')~'  - Modelo: '~fbn('CodAsi'))
+        SQL.GenerarAsientoOp(&codAsi,fbn('NrOperacion'),'','',Val(NA:1),Val(fv:1),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,fbn('NrTrans'),,,,,fsys,Dialogo.Fecha1)
+        SQL.EXEC
+    ENDIF
+Proximo

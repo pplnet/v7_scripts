@@ -1,0 +1,176 @@
+﻿***********************************************************************************************
+* Recibi un Registro 4428 y Completo la tabla GARANTIASOCT    (OCT)                           *
+***********************************************************************************************
+
+*/Guardo en el log de cotizaciones lo que llega del MAE
+*/AbrirASCII(Val(z2)~'\OCTGARAN.TXT',0)
+*/EscribirASCII(Val(A:2))
+*/CerrarASCII
+
+act(ln1, Val(A:2))
+acn(z1, 0)
+
+*/1234567890123456789012345678901 (31)
+*/0143057100040826092532338864428
+*/06110571ODOLAR999000000000000000000000000000000092685000000000000185370000000000000000000000000000000000000N    
+
+ACT(s:1,'Cliente')
+if Var('AGESIOP') = Num(Copy(Val(ln1),37,3))
+  ACN(u:1, Num(Copy(Val(ln1),33,3)))
+  ACT(t:15, 'R')
+else
+  ACN(u:1, Num(Copy(Val(ln1),37,3)))
+  ACT(t:15, 'O')
+endif
+if Val(u:1)=0
+  BorrarCeldas(t:1..t:1)
+else
+  ACT(t:1, SQL("Select Codigo From "~DBO~".CLIENTES Where NrMAE = "~Val(u:1)~" "))
+endif
+if Vacio(Val(t:1))
+  if Val(z1)=0
+    ACT(er:4, Pad('Cliente Garantia Inexistente: '~FStr(Val(u:1),0,0),40))
+  endif
+  ACN(z1,1)
+endif
+*message(Val(s:1)~' '~Val(t:1))
+
+ACT(s:3, 'Tipo Neg')
+ACT(t:3, Trim(Copy(Val(ln1),40,1)))
+if Not Eqstr(Val(t:3),'O')
+  if Val(z1)=0
+    ACT(er:4, Pad('Tipo de Negociacion Invalida (GAR)',40))
+  endif
+  ACN(z1,1)
+endif
+*Message(Val(s:3)~' '~Val(t:3))
+
+ACT(s:2, 'Especie')
+ACT(c:2, Trim(Copy(Val(ln1),41,5)))
+if NoVacio(Val(c:2))
+  ACT(t:2, SQL("Select EspecieDestino1 From "~DBO~".EQUIVALENCIA_ESPECIES Where EspecieOrigen = '"~Val(c:2)~"' and TipoNegociacion = '"~Val(t:3)~"' "))
+endif
+if Vacio(Val(t:2))
+  if Val(z1)=0
+    ACT(er:4,pad('Especie Destino Inexistente (GAR)',40))
+  endif
+  ACN(z1,1)
+endif
+*Message(Val(s:2)~' '~Val(t:2))
+
+ACT(s:4, 'NroPlazo')
+ACN(t:4, Num(Copy(Val(ln1),46,3)))
+
+ACT(s:5, 'Fecha')
+ACN(t:5, Fecha(Copy(Val(ln1),15,2)~'/'~Copy(Val(ln1),13,2)~'/20'~Copy(Val(ln1),11,2)))
+
+ACT(s:6, 'Monto')
+ACN(t:6, Num(Copy(Val(ln1),49,18))/100)
+
+ACT(s:7, 'Consumido Vta Pre Cierre')
+ACN(t:7, Num(Copy(Val(ln1),67,18))/100)
+
+ACT(s:8, 'Consumido Compra Pre Cierre')
+ACN(t:8, Num(Copy(Val(ln1),85,18))/100)
+
+ACT(s:9, 'Consumido Vta Post Cierre')
+ACN(t:9, Num(Copy(Val(ln1),103,18))/100)
+
+ACT(s:10, 'Consumido Compra Post Cierre')
+ACN(t:10, Num(Copy(Val(ln1),121,18))/100)
+
+*/Se pacta por monto fijo o porsentaje, 
+*/si fe por monto fijo este campo no se tiene en cta,.. si es por Porcent, indicara si es sobre el neto(N) o la suma(S)
+ACT(s:11, 'TotalNeto')
+
+ACT(t:11, Copy(Val(ln1),139,1))
+if Incluido(Val(t:11),'S|N')
+  ACT(t:12, Val(t:11))
+else
+  ACT(t:12, '')
+endif
+
+ACT(s:13, 'Mercado')
+ACT(t:13, Copy(Val(ln1),5,1))
+if Not EqStr(Val(t:13),Var('MERSIOP'))
+  if Val(z1)=0
+    ACT(er:4,pad('Registro Garantia de otro Mercado',40))
+  endif
+  ACN(z1,1)
+endif
+
+if Val(z1) = 0
+  acn(cu1,0)
+  SQL.ADD("Select Count('*') Cuantos from "~DBO~".GARANTIASOCT ")
+  SQL.ADD(" Where Fecha           = '"~IdxDate(Val(t:5))~"' ")
+  SQL.ADD("   and TipoNegociacion = '"~Val(t:3)~"' ")
+  SQL.ADD("   and Especie         = '"~Val(t:2)~"' ")
+  SQL.ADD("   and NroPlazo        = "~FStr(Val(t:4),0,0)~" ")
+  SQL.ADD("   and Cliente         = '"~Val(t:1)~"' ")
+  SQL.ADD("   and TipoGar         = '"~Val(t:15)~"' ")
+  Recorrer SQL
+    acn(cu1, fbn('Cuantos'))
+  Proximo  
+  if Val(cu1) = 0
+    SQL.ADD("Insert into "~DBO~".GARANTIASOCT ( ")
+    SQL.ADD(" Fecha,        TipoNegociacion, Especie,     ")
+    SQL.ADD(" NroPlazo,     Cliente,         TipoGar,     ")
+    SQL.ADD(" Monto,        CVPreCierre,     CCPreCierre, ")
+    SQL.ADD(" CVPostCierre, CCPostCierre,    TotalNeto    ")
+    SQL.ADD(" ) Values ( ")
+    SQL.ADD(" '"~IdxDate(Val(t:5))~"', ")
+    SQL.ADD(" '"~Val(t:3)~"', ")
+    SQL.ADD(" '"~Val(t:2)~"', ")
+
+    SQL.ADD(" "~FStr(Val(t:4),0,0)~", ")
+    SQL.ADD(" '"~Val(t:1)~"', ")
+    SQL.ADD(" '"~Val(t:15)~"', ")
+
+    SQL.ADD(" "~FStr(Val(t:6),0,2)~" , ")
+    SQL.ADD(" "~FStr(Val(t:7),0,2)~", ")
+    SQL.ADD(" "~FStr(Val(t:8),0,2)~", ")
+
+    SQL.ADD(" "~FStr(Val(t:9),0,2)~", ")
+    SQL.ADD(" "~FStr(Val(t:10),0,2)~", ")
+    SQL.ADD(" '"~Val(t:12)~"' ")
+    SQL.ADD(" ) ")
+    SQL.NEW
+  else
+    SQL.ADD("UPDATE "~DBO~".GARANTIASOCT ")
+    SQL.ADD("   Set Monto        = "~FStr(Val(t:6),0,2)~",   ")
+    SQL.ADD("       CVPreCierre  = "~FStr(Val(t:7),0,2)~",   ")
+    SQL.ADD("       CCPreCierre  = "~FStr(Val(t:8),0,2)~",   ")
+    SQL.ADD("       CVPostCierre = "~FStr(Val(t:9),0,2)~",   ")
+    SQL.ADD("       CCPostCierre = "~FStr(Val(t:10),0,2)~",  ")
+    SQL.ADD("       TotalNeto    = '"~Val(t:12)~"'           ")
+    SQL.ADD(" Where Fecha           = '"~IdxDate(Val(t:5))~"' ")
+    SQL.ADD("   and TipoNegociacion = '"~Val(t:3)~"' ")
+    SQL.ADD("   and Especie         = '"~Val(t:2)~"' ")
+    SQL.ADD("   and NroPlazo        = "~FStr(Val(t:4),0,0)~" ")
+    SQL.ADD("   and Cliente         = '"~Val(t:1)~"' ")
+    SQL.ADD("   and TipoGar         = '"~Val(t:15)~"' ")
+    SQL.NEW
+  endif
+  SQL.EXEC
+else
+  Message('*/Grabo en el Log de Errores')
+  */Fecha 
+  ACN(Y1, Ahora)
+  ACT(Y2, Hora(Val(Y1)))
+  ACT(Y3, Fecha(FSYS, Exe('FORFECMAE')))
+  ***** Fecha
+  ACT(er:1, Val(Y3))
+  ***** Hora
+  ACT(er:1, Val(er:1)~Copy(Val(Y2),1,2))
+  ACT(er:1, Val(er:1)~Copy(Val(Y2),4,2))
+  ACT(er:1, Val(er:1)~Copy(Val(Y2),7,2))
+  */Codigo de Registro
+  act(er:1, Val(er:1)~'4428')
+  */Motivo
+  act(er:1, Val(er:1)~Val(er:4))
+  */Contenido
+  act(er:1, Val(er:1)~Val(ln1))
+  AbrirASCII(Val(z2)~'\OCTERROR.TXT',0)
+  EscribirASCII(Val(er:1))
+  CerrarASCII
+endif

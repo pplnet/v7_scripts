@@ -1,0 +1,87 @@
+﻿HojaVisible(NO)
+CrearDialogo
+   NrTrans1: 'NrTrans' ;;;;;;Eqstr(BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans', Dialogo.NrTrans1), 'CUPON');'Transaccion Invalida';NO;;;;;;" TipoTr2 = 'CUPON' ";
+   Fecha1  : 'F.Corte' ;;;;;;Dialogo.Fecha1 <> 0;'Fecha de Corte Invalida';NO;Fsys
+   Fecha2  : 'F.Pago'  ;;;;;;Dialogo.Fecha2 > Dialogo.Fecha1;'Fecha de Pago Invalida';NO;Fsys
+   Especie1: 'Moneda Pago' ;;;;;;NoVacio(Dialogo.Especie1) Y Eqstr(BuscarCampo('ESPECIES','MonedaEmision','Codigo', Dialogo.Especie1), 'MON');'Moneda de Pago Invalida';NO;;;;;;" Tipo = 'MON' ";
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+ACT(BK:1, Var('BOOKCONTRA'))
+ACT(ML:1, Var('MONELOCA'))
+
+SQL.ADD(" Select T.Precio1, T.Precio2, T.Precio3, T.Precio5, T.CB5, T.Especie, T.Especie2, ")
+SQL.ADD(" T.Fecha1, M.Cantidad, T.Vehiculo1 ")
+SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVPENDIENTES M ")
+SQL.ADD(" Where T.NrTrans = M.NrOperacion ")
+SQL.ADD(" AND T.Especie2 = M.Especie ")
+SQL.ADD(" AND T.Vehiculo1 = M.Cliente ")
+SQL.ADD(" AND T.NrTrans = '"~Dialogo.NrTrans1~"' ")
+
+SQL.ADD(" UNION ")
+
+SQL.ADD(" Select T.Precio1, T.Precio2, T.Precio3, T.Precio5, T.CB5, T.Especie, T.Especie2, ")
+SQL.ADD(" T.Fecha1, M.Cantidad, T.Vehiculo1 ")
+SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD(" Where T.NrTrans = M.NrOperacion ")
+SQL.ADD(" AND T.Especie2 = M.Especie ")
+SQL.ADD(" AND T.Vehiculo1 = M.Cliente ")
+SQL.ADD(" AND T.NrTrans = '"~Dialogo.NrTrans1~"' ")
+Recorrer SQL
+    ***---Renta
+    ACN(RT:1, fbn('Cantidad') * fbn('Precio2') / 100)
+    ***---Amortizacion
+    ACN(AT:1, fbn('Cantidad') * fbn('Precio1') / 100)
+    ***---Ints. Capitalizados
+    ACN(IC:1, fbn('Cantidad') * fbn('Precio3') / 100)
+    ***---Indice
+    IF fbn('CB5') = 1
+        ACN(AJ:1, fbn('Precio5'))
+    ELSE
+        ACN(AJ:1, 1)
+    ENDIF
+    ***---Cantidad Cobrada/Pagada
+    ACN(CT:1, (Val(RT:1) + Val(AT:1) + Val(IC:1)) * Val(AJ:1))
+    ***---Moneda
+    ACT(MN:1, Dialogo.Especie1)
+    ***---Precio
+    IF Eqstr(Val(MN:1), Val(ML:1))
+        ACN(PR:1, 1)
+    ELSE
+* FJL 11/04/24 - Se generaban MovPosEje con precio = 0
+*        ACN(PR:1, Cotizacion(Val(MN:1),,,,fbn('Fecha1')-1,5,SI))
+        ACN(PR:1, Cotizacion(Val(MN:1),,,,fbn('Fecha1')-1,1,SI))
+    ENDIF
+    ***---Posicion Concertada
+    IF Dialogo.Fecha1 <= Fsys
+        SQL.ADD(" Insert Into "~DBO~".MOVPOSEJE ")
+    ELSE
+        SQL.ADD(" Insert Into "~DBO~".MOVPOSPEN ")
+    ENDIF
+    SQL.ADD(" (FechaMov, Cliente, Vehiculo, ")
+    SQL.ADD(" NrSaldo, Especie, Cantidad, ")
+    SQL.ADD(" Precio, Book, NrOperacion) ")
+    SQL.ADD(" Values ")
+    SQL.ADD(" ('"~IdxDate(Dialogo.Fecha1)~"', '"~fbn('Vehiculo1')~"', '"~fbn('Vehiculo1')~"', ")
+    SQL.ADD(" 31, '"~Val(MN:1)~"', "~Fstr(Val(CT:1), 0, 2)~", ")
+    SQL.ADD(" "~Fstr(Val(PR:1), 0, 8)~", '"~Val(BK:1)~"', '"~Dialogo.NrTrans1~"') ")
+    SQL.NEW
+    ***---Posicion Vencida
+    IF Dialogo.Fecha2 <= Fsys
+        SQL.ADD(" Insert Into "~DBO~".MOVPOSEJE ")
+    ELSE
+        SQL.ADD(" Insert Into "~DBO~".MOVPOSPEN ")
+    ENDIF
+    SQL.ADD(" (FechaMov, Cliente, Vehiculo, ")
+    SQL.ADD(" NrSaldo, Especie, Cantidad, ")
+    SQL.ADD(" Precio, Book, NrOperacion) ")
+    SQL.ADD(" Values ")
+    SQL.ADD(" ('"~IdxDate(Dialogo.Fecha2)~"', '"~fbn('Vehiculo1')~"', '"~fbn('Vehiculo1')~"', ")
+    SQL.ADD(" 51, '"~Val(MN:1)~"', "~Fstr(Val(CT:1), 0, 2)~", ")
+    SQL.ADD(" "~Fstr(Val(PR:1), 0, 8)~", '"~Val(BK:1)~"', '"~Dialogo.NrTrans1~"') ")
+    SQL.NEW
+Proximo
+SQL.EXEC

@@ -1,0 +1,108 @@
+﻿CrearDialogo
+  Fecha1     : "Fecha Desde"         ;1;1;;;;Dialogo.Fecha1 <> 0;'Fecha Desde Invalida';NO;PriDeMes(Fsys, SI);
+  Fecha2     : "Fecha Hasta"         ;1;2;;;;Dialogo.Fecha2 >= Dialogo.Fecha1;'Fecha Hasta Invalida';NO;Fsys;
+  Especie1   : "Moneda Oper."        ;3;1;;;;;;;Var('MONEEXTR');;LeerObjeto('Monedas');
+  Radio4     : "Consolidado|NO|SI"   ;3;2;;;;;;;0
+  Lista1     : "Vehiculo"            ;5;1;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') "));
+FinDialogo
+
+If Not Ok
+  Cancelar
+EndIf
+
+ACT(LS:1, IIF(NoVacio(Dialogo.Lista1), Dialogo.Lista1, IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSet(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') "))))
+
+ACN(EL:1, Elementos(Val(LS:1)))
+
+ACD(FE:1, Dialogo.Fecha1)
+ACD(FE:2, Dialogo.Fecha2)
+ACT(ES:1, Dialogo.Especie1)
+ACN(RA:4, Dialogo.Radio4)
+
+********************************************************************************************
+SQL.ADD(" Select Distinct O.Especie ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E ")
+SQL.ADD(" Where O.ContraEspecie = '"~Dialogo.Especie1~"' ")
+SQL.ADD(" AND O.Especie = E.Codigo ")
+SQL.ADD(" AND O.TipoOp In ('SECS','SECSV','SECT','SECTV','SEVS','SEVSV','SEVT','SEVTV') ")
+SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1))~") ")
+SQL.ADD(" AND O.FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+
+SQL.ADD(" UNION ")
+
+***---Select para Saldo Inicial de la Especie
+SQL.ADD(" Select Distinct S. Especie ")
+SQL.ADD(" From "~DBO~".SALDOSDIA S ")
+SQL.ADD(" Where S.NrSaldo = 10 ")
+SQL.ADD(" AND S.Saldo <> 0 ")
+SQL.ADD(" AND S.Fecha = (Select Max(D.Fecha) From "~DBO~".SALDOSDIA D ")
+SQL.ADD("                Where D.Cliente = S.Cliente ")
+SQL.ADD("                AND D.Especie = S.Especie ")
+SQL.ADD("                AND D.NrSaldo = S.NrSaldo ")
+SQL.ADD("                AND D.Fecha < '"~IdxDate(Dialogo.Fecha1)~"') ")
+
+SQL.ADD(" UNION ")
+
+***---Select para Saldo Inicial de Cupones
+SQL.ADD(" Select Distinct Especie ")
+SQL.ADD(" From "~DBO~".OPERACIONES ")
+SQL.ADD(" Where TipoOp = 'CUPON' ")
+SQL.ADD(" AND MB4='3' ")
+SQL.ADD(" AND TipoCambio3 = 10 ")
+SQL.ADD(" AND FechaOp < '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND (OperacionRef Is Null OR (OperacionRef Is Not Null AND OperacionRef = '')) ")
+SQL.ADD(" AND ContraEspecie = '"~Dialogo.Especie1~"' ")
+SQL.ADD(" AND Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1))~") ")
+SQL.ADD(" Order By Especie ")
+
+ACN(FI:3, fac+1)
+ACN(BD:1, 0)
+
+Recorrer SQL
+    ACN(BD:1, 1)
+    ACT(WA:fac, fbn('Especie'))
+    ACT(WB:fac, 'Bloomberg')
+    ACN(WC:fac, Cotizacion(fbn('Especie'),,,,Fsys,1))
+Proximo
+
+IF Val(BD:1) = 0
+    Cancelar('No hay informacion que concuerden con los datos ingresados')
+ENDIF
+
+CrearDialogo
+    ListBox; 'Arial,8,N'; 250; 300
+    'Especie'            ;WA:Val(FI:3)..WA:fac;NO;;;;70;STRING;
+    'Fuente'             ;WB:Val(FI:3)..WB:fac;;;;;70;STRING;
+    'Precio'             ;WC:Val(FI:3)..WC:fac;SI;Val(WC:FLB)>0;'Precio Invalido';;80;NUMERO;'###,###,###.########';
+    FinListBox
+FinDialogo
+
+IF Not OK
+    Cancelar
+ENDIF
+
+BorrarCeldas(LS:2..LS:4)
+
+ACN(FI:4, fac)
+
+Recorrer&k Val(FI:3), Val(FI:4)
+    ACT(LS:2, Val(LS:2)~Val(WA:&k)~'|')
+    ACT(LS:3, Val(LS:3)~Val(WB:&k)~'|')
+    ACT(LS:4, Val(LS:4)~Fstr(Val(WC:&k), 1, 8)~'|')
+Proximo
+
+********************************************************************************************
+
+
+IF Val(RA:4) = 0
+    ***---No Consolidado
+    Recorrer&k 1, Val(EL:1)
+        ACT(VH:1, Pipe2Comillas(ItemLista(Val(LS:1), &k)))
+        LinkearHoja('DETOAU', 1, Fecha1 = Val(FE:1), Fecha2 = Val(FE:2), Especie1 = Val(ES:1), Radio4 = Val(RA:4), Vehiculo1 = Val(VH:1), Lista1 = '', Lista2 = Val(LS:2), Lista3 = Val(LS:3), Lista4 = Val(LS:4))
+    Proximo
+ELSE
+    ***---Consolidado
+    LinkearHoja('DETOAU', 1, Fecha1 = Val(FE:1), Fecha2 = Val(FE:2), Especie1 = Val(ES:1), Radio4 = Val(RA:4), Vehiculo1 = '', Lista1 = Val(LS:1), Lista2 = Val(LS:2), Lista3 = Val(LS:3), Lista4 = Val(LS:4))
+ENDIF
+HojaVisible(NO)

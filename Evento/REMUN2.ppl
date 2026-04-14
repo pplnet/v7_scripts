@@ -1,0 +1,186 @@
+﻿CrearDialogo
+  Fecha1: 'Fecha'    ;1;1;;;;NoVacio(Dialogo.Fecha1);'Debe ingresar una fecha';NO;FSYS
+  Cuenta1:'Cuenta'   ;;;;;;;;;
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+If NoVacio(Dialogo.Cuenta1)
+    let &Cuenta Dialogo.Cuenta1
+    let &NrCuenta BuscarCampo('Cuentas','Numero','Codigo',&Cuenta) 
+    let &Banco BuscarCampo('Clientes','Alias3','Codigo',BuscarCampo('Cuentas','Comitente','Codigo',&Cuenta))
+    If Query("SELECT 1 FROM "~DBO~".SALDOSBANCARIOS WHERE Estado = 'REC' AND Banco = '"~&Banco~"' AND NrCuenta = '"~&NrCuenta~"' AND FechaSaldo < '"~IdxDate(Dialogo.Fecha1)~"' ") > 0
+        Cancelar('Hay Saldos pendientes por procesar.')
+    ENDIF
+ELSE
+    If Query("SELECT 1 FROM "~DBO~".SALDOSBANCARIOS WHERE Estado = 'REC' AND FechaSaldo < '"~IdxDate(Dialogo.Fecha1)~"' ") > 0
+        Cancelar('Hay Saldos pendientes por procesar.')
+    ENDIF
+Endif
+
+let &FechaLimite Habiles(Dialogo.Fecha1,1,'ARG',SI)
+
+*Recorrer&I 1,&FechaLimite-Dialogo.Fecha1
+Recorrer&i Dialogo.Fecha1, &FechaLimite-1
+    SQL.ADD("SELECT FechaSaldo, SaldoConPromedio, NrCuenta, Banco, SaldoContable + Ajuste as SaldoContable")
+    SQL.ADD("FROM "~DBO~".SALDOSBANCARIOS")
+    *SQL.ADD("WHERE FechaSaldo = '"~IdxDate(Dialogo.Fecha1+&I-1)~"'")
+    SQL.ADD("WHERE FechaSaldo = '"~IdxDate(&I)~"'")
+    SQL.ADD("AND Estado = 'REC'")
+    SQL.ADD("AND SignoInicial = 'C'")
+    *Uso los datos de la cuenta que se ingresó
+    If NoVacio(Dialogo.Cuenta1) 
+        SQL.ADD("AND Banco = '"~&Banco~"' AND NrCuenta = '"~&NrCuenta~"'")
+    Endif
+    Recorrer SQL
+        *Obtengo la cuenta correcta si no se ingresó ninguna
+        If Vacio(Dialogo.Cuenta1)
+            let &Comitente BuscarCampo('Clientes','Codigo','Alias3',FBN['Banco'])
+            let &Numero FBN['NrCuenta']
+            SQL.ADD("SELECT Codigo")
+            SQL.ADD("FROM "~DBO~".CUENTAS")
+            SQL.ADD("WHERE Numero = '"~&Numero~"' AND Comitente = '"~&Comitente~"'")
+            Recorrer SQL
+                let &Cuenta FBN['Codigo']
+            Proximo
+        Endif
+        
+        let &SaldoPromedio FBN['SaldoConPromedio']
+        let &SaldoContable FBN['SaldoContable']
+        
+        *Obtengo la fecha del saldo para ver si corresponde al último día habil del mes
+        let &FechaSaldo FBN['FechaSaldo']
+        
+        SQL.ADD("SELECT FechaOp, FechaOp2, FechaVto, Plazo, Vehiculo1, Cliente1, Especie, Precio1, RB8, NrOperacion, TotalIntereses, Cuenta1, ")
+        SQL.ADD(" Cantidad, CB2, TotalNetoCli2 ")
+        SQL.ADD("FROM "~DBO~".OPERACIONES")
+        SQL.ADD("WHERE TipoOp = 'MMRPAC' AND ")
+        SQL.ADD("FechaOp <= '"~IdxDate(FBN['FechaSaldo'])~"' AND FechaVto >= '"~IdxDate(FBN['FechaSaldo'])~"' ")
+        SQL.ADD("AND Cuenta1 = '"~&Cuenta~"' ")
+        Recorrer SQL
+            IF fbn('CB2') = 1
+                ***---Saldo Minimo Modificado, tomamos el nuevo saldo minimo requerido
+                let &SaldoMinimo FBN['TotalNetoCli2']
+            ELSE
+                let &SaldoMinimo FBN['Cantidad']
+            ENDIF
+            let &OperacionMMRPAC FBN['NrOperacion']
+            *Si el SaldoPromedio es mayor al Saldo Minimo de la MMRPAC y si se trata del último día del mes, tengo que anular todo lo que sigue 
+            IF &FechaSaldo = FinDeMes(Dialogo.Fecha1,SI,'ARG') Y &SaldoMinimo > &SaldoPromedio
+                *Borro las MMCCR asociadas
+                SQL.ADD("DELETE FROM "~DBO~".OPERACIONES")
+                SQL.ADD("WHERE TipoOp = 'MMCCR' AND OperacionRef = '"~&OperacionMMRPAC~"'")
+                SQL.NEW
+                SQL.EXEC
+                    
+                *Pongo los intereses de la MMRPAC en 0
+                SQL.ADD("UPDATE "~DBO~".OPERACIONES")
+                SQL.ADD(" SET TotalIntereses = 0, ")
+                SQL.ADD(" TotalNetoCli1 = "~&SaldoPromedio~"")
+                SQL.ADD("WHERE NrOperacion = '"~&OperacionMMRPAC~"'")
+                SQL.NEW
+                SQL.EXEC
+                    
+                *Borro las Cuotas de la MMRPAC
+                SQL.ADD("DELETE FROM "~DBO~".CUOTAS")
+                SQL.ADD("WHERE NrOperacion = '"~&OperacionMMRPAC~"'")
+                SQL.NEW
+                SQL.EXEC
+                    
+            ELSE
+            *Sigo procesando si no estoy en el último día del mes; o si estoy en el último día del mes pero el saldo Promedio supera al Minimo
+                let &FechaOp &I
+                let &FechaOp2 &I
+                let &Plazo 1
+                let &FechaVto &I+&Plazo
+                let &Vehiculo1 FBN['Vehiculo1']
+                let &Cliente1 FBN['Cliente1']
+                let &Especie FBN['Especie']
+                let &Precio1 FBN['Precio1']
+                let &RB8 FBN['RB8']
+                let &OperacionRef FBN['NrOperacion']
+                let &Cuenta1 FBN['Cuenta1']
+                let &TotalIntereses &SaldoPromedio*&Precio1*&Plazo/IIF(&RB8 = 0, 36000, 36500)
+                *ACN(NU:2,BuscarCampo('VEHICULOS','Alias1','Codigo',&Vehiculo1))
+                let &Numerador BuscarCampo('VEHICULOS','Alias1','Codigo',&Vehiculo1)
+                let &NrOperacion GetNumerador(Num(&Numerador))
+                
+                let &TotalInteresesMMRPAC FBN['TotalIntereses']+&TotalIntereses
+                
+                *Inserto la operación en la tabla
+                SQL.ADD("Insert Into "~DBO~".OPERACIONES ( ")
+                SQL.ADD("TipoOp,     Operador,      FechaOp,         FechaOp2,")
+                SQL.ADD("FechaVto,   Plazo,         Vehiculo1,       Cliente1,")
+                SQL.ADD("Especie,    Precio1,       UsrInput,        NrOperacion,")
+                SQL.ADD("FechaEj,    Cantidad,      TotalIntereses,  Cuenta1,")
+                SQL.ADD("FechaCarga, FechaCargaSys, TablaFeriados1,  CB1,")
+                SQL.ADD("OperacionRef ")
+                SQL.ADD("   ) VALUES (")
+                SQL.ADD(" 'MMCCR',                       '"~USUARIOACTIVO~"',          '"~IdxDate(&FechaOp)~"',     '"~IdxDate(&FechaOp2)~"', ")
+                SQL.ADD(" '"~IdxDate(&FechaVto)~"',      '1',                          '"~&Vehiculo1~"',            '"~&Cliente1~"',")
+                SQL.ADD(" '"~&Especie~"',                "~Fstr(&Precio1,0,8)~",       '"~USUARIOACTIVO~"',         '"~&NrOperacion~"',         ")
+                SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', "~Fstr(&SaldoPromedio,0,2)~", "~Fstr(&TotalIntereses,0,2)~", '"~&Cuenta1~"',")
+                SQL.ADD(" "~SQLAhora~",                  '"~IdxDate(Fsys)~"',          'ARG',                       '1',")
+                SQL.ADD(" '"~&OperacionRef~"'")
+                SQL.ADD("   )")
+                SQL.NEW
+                SQL.EXEC
+            
+                *Actualizo los movimientos devengados
+                SQL.ActualizarMovimientos3(&NrOperacion,NO,NO,NO,NO,SI)
+                SQL.NEW
+                SQL.EXEC
+            
+                *Inserto la operación en la instancia Terminal
+                *Ver evento INSBIT
+                EjecutarEvento('INSBIT',String1='OPERACIONES',Entero1=50,NrOperacion1=&NrOperacion)
+                
+                *Inserto en Cuotas
+                let &NrCuota 0
+                SQL.ADD("SELECT Max(NrCuota) as NrCuota")
+                SQL.ADD("FROM "~DBO~".CUOTAS")
+                SQL.ADD("WHERE NrOperacion = '"~&OperacionRef~"'")
+                Recorrer SQL
+                    let &NrCuota FBN['NrCuota']
+                Proximo
+                SQL.ADD("Insert Into "~DBO~".CUOTAS (NrOperacion, Fecha1, Cantidad1, Cantidad2, Total1, NrCuota) ")
+                SQL.ADD("VALUES")
+                SQL.ADD(" ('"~&OperacionRef~"','"~IdxDate(&FechaOp)~"',"~Fstr(&SaldoContable,0,2)~","~Fstr(&SaldoPromedio,0,2)~","~Fstr(&TotalIntereses,0,2)~","~Fstr(&NrCuota+1,0,0)~") ")
+                SQL.NEW
+                SQL.EXEC
+                
+                *Sumo el total de intereses a la MMRPAC
+                SQL.ADD("UPDATE "~DBO~".OPERACIONES")
+                SQL.ADD("SET TotalIntereses = "~Fstr(&TotalInteresesMMRPAC,0,2)~"")
+                IF &FechaSaldo = FinDeMes(Dialogo.Fecha1,SI,'ARG')
+                    SQL.ADD(",CB1 = 1")
+                    SQL.ADD(", TotalNetoCli1 = "~&SaldoPromedio~"")
+                ENDIF
+                SQL.ADD("WHERE NrOperacion = '"~&OperacionRef~"'")
+                SQL.NEW
+                SQL.EXEC
+                
+                *Actualizo los movimientos de la MMRPAC solo si es fin de mes
+                IF &FechaSaldo = FinDeMes(Dialogo.Fecha1,SI,'ARG')
+                    SQL.ActualizarMovimientos3(&OperacionRef,SI,NO,NO,NO,SI)
+                    SQL.NEW
+                    SQL.EXEC
+                ENDIF
+            ENDIF
+        Proximo
+        *Pongo el Saldo Bancario como procesado
+        SQL.ADD("UPDATE SALDOSBANCARIOS")
+        SQL.ADD("SET Estado = 'PRO'")
+        SQL.ADD("WHERE FechaSaldo = '"~IdxDate(&I)~"' AND Estado = 'REC'")
+        SQL.ADD("AND SignoInicial = 'C'")
+        If NoVacio(Dialogo.Cuenta1) 
+            SQL.ADD("AND Banco = '"~&Banco~"' AND NrCuenta = '"~&NrCuenta~"'")
+        Endif
+        SQL.NEW
+        SQL.EXEC
+    Proximo
+Proximo
+
+***---MessageBox('Evento Calculo de Intereses Remuneradas Finalizado Correctamente.')

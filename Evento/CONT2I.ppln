@@ -1,0 +1,101 @@
+MostrarCuadroDeMensajes()
+creardialogo
+fecha1:'Fecha';;;;;;dialogo.fecha1 > 0;'Fecha Invalida';NO;FSys()
+listatabla1: 'Operaciones';;;;NO;NO;;;;;;;;;;'NrOperacion';'NrOperacion;Cliente1;FechaOp;Especie;FechaVto';'OPERACIONES'
+tipoop1:'TipoOp';;;;NO;NO;;
+lista1:'Vehiculos';;;;SI;SI;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), SQLSet("Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo = '"~UsuarioActivo()~"'"))
+check1:'Contab.Procesada';;;;NO;NO;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+Message('--- Asientos de Devengados Descubiertos ---')
+
+Acn(x1, Query("Select 1 from "~Dbo()~".VARIABLES where Codigo = 'DIASCONT' "))
+if (Val(x1) = 1)
+Acn(x1, Trunc(Var('DIASCONT'), 0))
+endif
+if (Val(x1) < 1)
+Acn(x1, 1)
+endif
+Acd(x2, Habiles(PriDeMes(dialogo.fecha1, SI) - 1, Val(x1), 'ARG'))
+
+Acd(v:1, dialogo.fecha1)
+Acd(v:2, FinDeMes(PriDeMes(dialogo.fecha1, SI) - 1, NO))
+Acd(v:3, PriDeMes(Val(v:2), SI))
+Acd(v:4, PriDeMes(Val(v:1), SI))
+Acd(v:5, Val(v:4) - 1)
+Acd(v:6, Habiles(dialogo.fecha1, -1, 'ARG') + 1)
+
+Act(y:1, dialogo.lista1)
+Acd(fe:1, PriDeMes(dialogo.fecha1))
+
+
+Act(me:1, Var('MONEEXTR'))
+Act(ml:1, Var('MONELOCA'))
+Act(mu:1, Var('MONEURU'))
+
+
+Sqladd(" Select O.TipoOp, O.Vehiculo1, MD.Especie, V.Valor1, V.Valor2, M.Codigo CodAsi, Sum(MD.Monto) Devengado, ")
+Sqladd(" MD.Especie Moneda, C.Fecha2 FechaVto, O.NrOperacion, O.Cliente1, MD.TipoDevengado, O.Observaciones, O.Precio1, ")
+Sqladd(" O.Plazo, O.Cantidad, O.MB3, '' Alias8, O.CB5, V.Alias4, O.TotalNetoCli1, O.FechaVto, O.FechaVto2, O.Indice, O.FechaOp, O.RB10 ")
+Sqladd(" From "~Dbo()~".OPERACIONES O, "~Dbo()~".MOVDEVENGADOS MD, "~Dbo()~".VEHICULOS V, "~Dbo()~".MODELOSASIENTO M, ")
+Sqladd(" "~Dbo()~".CUOTAS C ")
+Sqladd(" Where C.Fecha2 >= '"~IdxDate(Val(v:3))~"' AND C.Fecha2 <= '"~IdxDate(Val(v:5))~"' ")
+Sqladd("   and O.TipoOp = 'MMDPAC' AND O.RB10=0 ")
+Sqladd("   and O.NrOperacion =  MD.NrOperacion ")
+Sqladd("   and O.NrOperacion =  C.NrOperacion ")
+Sqladd("   and MD.Fecha      > C.Fecha2 ")
+Sqladd("   and MD.Fecha      <=  C.Fecha3  ")
+Sqladd("   and O.Vehiculo1 Not  IN ("~Pipe2Comillas(Var('VLIQUIDAA'))~") ")
+Sqladd(" AND M.Habilitado = 'SI' ")
+Sqladd(" AND M.Entorno = '"~Sigla()~"' ")
+if (NoVacio(dialogo.lista1))
+Sqladd(" AND O.Vehiculo1 IN ("~Pipe2Comillas(dialogo.lista1)~") AND (( ")
+recorrer&i 1, Elementos(dialogo.lista1)
+Sqladd(" '|'+rtrim(M.Vehiculo)+'|' like '%|"~ItemLista(dialogo.lista1, &i)~"|%' ")
+if (not Elementos(dialogo.lista1) = &i)
+Sqladd(" OR ")
+endif
+proximo
+Sqladd(") OR M.Vehiculo1 is null OR M.Vehiculo1 = '' OR M.Vehiculo1 = ' ' )")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+Sqladd(" AND O.Vehiculo1 IN (Select Vehiculo from "~Dbo()~".USRVEHICULO where Codigo = '"~UsuarioActivo()~"') ")
+endif
+endif
+Sqladd("   and O.Vehiculo1   =  V.Codigo ")
+Sqladd("   and M.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIDEVF'))~") ")
+Sqladd("   and M.TipoOp      = O.TipoOp ")
+Sqladd(" group by O.TipoOp, O.Vehiculo1, MD.Especie, V.Valor1, V.Valor2, M.Codigo, C.Fecha2, O.NrOperacion, ")
+Sqladd(" O.Cliente1, MD.TipoDevengado, O.Observaciones, O.Precio1, O.Plazo, O.Cantidad, O.MB3, O.CB5, ")
+Sqladd(" V.Alias4, O.TotalNetoCli1, O.FechaVto, O.FechaVto2,  O.Indice, O.FechaOp, O.RB10 ")
+
+recorrer sql
+Acn(ck:1, 0)
+Acd(fv:1, Val(v:5))
+Act(vh:1, Fbn('Vehiculo1'))
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(Query(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrOperacion = '"~Fbn('NrOperacion')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado = 'E' AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Act(ba:fac, Fbn('TipoOp'))
+Act(bb:fac, Fbn('Vehiculo1'))
+Acn(bc:fac, Fbn('Valor1'))
+Acn(bd:fac, Fbn('Valor2'))
+Act(be:fac, Fbn('Especie'))
+Acn(bf:fac, Fbn('Devengado'))
+Act(bg:fac, Fbn('CodAsi'))
+Acn(dv:1, Fbn('Devengado'))
+Message(Fbn('NrOperacion')~' - Modelo: '~Fbn('CodAsi'))
+Sqlgenerarasientoop(Fbn('CodAsi'), Fbn('NrOperacion'), '', '', 810, Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoOp'), null, null, null, null, null, null, FSys(), dialogo.fecha1)
+Sqlexec()
+endif
+proximo
+

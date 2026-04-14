@@ -1,0 +1,285 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1   : 'Fecha'             ;;;;;;;;;FSys
+  Vehiculo1: 'Vehiculo'          ;;;;NO;;;;;Var('VEHICULODE');;;
+  Radio2   : 'Expresado|ARP|USD' ;;;;;;;;;0
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+
+Message(Dialogo.Vehiculo1)
+
+CrearFont(3, 'Arial,12,B')
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,1)
+
+ACT(g1, 'Posicion de Derivados')
+ACT(a3, 'Fecha : '~Dialogo.Fecha1)
+
+if NoVacio(Dialogo.Vehiculo1)
+   ACT(a:4, 'Vehiculo : '~Dialogo.Vehiculo1)
+else
+   ACT(a:4, 'Vehiculo : Todos')
+endif
+ACT(a:5, 'Expresado en '~IIF(Dialogo.Radio2=0,'Pesos','Dolares') )
+
+ACD(n2, FSys)
+SetFont(g1,3)
+SetFont(a3..a5,1)
+SetFilaActual(6)
+
+*** SELECCIONO SWAPS DE MONEDA
+SQL.ADD("Select 1 Orden, O.Vehiculo1, O.FechaCargaSys, O.Cliente1, O.NrOperacion, O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto FVto, ")
+SQL.ADD("C.Fecha1 FInicio, C.Fecha2 FFin, C.Cantidad1 ResidualV, C.Cantidad2 ResidualC, C.Precio1 VTasa, C.Precio2 CTasa, C.Total3 VSpread, C.Total4 CSpread, ")
+SQL.ADD(" C.Cantidad3 VTotInt, C.Cantidad4 CTotInt, O.TipoOp, O.RB9, O.RB8, O.TotalAux3, O.TotalBrutoCli2, C.Fecha3 FechaPago, C.Cantidad5, C.Cantidad6, O.Cuotas1,O.RB5,C.Fecha5 FInicioC ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+SQL.ADD(" where O.NrOperacion = C.NrOperacion ")
+SQL.ADD(" AND O.TipoOp IN ('MMSM') ")
+SQL.ADD(" AND C.Fecha1 <= '"~IdxDate(Dialogo.Fecha1)~"' and C.Fecha2>'"~IdxDate(Dialogo.Fecha1)~"' ")
+if NoVacio(Dialogo.Vehiculo1)
+  SQL.ADD("and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+endif
+SQL.ADD("  Union All ")
+
+*** SELECCIONO SWAPS DE TASA
+SQL.ADD(" Select 2 Orden, O.Vehiculo1, O.FechaCargaSys, O.Cliente1, O.NrOperacion, O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto FVto, ")
+SQL.ADD(" C.Fecha1 FInicio, C.Fecha2 FFin, C.Cantidad1 ResidualV, C.Cantidad2 ResidualC, C.Precio1 VTasa, C.Precio2 CTasa, C.Total3 VSpread, C.Total4 CSpread, ")
+SQL.ADD(" C.Cantidad3 VTotInt, C.Cantidad4 CTotInt, O.TipoOp, O.RB9, O.RB8, O.TotalAux3, O.TotalBrutoCli2, C.Fecha3 FechaDePago, C.Cantidad5, C.Cantidad6, O.Cuotas1,O.RB5,C.Fecha5 FInicioC ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+SQL.ADD(" where O.NrOperacion = C.NrOperacion ")
+SQL.ADD(" AND O.TipoOp IN ('MMST') ")
+SQL.ADD(" AND C.Fecha1 <= '"~IdxDate(Dialogo.Fecha1)~"' and C.Fecha2>'"~IdxDate(Dialogo.Fecha1)~"' ")
+if NoVacio(Dialogo.Vehiculo1)
+  SQL.ADD("and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+endif
+
+**** Corte de control de Swaps de Tasa de Interes o de Tipo de Cambio
+ACN(zt1, 0)
+
+**** Variable para el inicio
+ACN(zt2,0)
+
+**** Variable que dice si es consolidado
+ACN(zt3,1)
+
+**** guardo la posicion de la celda inicial de datos
+ACN(zt4,0)
+
+ACT(zz1,'MONEDA')
+ACT(zz2,'TASA')
+ACN(zt4,0)
+
+** Inicializo variables de suma
+ACN(pp1,0)
+ACN(qq1,0)
+ACN(ss1,0)
+ACN(tt1,0)
+ACN(uu1,0)
+ACN(vv1,0)
+
+Recorrer SQL
+
+   ** Si NO es consolidado y cambia el orden (Vto simple o Vto Multiple)
+   if [FBN['Orden'] <> Val(zt1)]
+      if Val(zt3)=0
+         AgregarMarco(a:Val(zt4)..Val(co1)-2:fac,2,2)
+         AgregarMarco(Val(co1)-1:Val(zt4)..Val(co1):fac,2,0)
+         ACT(o:fac+1, 'Total '~IIF(Dialogo.Radio2=0,'ARP','USD') )
+         
+         ACN(p:fac+1, IIf(VAL(ZT1)=1,Val(pp1)) )
+         ACN(q:fac+1, Val(qq1) )
+         ACN(s:fac+1, IIf(VAL(ZT1)=1,Val(ss1)) )
+         ACN(t:fac+1, Val(tt1) )
+         ACN(v:fac+1, Val(vv1) )
+         
+         ** Inicializo variables de suma
+         ACN(pp1,0)
+         ACN(qq1,0)
+         ACN(ss1,0)
+         ACN(tt1,0)
+         ACN(uu1,0)
+         ACN(vv1,0)
+
+         AgregarMarco(o:fac+1..t:fac+1,2,2)
+         AgregarMarco(u:fac+1..v:fac+1,2,0)
+         SetFont(o:fac+1..v:fac+1,1)
+         SetFont(a:Val(zt4)..Val(co1):fac,2)
+         FormatoCeldas(n:Val(zt4)..o:fac,Exe('F7'))
+         FormatoCeldas(j:Val(zt4)..k:fac,Exe('F3'))
+         FormatoCeldas(p:Val(zt4)..q:fac,Exe('F3'))
+         FormatoCeldas(r:Val(zt4)..r:fac,Exe('F0'))
+         FormatoCeldas(s:Val(zt4)..v:fac+1,Exe('F2'))
+         SetFilaActual(fac+3)
+      endif
+      ACN(zt3,1)
+      ACT(a:fac, 'SWAPS DE '~IIF(FBN['Orden']=1,Val(zz1),Val(zz2)) )
+      AgregarMarco(a:fac..c:fac,2,0,Exe('COLOR6'))
+      SetFont(a:fac..c:fac,1)
+      SetFilaActual(fac+2)
+   endif
+
+   ** Si cambia el orden y (es la primera vez o No es consolidado)
+   if [FBN['Orden'] <> Val(zt1)] y [Val(zt3)=1]
+      if FBN['Orden'] = 1
+          ACN(SW1,1)
+      else
+          ACN(SW1,0)
+      endif
+      ACN(zt1,FBN['Orden'])
+      ACN(zt3,0)
+      (.'VERCUADRO'.)
+      ACN(zt4,fac)
+   endif
+
+   if Not EqStr(FBN['Especie'],Val(es1))
+      * az1: Cotizacion 
+       ACN(az1,CotizacionC(fbn['Especie'],,,,Dialogo.Fecha1,1,SI,IIF(Dialogo.Radio2=0,VAR('MONELOCA'),VAR('MONEEXTR'))) )
+       ACT(es1, FBN['Especie'])
+   endif
+
+   if Not EqStr(FBN['ContraEspecie'],Val(es2))
+      * az2: Cotizacion Contraparte
+       ACN(az2,CotizacionC(fbn['ContraEspecie'],,,,Dialogo.Fecha1,1,SI,IIF(Dialogo.Radio2=0,VAR('MONELOCA'),VAR('MONEEXTR'))) )
+       ACT(es2, FBN['ContraEspecie'])
+   endif
+
+   ACT(a:fac, FBN['Cliente1'] )
+   ACT(b:fac, FBN['FechaCargaSys'] )
+   ACT(c:fac, FBN['FechaOp'] )
+   ACT(d:fac, FBN['FVto'] )
+
+   ** Si es una op de Venc. Mult. la fecha vto anterior no me sirve, tengo que tomar la fecha fin de la ultima cuota
+   if Incluido(FBN['TipoOp'], 'MMST')
+      ACT(d:fac, SQL("SELECT Fecha2 FROM "~DBO~".CUOTAS WHERE NrOperacion='"~FBN['NrOperacion']~"' and NrCuota="~FBN['Cuotas1']) )
+      AsignarLink(a:fac,'POSWDE',NrOPeracion1=FBN['NrOperacion'])
+   endif
+
+   ** Si es una op que posee cuotas, asigno link de detalle 
+   AsignarLink(a:fac,'POSWDE',NrOPeracion1=FBN['NrOperacion'])
+
+   ACT(e:fac, FBN['Especie'] )
+   ACT(f:fac, FBN['ContraEspecie'] )
+   ACT(g:fac, FBN['NrOperacion'] )
+   ACLO(g:fac, FBN['NrOperacion'] )
+   ACT(h:fac, FBN['FInicio'] )
+   ACT(i:fac, FBN['FFin'] )
+   ACN(j:fac, FBN['ResidualV'] )
+   ACN(k:fac, FBN['ResidualC'] )      
+   ACN(l:fac, FBN['Cantidad6'] )
+   ACN(m:fac, FBN['Cantidad5'] )
+   ACN(n:fac, (FBN['VTasa']+FBN['VSpread']) )
+   ACN(o:fac, (FBN['CTasa']+FBN['CSpread']) )
+   ACN(p:fac, FBN['CTotInt'] )
+   ACN(q:fac, FBN['VTotInt'] )
+   ACN(r:fac, FACTORDIAS2(FBN['FInicio'],Dialogo.Fecha1+1,FBN['RB8']+1))
+
+   ** Calculo intereses devengados
+   *- Interes Devengado a Recibir -> Day Count de la contraparte
+   ACN(s:fac, IIF(FBN['RB9']=0,((FBN['ResidualC']*(FBN['CTasa']+FBN['CSpread']))/100)*FACTORDIAS(FBN['FInicio'],Dialogo.Fecha1+1,FBN['RB5']+1),IIF(FBN['CTasa']>0,((FBN['ResidualC']*(FBN['CTasa']+FBN['CSpread']))/100)*FACTORDIAS(FBN['FInicio'],Dialogo.Fecha1+1,FBN['RB5']+1),0)) )
+
+   *- Interes Devengado a Pagar  -> Day Count de la Vehiculo
+   ACN(t:fac, IIF(FBN['RB9']=0,((FBN['ResidualV']*(FBN['VTasa']+FBN['VSpread']))/100)*FACTORDIAS(FBN['FInicio'],Dialogo.Fecha1+1,FBN['RB8']+1),IIF(FBN['VTasa']>0,((FBN['ResidualV']*(FBN['VTasa']+FBN['VSpread']))/100)*FACTORDIAS(FBN['FInicio'],Dialogo.Fecha1+1,FBN['RB8']+1),0)) )
+   if Val(SW1)=0
+      ** Calculo Tipo de Cambio si estoy en swaps de tipo de cambio
+      ACN(w:fac, IIF(EqStr(Modo(FBN['Especie'],FBN['ContraEspecie']),'DIR'),FBN['ResidualC']/FBN['ResidualV'],FBN['ResidualV']/FBN['ResidualC']) )
+      ACN(v:fac, FBN['VTotInt'] )
+      ACN(u:fac, FBN['CTotInt'] )      
+      SCN(uu1, FBN['CTotInt']*Val(az2) )
+      SCN(vv1, FBN['VTotInt']*Val(az1) )      
+   else
+      ACN(v:fac, FBN['CTotInt']-FBN['VTotInt'] )
+      SCN(vv1, Val(v:fac) )      
+   endif
+
+   ** En el caso de que sea una op Mult. Venc., tengo que tomar la cuota vigente del vehiculo y de la contraparte (las dos por separado).
+   ** La cuota del vehiculo ya la tome en el select superior, ahora seleccionar algunos datos de la cuota vigente de la contraparte
+   ** y los sobreescribo sobre los que ya estan
+   ACN(fi1,fac)
+   SQL.ADD(" Select C.Fecha2 FFin, C.Cantidad2 ResidualC, C.Precio2 CTasa, C.Total4 CSpread, ")
+   SQL.ADD(" C.Cantidad4 CTotInt, O.TipoOp, O.RB9, O.RB8, C.NrCuota ")
+   SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+   SQL.ADD(" where C.NrOperacion = '"~Val(g:fac)~"' and C.NrOperacion=O.NrOperacion " )
+   SQL.ADD("  and C.Fecha1<='"~IdxDate(Dialogo.Fecha1)~"' and C.Fecha2>'"~IdxDate(Dialogo.Fecha1)~"' ")
+   Recorrer SQL
+     ACN(k:Val(fi1), FBN['ResidualC'] )
+     ** Tasa
+     ACN(o:Val(fi1), (FBN['CTasa']+FBN['CSpread']) )
+     ** Intereses Totales
+     ACN(p:Val(fi1), FBN['CTotInt'] )
+     ** Intereses devengados
+     * ACN(s:Val(fi1), IIF(FBN['RB9']=0,((FBN['ResidualC']*(FBN['CTasa']+FBN['CSpread']))/100)*FACTORDIAS(Val(h:Val(fi1)),Dialogo.Fecha1,FBN['RB8']+1),IIF(FBN['CTasa']>0,((FBN['ResidualC']*(FBN['CTasa']+FBN['CSpread']))/100)*FACTORDIAS(Val(h:Val(fi1)),Dialogo.Fecha1,FBN['RB8']+1),0)) )
+   Proximo
+
+   SetFilaActual(Val(fi1))
+   SCN(pp1,Val(p:fac)*Val(az2) )
+   SCN(qq1,Val(q:fac)*Val(az1) )
+   SCN(ss1,Val(s:fac)*Val(az2) )
+   SCN(tt1,Val(t:fac)*Val(az1) )  
+
+Proximo
+
+ifa
+AgregarMarco(a:Val(zt4)..Val(co1):fac,2,2)
+FormatoCeldas(n:Val(zt4)..o:fac,Exe('F5'))
+FormatoCeldas(j:Val(zt4)..k:fac,Exe('F3'))
+FormatoCeldas(p:Val(zt4)..q:fac,Exe('F3'))
+FormatoCeldas(r:Val(zt4)..r:fac,Exe('F0'))
+FormatoCeldas(s:Val(zt4)..v:fac+1,Exe('F2'))
+SetFont(a:Val(zt4)..Val(co1):fac,2)
+ACT(o:fac+1, 'Total '~IIF(Dialogo.Radio2=0,'ARP','USD') )
+         
+ACN(p:fac+1, IIf(VAL(ZT1)=1,Val(pp1)) )
+ACN(q:fac+1, Val(qq1) )
+ACN(s:fac+1, IIf(VAL(ZT1)=1,Val(ss1)) )
+ACN(t:fac+1, Val(tt1) )
+ACN(v:fac+1, Val(vv1) )
+ACN(u:fac+1, IIf(VAL(ZT1)=1,Val(uu1)) )
+
+If VAL(ZT1)<>1
+   ACT(p:fac+1, ' ')
+   ACT(s:fac+1, ' ')
+   ACT(u:fac+1, ' ')
+   AgregarMarco(o:fac+1..o:fac+1,2,2)
+   AgregarMarco(q:fac+1..q:fac+1,2,2)
+   AgregarMarco(t:fac+1..t:fac+1,2,2)
+   AgregarMarco(v:fac+1..v:fac+1,2,2)
+Else
+   AgregarMarco(o:fac+1..v:fac+1,2,2)
+EndIf
+
+
+SetFont(o:fac+1..v:fac+1,1)
+if Val(SW1)=0
+   FormatoCeldas(w:Val(zt4)..w:fac,Exe('F5'))
+endif
+
+
+ACO(10,10)
+ACO(11,17)
+ACO(12,10)
+ACO(13,17)
+ACO(14,9)
+ACO(15,9)
+ACO(16,15)
+ACO(17,9)
+ACO(19,15)
+ACO(20,9)
+ACO(21,15)
+ACO(22,9)
+ACO(23,5)
+
+SetFilaActual(fac+3)
+
+*ACT(j:fac, 'TOTAL DEVENGADO :')
+*AgregarMarco(j:fac..Val(co1):fac,2,0)
+*SetFont(j:fac..Val(co1):fac,1)
+
+LimitesVision(z:fac+1)
+Impresion(1,2)
+

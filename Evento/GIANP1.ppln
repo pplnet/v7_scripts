@@ -1,0 +1,135 @@
+HojaVisible(SI)
+MostrarCuadroDeMensajes()
+
+creardialogo
+fecha1: 'Fecha Saldos';1;1;1;SI;SI;EsHabil(dialogo.fecha1, 'ARG');'Dia no habil';SI;FSys()
+directorio1: 'Path XLS';2;1;1;SI;SI;;;;Var('PATHDN')
+string1: 'Archivo XLS';3;1;1;SI;SI;;;;Var('FILEDN')
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (existedirectorio(dialogo.directorio1))
+if (Eqstr(Copy(dialogo.directorio1, Longitud(dialogo.directorio1), 1), '\'))
+if (not existearchivo(dialogo.directorio1~dialogo.string1))
+Cancelar('1.El Archivo '~dialogo.string1~' no existe en el directorio: '~dialogo.directorio1)
+endif
+else
+if (not existearchivo(dialogo.directorio1~'\'~dialogo.string1))
+Cancelar('2.El Archivo '~dialogo.string1~' no existe en el directorio: '~dialogo.directorio1)
+endif
+endif
+else
+Cancelar('El directorio '~dialogo.directorio1~' no existe')
+endif
+
+
+let(&pf, '')
+if (Eqstr(Copy(dialogo.directorio1, Longitud(dialogo.directorio1), 1), '\'))
+let(&pf, dialogo.directorio1~dialogo.string1)
+else
+let(&pf, dialogo.directorio1~'\'~dialogo.string1)
+endif
+
+CrearFont(1, 'Arial,12,B')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,8,')
+
+Act(c:1, 'Importacion de Saldos Bancarios')
+SetFont(c:1, 1)
+
+importarxls(f:4..g:10000, y:4..z:100000, &pf)
+if (not ok)
+Cancelar('Error al cargar el archivo'~&pf)
+endif
+
+let(&fecsaldos, Val(zz:4))
+
+if (&fecsaldos <> dialogo.fecha1)
+HojaVisible(NO)
+Cancelar('Fecha Saldos('~dialogo.fecha1~') y fecha del CSV('~&fecsaldos~') son distintas')
+endif
+
+Message('Insertando registros en la Base de Datos')
+
+
+recorrer&j 5, 100000
+
+if (NoVacio(Val(zy:&j)))
+
+if (Query(" Select 1 from "~Dbo()~".SALDOSBANCARIOS where FechaSaldo >= '"~IdxDate(dialogo.fecha1)~"' and NrCuenta = '"~Val(zy:&j)~"' and Estado <> 'ANU'  ") = 1)
+if (Query(" Select 1 from "~Dbo()~".SALDOSBANCARIOS where FechaSaldo = '"~IdxDate(dialogo.fecha1)~"' and NrCuenta = '"~Val(zy:&j)~"' and Estado <> 'ANU'  ") = 1)
+Act(m:&j, 'Ya existe saldo para '~Val(zy:&j)~' al '~dialogo.fecha1~' ')
+else
+Act(m:&j, 'Existen saldos posteriores para '~Val(zy:&j)~' al '~dialogo.fecha1~' ')
+endif
+ColorCeldas(m:&j, clred)
+else
+
+Acd(dd:1, Fecha(PriDeMes(&fecsaldos, SI)))
+let(&contable, 0)
+let(&operativo, 0)
+let(&inicial, 0)
+let(&dias, 0)
+if (Val(dd:1) < &fecsaldos)
+Sqladd(" Select TOP 1 SaldoAcuCon, SaldoAcuOpe, SaldoAcuIni, DiasAcu from "~Dbo()~".SALDOSBANCARIOS ")
+Sqladd(" where NrCuenta = '"~Val(zy:&j)~"' and FechaSaldo < '"~IdxDate(&fecsaldos)~"' and  FechaSaldo >= '"~IdxDate(Val(dd:1))~"' and Estado <> 'ANU' ")
+Sqladd(" Order by FechaSaldo DESC ")
+recorrer sql
+let(&contable, Fbn()['SaldoAcuCon'])
+let(&operativo, Fbn()['SaldoAcuOpe'])
+let(&inicial, Fbn()['SaldoAcuIni'])
+let(&dias, Fbn()['DiasAcu'])
+break
+proximo
+endif
+
+let(&contable, &contable + Val(zz:&j))
+
+let(&inicial, &inicial + Val(zz:&j))
+
+let(&operativo, &operativo + Val(zz:&j))
+
+let(&flag2, 0)
+
+recorrer&k &fecsaldos, Habiles(&fecsaldos, +1, 'ARG') - 1
+let(&dias, &dias + 1)
+if (&flag2 = 0 y Fecha(&k) > FinDeMes(&fecsaldos, SI))
+let(&dias, 1)
+let(&flag2, 1)
+let(&operativo, Val(zz:&j))
+let(&contable, Val(zz:&j))
+let(&inicial, Val(zz:&j))
+else
+if (&k > &fecsaldos)
+let(&operativo, &operativo + Val(zz:&j))
+let(&contable, &contable + Val(zz:&j))
+let(&inicial, &inicial + Val(zz:&j))
+endif
+endif
+Sqladd(" INSERT INTO "~Dbo()~".SALDOSBANCARIOS ")
+Sqladd(" (FechaSaldo, FechaBajada, FechaCarga, NrCuenta, SaldoContable, ")
+Sqladd(" SaldoInicio, SaldoOperativo, Proyectado24h, Proyectado48h, ")
+Sqladd(" Estado, ")
+Sqladd(" SaldoOpePromedio, SaldoConPromedio, Usuario, SaldoIniPromedio, ")
+Sqladd(" SaldoAcuCon, SaldoAcuOpe, SaldoAcuIni, DiasAcu, Ajuste ) ")
+Sqladd(" Values('"~IdxDate(Fecha(&k))~"' , '"~IdxDate(FSys())~"' , "~SQLAhora()~" , '"~Val(zy:&j)~"' , "~FStr(Val(zz:&j), 1, 2)~" , ")
+Sqladd(" "~FStr(Val(zz:&j), 1, 2)~" , "~FStr(Val(zz:&j), 1, 2)~" , "~FStr(Val(zz:&j), 1, 2)~" , "~FStr(Val(zz:&j), 1, 2)~" , ")
+Sqladd(" 'REC' , ")
+Sqladd(" "~FStr(&operativo / &dias, 1, 2)~" , "~FStr(&contable / &dias, 1, 2)~" , '"~UsuarioActivo()~"' , "~FStr(&inicial / &dias, 1, 2)~" , ")
+Sqladd(" "~FStr(&contable, 1, 2)~", "~FStr(&operativo, 1, 2)~", "~FStr(&inicial, 1, 2)~", "~FStr(&dias, 1, 0)~", 0)  ")
+Sqlnew()
+Sqlexec()
+proximo
+
+endif
+else
+Cancelar('Finalizando Evento, no se encontraron más Cuentas')
+endif
+
+proximo
+
+
+

@@ -1,0 +1,59 @@
+creardialogo
+fecha1: 'Fecha';1;1;;;;;;;FSys()
+vehiculo1: 'Vehiculo';2;;;NO;;;;;Var('VEHICON')
+listatabla1: 'Operaciones';1;2;;;;;;;;;;;;;'NrOperacion';'NrOperacion;Cliente1;FechaOp;Especie;FechaVto';'OPERACIONES'
+check1: 'Contab.Procesada';3;1;;NO;NO;
+radio1: 'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos';4;1;;NO;NO;;;;4;
+findialogo
+
+if (not ok)
+raise('Evento Cancelado')
+endif
+Message('--- Asientos de Movimientos no Operativos ---')
+Act(ta:1, Var('TIPASIMNOP'))
+Act(ml:1, Var('MONELOCA'))
+Act(vc:1, dialogo.vehiculo1)
+Acd(fe:1, Habiles(dialogo.fecha1, -Var('FVALORCONT'), 'ARG'))
+
+Sqladd("SELECT T.NrTrans, T.Fecha3, T.Vehiculo1, T.Cuenta1, T.CuentaContable2 CConcepto, T.Cuenta2, ")
+Sqladd("T.Cantidad1, T.Fecha1, MA.Codigo CodAsi, T.TipoTr2, T.ConceptoPago, T.Especie, T.Cliente1 Cliente, E.Issuer,T.Cliente1, ")
+Sqladd("'TIC' as TipoOp, T.Especie Moneda, T.Mercado1 Mercado ")
+Sqladd("FROM "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".MODELOSASIENTO MA, "~Dbo()~".ESPECIES E ")
+Sqladd("WHERE T.TipoTr2 in ('DENOP','RENOP','TRNOP') ")
+Sqladd("AND T.Fecha3 = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd("AND T.Especie = E.Codigo ")
+Sqladd("AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+Sqladd("AND MA.Habilitado = 'SI' ")
+Sqladd("AND MA.TipoAsiento = '"~Val(ta:1)~"' ")
+Sqladd("AND IsNull(T.CB7,'0') = '0'")
+Watch(Sqlbatch())
+Acn(xx:2, 0)
+Acn(xx:1, 0)
+recorrer sql
+Acn(co:1, 0)
+Acd(fv:1, Fbn('Fecha1'))
+Acd(fd:1, dialogo.fecha1)
+Act(vh:1, Fbn('Vehiculo1'))
+Act( to :1, Fbn('CodAsi'))
+Act(ti:1, Fbn('TipoTr2'))
+Act(nr:1, '')
+Act(nr:2, Fbn('NrTrans'))
+Acn(ck:1, 0)
+Acn(ck:1, 0)
+let(&merctapte, Fbn('Mercado'))
+Acn(co:1, iif (Eqstr(BuscarCampo('CNCONCEPTOSPAGOCOBRO', 'NoCont', 'Codigo', Fbn('ConceptoPago')), 'NO') o Vacio(BuscarCampo('CNCONCEPTOSPAGOCOBRO', 'NoCont', 'Codigo', Fbn('ConceptoPago'))), 1, 0))
+if (Val(co:1) = 1)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(Query(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrTrans2 = '"~Fbn('NrTrans')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+let(&codasi, Fbn('CodAsi'))
+if (Val(ck:1) = 0)
+Message(Fbn('NrTrans')~'  - Modelo: '~Fbn('CodAsi'))
+Sqlgenerarasientoop(&codasi, '', '', '', Val(na:1), Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoTr2'), null, Fbn('NrTrans'), null, null, null, null, FSys(), dialogo.fecha1)
+Sqlexec()
+endif
+endif
+proximo

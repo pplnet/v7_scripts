@@ -1,0 +1,544 @@
+﻿CrearDialogo
+  Perfil1:'Perfil' ;;;;;;NoVacio(Dialogo.Perfil1);'Perfil Invalido';NO;
+  Radio1 :'Tipo|Menu|Tablas|Op/Tr|Especial|Variables|Instancias';;;;;;Dialogo.Radio1 >= 0;'Tipo Invalido';NO;-1
+  Radio2 : 'Op/Tr|Operacion|Transaccion';;;;;Dialogo.Radio1=2;;;NO;0
+  Lista1 : 'Items Menu' ;;;;;Dialogo.Radio1 = 0;;;;;;'Archivo|Operaciones|Transacciones|Informes|Eventos|Utilitarios|Especial|Parametrizaciones';
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(2)
+
+ACT(A:fac, 'Informe de Perfiles de Usuarios')
+SetFont(A:fac, 3)
+
+SetFilaActual(fac+2)
+ACT(A:fac, 'Perfil: '~Dialogo.Perfil1~' - '~BuscarCampo('PERFILES2','Nombre','Codigo',Dialogo.Perfil1))
+ifa
+IF Dialogo.Radio1 = 0
+    ACT(A:fac, 'Items Menu: '~IIF(NoVacio(Dialogo.Lista1), Dialogo.Lista1, 'Todos'))
+ENDIF
+IF Dialogo.Radio1 = 1
+    ACT(A:fac, 'Tablas')
+ENDIF
+IF Dialogo.Radio1 = 2
+    ACT(A:fac, 'Tipos Operacion')
+ENDIF
+IF Dialogo.Radio1 = 3
+    ACT(A:fac, 'Especiales')
+ENDIF
+IF Dialogo.Radio1 = 4
+    ACT(A:fac, 'Variables')
+ENDIF
+IF Dialogo.Radio1 = 5
+    ACT(A:fac, 'Instancias')
+ENDIF
+SetFont(A:fac-1..A:fac, 2)
+SetFilaActual(fac+2)
+IF Dialogo.Radio1 = 0
+    ***---Items Menu
+    ACT(A:fac, 'Codigo')
+    ACT(B:fac, 'Descripcion')
+    SetFont(A:fac..B:fac, 2)
+    AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR'))
+    ACN(FI:1, fac+1)
+    IF Incluido('Archivo', Dialogo.Lista1) O Vacio(Dialogo.Lista1)
+        ifa
+        ACT(A:fac, 'MENU ARCHIVO')
+        SetFont(A:fac..B:fac, 2)
+        ACN(FI:2, fac+1)
+        AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR11'))
+        SQL.ADD(" Select PT.Codigo, PT.Descripcion ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+        SQL.ADD(" Where PatIndex('%IT'+RTrim(PT.Codigo)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND PT.Tipo IN ('A') ")
+        Recorrer SQL
+            ACT(A:fac, fbn('Codigo'))
+            ACT(B:fac, fbn('Descripcion'))
+        Proximo
+        SetFont(A:Val(FI:2)..B:fac, 1)
+    ENDIF
+    IF Incluido('Operaciones', Dialogo.Lista1) O Vacio(Dialogo.Lista1)
+        ifa
+        ACT(A:fac, 'MENU OPERACIONES')
+        SetFont(A:fac..B:fac, 2)
+        AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR11'))
+        ACN(FI:2, fac+1)
+        ***---Si no tiene habilitado Eventuales, lo pongo a mano.
+        ACN(SM:1, 300)
+        SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, PT.Tipo ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+        SQL.ADD(" Where PatIndex('%IT'+RTrim(PT.Codigo)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND PT.Tipo IN ('O', 'Q') ")
+        Recorrer SQL
+            ACT(A:fac, fbn('Codigo'))
+            ACT(B:fac, fbn('Descripcion'))
+            IF Eqstr(fbn('Tipo'), 'O')
+                ***---Nro. que suma para operaciones
+                ACN(SM:1, fbn('Codigo'))
+            ENDIF
+        Proximo
+        ***---Obtengo Instancias
+        SQL.ADD(" Select I.NrInstancia, I.Nombre, P.Codigo Perfil ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".INSTANCIAS I ")
+        SQL.ADD(" Where PatIndex('%IT'+SubString(Rtrim(Convert(Char, I.NrInstancia+"~Val(SM:1)~")), 1, 3)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND I.Tabla = 'OPERACIONES' ")
+        Recorrer SQL
+            ACT(A:fac, Fstr(fbn('NrInstancia')+Val(SM:1), 0, 0))
+            ACT(B:fac, fbn('Nombre'))
+        Proximo
+        SetFont(A:Val(FI:2)..B:fac, 1)
+    ENDIF
+    IF Incluido('Transacciones', Dialogo.Lista1) O Vacio(Dialogo.Lista1)
+        ifa
+        ACT(A:fac, 'MENU TRANSACCIONES')
+        SetFont(A:fac..B:fac, 2)
+        AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR11'))
+        ***---Obtengo nro. de cada cabecera
+        SQL.ADD(" Select Codigo, Descripcion From "~DBO~".PERFILESTABLAS ")
+        SQL.ADD(" Where Tipo = 'R' ")
+        SQL.ADD(" AND Descripcion IN ('Transacciones','Ordenes','MinutasBolsa','OpMinoristas') ")
+        Recorrer SQL
+            IF Eqstr(fbn('Descripcion'), 'Transacciones')
+                ACN(TR:1, Num(fbn('Codigo')))
+            ENDIF
+            IF Eqstr(fbn('Descripcion'), 'Ordenes')
+                ACN(OR:1, Num(fbn('Codigo')))
+            ENDIF
+            IF Eqstr(fbn('Descripcion'), 'MinutasBolsa')
+                ACN(MB:1, Num(fbn('Codigo')))
+            ENDIF
+            IF Eqstr(fbn('Descripcion'), 'OpMinoristas')
+                ACN(OP:1, Num(fbn('Codigo')))
+            ENDIF
+            DFA
+        Proximo
+        SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, PT.Tipo ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+        SQL.ADD(" Where PatIndex('%IT'+RTrim(PT.Codigo)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND PT.Tipo IN ('R') ")
+        Recorrer SQL
+            ACT(A:fac, fbn('Codigo'))
+            ACT(B:fac, fbn('Descripcion'))
+        Proximo
+        ***---Obtengo Instancias
+        ACN(BD:1, 0)
+        SQL.ADD(" Select I.NrInstancia, I.Nombre, P.Codigo Perfil ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".INSTANCIAS I ")
+        SQL.ADD(" Where PatIndex('%IT'+SubString(Rtrim(Convert(Char, I.NrInstancia+"~Val(TR:1)~")), 1, 3)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND I.Tabla = 'TRANSACCIONES2' ")
+        Recorrer SQL
+            IF Val(BD:1) = 0
+                ACT(A:fac, 'Transacciones')
+                SetFont(A:fac, 2)
+                ACN(BD:1, 1)
+                ifa
+                ACN(FI:2, fac)
+            ENDIF
+            ACT(A:fac, Fstr(fbn('NrInstancia')+Val(TR:1), 0, 0))
+            ACT(B:fac, fbn('Nombre'))
+        Proximo
+        SetFont(A:Val(FI:2)..B:fac, 1)
+        ACN(BD:1, 0)
+        SQL.ADD(" Select I.NrInstancia, I.Nombre, P.Codigo Perfil ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".INSTANCIAS I ")
+        SQL.ADD(" Where PatIndex('%IT'+SubString(Rtrim(Convert(Char, I.NrInstancia+"~Val(OR:1)~")), 1, 3)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND I.Tabla = 'ORDENES' ")
+        Recorrer SQL
+            IF Val(BD:1) = 0
+                ACT(A:fac, 'Ordenes')
+                SetFont(A:fac, 2)
+                ACN(BD:1, 1)
+                ifa
+                ACN(FI:2, fac)
+            ENDIF
+            ACT(A:fac, Fstr(fbn('NrInstancia')+Val(OR:1), 0, 0))
+            ACT(B:fac, fbn('Nombre'))
+        Proximo
+        SetFont(A:Val(FI:2)..B:fac, 1)
+        ACN(BD:1, 0)
+        SQL.ADD(" Select I.NrInstancia, I.Nombre, P.Codigo Perfil ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".INSTANCIAS I ")
+        SQL.ADD(" Where PatIndex('%IT'+SubString(Rtrim(Convert(Char, I.NrInstancia+"~Val(MB:1)~")), 1, 3)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND I.Tabla = 'MINUTASBOLSA' ")
+        Recorrer SQL
+            IF Val(BD:1) = 0
+                ACT(A:fac, 'MinutasBolsa')
+                SetFont(A:fac, 2)
+                ACN(BD:1, 1)
+                ifa
+                ACN(FI:2, fac)
+            ENDIF
+            ACT(A:fac, Fstr(fbn('NrInstancia')+Val(MB:1), 0, 0))
+            ACT(B:fac, fbn('Nombre'))
+        Proximo
+        SetFont(A:Val(FI:2)..B:fac, 1)
+       IF NO
+        ***---En Pampa no Hay OPMINORISTAS
+        ACN(BD:1, 0)
+        SQL.ADD(" Select I.NrInstancia, I.Nombre, P.Codigo Perfil ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".INSTANCIAS I ")
+        SQL.ADD(" Where PatIndex('%IT'+SubString(Rtrim(Convert(Char, I.NrInstancia+"~Val(OP:1)~")), 1, 3)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND I.Tabla = 'OPMINORISTAS' ")
+        Recorrer SQL
+            IF Val(BD:1) = 0
+                ACT(A:fac, 'OpMinoristas')
+                SetFont(A:fac, 2)
+                ACN(BD:1, 1)
+                ifa
+                ACN(FI:2, fac)
+            ENDIF
+            ACT(A:fac, Fstr(fbn('NrInstancia')+Val(OP:1), 0, 0))
+            ACT(B:fac, fbn('Nombre'))
+        Proximo
+        SetFont(A:Val(FI:2)..B:fac, 1)
+       ENDIF
+    ENDIF
+    IF Incluido('Informes', Dialogo.Lista1) O Vacio(Dialogo.Lista1)
+        ifa
+        ACT(A:fac, 'MENU INFORMES')
+        SetFont(A:fac..B:fac, 2)
+        AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR11'))
+        ACT(C:Val(FI:1)-1, 'Tipo')
+        SetFont(C:Val(FI:1)-1, 2)
+        ACN(FI:2, fac+1)
+        SQL.ADD(" Select I.Codigo, I.Tipo, I.Nombre ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".INFORMES I ")
+        SQL.ADD(" Where patindex('%IN'+RTrim(I.Codigo)+' %',P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        Recorrer SQL
+            ACT(A:fac, fbn('Codigo'))
+            ACT(B:fac, fbn('Nombre'))
+            ACT(C:fac, fbn('Tipo'))
+            AlinearCeldas(C:fac,'D')
+        Proximo
+        SetFont(A:Val(FI:2)..C:fac, 1)
+    ENDIF
+    IF Incluido('Eventos', Dialogo.Lista1) O Vacio(Dialogo.Lista1)
+        ifa
+        ACT(A:fac, 'MENU EVENTOS')
+        SetFont(A:fac..B:fac, 2)
+        AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR11'))
+        ACN(FI:2, fac+1)
+        SQL.ADD(" Select E.Codigo, E.Tipo, E.Nombre ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".EVENTOS E ")
+        SQL.ADD(" Where patindex('%EV'+RTrim(E.Codigo)+' %',P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        Recorrer SQL
+            ACT(A:fac, fbn('Codigo'))
+            ACT(B:fac, fbn('Nombre'))
+            ACT(C:fac, fbn('Tipo'))
+            AlinearCeldas(C:fac,'D')
+        Proximo
+        SetFont(A:Val(FI:2)..C:fac, 1)
+    ENDIF
+    IF Incluido('Utilitarios', Dialogo.Lista1) O Vacio(Dialogo.Lista1)
+        ifa
+        ACT(A:fac, 'MENU UTILITARIOS')
+        SetFont(A:fac..B:fac, 2)
+        AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR11'))
+        ACN(FI:2, fac+1)
+        SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, PT.Tipo ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+        SQL.ADD(" Where PatIndex('%IT'+RTrim(PT.Codigo)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND PT.Tipo IN ('U') ")
+        Recorrer SQL
+            ACT(A:fac, fbn('Codigo'))
+            ACT(B:fac, fbn('Descripcion'))
+        Proximo
+        SetFont(A:Val(FI:2)..B:fac, 1)
+    ENDIF
+    IF Incluido('Especial', Dialogo.Lista1) O Vacio(Dialogo.Lista1)
+        ifa
+        ACT(A:fac, 'MENU ESPECIAL')
+        SetFont(A:fac..B:fac, 2)
+        AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR11'))
+        ACN(FI:2, fac+1)
+        SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, PT.Tipo ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+        SQL.ADD(" Where PatIndex('%IT'+RTrim(PT.Codigo)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND PT.Tipo IN ('E') ")
+        Recorrer SQL
+            ACT(A:fac, fbn('Codigo'))
+            ACT(B:fac, fbn('Descripcion'))
+        Proximo
+        SetFont(A:Val(FI:2)..B:fac, 1)
+    ENDIF
+    IF Incluido('Parametrizaciones', Dialogo.Lista1) O Vacio(Dialogo.Lista1)
+        ifa
+        ACT(A:fac, 'MENU PARAMETRIZACIONES')
+        SetFont(A:fac..B:fac, 2)
+        AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR11'))
+        ACN(FI:2, fac+1)
+        SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, PT.Tipo ")
+        SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+        SQL.ADD(" Where PatIndex('%IT'+RTrim(PT.Codigo)+' %', P.Script) <> 0 ")
+        SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+        SQL.ADD(" AND PT.Tipo IN ('P') ")
+        Recorrer SQL
+            ACT(A:fac, fbn('Codigo'))
+            ACT(B:fac, fbn('Descripcion'))
+        Proximo
+        SetFont(A:Val(FI:2)..B:fac, 1)
+    ENDIF
+ENDIF
+
+IF Dialogo.Radio1 = 1
+    ***---Tablas
+    ACT(A:fac, 'Codigo')
+    ACT(B:fac, 'Tabla')
+    ACT(C:fac, 'Alta')
+    ACT(D:fac, 'Baja')
+    ACT(E:fac, 'Modif.')
+    ACT(F:fac, 'Ver')
+    ACT(G:fac, 'Doble')
+    SetFont(A:fac..G:fac, 2)
+    AgregarMarco(A:fac..G:fac, 0, 0, Exe('COLOR'))
+    ACN(FI:2, fac+1)
+    SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, 3 Permiso ")
+    SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+    SQL.ADD(" Where (PatIndex('% '+RTrim(PT.Codigo)+'A %', P.Script) > 1 OR PatIndex('%'+RTrim(PT.Codigo)+'A %', P.Script) = 1 ) ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND PT.Tipo = 'T' ")
+
+    SQL.ADD(" UNION ")
+
+    SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, 4 Permiso ")
+    SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+    SQL.ADD(" Where (PatIndex('% '+RTrim(PT.Codigo)+'B %', P.Script) > 1 OR PatIndex('%'+RTrim(PT.Codigo)+'B %', P.Script) = 1 ) ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND PT.Tipo = 'T' ")
+
+    SQL.ADD(" UNION ")
+
+    SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, 5 Permiso ")
+    SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+    SQL.ADD(" Where (PatIndex('% '+RTrim(PT.Codigo)+'M %', P.Script) > 1 OR PatIndex('%'+RTrim(PT.Codigo)+'M %', P.Script) = 1 ) ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND PT.Tipo = 'T' ")
+
+    SQL.ADD(" UNION ")
+
+    SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, 6 Permiso ")
+    SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+    SQL.ADD(" Where (PatIndex('% '+RTrim(PT.Codigo)+'V %', P.Script) > 1 OR PatIndex('%'+RTrim(PT.Codigo)+'V %', P.Script) = 1 ) ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND PT.Tipo = 'T' ")
+
+    SQL.ADD(" UNION ")
+
+    SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, 7 Permiso ")
+    SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+    SQL.ADD(" Where (PatIndex('% '+RTrim(PT.Codigo)+'D %', P.Script) > 1 OR PatIndex('%'+RTrim(PT.Codigo)+'D %', P.Script) = 1 ) ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND PT.Tipo = 'T' ")
+    SQL.ADD(" Order By P.Codigo ")
+    Recorrer SQL
+        Message(fbn('Descripcion'))
+        IF Not Eqstr(fbn('Codigo'), Val(PF:1)) O CeldaVacia(PF:1)
+            ACT(A:fac, fbn('Codigo'))
+            ACT(B:fac, fbn('Descripcion'))
+        ELSE
+            DFA
+        ENDIF
+        ACT(fbn('Permiso'):fac, 'X')
+        ACT(PF:1, fbn('Codigo'))
+    Proximo
+    SetFont(A:Val(FI:2)..G:fac, 1)
+    AlinearCeldas(C:Val(FI:2)..G:fac, 'C')
+ENDIF
+
+IF Dialogo.Radio1 = 2
+    ***---Tipos Op/Tr
+    ACT(A:fac, 'Codigo')
+    ACT(B:fac, 'Descripcion')
+    SetFont(A:fac..B:fac, 2)
+    AgregarMarco(A:fac..B:fac, 0, 0, Exe('COLOR'))
+    ACN(FI:2, fac+1)
+    SQL.ADD(" Select T.Codigo, T.Nombre ")
+    If Dialogo.Radio2 = 0
+       SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".TIPOSOPERACION T ")
+       SQL.ADD(" Where patindex('%TO'+RTrim(T.Codigo)+' %',P.Script) <> 0 ")
+    Else
+       SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".TIPOSTRANSACCION2 T ")
+       SQL.ADD(" Where patindex('%TT'+RTrim(T.Codigo)+' %',P.Script) <> 0 ")
+    EndIf
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    Recorrer SQL
+        ACT(A:fac, fbn('Codigo'))
+        ACT(B:fac, fbn('Nombre'))
+    Proximo
+    SetFont(A:Val(FI:2)..B:fac, 1)
+ENDIF
+
+IF Dialogo.Radio1 = 3
+    ***---Especiales
+    ACT(A:fac, 'Codigo')
+    ACT(B:fac, 'Descripcion')
+    SetFont(A:fac..B:fac, 2)
+    AgregarMarco(A:fac..B:fac, 0, 0, Exe('COLOR'))
+    ACN(FI:2, fac+1)
+    SQL.ADD(" Select PT.Codigo, PT.Descripcion, P.Codigo Perfil, PT.Tipo ")
+    SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".PERFILESTABLAS PT ")
+    SQL.ADD(" Where PatIndex('%'+RTrim(PT.Codigo)+' %', P.Script) <> 0 ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND PT.Tipo IN ('S ') ")
+    Recorrer SQL
+        ACT(A:fac, fbn('Codigo'))
+        ACT(B:fac, fbn('Descripcion'))
+    Proximo
+    SetFont(A:Val(FI:2)..B:fac, 1)
+ENDIF
+
+IF Dialogo.Radio1 = 4
+    ***---Variables
+    ACT(A:fac, 'Codigo')
+    ACT(B:fac, 'Nombre')
+    ACT(C:fac, 'Valor')
+    SetFont(A:fac..C:fac, 2)
+    AgregarMarco(A:fac..C:fac, 0, 0, Exe('COLOR'))
+    ACN(FI:2, fac+1)
+    SQL.ADD(" Select V.Codigo, V.Valor, V.Nombre ")
+    SQL.ADD(" From "~DBO~".PERFILES2 P, "~DBO~".VARIABLES V ")
+    SQL.ADD(" Where patindex('%VA'+RTrim(V.Codigo)+' %',P.Script) <> 0 ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    Recorrer SQL
+        ACT(A:fac, fbn('Codigo'))
+        ACT(B:fac, fbn('Nombre'))
+        ACT(C:fac, fbn('Valor'))
+    Proximo
+    SetFont(A:Val(FI:2)..C:fac, 1)
+ENDIF
+
+IF Dialogo.Radio1 = 5
+    ***---Instancias
+    ACT(A:fac, 'NrInstancia')
+    ACT(B:fac, 'Nombre')
+    ACT(C:fac, 'Agregar')
+    ACT(D:fac, 'Editar')
+    ACT(E:fac, 'Borrar')
+    ACT(F:fac, 'Avanzar')
+    ACT(G:fac, 'Retroceder')
+    SetFont(A:fac..G:fac, 2)
+    AgregarMarco(A:fac..G:fac, 0, 0, Exe('COLOR'))
+    SQL.ADD(" Select I.*, 'A' Permiso ")
+    SQL.ADD(" From "~DBO~".INSTANCIAS I, "~DBO~".PERFILES2 P ")
+    SQL.ADD(" Where patindex('%'+RTrim(I.Agregar)+' %',P.Script) <> 0 ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND I.Agregar <> '@@@' ")
+    SQL.ADD(" AND I.Agregar Is Not Null ")
+    SQL.ADD(" AND I.Agregar <> '' ")
+    SQL.ADD(" AND I.Agregar <> ' ' ")
+
+
+
+    SQL.ADD(" UNION ")
+
+    SQL.ADD(" Select I.*, 'E' Permiso ")
+    SQL.ADD(" From "~DBO~".INSTANCIAS I, "~DBO~".PERFILES2 P ")
+    SQL.ADD(" Where patindex('%'+RTrim(I.Editar)+' %',P.Script) <> 0 ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND I.Editar <> '@@@' ")
+    SQL.ADD(" AND I.Editar Is Not Null ")
+    SQL.ADD(" AND I.Editar <> '' ")
+    SQL.ADD(" AND I.Editar <> ' ' ")
+
+    SQL.ADD(" UNION ")
+
+    SQL.ADD(" Select I.*, 'B' Permiso ")
+    SQL.ADD(" From "~DBO~".INSTANCIAS I, "~DBO~".PERFILES2 P ")
+    SQL.ADD(" Where patindex('%'+RTrim(I.Borrar)+' %',P.Script) <> 0 ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND I.Borrar <> '@@@' ")
+    SQL.ADD(" AND I.Borrar Is Not Null ")
+    SQL.ADD(" AND I.Borrar <> '' ")
+    SQL.ADD(" AND I.Borrar <> ' ' ")
+
+    SQL.ADD(" UNION ")
+
+    SQL.ADD(" Select I.*, 'F' Permiso ")
+    SQL.ADD(" From "~DBO~".INSTANCIAS I, "~DBO~".PERFILES2 P ")
+    SQL.ADD(" Where patindex('%'+RTrim(I.Fwd)+' %',P.Script) <> 0 ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND I.Fwd <> '@@@' ")
+    SQL.ADD(" AND I.Fwd Is Not Null ")
+    SQL.ADD(" AND I.Fwd <> '' ")
+    SQL.ADD(" AND I.Fwd <> ' ' ")
+
+    SQL.ADD(" UNION ")
+
+    SQL.ADD(" Select I.*, 'R' Permiso ")
+    SQL.ADD(" From "~DBO~".INSTANCIAS I, "~DBO~".PERFILES2 P ")
+    SQL.ADD(" Where patindex('%'+RTrim(I.Rew)+' %',P.Script) <> 0 ")
+    SQL.ADD(" AND P.Codigo = '"~Dialogo.Perfil1~"' ")
+    SQL.ADD(" AND I.Rew <> '@@@' ")
+    SQL.ADD(" AND I.Rew Is Not Null ")
+    SQL.ADD(" AND I.Rew <> '' ")
+    SQL.ADD(" AND I.Rew <> ' ' ")
+    SQL.ADD(" Order By I.Tabla, I.NrInstancia ")
+    Recorrer SQL
+        IF Not Eqstr(fbn('Tabla'), Val(TB:1)) O CeldaVacia(TB:1)
+            IF Not CeldaVacia(TB:1)
+                SetFont(A:Val(FI:2)..G:fac-1, 1)
+                AlinearCeldas(C:Val(FI:2)..G:fac, 'C')
+            ENDIF
+            ACT(A:fac, fbn('Tabla'))
+            SetFont(A:fac, 2)
+            AgregarMarco(A:fac..G:fac, 0, 0, Exe('COLOR11'))
+            ifa
+            ACT(A:fac, fbn('NrInstancia'))
+            ACT(B:fac, fbn('Nombre'))
+            ACN(FI:2, fac)
+        ELSE
+            IF Eqstr(fbn('NrInstancia'), Val(IT:1))
+                DFA
+            ELSE
+                ACT(A:fac, fbn('NrInstancia'))
+                ACT(B:fac, fbn('Nombre'))
+                ACN(FI:2, fac)
+            ENDIF
+        ENDIF
+        IF Eqstr(fbn('Permiso'), 'A')
+            ACT(C:fac, 'X')
+        ENDIF
+        IF Eqstr(fbn('Permiso'), 'E')
+            ACT(D:fac, 'X')
+        ENDIF
+        IF Eqstr(fbn('Permiso'), 'B')
+            ACT(E:fac, 'X')
+        ENDIF
+        IF Eqstr(fbn('Permiso'), 'F')
+            ACT(F:fac, 'X')
+        ENDIF
+        IF Eqstr(fbn('Permiso'), 'R')
+            ACT(G:fac, 'X')
+        ENDIF
+        ACT(TB:1, fbn('Tabla'))
+        ACT(IT:1, fbn('NrInstancia'))
+    Proximo
+ENDIF
+SetFont(A:Val(FI:2)..G:fac, 1)
+AlinearCeldas(C:Val(FI:2)..G:fac, 'C')
+SetFilaActual(fac+2)
+ACT(A:fac, 'Fin del Informe')
+SetFont(A:fac, 2)
+
+ACO(1, 8)
+ACO(2, 30)
+LimitesVision(H:fac+1)

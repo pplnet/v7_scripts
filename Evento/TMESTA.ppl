@@ -1,0 +1,73 @@
+﻿CrearDialogo
+  Fecha1:       'Fecha'     ;1;;;  ;  ;Dialogo.Fecha1>=Habiles(FSys,-Var('FVALORMAX'),'ARG') y Dialogo.Fecha1 <= Fsys;'Fecha fuera de rango permitido';NO;Fsys
+  NrOperacion1:  'TCPCEM'   ; ;;;  ;  ;;;;;;;;;"TipoOp in ('TCPCEM')"
+  Lista1:        'Mercados' ; ;;;NO;  ;;;;;'MAE|BYMA';SQLSet("SELECT Codigo FROM "~DBO~".MERCADOS  ORDER BY Codigo ");SI
+Findialogo
+if Not Ok
+   Cancelar
+endif
+
+** Para Procesar poner y:1 en 1
+ACN(y:1, 1)
+if Val(y:1)=0
+  HojaVisible(SI)
+endif
+
+SQL.ADD("SELECT O.NrORDEN, O.Mercado4 ")
+SQL.ADD("  FROM "~DBO~".ORDENES O, "~DBO~".OPERACIONESBITS OB ")
+SQL.ADD(" WHERE O.NrORDEN = OB.NrOperacion ")
+** Incluir BYMA inst 54
+SQL.ADD("   AND OB.NrBit in (54,104) ")
+SQL.ADD("   AND OB.Valor = '1' ")
+SQL.ADD("   AND O.FechaVto <="~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   AND  O.TipoOrden = 'TMANIF' ")
+if NoVacio(Dialogo.NrOperacion1)
+  SQL.ADD("AND  O.NrOperacion1 = '"~Dialogo.NrOperacion1~"' ")
+Endif
+If NoVacio(Dialogo.Lista1)
+  SQL.ADD("AND  O.Mercado4 In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+SQL.ADD("ORDER BY O.NrOrden ")
+watch(SQL.BATCH())
+Recorrer SQL
+  Message('Cerrando manifestacion '~FBN('NrOrden'))
+  ACT(OR:1,fbn['NrOrden'])
+  if Val(y:1)=1
+    * Procesa
+    SQL.ADD("SELECT *  FROM "~DBO~".MOVLIMITES  WHERE NrOperacion = '"~fbn['NrOrden']~"' ")
+    Recorrer SQL
+       SQL.ADD("INSERT INTO "~DBO~".MOVLIMITES ")
+       SQL.ADD("(FechaMov, Cliente, Limite, Especie, Monto, NrOperacion, Descripcion,  ")
+       SQL.ADD("Bits, Vehiculo, Operador, Book, Responsable, TipoPosicion, Producto,  ")
+       SQL.ADD("GrupoEspecie, CarteraBCRA) ")
+       SQL.ADD(" values (  ")
+       SQL.ADD(" "~IdxDate2(fbn['FechaMov'])~", '"~fbn['Cliente']~"', '"~fbn['Limite']~"', '"~fbn['Especie']~"', "~FSTR(fbn['Monto']*-1,0,2)~", '"~fbn['NrOperacion']~"', '"~fbn['Descripcion']~"',  ")
+       SQL.ADD(" '"~fbn['Bits']~"', '"~fbn['Vehiculo']~"', '"~fbn['Operador']~"', '"~fbn['Book']~"', '"~fbn['Responsable']~"', '"~fbn['TipoPosicion']~"', '"~fbn['Producto']~"',   ")
+       SQL.ADD(" '"~fbn['GrupoEspecie']~"', '"~fbn['CarteraBCRA']~"') ")       
+       SQL.NEW
+    Proximo
+    SQL.EXEC
+
+    * FJL 21/10/22 - Lo saco de Instancia Pendiente dependiendo del mercado
+*    EjecutarEvento('CBOINS', String1=FBN['NrOrden'], Radio1=1, Radio2=2, Entero1=104, Entero2=170)
+    if EqStr(fbn('Mercado4'),VAR('AMBBYMA'))
+      EjecutarEvento('CBOINS', String1=FBN['NrOrden'], Radio1=1, Radio2=1, Entero1=54, Entero2=170)
+    else
+      if EqStr(fbn('Mercado4'),VAR('AMBMAE'))
+        EjecutarEvento('CBOINS', String1=FBN['NrOrden'], Radio1=1, Radio2=2, Entero1=104, Entero2=170)
+      else
+        * Como Contingencia
+        EjecutarEvento('CBOINS', String1=FBN['NrOrden'], Radio1=1, Radio2=2, Entero1=104, Entero2=170)
+      endif
+    endif
+
+    SQL.ADD(" UPDATE "~DBO~".ORDENES")
+    SQL.ADD("   SET ESTADO = '2' ")
+    SQL.ADD(" WHERE NrOrden  = '"~FBN['NrOrden']~"' ")
+    SQL.NEW 
+    SQL.EXEC
+  else
+    * No Procesa
+    MessageBox('Cerrando manifestacion '~FBN('NrOrden'))
+  endif
+Proximo

@@ -1,0 +1,211 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:  'Fecha'  ;1;1; ;  ;  ;;;;fsys
+  Check1:  'Procesa';1;2; ;SI;SI;;;;0;
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+ACT(v:1, 'Oper en OPROFEX')
+ACT(v:2, 'OpROFEX en USR')
+ACT(v:3, 'Operador Default')
+ACT(v:5, VAR('AGESIOP'))
+ACT(T:99,'A3')
+ACN(w:1, SQL("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'OPA3' AND COLUMN_NAME in ('RootPartyID') "))
+ACN(x:1, SQL("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'OPA3' AND COLUMN_NAME in ('RootPartyRole') "))
+ACN(w:2, SQL("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'USUARIOS' AND COLUMN_NAME in ('OpROFEX') "))
+if SQL("SELECT 1 FROM "~DBO~".VARIABLES where Codigo='OPROFEXDEF' ")=1
+  ACT(w:3, Var('OPROFEXDEF'))
+  if SQL("SELECT 1 FROM "~DBO~".USUARIOS where Codigo='"~Val(w:3)~"' ")=0
+    ACT(w:3, USUARIOACTIVO)
+  endif
+endif
+if Vacio(Val(w:3))
+  ACT(w:3, USUARIOACTIVO)
+endif
+
+Message('Recuperando Op CPC1 A3...')
+SQL.ADD("Select * from "~DBO~".OPA3")
+SQL.ADD(" where isnull(Procesado,'0')='0' ")
+SQL.ADD("   and Convert(Date,FechaReal)="~IdxDate2(Dialogo.Fecha1) )
+SQL.ADD("   and MarketID  = 'XMAB' ")
+**SQL.ADD("   and SegmentID  = 'TIVA' ")
+** que TrdRptStatus se toman?? 0=confirmada, 3=Cancelada, 4=Transitoria
+SQL.ADD("   and isnull(Anulada,'NO')  = 'NO' ")
+SQL.ADD("   and TrdRptStatus  in ('0','3') ")
+SQL.ADD("   and isnull(ExecId,'')  <> '' ")
+SQL.ADD(" Order by Fecha,Boleta ")  
+watch(sql.batch)
+Recorrer SQL
+     ACT(t:1, fbn('Boleta'))
+     if Dialogo.Check1=1
+        Message('...'~fbn('Boleta'))
+     else
+        MessageBox('...'~fbn('Boleta'))
+     endif
+     ACT(aa:FAC, fbn('Boleta'))
+     ACT(ab:FAC, fbn('Posicion'))
+     
+     ACT(FE:1, FBN('Fecha'))
+     ACT(HO:1, FBN('Hora'))        
+     ACD(VT:1, FBN('Vto'))    
+     
+     **// Warning por default
+     ACT(WA:1, 'Falta la posicion '~FBN('Posicion'))
+     
+     if FBN['TrdRptStatus']=3
+        ** ver que hacer si viene cancelada -- se borra la ejecucion y se actualizala orden??? que pasa si hay una sola ejecucion??
+     else   
+        **FBN['TrdRptStatus']=0 --> Confirmada
+     endif
+     
+     ** idcomitente es la relacion con CLIENTE FPA por campo NrROFEX
+   
+     ACT(xy:2,SQL("Select 'NOK' From "~DBO~".EJECUCIONES Where cast(Fecha As Date) = '"~IdxDate(fbn('Fecha'))~"' and NrSecuencia = '"~fbn('TradeNumber')~"' "))
+  
+     
+        ACT(xy:3, iif(EqStr('NOK',Val(xy:2)),'NOK','OK'))
+        *messagebox(fbn('Fecha')~' - '~fbn('Secuencia')~' - '~Val(xy:2)~' - '~Val(xy:3))     
+        **messagebox(' 368 '~val(xy:3))
+     
+        IF EqStr(val(xy:3),'OK') y Incluido(FBN('IdCpraVta'),'1|3')
+           **Ejecucion Nueva
+           ACT(x:1, 'S')
+           ACT(xy:1,'NN')
+ 
+           **Definir Tipo de orden y Cliente por el mensaje
+           If EqStr(FBN('IdCpraVta'),'1')
+              ACT(u:3,'OTIC')
+              ACT(v:1,fbn('TradeNumber'))
+              **ACT(u:60, Copy(fbn('Fecha'),5,2)~'/'~Copy(fbn('Fecha'),3,2)~'/20'~Copy(fbn('Fecha'),1,2)~' '~Copy(fbn('Hora'),1,2)~':'~Copy(fbn('Hora'),3,2)~':'~Copy(fbn('Hora'),5,2))
+              **ACT(u:60, fbn('Fecha'))
+              ACT(u:60, Val(fe:1)~' '~Copy(val(ho:1),1,2)~':'~Copy(val(ho:1),3,2)~':'~Copy(val(ho:1),5,2))
+              ACT(t:60, SQLFechaStr(Val(u:60),Exe('FORFECHOR')))
+              ACT(u:2,  SQL("Select TipoOrden From "~DBO~".ORDENES Where NroAltaMAE='"~fbn('Boleta')~"'  and FechaOrden = '"~IdxDate(fbn('Fecha'))~"' "))
+              ACT(t:53, SQL("Select NrOrden   From "~DBO~".ORDENES Where NroAltaMAE='"~fbn('Boleta')~"'  and FechaOrden = '"~IdxDate(fbn('Fecha'))~"'"))
+              ACT(t:54, SQL("Select Cliente   From "~DBO~".ORDENES Where NroAltaMAE='"~fbn('Boleta')~"'  and FechaOrden = '"~IdxDate(fbn('Fecha'))~"'"))
+           Else
+              ACT(u:3,'OTIV')
+              ACT(v:1,fbn('TradeNumber'))     
+              **ACT(u:60, Copy(fbn('Fecha'),5,2)~'/'~Copy(fbn('Fecha'),3,2)~'/20'~Copy(fbn('Fecha'),1,2)~' '~Copy(fbn('Hora'),1,2)~':'~Copy(fbn('Hora'),3,2)~':'~Copy(fbn('Hora'),5,2))
+              **ACT(u:60, fbn('Fecha'))
+              ACT(u:60, Val(fe:1)~' '~Copy(val(ho:1),1,2)~':'~Copy(val(ho:1),3,2)~':'~Copy(val(ho:1),5,2))
+              ACT(t:60, SQLFechaStr(Val(u:60),Exe('FORFECHOR')))
+              ACT(u:2,  SQL("Select TipoOrden From "~DBO~".ORDENES Where NroAltaMAE='"~fbn('Boleta')~"'  and FechaOrden = '"~IdxDate(fbn('Fecha'))~"'"))
+              ACT(t:53, SQL("Select NrOrden   From "~DBO~".ORDENES Where NroAltaMAE='"~fbn('Boleta')~"'  and FechaOrden = '"~IdxDate(fbn('Fecha'))~"'"))
+              ACT(t:54, SQL("Select Cliente   From "~DBO~".ORDENES Where NroAltaMAE='"~fbn('Boleta')~"'  and FechaOrden = '"~IdxDate(fbn('Fecha'))~"'"))
+           Endif
+           if EqStr(Val(u:3),'OTIC')
+              ACT(t:2,'TIC')
+           else
+              ACT(t:2,'TIV')
+           endif
+     
+
+           If EqStr(Val(t:54),Var('VEHICULO'))
+              ** Es Cartera Propia
+              ACN(t:55, 1)
+              ACT(xy:1,'OK') 
+           Else
+              ** Es Terceros
+              If EqStr(Val(u:2),'OTIC')
+                 ACT(xy:1,'OK')
+              Else
+                 If EqStr(Val(u:2),'OTIV')
+                    ACT(xy:1,'OK')
+                 Else
+                    ** Si hubiese otro tipo de msg desarrollar aqui 
+                    ACT(xy:1,'NOK')
+                 Endif
+              Endif
+           Endif
+     
+     **Messagebox('Orden '~Val(t:53)~' TipoOrden '~Val(u:2)~' '~Val(t:54)~' '~Val(t:55))
+     ** Arma datos Orden y Operacion  
+     (.'AUXGENCPC0'.)
+    ** generar Orden si NO existe
+     If Vacio(Val(u:2))
+        ACT(u:2,Val(u:3))
+        
+        *  messagebox('Grabo orden')
+        ACT(wa:1,'')
+        (.'GENORDENES'.)
+        ACT(t:53, Val(w7))
+     Endif
+     if Val(t:44)=1
+     *messagebox('Va a Datos Incompletos')
+        EjecutarEvento('CBOINS', String1=Val(T:53), Radio1=1, Radio2=0, Entero1=1, Entero2=4) 
+        ** Genera / Actualiza Ejecuciones 
+        (.'AUXGENOR22'.)
+        Message('     Se genero '~Val(NR:1))
+        SQL.ADD(" Update "~DBO~".OPA3 ")
+        SQL.ADD("    Set Procesado = '1', NrOperacion = '"~Val(NR:1)~"', Warning = null")
+        SQL.ADD("  Where Boleta = '"~FBN('Boleta')~"' ")
+        SQL.NEW
+        SQL.EXEC
+        else
+        SQL.ADD(" Select Cliente, TipoOrden, ContraEspecie, ")
+        SQL.ADD("        Mercado, Mercado2, Mercado3, Mercado4, ")
+        SQL.ADD("        Vehiculo, Operador, RB9, RB10, Book1, Lotes Plazo, RB5, ")
+        SQL.ADD("        Cuotas1, CB10, Cupon1, AfectaLS, ")
+        SQL.ADD("        Cuenta1, Cuenta4, Cuenta5, MB2  ")
+        SQL.ADD("   From "~DBO~".ORDENES Where NrOrden='"~Val(T:53)~"' ")
+        Recorrer SQL
+          DFA
+          ACT(u:2,  fbn('TipoOrden'))
+          ACT(t:12, fbn('ContraEspecie'))
+          ACT(t:22, fbn('Mercado'))        
+          ACT(t:31, fbn('Mercado3'))
+          ACT(t:52, fbn('Mercado2'))
+          ACT(t:54, fbn('Cliente'))         
+          ACT(t:75, fbn('Book1'))
+          ACT(t:28, fbn('Cuenta1'))
+          ACT(t:80, fbn('Cuenta4'))
+          ACT(t:81, fbn('Cuenta5'))
+          ACT(t:82, fbn('MB2'))
+        Proximo     
+     
+        ACT(t:59, BuscarCampo('OPERACIONES','NrOperacion','NrOrden1',Val(T:53)))
+        If NoVacio(Val(t:59))
+           ** Generar Ejecucion y Actualizar Orden y Operacion
+           (.'AUXGENORD2'.)
+        Else
+           ** Generar Operacion y Ejecucion
+           (.'AUXGENORD1'.)
+       
+           Message('     Se genero '~Val(T:1))
+           SQL.ADD(" Update "~DBO~".OPA3 ")
+           SQL.ADD("    Set Procesado = '1', NrOperacion = '"~Val(T:59)~"', Warning = null")
+           SQL.ADD("  Where Boleta = '"~Val(T:1)~"' ")
+           SQL.NEW
+           SQL.EXEC
+        Endif
+        *endif de datos Incompletos
+    endif
+ Endif
+        
+proximo
+
+if Dialogo.Check1=0 y FAC>0
+  FormatoCeldas(t:6..t:6,Exe('F0'))
+  FormatoCeldas(t:11..t:11,Exe('F2'))
+  FormatoCeldas(t:13..t:15,Exe('F8'))
+  FormatoCeldas(t:16..t:16,Exe('F2'))
+  FormatoCeldas(t:21..t:55,Exe('F0'))
+
+  FormatoCeldas(ca:6..(78+FAC):6,Exe('F0'))
+  FormatoCeldas(ca:11..(78+FAC):11,Exe('F2'))
+  FormatoCeldas(ca:13..(78+FAC):15,Exe('F8'))
+  FormatoCeldas(ca:16..(78+FAC):16,Exe('F2'))
+  FormatoCeldas(ca:21..(78+FAC):55,Exe('F0'))
+  ACO(1, 10)
+  ACO(19,15)
+  ACO(20,12)
+  ACO(78,15)
+endif

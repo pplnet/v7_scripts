@@ -1,0 +1,434 @@
+﻿**------------------------------------**-----------------**
+** AUXCOPMAE - Copiativo libro MAE - Función Auxiliar  **
+**-----------------------------------------------------**
+
+    IF Not Eqstr(fbn('ContraEspecie'), 'ARP')
+        ACN(CT:1, Cotizacion(fbn('ContraEspecie'),,,,fbn('FechaOp'),5,SI))
+    ELSE
+        ACN(CT:1, 1)
+    ENDIF
+
+    IF Not Eqstr(Dialogo.Especie1, 'ARP')
+        ACN(CT:2, CotizacionC(fbn('ContraEspecie'),,,,fbn('FechaOp'),1,SI,Dialogo.Especie1))
+    ELSE
+        ACN(CT:2, Val(CT:1))
+    ENDIF
+    
+    ** AA 02/07/2025 Control paginado 
+    ACT(me:20,FBN['Mercado4'])
+    (.'AXCPMAPAG'.)
+    
+    SCN(aw1, 1)
+    SCN(vi2,1)    
+
+    *1ra linea
+    ACT(a:FAC, IIF(longitud(fbn['NrBoleto'])<=6,fbn['NrBoleto'],Copy(fbn['NrBoleto'],longitud(fbn['NrBoleto'])-5,6)) )
+    ACT(b:FAC, Copy(fbn['NrOperacion'],1,8))
+    ACLO(b:FAC, Copy(fbn['NrOperacion'],1,8))
+    message('Operacion '~Val(b:fac))
+    ACD(c:FAC, fbn['FechaOp'])
+    ACD(FE:1, fbn('FechaOp'))
+    
+    If Eqstr(fbn('Convenio'),'1')
+       ACD(d:FAC, fbn['FechaPago'])
+    Else
+       ACD(d:FAC, fbn['FechaVto'])
+    Endif
+    If Incluido(fbn['TipoOp'],'CAUC')
+       if FBN['Qry']=111
+          ACT(e:FAC, 'Compra')
+       else
+          ACT(e:FAC, 'Venta')
+       endif   
+    EndIf
+    If Incluido(fbn['TipoOp'],'TIC')
+       ACT(e:FAC, 'Compra')
+    EndIf
+    If Incluido(fbn['TipoOp'],'TCOPRI')
+       ACT(e:FAC, 'Colocacion Primaria')
+    EndIf
+
+    If Incluido(fbn['TipoOp'],'TIV')
+       ACT(e:FAC, 'Venta')
+    Endif
+    If Incluido(fbn['TipoOp'],'TIFC')
+       ACT(e:FAC, 'Compra Fut')
+    EndIf
+    If Incluido(fbn['TipoOp'],'TIFV')
+       ACT(e:FAC, 'Venta Fut ')
+    Endif
+    If EqStr(fbn['PaseCB'],'1')
+       ACT(e:FAC, val(e:fac)~' Por Pase ')       
+    EndIf
+
+    ACT(f:fac, Fstr(IIF(fbn('Plazo')>=24,fbn('Plazo')/24,fbn('Plazo')),0,0))
+
+    If Num(fbn['NroAltaMae'])>0
+       If fbn('CB4') = 1 o ((EqStr(fbn('Cliente1'),VAR('VEHICULODE')) o EqStr(fbn('Cliente1'),VAR('CLIENTEMAE'))) y NoVacio(fbn('NrOrden1')))
+       Else
+          IF Incluido(fbn('Tipo'),'cBaja')
+             ACT(g:FAC, Pad0(Copy(Fstr(fbn('NroBajaMAE'),0,0),1,5),5))
+          ELSE
+             ACT(g:FAC, Pad0(Copy(Fstr(fbn('NroAltaMAE'),0,0),1,5),5))
+          ENDIF
+       endif
+       ACT(i:fac,Pad(FBN['CodMAEContado'],5))
+    Else
+       ACT(g:FAC, 'N/A')
+       ACT(i:fac,FBN['Especie'])
+       ACT(v:fac, fbn['NroAltaMAE'])
+    Endif
+    ACT(i:fac, fbn('CodMAEContado')~' - '~Copy(fbn('Nombre'), 1, 15))
+    ACT(s:fac, FBN['Cupon'] )
+    if EqStr(fbn('BYMA'),'NO')
+       ACT(H:fac, fbn('Cliente1')~' - '~Copy(fbn('RazonSocial'),1,25))
+    else
+       ACT(H:fac, Val(xx1))  
+       *ACT(H:fac, 'Cartera Propia')  
+    endif
+
+    ACN(j:fac, fbn['Cantidad'])
+
+    If Eqstr(FBN['Especie'],'FRB') 
+       ACN(k:fac, FBN['Precio1']*fbn('VTeorico') )
+    Else
+       If EqStr(fbn['EsAforado'],'1')
+          ACN(k:fac, FBN['TipoCambio2'])
+       Else
+          ACN(k:fac, FBN['Precio1'])
+       Endif
+    Endif
+
+    If EqStr(fbn['EsAforado'],'1')  
+       ACN(l:fac, fbn['TotalCaucion']-IIF(EqStr(FBN['CotizaMAE'],'CLE'),fbn['TotalIntereses'],0))
+    Else
+       ACN(l:fac, fbn['TotalBrutoCli1'])
+    Endif
+
+    *- Si la especie es Dirty Clean igualmente calculo los intereses
+    IF EqStr(FBN['CotizaMAE'],'CLE') y EqStr(FBN('InteresesC'),'DIR')
+       *- Calculo el precio sacandole los intereses
+       If EqStr(fbn['EsAforado'],'1')
+           * Precio Clean Aforado
+          ACN(k:fac,(fbn['TotalCaucion']-fbn['TotalIntereses'])/fbn['Cantidad'])
+           * Bruto Aforado
+          ACN(l:fac, fbn['Cantidad']*Val(k:fac)*ValorTeorico2(fbn('Especie'),fbn('FechaVto')) )
+       Else
+          ACN(k:fac,(fbn['TotalNetoCli1']-fbn['TotalIntereses'])/fbn['Cantidad'])
+          ACN(l:fac, fbn['TotalBrutoCli1']-fbn['TotalIntereses'])
+       Endif
+    EndIf
+
+    * - La especie es CLEAN DIRTY, informo Neto y precio sucio
+    IF EqStr(FBN['CotizaMAE'],'DIR') y EqStr(FBN('InteresesC'),'CLE')
+       *- Calculo el precio sacandole los intereses
+       If EqStr(fbn['EsAforado'],'1')
+          ACN(k:fac,(fbn['TotalCaucion'])/fbn['Cantidad'])
+          ACN(l:fac, fbn['TotalCaucion'])
+       Else
+          ACN(k:fac,(fbn['TotalNetoCli1'])/fbn['Cantidad'])
+          ACN(l:fac, fbn['TotalNetoCli1'])
+       Endif
+    EndIf
+
+    IF EqStr(FBN['CotizaMAE'],'CLE')
+       ACN(m:fac, fbn['TotalIntereses'])
+    Else
+       ACN(m:fac, 0)
+    Endif
+    ACN(n:fac, fbn['TotalNetoCli1'])
+
+    If EqStr(fbn['EsAforado'],'1')
+*       ACT(e:FAC, val(e:fac)~' Aforado ') 
+       ACN(n:fac, fbn['TotalCaucion'])
+    EndIf
+
+    If Incluido(fbn['TipoOp'],'TIC|TIV')
+       ACN(o:fac, fbn('TotalAux2'))
+       ACN(p:fac, fbn('Derechos'))
+    Endif
+
+    *    ACN(q:fac, Val(o:fac) + Val(p:fac))
+    *    ACN(r:fac, Val(n:fac) + Val(q:fac))
+    if Not Eqstr(FBN['Mercado4'],'BYMA')
+       ACT(t:fac, Copy(fbn['NrMAE'],1,25) )
+    else
+       ACT(t:fac, Copy(fbn['NrBYMA'],1,25) )
+    endif
+    ACT(u:fac, fbn['OpSIOPEL'])
+    ACN(cp:1, 0)
+    ACN(cp:1, SQL("SELECT 1 FROM "~DBO~".OPERACIONES  WHERE NrOperacion3='"~fbn('NrOperacion3')~"' AND NrOperacion3 is not NULL AND NrOperacion3 <> ''  AND NrOperacion3 <> '00000' AND NrOperacion<>'"~fbn('NrOperacion')~"' "))
+    SCN(cp:1, SQL("SELECT 1 FROM "~DBO~".BOPERACIONES WHERE NrOperacion3='"~fbn('NrOperacion3')~"' AND NrOperacion3 is not NULL AND NrOperacion3 <> ''  AND NrOperacion3 <> '00000' AND NrOperacion<>'"~fbn('NrOperacion')~"' "))
+
+**********************************************************************************
+**** Esto se trajo del Boleto para que sea exactamente igual MB 22/02/2006
+      IF EqStr(VAR('LICILIBROS'),'SI')
+         ACT(xy1,'TIC|TIV|TCOPRI')
+      ELSE
+         ACT(xy1,'TIC|TIV')
+      ENDIF
+      If SQL("SELECT COUNT(*) FROM "~DBO~".OPERACIONES WHERE NrOperacion3 = '"~fbn('NrOperacion3')~"' AND TipoOp IN ("~Pipe2Comillas(VAL(XY1))~") ")=2
+         act(CL:1 , SQL("Select Cliente1 From "~DBO~".OPERACIONES Where NrOperacion3 = '"~fbn('NrOperacion3')~"' and CB8 ='1' and NrOperacion <> '"~fbn('NrOperacion')~"'"))
+         act(cl3 , SQL("Select CategDepositante From "~DBO~".CLIENTES Where Codigo = '"~Val(CL:1)~"' "))
+         act(cl4 , SQL("Select AFJP     From "~DBO~".CLIENTES Where Codigo = '"~Val(CL:1)~"' "))
+         act(cl6 , SQL("Select Alias2   From "~DBO~".CLIENTES Where Codigo = '"~Val(CL:1)~"' "))
+         act(cl5 , SQL("Select NrCuenta From "~DBO~".CLIENTES Where Codigo = '"~Val(CL:1)~"' "))
+
+*****************20/07/2005         If fbn('NrMAE')>0
+
+         If novacio(fbn('NrMAE')) y Not eqstr(fbn('NrMAE'),'000')
+
+            * SOLO SE INDICA EL TIPO DE CONTRAPARTE EN EL BOLETO DEL AGENTE MAE
+            IF Eqstr(Val(cl3),'BAN') 
+               act(t:fac,'Banco') 
+            Endif
+            IF Eqstr(Val(cl3),'ABO') 
+               act(t:fac,'Soc.Bolsa ') 
+            Endif
+            IF Eqstr(Val(cl3),'AME') 
+               act(t:fac,'Age.MAE ') 
+            Endif
+            IF Eqstr(Val(cl3),'FON') Y [Vacio(Val(cl4)) o  Eqstr(Val(cl4),'NO')]
+               act(t:fac,'FCI') 
+            Endif
+            IF Eqstr(Val(cl3),'FON') Y Eqstr(Val(cl4),'SI')
+               act(t:fac,'AFJP Fondo') 
+            Endif
+            IF [Not Eqstr(Val(cl3),'FON') o Vacio(val(cl3))] Y Eqstr(Val(cl4),'SI')
+               act(t:fac,'AFJP Encaje') 
+            Endif
+            IF Eqstr(Val(cl3),'OTR')
+               act(t:fac,'Otros') 
+            Endif
+            IF Eqstr(Val(cl3),'OTR') y Eqstr(Val(cl4),'SI')
+               act(t:fac,'AFJP') 
+            Endif
+*            act(t:fac+1,fbn('NrCuenta')) 
+*            act(t:fac+1,Val(cl:5))
+            ***---Se pone el codigo de la contraparte. Hablado con Cristina Segato 07-02-06
+            ***  ACT(t:fac, Val(CL:1))
+
+            *** Modificado por MB  21/2
+            act(t:fac,Val(t:fac)~' '~Val(cl:6) )  
+
+         Else
+*            act(t:fac,fbn('NrCuenta'))
+            act(t:fac,Val(cl:5))
+         Endif
+      Endif
+
+***********************************************************************************
+ if Not Eqstr(FBN['Mercado4'],'BYMA')
+   If fbn('CB4') = 1 o ((EqStr(fbn('Cliente1'),VAR('VEHICULODE')) o EqStr(fbn('Cliente1'),VAR('CLIENTEMAE'))) y NoVacio(fbn('NrOrden1')))
+      #ifdef BIND
+         ACT(v:fac, 'C.Propia')
+      #else
+         ACT(v:fac, 'Contr.Central')
+      #endif
+   Else
+      IF fbn('CB8') = 1
+         IF EqStr(VAR('LICILIBROS'),'SI')
+            ACT(xy1,'TIC|TIV|TCOPRI')
+         ELSE
+            ACT(xy1,'TIC|TIV')
+         ENDIF
+         IF SQL(" Select 1 FROM "~DBO~".OPERACIONES WHERE NrOperacion3 = '"~fbn('NrOperacion3')~"' AND TipoOp <> '"~fbn('TipoOp')~"' AND TipoOp IN ("~Pipe2Comillas(VAL(XY1))~") AND NrOperacion3 <> '00000' AND NrOperacion3 <> '     ' AND NrOperacion3 <> '' AND NrOperacion3 IS NOT NUll AND CB8='1' ")=1
+            ACT(v:fac, '3ros.')
+         ELSE
+           if EqStr(fbn('BYMA'),'SI')
+              ACT(v:fac, fbn('Cliente1')~' - '~Copy(fbn('RazonSocial'),1,25))
+           else
+              ACT(v:fac, 'C.Propia')
+           endif
+         ENDIF
+      ELSE
+         if EqStr(fbn('BYMA'),'SI')
+            ACT(v:fac, fbn('Cliente1')~' - '~Copy(fbn('RazonSocial'),1,25))
+         else
+            ACT(v:fac, 'C.Propia')
+         endif
+      ENDIF
+  Endif  
+ Endif   
+**********************************************************************************
+
+    ACT(w:fac, fbn('ContraEspecie'))
+    ACT(ES:1, fbn('ContraEspecie'))
+
+    If Incluido(fbn('Tipo'),'Baja|cBaja')
+       If EqStr(fbn['ObsErrorMAE'],'C')
+          ACT(x:fac, 'Baja por Carta')
+       Else
+          ACT(x:fac, 'Baja')
+       Endif
+    Endif
+    ACT(y:fac, fbn('Mercado4'))
+    scn(tT2,1)
+    
+    FormatoCeldas(k:fac,Exe('F9'))
+    *SetFont(a:FAC..y:fac,1)
+    *AlinearCeldas(g:FAC..g:FAC,'D')
+    *AlinearCeldas(u:fac..v:fac,'D')
+    *AlinearCeldas(e:FAC..e:FAC,'I')
+
+    *2da linea
+    IFA
+    SCN(aw1, 1)
+    
+    
+    If (fbn('CB4') = 1 o ((EqStr(fbn('Cliente1'),VAR('VEHICULODE')) o Incluido(fbn('Cliente1'),VAR('CLIEGARCP')) o EqStr(fbn('Cliente1'),VAR('CLIENTEMAE'))) y NoVacio(fbn('NrOrden1')) y Not EqStr(fbn['TipoOp'],'CAUC'))) y Not EqStr(BuscarCampo('UDNS','SenebiSistaco','Codigo',fbn['UDN2']),'SI')
+    
+       if Not EqStr(BuscarCampo('UDNS','SenebiSistaco','Codigo',fbn['UDN2']),'SI') o (Incluido(fbn['TipoOp'],'TCOPRI') y EqStr(VAR('LICILIBROS'),'SI'))
+          ACT(a:FAC, fbn['NrOrden1'])
+       endif   
+       ACD(b:FAC, fbn['FechaOp'])
+       **ACT(c:FAC, Hora(fbn['FechaAltaMAE']))
+       
+       if EqStr(Val(e:fac-1),'Compra')
+          ACT(c:FAC, BuscarCampo('OPSIOPEL','HoraOfertaCpra','NrOrden',fbn['NrOrden1']))
+       Else
+          ACT(c:FAC, BuscarCampo('OPSIOPEL','HoraOfertaVta','NrOrden',fbn['NrOrden1']))   
+       end
+       if Vacio(Val(c:fac))
+          ACT(c:FAC, BuscarCampo('ORDENES','HoraOrden','NrOrden',fbn['NrOrden1']))
+       else
+          ACT(c:FAC,Copy(Val(c:fac),1,2)~':'~Copy(Val(c:fac),3,2)~':'~Copy(Val(c:fac),5,2))   
+       endif   
+    else
+       If Incluido(fbn['TipoOp'],'TCOPRI')  y EqStr(VAR('LICILIBROS'),'SI')
+         ACT(a:FAC, fbn['NrOrden1'])
+       Else
+         ** AA 09-10-2023 verificar si todo BYMA debe tener 8 caracteres
+         if EqStr(BuscarCampo('UDNS','SenebiSistaco','Codigo',fbn['UDN2']),'SI')
+           ACT(a:FAC, Copy(Fstr(fbn('NroAltaMAE'),0,0),1,16))
+         else 
+         
+           ACT(a:FAC, Copy(Fstr(fbn('NroAltaMAE'),0,0),1,5))
+         endif
+       Endif
+       ACD(b:FAC, fbn['FechaOp'])
+** FJL 09/09/25 - Por hora orden en cauciones
+*       ACT(c:FAC, SQL("SELECT Top 1 HoraOp FROM "~DBO~".LIBORDENES WHERE NrOperacionRef = '"~fbn('NrOperacion')~"' and Agente <> '' "))
+*       if EqStr(Val(c:fac),'')
+*         ACT(c:FAC, Hora(fbn['FechaAltaMAE']))
+*       endif
+       if Incluido(fbn('TipoOp'),'CAUC')
+         ACT(a:FAC, fbn['NrOrden1'])
+         ACT(c:FAC, SQL("SELECT Top 1 HoraOp FROM "~DBO~".LIBORDENES WHERE NrOperacionRef = '"~fbn('NrOperacion')~"' "))
+         if EqStr(Val(c:fac),'')
+           ACT(c:FAC, Hora(fbn['FechaAltaMAE']))
+         endif
+       else
+         ACT(c:FAC, SQL("SELECT Top 1 HoraOp FROM "~DBO~".LIBORDENES WHERE NrOperacionRef = '"~fbn('NrOperacion')~"' and Agente <> '' "))
+         if EqStr(Val(c:fac),'')
+           ACT(c:FAC, Hora(fbn['FechaAltaMAE']))
+         endif
+       endif
+    Endif
+    
+    *ACT(c:FAC, Hora(fbn['FechaAltaMAE']))
+    *ACT(c:FAC, Hora(fbn['FechaCarga']))
+    
+    if EqStr(fbn('BYMA'),'NO')
+       ACT(h:fac, fbn('CUIT')~' - '~fbn('ComitenteCTA'))
+    else
+       ACT(h:fac, Val(xx3)~' - '~Val(xx4))
+    endif
+    
+    ACN(o:fac, fbn('IVAComision'))
+    ACN(p:fac, fbn('IVADerechos'))
+
+    ACN(q:fac-1, Val(o:fac-1) + Val(p:fac-1) +  Val(o:fac) + Val(p:fac))
+    ACN(r:fac-1, Val(n:fac-1) + Val(q:fac-1))
+
+    SetFont(a:FAC-1..y:fac,1)
+    
+    AlinearCeldas(g:FAC-1..g:FAC,'D')
+    AlinearCeldas(u:fac-1..v:fac,'D')
+    AlinearCeldas(e:FAC-1..e:FAC,'I')
+
+    *3ra linea
+    ACT(xy100, fbn['UDN2'])
+    ACT(xy2, fbn['NrOrdenAux'])
+    ACT(xy4, fbn['NumOpeSENEBI'])
+
+    **If fbn('CB4') = 1 o ((EqStr(fbn('Cliente1'),VAR('VEHICULODE')) o EqStr(fbn('Cliente1'),VAR('CLIENTEMAE'))) y NoVacio(fbn('NrOrden1')) y Not EqStr(fbn['TipoOp'],'TCOPRI') ) 
+        
+    If (fbn('CB4') = 1 o ((EqStr(fbn('Cliente1'),VAR('VEHICULODE')) o Incluido(fbn('Cliente1'),VAR('CLIEGARCP')) o EqStr(fbn('Cliente1'),VAR('CLIENTEMAE'))) y NoVacio(fbn('NrOrden1')) y Not Incluido(fbn['TipoOp'],'TCOPRI|CAUC')))y Not EqStr(BuscarCampo('UDNS','SenebiSistaco','Codigo',fbn['UDN2']),'SI')
+      SQL.ADD("SELECT * from "~DBO~".EJECUCIONES where NrOperacion = '"~fbn['NrOperacion']~"' ")
+      
+      Recorrer SQL
+
+        ** AA  02/07/2025 paginado
+      
+        (.'AXCPMAPAG'.)      
+        ** AA 05/07/2023 se actualiza Bind modificado 10/07/2023 solo para BYMA
+        if Eqstr(Val(me:10),'BYMA')
+          ACT(c:fac,'Reg: '~fbn['NrSecuencia']~' Orden: '~iif(Incluido(Val(xy100),'FIX|SDIB'),Val(xy2),iif(Incluido(Val(xy100),VAR('COPIATSNBG')),Val(xy4),fbn['NrSecuencia']))~'  '~fbn['Fecha'] )
+        else
+          ACT(xy1, Copy(Fstr(Anio(FBN['Fecha']),0,0),3,2)~Pad0(Fstr(Mes(FBN['Fecha']),0,0),2)~Pad0(Fstr(Dia(FBN['Fecha']),0,0),2) )
+          ACT(xy2, Copy(Hora(fbn('Fecha')),1,2)~Copy(Hora(fbn('Fecha')),4,2)~Copy(Hora(fbn('Fecha')),7,2))
+          if Incluido(Val(xy100),VAR('COPIATSNBG'))
+            ACT(xy3, Pad0(Copy(Fstr(val(xy4),0,0),1,8),8))
+          else
+            ** AA 10/06/2025 cambio SIOPEL por A3
+            ACT(xy3, Pad0(Copy(Fstr(fbn('NrSecuencia'),0,0),1,8),8))
+            **ACT(xy3, Pad0(Copy(Fstr(fbn('NrSecuencia'),0,0),1,5),5))
+          endif
+          ACT(c:fac,fbn['NrEjecucion']~' '~Val(xy1)~Val(xy2)~Val(xy3))
+        endif
+
+        ACN(j:fac,fbn['Cantidad'])
+        ACN(k:fac,fbn['Precio'])
+        ACN(r:fac,fbn['Cantidad']*fbn['Precio'])
+        FormatoCeldas(j:fac,Exe('F0'))
+        FormatoCeldas(k:fac,Exe('F9'))
+        SetFont(a:FAC..y:fac,1)
+        SCN(aw1, 1)
+          
+      Proximo  
+      else
+      IFA
+      SCN(aw1, 1)
+      if Incluido(Val(xy100),VAR('COPIATSNBG'))
+        **ACT(xy3, Pad0(Copy(Fstr(fbn('NroAltaMAE'),0,0),1,5),5))
+        ACT(xy3, Pad0(Copy(Fstr(Val(xy4),0,0),1,8),8))
+        ACT(c:fac,'Reg: '~Val(xy3)~'   '~fbn('FechaAltaMAE') )       
+      else
+        ACT(xy3, Pad0(Copy(Fstr(fbn('NroAltaMAE'),0,0),1,5),5))
+        IF NoVacio(FBN['NroAltaMAE']) 
+          ACT(xy1, Copy(Fstr(Anio(FBN['FechaAltaMAE']),0,0),3,2)~Pad0(Fstr(Mes(FBN['FechaAltaMAE']),0,0),2)~Pad0(Fstr(Dia(FBN['FechaAltaMAE']),0,0),2) )
+          ACT(xy2, Copy(Hora(fbn('FechaAltaMAE')),1,2)~Copy(Hora(fbn('FechaAltaMAE')),4,2)~Copy(Hora(fbn('FechaAltaMAE')),7,2))
+          ACT(c:fac,Val(xy1)~Val(xy2)~Val(xy3))       
+        ENDIF
+      endif   
+    endif
+    SetFont(a:FAC..y:fac,1)
+    
+    AlinearCeldas(g:FAC-1..g:FAC,'D')
+    AlinearCeldas(u:fac-1..v:fac,'D')
+    AlinearCeldas(e:FAC-1..e:FAC,'I')    
+
+    *-Diarios
+    IF Eqstr(fbn('Tipo'), 'Alta')
+        SCN(to:1, Val(l:fac))
+        SCN(to:2, Val(n:fac))
+        SCN(to:3, Val(m:fac))
+
+        SCN(to:5, Val(o:fac))
+        SCN(to:6, Val(p:fac))
+
+        SCN(TW:1, Val(q:fac))
+
+        *-Mensuales
+        SCN(tm:1, Val(l:fac))
+        SCN(tm:2, Val(n:fac))
+        SCN(tm:3, Val(m:fac))
+
+        SCN(tm:5, Val(o:fac))
+        SCN(tm:6, Val(p:fac))
+        SCN(TW:2, Val(q:fac))
+    ENDIF
+
+    ACD(fo:1, fbn('FechaOp'))
+    ACN(me:1, mes(fbn['FechaOp']))

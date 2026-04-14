@@ -1,0 +1,63 @@
+creardialogo
+directorio1: 'Path TXT';1;1;1;SI;SI;;;;Var('PATHLOG')
+string1: 'Archivo TXT';2;1;1;SI;SI;;;;'tabla cbu - ctas contables.txt'
+entorno1: 'Entorno';;;;NO;;NoVacio(dialogo.entorno1);'Debe indicar el entorno';NO;'BFSA'
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+let(&pf, '')
+if (existedirectorio(dialogo.directorio1))
+if (Eqstr(Copy(dialogo.directorio1, Longitud(dialogo.directorio1), 1), '\'))
+let(&pf, dialogo.directorio1~dialogo.string1)
+else
+let(&pf, dialogo.directorio1~'\'~dialogo.string1)
+if (not existearchivo(dialogo.directorio1~'\'~dialogo.string1))
+Cancelar('El Archivo '~dialogo.string1~' no existe en el directorio: '~dialogo.directorio1)
+endif
+endif
+else
+Cancelar('El directorio '~dialogo.directorio1~' no existe')
+endif
+
+AbrirAscii(&pf, 0)
+if (not ok)
+Cancelar()
+endif
+LeerAscii()
+Messagebox('Importando datos')
+recorrer&i 1, 100000
+let(&leer, LeerAscii())
+if (NoVacio(&leer))
+let(&cbu, Copy(&leer, 1, 22))
+let(&ctacble, Copy(&leer, 23, 32))
+
+if (NoVacio(Query("Select 1 from "~Dbo()~".CUENTAS Where CBU = '"~&cbu~"' ")))
+Sqladd("UPDATE "~Dbo()~".CUENTAS Set CuentaContable1 = '"~&ctacble~"' ")
+Sqladd("Where CBU = '"~&cbu~"' ")
+Sqlnew()
+Sqlexec()
+endif
+
+Sqladd("Select Especies from "~Dbo()~".CUENTAS Where CuentaContable1 = '"~&ctacble~"' ")
+recorrer sql
+let(&moneda, ItemLista(Fbn('Especies'), 1))
+proximo
+if (Query("Select 1 from "~Dbo()~".CONTABILIDAD Where Codigo = '"~&ctacble~"' ") = 1)
+Sqladd("UPDATE "~Dbo()~".CONTABILIDAD Set Nombre = 'Cuenta Bancaria', ")
+Sqladd("Moneda ='"~&moneda~"' , Entorno = '"~dialogo.entorno1~"' ")
+Sqlnew()
+Sqlexec()
+else
+Sqladd("INSERT INTO "~Dbo()~".CONTABILIDAD (Codigo,Nombre,Moneda,Entorno) VALUES")
+Sqladd("('"~&ctacble~"','Cuenta Bancaria','"~&moneda~"','"~dialogo.entorno1~"')")
+Sqlnew()
+Sqlexec()
+endif
+break
+endif
+proximo
+
+CerrarAscii()

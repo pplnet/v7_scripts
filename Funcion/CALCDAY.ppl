@@ -1,0 +1,96 @@
+﻿**TIPOCAMBIO
+let &fechaTC Dialogo.Fecha1
+@VARTIPOCAM
+let &vehiculoTC &vehiculo
+@COTVEHIC
+
+**Defino variables
+**Day ARP
+let &dayML 0
+**Day USD
+let &dayME 0
+
+
+**RESULTADOS FCI DEL DÍA
+*SQL.ADD(" Select Especie,Sum(VRMEDAY+RRMEDAY+CRMEDAY) as 'Resultado' from "~DBO~".RESULTADOS2 Where Fecha ='"~IdxDate(Dialogo.Fecha1)~"' ")
+*SQL.ADD(" AND Vehiculo='"~&vehiculo~"' AND Book='"~&book~"' AND NrSaldo=1")
+*SQL.ADD(" Group by Especie ")
+*Recorrer SQL
+*    let &cotiza Buscarcampo('ESPECIES','Cotiza','Codigo',fbn('Especie'))
+*    let &monedaTC1 &cotiza
+*    If EqStr(&cotiza,&monedaLocal)
+*        let &dayML &dayML+fbn('Resultado')
+*        let &monedaTC2 &monedaExtr
+*        @TIPOCAMBIO
+*        let &dayME &dayME+(fbn('Resultado')*&tc)
+*    Else
+*        let &dayME &dayME+fbn('Resultado')
+*        let &monedaTC2 &monedaLocal
+*        @TIPOCAMBIO
+*        let &dayML &dayME+(fbn('Resultado')*&tc)
+*    Endif
+*Proximo
+
+**RESULTADOS SEC Y FCI DEL DÍA
+SQL.ADD(" Select Especie,Sum(VRMEDAY+RRMEDAY+CRMEDAY+INMEDAY) as 'Resultado' from "~DBO~".RESULTADOS2 Where Fecha ='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND Vehiculo='"~&vehiculo~"' AND Book='"~&book~"' and NrSaldo=1 ")
+SQL.ADD(" Group by Especie ")
+Recorrer SQL
+    let &cotiza Buscarcampo('ESPECIES','Cotiza','Codigo',fbn('Especie'))
+    let &monedaTC1 &cotiza
+    If EqStr(&cotiza,&monedaLocal)
+    let &dayML &dayML+fbn('Resultado')
+        let &monedaTC2 &monedaExtr
+        @TIPOCAMBIO
+        let &dayME &dayME+(fbn('Resultado')*&tc)
+    Else
+        let &dayME &dayME+fbn('Resultado')
+        let &monedaTC2 &monedaLocal
+        @TIPOCAMBIO
+        let &dayML &dayME+(fbn('Resultado')*&tc)
+    Endif
+Proximo
+
+
+**RESULTADOS MM DEL DÍA
+SQL.ADD(" Select Especie,Sum(Monto) as 'Resultado' from "~DBO~".MOVDEVENGADOS Where Fecha ='"~IdxDate(Dialogo.Fecha1)~"' and NrSaldo=140 and TipoDevengado='INTLEN' ")
+SQL.ADD(" AND Vehiculo='"~&vehiculo~"' AND Book='"~&book~"' and Especie IN ('"~&monedaLocal~"','"~&monedaExtr~"') ")
+SQL.ADD(" Group By Especie")
+Recorrer SQL
+    If EqStr(FBN('Especie'),&monedaLocal)
+        let &dayML &dayML+fbn('Resultado')
+        let &monedaTC2 &monedaExtr
+        @TIPOCAMBIO
+        let &dayME &dayME+(fbn('Resultado')*&tc)
+    Else
+        let &dayME &dayME+fbn('Resultado')
+        let &monedaTC2 &monedaLocal
+        @TIPOCAMBIO
+        let &dayML &dayME+(fbn('Resultado')*&tc)
+    Endif
+Proximo
+
+**DC (Suma en la tabla DayML El campo DC de la tabla DCMM)
+let &dC SQL("Select Sum(DC) from "~DBO~".DCMM Where Vehiculo='"~&vehiculo~"' and Book='"~&book~"' and Fecha='"~IdxDate(Dialogo.Fecha1)~"' ")
+let &dayML &dayML+&dC
+**
+
+let &ayer Habiles(Dialogo.Fecha1,-1,,SI)
+let &vCartMLAyer QUERY(" Select ValorCarteraML from "~DBO~".RENTABILIDAD Where Fecha ='"~IdxDate(&ayer)~"'  AND Vehiculo = '"~&vehiculo~"' AND Book='"~&book~"' ")
+
+**Si al día de ayer no hay Valor Cartera, le pongo valor 1 para que no divida por 0
+If &vCartMLAyer=0
+    let &vCartMLAyer 1
+Endif
+**Calculo la rentabilidad
+
+let &rentabilidad &dayML/&vCartMLAyer
+
+
+SQL.ADD("UPDATE "~DBO~".RENTABILIDAD  ")
+SQL.ADD("Set DayML = "~FStr(&dayML,0,2)~" ,DayME = "~FStr(&dayME,0,2)~" ,Rentabilidad="~FStr(&rentabilidad,0,8)~", ")
+SQL.ADD("FechaCarga = "~SQLAhora~", FechaCargaSys = '"~IdxDate(FSYS)~"'  ") 
+SQL.ADD("Where Fecha ='"~IdxDate(Dialogo.Fecha1)~"'  AND Vehiculo = '"~&vehiculo~"' AND Book='"~&book~"'  ") 
+SQL.NEW
+SQL.EXEC
+

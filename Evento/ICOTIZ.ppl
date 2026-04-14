@@ -1,0 +1,165 @@
+﻿HojaVisible(SI)
+acn(ze1, Num(Copy(Fstr(Anio(Fsys), 4, 0), 3, 2)) )
+acn(ze2,Num(Pad0(Fstr(DifDias(Fsys, Fecha('01/01/'~Fstr(Anio(Fsys), 4, 0)), 'ARG', NO)+1, 0, 0), 3)))
+
+CrearDialogo
+  Fecha1       : 'Desde'       ;;;;;;NoVacio(Dialogo.Fecha1);'Debe Ingresar una Fecha Desde';NO;Fsys
+  Fecha2       : 'Hasta'       ;;;;;;NoVacio(Dialogo.Fecha2);'Debe Ingresar una Fecha Desde';NO;Fsys
+  Especie1     : 'Especie'     ;;;;NO;NO;;;;
+  String1      : 'Path Txt'    ;;;;;;;;;Var('DIRICOTIZ');;;;;;;;;;;;;;;;;  
+  String2      : 'Nombre'      ;;;;NO;;;;;'SIA'~Pad0(Fstr(val(ze1),0,0),2)~Fstr(val(ze2),0,0)
+  Radio1       : 'Sist.Oper.|W98|NT'     ;1;2;;;;;;;1;
+  Radio2       : 'Salida|Inf+TXT|TXT|Informe|'     ;2;2;;;;;;;0
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+*- no1: Nombre del Txt
+ACT(no1,'SIA'~Pad0(Fstr(val(ze1),0,0),2)~Fstr(val(ze2),0,0))
+
+MostrarCuadroDeMensajes
+
+IF Not ExisteDirectorio(Var('PATHINTCON'))
+    Cancelar('Debe crear el directorio '~Var('PATHINTCON'))
+ENDIF
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(4)
+
+ACT(a:2,'Fecha : '~Var('FECHASYS'))
+SetFont(c:2..c:2,1)
+
+ACT(a:FAC,   'Envio de Tipos de Cambio a SIAG desde el '~Dialogo.Fecha1~' al '~Dialogo.Fecha2)
+ACT(a:FAC+1, 'Genera '~IIF(Dialogo.Radio2=0,'Informe y TXT',IIF(Dialogo.Radio2=1,'TXT','Informe')))
+ACT(a:FAC+2, IIF(Dialogo.Radio2<2,'Archivo :'~Dialogo.String1~val(no1)))
+
+SetFont(a:FAC..a:FAC+2,3)
+
+SetFilaActual(FAC+1)
+ACN(w1,FAC)
+
+SetFilaActual(FAC+3)
+
+ACT(Z1,'')
+
+ACT(a:FAC,'Especie')
+ACT(b:FAC,'Tipo')
+ACT(c:FAC,'FechaEj')
+ACT(d:FAC,'PrecioEj')
+ACT(e:FAC,'Closed')
+ACT(f:FAC,'Ask')
+ACT(g:FAC,'Bid')
+ACT(h:FAC,'Last')
+ACT(i:FAC,'Fecha')
+
+SetFont(a:FAC..i:FAC,2)
+AgregarMarco(a:FAC..i:FAC,2,0,Exe('COLOR'))
+
+ACT(ml1,Var('MONELOCA'))
+ACT(me1,Var('MONEEXTR'))
+
+
+IF Dialogo.Radio2<2 y ExisteArchivo(Dialogo.String1~val(no1)) 
+   IF Dialogo.Radio1 = 0
+      WinExec('COMMAND.COM /C DEL '~Dialogo.String1~val(no1), 0)
+   ELSE
+      WinExec('CMD.EXE /C DEL '~Dialogo.String1~val(no1), 0)
+   ENDIF
+
+   ***---A veces ejecuta lo que sigue y el S.O. todavia no borro el archivo
+   Esperar(3)
+EndIf
+
+IF Dialogo.Radio2<=1 
+   ACT(aa1, Dialogo.String1~val(no1))
+
+   Message('Creando Archivo '~val(no1))
+
+   AbrirASCII(val(aa1),0)
+EndIf
+
+SQL.ADD("  Select C.Codigo,CASE C.FechaEj WHEN NULL THEN ' ' ELSE C.FechaEj END FechaEj,C.PrecioEj,C.CallPut,C.Precio1,")
+SQL.ADD("  C.Precio2,C.Precio3,C.Precio4,C.Fecha as Fecha FROM ")
+SQL.ADD("  "~DBO~".COTIZACIONES C")
+SQL.ADD("  WHERE C.Fecha Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"'")
+* SQL.ADD("  AND C.Codigo Not In ('"~val(ml1)~"','"~val(me1)~"')  ")
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("  AND C.Codigo = '"~Dialogo.Especie1~"'  ")
+EndIf
+SQL.ADD("  ORDER BY C.Fecha,C.Codigo ")
+
+Recorrer SQL
+
+    ACT(a:fac, FBN['Codigo'] )
+    ACT(b:fac, FBN['CallPut'] )
+    ACT(c:fac, FBN['FechaEj'])
+    ACN(d:fac, FBN['PrecioEj'] )
+    ACD(i:fac, FBN['Fecha'] )
+
+    If Not EqStr(Val(a:fac),val(ml1))
+       *- Todas las especies salvo los pesos se transforman a pesos, los pesos quedan expresados en usd
+       ACN(e:fac, CotizacionC(Val(a:fac),,,,val(i:fac), 1, SI,val(ml1) ) )
+       ACN(f:fac, CotizacionC(Val(a:fac),,,,val(i:fac), 2, SI,val(ml1) ) )
+       ACN(g:fac, CotizacionC(Val(a:fac),,,,val(i:fac), 3, SI,val(ml1) ) )
+       ACN(h:fac, CotizacionC(Val(a:fac),,,,val(i:fac), 4, SI,val(ml1) ) )
+    Else
+       ACN(e:fac, Cotizacion(Val(a:fac),,,,val(i:fac), 1 ) )
+       ACN(f:fac, Cotizacion(Val(a:fac),,,,val(i:fac), 2 ) )
+       ACN(g:fac, Cotizacion(Val(a:fac),,,,val(i:fac), 3 ) )
+       ACN(h:fac, Cotizacion(Val(a:fac),,,,val(i:fac), 4 ) )
+    EndIf
+
+
+    IF Dialogo.Radio2<=1 
+       ACT(aa:1,' ')
+       ACT(aa:1,FStr(Anio(val(i:fac)),4,0)~PAD0(FStr(Mes(val(i:fac)),0,0),2)~PAD0(FStr(Dia(val(i:fac)),0,0),2) )
+       ACT(aa:1,val(aa:1)~Pad(val(a:fac),6) )
+
+       If Not EqStr(val(c:fac),' ')
+          ACT(aa:1,val(aa:1)~FStr(Anio(val(c:fac)),4,0)~PAD0(FStr(Mes(val(c:fac)),0,0),2)~PAD0(FStr(Dia(val(c:fac)),0,0),2) )
+       Else
+          ACT(aa:1,val(aa:1)~'00000000')
+       EndIf
+
+       ACT(aa:1,val(aa:1)~Pad0(Fstr(val(d:fac),22,7),22) )
+       ACT(aa:1,val(aa:1)~Pad(val(b:fac),3) )
+       ACT(aa:1,val(aa:1)~Pad0(Fstr(val(e:fac),22,7),22) )
+       ACT(aa:1,val(aa:1)~Pad0(Fstr(val(f:fac),22,7),22) )
+       ACT(aa:1,val(aa:1)~Pad0(Fstr(val(g:fac),22,7),22) )
+       ACT(aa:1,val(aa:1)~Pad0(Fstr(val(h:fac),22,7),22) )
+
+       EscribirASCII(val(aa:1))
+
+    EndIf
+
+    FormatoCeldas(d:fac..d:fac, Exe('F7'))
+    FormatoCeldas(e:fac..h:fac, Exe('F7'))
+    SetFont(a:FAC..i:FAC,1)
+Proximo
+
+LimitesVision(m:fac)
+
+ACO(1,6)
+ACO(2,6)
+ACO(3,6)
+ACO(4,10)
+ACO(5,10)
+ACO(6,10)
+ACO(7,10)
+ACO(8,10)
+ACO(9,8)
+
+CerrarASCII
+
+If Dialogo.Radio2=1
+   HojaVisible(NO)
+EndIF
+
+If Dialogo.Radio1=0 o Dialogo.Radio1=1
+   MessageBox('Se Genero el Archivo '~Dialogo.String1~val(no1))
+EndIF

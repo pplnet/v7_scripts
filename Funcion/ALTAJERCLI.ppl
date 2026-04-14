@@ -1,0 +1,63 @@
+﻿*- Parametro de entrada cw3 =>  Contiene el tipo de Cliente a dar de alta 
+*- Parametro de Salida ba2  => Codigo de jerarquia a generar
+
+      *- Distribucion de jerarquias
+      If EqSTr(val(cw:3),'C') o Not Incluido(val(cw:3),'L|E|C|J|')
+         ACT(cw:3,'JERCLIENTE')
+         ACT(ba5, BuscarCampo('CLIENTES','Jerarquia','Codigo', 'CLIENTES') )
+      EndIf 
+      If EqSTr(val(cw:3),'L')
+         ACT(cw:3,'JERBLOCAL')
+         ACT(ba5, BuscarCampo('CLIENTES','Jerarquia','Codigo', 'BLOCAL') )
+      EndIf
+      If EqSTr(val(cw:3),'E')
+         ACT(cw:3,'JERBEXTER')
+         ACT(ba5, BuscarCampo('CLIENTES','Jerarquia','Codigo', 'BEXTER') )
+      EndIf
+      If EqSTr(val(cw:3),'J')
+         ACT(cw:3,'JEREMPRESA')
+         ACT(ba5, BuscarCampo('CLIENTES','Jerarquia','Codigo', 'EMPRESAS') )
+      EndIf
+
+      Repetir
+         *- La variable empieza desde 1 lo formateo para pegarle a los 6 primeros
+         *- digitos de la jerarquia ppal los otros 9 restantes. Ejemplo: Si BLOCAL es 001.001
+         *- recupero en wj1: 1 y lo transformo en 001.001.001. Asi voy obteniendo las subjerarquias de 
+         *- las jerarquias ppales
+
+         ACT(wj2,Fstr(SQL("Select Valor from "~DBO~".VARIABLES where Codigo='"~VAL(cw3)~"' "),0,0))
+         ACT(wj3,Copy(val(ba5),1,6)~Pad0(val(wj2),3)~'000000')
+
+         *- wj1: Codigo de Jerarquia actual
+         ACT(wj1,BuscarCampo('CLIENTES','Codigo','Jerarquia',val(wj3)))
+         
+         ACT(ba2,'')
+         If NoVacio(val(wj1))
+             ACT(ba2,GenerarJerarquia2('CLIENTES',Val(wj3)) )
+         EndIf
+
+         *- Si se excede de 15 la gerarquia actual tengo que crear otra jerarquia
+         *- O no encontro la jerarquia por ser la primer vez
+         If Longitud(Val(ba2))<>15 
+            ACT(wj2,Fstr(Num(val(wj2))+1,0,0))
+            ACT(wj3,Copy(val(ba5),1,6)~Pad0(val(wj2),3)~'000000')
+
+            ACT(wj4,Copy(VAL(cw3),4,6)~val(wj2))
+
+            SQL.ADD("UPDATE "~DBO~".VARIABLES    ")
+            SQL.ADD("SET Valor = '"~Val(wj2)~"'  ")
+            SQL.ADD("WHERE Codigo='"~VAL(cw3)~"' ")
+            SQL.NEW
+
+            *- Nueva Jerarquia de la cual cuelgan los clientes
+            SQL.ADD("INSERT "~DBO~".CLIENTES                                  ")
+            SQL.ADD("( Jerarquia, Codigo, RazonSocial,Fecha1  )                      ")
+            SQL.ADD(" VALUES ( '"~Val(wj3)~"','"~VAL(wj4)~"','"~VAL(wj4)~"',"~IdxDate2(Fsys)~") ")
+            SQL.NEW       
+            SQL.EXEC
+
+            ACT(ba2,GenerarJerarquia2('CLIENTES',VAL(wj3)) )
+        Else
+           Break
+        Endif 
+      Proximo

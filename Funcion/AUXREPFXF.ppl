@@ -1,0 +1,386 @@
+﻿********************************
+*** Buscar Resultados Realizados
+********************************
+ACN(cz:5, 0)
+ACN(cz:5, SQL("Select 1 from "~DBO~".VARIABLES where Codigo='MESINIEJE' "))
+if Val(cz:5)=0
+  ACN(cz:6, 1)
+else
+  ACN(cz:6, VAR('MESINIEJE'))
+endif
+if Val(cz:6)<1 or Val(cz:6)>12
+  ACN(cz:6, 1)
+endif
+if Mes(Dialogo.Fecha1)>=Val(cz:6)
+  ACT(cz:2, '01/'~Pad0(FStr(Val(cz:6),1,0),2)~'/'~FStr(Anio(Dialogo.Fecha1),4,0))
+else
+  ACT(cz:2, '01/'~Pad0(FStr(Val(cz:6),1,0),2)~'/'~FStr(Anio(Dialogo.Fecha1)-1,4,0))
+endif
+ACD(cz:3, Fecha(Val(cz:2)))
+ACN(cz:4, CotizacionC('USD',,,, Dialogo.Fecha1, 1, SI,'ARP'))
+
+SQL.ADD("Select R.* from "~DBO~".RESULTADOS R, "~DBO~".BOOKS B")
+SQL.ADD(" where R.NrSaldo = 123 ")
+SQL.ADD("   and R.TipoResultado =  'REALIZ' ")
+SQL.ADD("   and R.FechaEj       <  '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   and R.Day           <> 0 ")
+SQL.ADD("   and R.Fecha         >= '"~IdxDate(Val(cz:3))~"' ")
+SQL.ADD("   and R.Book          =  B.Codigo ")
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and R.Especie = '"~Dialogo.Especie1~"'")
+endif
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and R.Vehiculo in ("~Pipe2Comillas(val(az:1))~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo2)
+    SQL.ADD("and R.Vehiculo in ("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+  EndIf
+endif
+*if NoVacio(val(az:2))
+*   SQL.ADD(" and R.Book in ("~Pipe2Comillas(val(az:2))~") ")
+*endif
+If NoVacio(Dialogo.Lista2)
+  SQL.ADD("  and B.TipoBook in ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+endif
+If NoVacio(Dialogo.Lista3)
+  SQL.ADD("  and B.Codigo   in ("~Pipe2Comillas(Dialogo.Lista3)~") ")
+endif
+SQL.ADD(" order by FechaEj ")
+recorrer SQL
+  DFA
+  SCN(cz:1, 1)
+  ACD(da:Val(cz:1), fbn('Fecha'))
+  ACD(db:Val(cz:1), fbn('FechaEj'))
+  ACT(dc:Val(cz:1), fbn('Vehiculo'))
+  ACT(dd:Val(cz:1), fbn('Especie'))
+  ACN(de:Val(cz:1), fbn('NrSaldo'))
+  ACN(df:Val(cz:1), fbn('Day'))
+  ACN(dg:Val(cz:1), fbn('MTD'))
+  ACN(dh:Val(cz:1), fbn('YTD'))
+  ACT(di:Val(cz:1), fbn('TipoResultado'))
+  SQL.ADD("Select CantidadIni from "~DBO~".POSICIONES ")
+  SQL.ADD(" where Especie  = '"~fbn('Especie')~"' ")
+  SQL.ADD("   and Vehiculo = '"~fbn('Vehiculo')~"' ")
+  SQL.ADD("   and Book     = '"~fbn('Book')~"' ")
+  SQL.ADD("   and NrSaldo  = "~fbn('NrSaldo')~" ")
+  SQL.ADD("   and Fecha    = '"~IdxDate(fbn('Fecha'))~"' ")
+  SQL.ADD("   and FechaEj  = '"~IdxDate(fbn('FechaEj'))~"' ")
+  recorrer SQL
+    DFA
+    SCN(dj:Val(cz:1), 1)
+    ACN(dk:Val(cz:1), fbn('CantidadIni'))
+  proximo
+  if Val(dk:Val(cz:1))>=0
+    ACN(dl:Val(cz:1), Val(df:Val(cz:1)))
+  else
+    ACN(dm:Val(cz:1), Val(df:Val(cz:1)))
+  endif
+proximo
+if Val(cz:1)>0
+  ACN(df:Val(cz:1)+2, SUM(df:1..df:Val(cz:1)))
+  ACN(dg:Val(cz:1)+2, SUM(dg:1..dg:Val(cz:1)))
+  ACN(dh:Val(cz:1)+2, SUM(dh:1..dh:Val(cz:1)))
+  ACN(dl:Val(cz:1)+2, SUM(dl:1..dl:Val(cz:1)))
+  ACN(dm:Val(cz:1)+2, SUM(dm:1..dm:Val(cz:1)))
+  SetFont(da:1..dm:Val(cz:1)+2,1)
+endif
+SetFont(cz:1..cz:6,1)
+
+***************************************
+* Nuevo Criterio Operacion * Operacion
+***************************************
+SQL.ADD("Select O.FechaVto,      O.TipoOp,    O.NrOperacion, O.Vehiculo1, ")
+SQL.ADD("       O.Cantidad,      O.Precio1,   O.Especie,     O.FechaOp,  ")
+SQL.ADD("       O.CB8,           O.PrecioEj,  O.Precio2,     O.FechaUltCupon, ")
+SQL.ADD("       O.TipoCambio3    ")
+SQL.ADD("  from "~DBO~".OPERACIONES O, "~DBO~".BOOKS B ")
+SQL.ADD(" where O.TipoOp   In ('FXCT','FXVT') ")
+SQL.ADD("   and O.Book1    =  B.Codigo ")
+SQL.ADD("   and O.FechaVto <  '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   and O.FechaVto >= '"~IdxDate(Val(cz:3))~"' ")
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie =  '"~Dialogo.Especie1~"'")
+endif
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(Val(az:1))~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo2)
+    SQL.ADD("and O.Vehiculo1 in ("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo2))~")")
+  EndIf
+endif
+*if NoVacio(Val(az:2))
+*   SQL.ADD(" and O.Book1 in ("~Pipe2Comillas(Val(az:2))~") ")
+*endif
+If NoVacio(Dialogo.Lista2)
+  SQL.ADD("  and B.TipoBook in ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+endif
+If NoVacio(Dialogo.Lista3)
+  SQL.ADD("  and B.Codigo   in ("~Pipe2Comillas(Dialogo.Lista3)~") ")
+endif
+SQL.ADD(" order by FechaVto,Cliente1,Precio1 ")
+recorrer SQL
+  DFA
+  SCN(dz:1, 1)
+  ACT(ea:Val(dz:1), fbn('NrOperacion'))
+  ACT(eb:Val(dz:1), fbn('TipoOp'))
+  ACD(ec:Val(dz:1), fbn('FechaOp'))
+  ACD(ed:Val(dz:1), fbn('FechaVto'))
+  ACT(ee:Val(dz:1), fbn('Especie'))
+  ACN(ef:Val(dz:1), fbn('Cantidad'))
+  ACN(eg:Val(dz:1), fbn('Precio1'))
+  * Precio Cierre
+  if fbn('CB8')=0
+    * DF
+    ACN(eh:Val(dz:1), fbn('PrecioEj'))
+  else
+    * NDF
+    ACN(eh:Val(dz:1), fbn('Precio2'))
+  endif
+  * Res.Realizado
+  if Val(eh:Val(dz:1))>0
+    if EqStr(fbn('TipoOp'),'FXCT')
+      * Realizado x Compra
+      ACN(ei:Val(dz:1), Val(ef:Val(dz:1))*(Val(eh:Val(dz:1))-Val(eg:Val(dz:1))))
+    else
+      * Realizado x Venta
+      ACN(ej:Val(dz:1), Val(ef:Val(dz:1))*(Val(eg:Val(dz:1))-Val(eh:Val(dz:1))))
+    endif
+  endif
+  ************************************************************************************************
+  * FJL 23/01/09 Se modifica criterio para calcular el Resultado realizado tomando el precio reset
+  *              cuando el reporte se pide con reset de precios
+  ************************************************************************************************
+  * Precio Inicio
+  if Dialogo.Radio3=0
+    * Es SIN Reset de precios
+    ACN(ek:Val(dz:1), fbn('Precio1'))
+  else
+    if fbn('FechaUltCupon')>0 y fbn('FechaUltCupon')<Val(cz:3)
+      ACN(ek:Val(dz:1), fbn('TipoCambio3'))
+    else
+      ACN(ek:Val(dz:1), fbn('Precio1'))
+    endif
+  endif
+  * Res.Realizado
+  if Val(eh:Val(dz:1))>0
+    if EqStr(fbn('TipoOp'),'FXCT')
+      * Realizado x Compra
+      ACN(el:Val(dz:1), Val(ef:Val(dz:1))*(Val(eh:Val(dz:1))-Val(ek:Val(dz:1))))
+    else
+      * Realizado x Venta
+      ACN(em:Val(dz:1), Val(ef:Val(dz:1))*(Val(ek:Val(dz:1))-Val(eh:Val(dz:1))))
+    endif
+  endif
+
+proximo
+
+if Val(dz:1)>0
+  ACN(ei:Val(dz:1)+2, SUM(ei:1..ei:Val(dz:1)))
+  ACN(ej:Val(dz:1)+2, SUM(ej:1..ej:Val(dz:1)))
+  ACN(el:Val(dz:1)+2, SUM(el:1..el:Val(dz:1)))
+  ACN(em:Val(dz:1)+2, SUM(em:1..em:Val(dz:1)))
+  SetFont(ea:1..em:Val(dz:1)+2,1)
+  FormatoCeldas(eg:1..eh:Val(dz:1),Exe('F8'))
+  FormatoCeldas(ek:1..ek:Val(dz:1),Exe('F8'))
+endif
+SetFont(dz:1..dz:1,1)
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'CONSOLIDADOS')
+SetFont(a:FAC,2)
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'C O M P R A S')
+ACT(a:FAC+1, 'Nominal (en USD)')
+ACT(a:FAC+2, 'Plazo Prom.Ponderado (Residual)')
+ACT(a:FAC+3, 'Precio Prom.Ponderado (Pactado)')
+ACT(a:FAC+4, 'Precio Prom.Ponderado (Hoy)')
+ACT(a:FAC+5, 'Tasa Implicita Ponderada')
+ACT(a:FAC+6, 'Net Market Value (en ARP)')
+ACT(a:FAC+7, 'P&L No Realizado (en ARP)')
+ACT(a:FAC+8, 'P&L No Realizado (en USD)')
+ACT(a:FAC+9, 'P&L Realizado (en ARP)')
+ACT(a:FAC+10, 'P&L Realizado (en USD)')
+ACT(Val(ax:3):FAC, 'V E N T A S')
+ACT(Val(ax:3):FAC+1, 'Nominal (en USD)')
+ACT(Val(ax:3):FAC+2, 'Plazo Prom. Ponderado (Residual)')
+ACT(Val(ax:3):FAC+3, 'Precio Prom. Ponderado (Pactado)')
+ACT(Val(ax:3):FAC+4, 'Precio Prom. Ponderado (Hoy)')
+ACT(Val(ax:3):FAC+5, 'Tasa Implicita Ponderada')
+ACT(Val(ax:3):FAC+6, 'Net Market Value (en ARP)')
+ACT(Val(ax:3):FAC+7, 'P&L No Realizado (en ARP)')
+ACT(Val(ax:3):FAC+8, 'P&L No Realizado (en USD)')
+ACT(Val(ax:3):FAC+9, 'P&L Realizado (en ARP)')
+ACT(Val(ax:3):FAC+10, 'P&L Realizado (en USD)')
+SetFont(a:FAC..a:FAC+10,2)
+SetFont(Val(ax:3):FAC..Val(ax:3):FAC+10,2)
+
+if Val(ay:1)>1
+  ACN(d:FAC+1,  Sum(bk:2..bk:Val(ay:1)))
+  ACN(d:FAC+2,  Sum(bj:2..bj:Val(ay:1))/Sum(bk:2..bk:Val(ay:1)))
+  ACN(d:FAC+3,  Sum(bl:2..bl:Val(ay:1))/Sum(bm:2..bm:Val(ay:1)))
+  ACN(d:FAC+4,  Sum(bn:2..bn:Val(ay:1))/Sum(bj:2..bj:Val(ay:1)))
+  ACN(d:FAC+5,  Sum(bo:2..bo:Val(ay:1))/Sum(bj:2..bj:Val(ay:1)))
+  ACN(d:FAC+6,  Sum(bq:2..bq:Val(ay:1)))
+  * No Realiz ARP Com
+  ACN(d:FAC+7,  Sum(br:2..br:Val(ay:1)))
+  * No Realiz USD Com
+  ACN(d:FAC+8,  Sum(bs:2..bs:Val(ay:1)))
+
+  ACN(Val(ax:3)+3:FAC+1,  Sum(ck:2..ck:Val(ay:1)))
+  ACN(Val(ax:3)+3:FAC+2,  Sum(cj:2..cj:Val(ay:1))/Sum(ck:2..ck:Val(ay:1)))
+  ACN(Val(ax:3)+3:FAC+3,  Sum(cl:2..cl:Val(ay:1))/Sum(cm:2..cm:Val(ay:1)))
+  ACN(Val(ax:3)+3:FAC+4,  Sum(cn:2..cn:Val(ay:1))/Sum(cj:2..cj:Val(ay:1)))
+  ACN(Val(ax:3)+3:FAC+5,  Sum(co:2..co:Val(ay:1))/Sum(cj:2..cj:Val(ay:1)))
+  ACN(Val(ax:3)+3:FAC+6,  Sum(cq:2..cq:Val(ay:1)))
+  * No Realiz ARP Ven
+  ACN(Val(ax:3)+3:FAC+7,  Sum(cr:2..cr:Val(ay:1)))
+  * No Realiz USD Ven
+  ACN(Val(ax:3)+3:FAC+8,  Sum(cs:2..cs:Val(ay:1)))
+else
+  ACN(d:FAC+1,  0)
+  ACN(d:FAC+2,  0)
+  ACN(d:FAC+3,  0)
+  ACN(d:FAC+4,  0)
+  ACN(d:FAC+5,  0)
+  ACN(d:FAC+6,  0)
+  ACN(d:FAC+7,  0)
+  ACN(d:FAC+8,  0)
+
+  ACN(Val(ax:3)+3:FAC+1,  0)
+  ACN(Val(ax:3)+3:FAC+2,  0)
+  ACN(Val(ax:3)+3:FAC+3,  0)
+  ACN(Val(ax:3)+3:FAC+4,  0)
+  ACN(Val(ax:3)+3:FAC+5,  0)
+  ACN(Val(ax:3)+3:FAC+6,  0)
+  ACN(Val(ax:3)+3:FAC+7,  0)
+  ACN(Val(ax:3)+3:FAC+8,  0)
+endif
+
+* Realiz ARP Com
+*ACN(d:FAC+9,  Val(dl:Val(cz:1)+2))
+*ACN(d:FAC+9,  Val(ei:Val(dz:1)+2))
+ACN(d:FAC+9,  Val(el:Val(dz:1)+2))
+* Realiz USD Com
+*ACN(d:FAC+10,  Val(dl:Val(cz:1)+2)/Val(cz:4))
+*ACN(d:FAC+10,  Val(ei:Val(dz:1)+2)/Val(cz:4))
+ACN(d:FAC+10,  Val(el:Val(dz:1)+2)/Val(cz:4))
+
+* Realiz ARP Ven
+*ACN(Val(ax:3)+3:FAC+9,  Val(dm:Val(cz:1)+2))
+*ACN(Val(ax:3)+3:FAC+9,  Val(ej:Val(dz:1)+2))
+ACN(Val(ax:3)+3:FAC+9,  Val(em:Val(dz:1)+2))
+* Realiz USD Ven
+*ACN(Val(ax:3)+3:FAC+10,  Val(dm:Val(cz:1)+2)/Val(cz:4))
+*ACN(Val(ax:3)+3:FAC+10,  Val(ej:Val(dz:1)+2)/Val(cz:4))
+ACN(Val(ax:3)+3:FAC+10,  Val(em:Val(dz:1)+2)/Val(cz:4))
+
+SetFont(d:FAC+1..d:FAC+10,1)
+SetFont(Val(ax:3)+3:FAC+1..Val(ax:3)+3:FAC+10,1)
+FormatoCeldas(d:FAC+1..d:FAC+2,Exe('F2'))
+FormatoCeldas(d:FAC+3..d:FAC+5,Exe('F7'))
+FormatoCeldas(d:FAC+6..d:FAC+10,Exe('F2'))
+FormatoCeldas(Val(ax:3)+3:FAC+1..Val(ax:3)+3:FAC+2,Exe('F2'))
+FormatoCeldas(Val(ax:3)+3:FAC+3..Val(ax:3)+3:FAC+5,Exe('F7'))
+FormatoCeldas(Val(ax:3)+3:FAC+6..Val(ax:3)+3:FAC+10,Exe('F2'))
+
+SetFilaActual(FAC+12)
+ACT(a:FAC, 'TOTAL CARTERA DE FORWARDS')
+SetFont(a:FAC,2)
+ACT(Val(ax3):FAC, 'TOTAL CARTERA DE FORWARDS')
+SetFont(Val(ax3):FAC,2)
+
+SetFilaActual(FAC+2)
+ACN(aw:1, FAC)
+ACT(a:FAC, 'Nominal Total (en USD)')
+ACT(a:FAC+1, 'Net Market Value Total')
+ACT(a:FAC+2, 'P&L No Realizado (en ARP)')
+ACT(a:FAC+3, 'P&L Realizado (en ARP)')
+ACT(a:FAC+4, 'P&L Total (en ARP)')
+ACT(a:FAC+5, 'P&L No Realizado (en USD)')
+ACT(a:FAC+6, 'P&L Realizado (en USD)')
+ACT(a:FAC+7, 'P&L Total (en USD)')
+SetFont(a:FAC..a:FAC+7,2)
+ACT(Val(ax3):FAC, 'Nominal Total (en USD)')
+ACT(Val(ax3):FAC+1, 'Net Market Value Total')
+ACT(Val(ax3):FAC+2, 'P&L No Realizado (en ARP)')
+ACT(Val(ax3):FAC+3, 'P&L Realizado (en ARP)')
+ACT(Val(ax3):FAC+4, 'P&L Total (en ARP)')
+ACT(Val(ax3):FAC+5, 'P&L No Realizado (en USD)')
+ACT(Val(ax3):FAC+6, 'P&L Realizado (en USD)')
+ACT(Val(ax3):FAC+7, 'P&L Total (en USD)')
+SetFont(Val(ax3):FAC..Val(ax3):FAC+7,2)
+
+if Val(ay:1)>1
+  ACN(d:FAC,    Sum(bk:2..bk:Val(ay:1))-Sum(ck:2..ck:Val(ay:1)))
+  ACN(d:FAC+1,  Sum(bq:2..bq:Val(ay:1))+Sum(cq:2..cq:Val(ay:1)))
+  * No Realizado ARP
+  ACN(d:FAC+2,  Sum(br:2..br:Val(ay:1))+Sum(cr:2..cr:Val(ay:1)))
+  * Total ARP
+  ACN(d:FAC+4,  Sum(br:2..br:Val(ay:1))+Sum(cr:2..cr:Val(ay:1)))
+  * No Realizado USD
+  ACN(d:FAC+5,  Sum(bs:2..bs:Val(ay:1))+Sum(cs:2..cs:Val(ay:1)))
+  * Total USD
+  ACN(d:FAC+7,  Sum(bs:2..bs:Val(ay:1))+Sum(cs:2..cs:Val(ay:1)))
+
+  ACN(Val(ax3)+3:FAC,    Sum(bk:2..bk:Val(ay:1))-Sum(ck:2..ck:Val(ay:1)))
+  ACN(Val(ax3)+3:FAC+1,  Sum(bq:2..bq:Val(ay:1))+Sum(cq:2..cq:Val(ay:1)))
+  * No Realizado ARP
+  ACN(Val(ax3)+3:FAC+2,  Sum(br:2..br:Val(ay:1))+Sum(cr:2..cr:Val(ay:1)))
+  * Total ARP
+  ACN(Val(ax3)+3:FAC+4,  Sum(br:2..br:Val(ay:1))+Sum(cr:2..cr:Val(ay:1)))
+  * No Realizado USD
+  ACN(Val(ax3)+3:FAC+5,  Sum(bs:2..bs:Val(ay:1))+Sum(cs:2..cs:Val(ay:1)))
+  * Total USD
+  ACN(Val(ax3)+3:FAC+7,  Sum(bs:2..bs:Val(ay:1))+Sum(cs:2..cs:Val(ay:1)))
+else
+  ACN(d:FAC,    0)
+  ACN(d:FAC+1,  0)
+  ACN(d:FAC+2,  0)
+  ACN(d:FAC+3,  0)
+  ACN(d:FAC+4,  0)
+  ACN(d:FAC+5,  0)
+  ACN(d:FAC+6,  0)
+  ACN(d:FAC+7,  0)
+
+  ACN(Val(ax3)+3:FAC,    0)
+  ACN(Val(ax3)+3:FAC+1,  0)
+  ACN(Val(ax3)+3:FAC+2,  0)
+  ACN(Val(ax3)+3:FAC+3,  0)
+  ACN(Val(ax3)+3:FAC+4,  0)
+  ACN(Val(ax3)+3:FAC+5,  0)
+  ACN(Val(ax3)+3:FAC+6,  0)
+  ACN(Val(ax3)+3:FAC+7,  0)
+endif
+* Realizado ARP
+*ACN(d:FAC+3,  Val(ei:Val(dz:1)+2)+Val(ej:Val(dz:1)+2))
+ACN(d:FAC+3,  Val(el:Val(dz:1)+2)+Val(em:Val(dz:1)+2))
+* Total ARP
+*SCN(d:FAC+4,  Val(ei:Val(dz:1)+2)+Val(ej:Val(dz:1)+2))
+SCN(d:FAC+4,  Val(el:Val(dz:1)+2)+Val(em:Val(dz:1)+2))
+* Realizado USD
+*ACN(d:FAC+6,  (Val(ei:Val(dz:1)+2)+Val(ej:Val(dz:1)+2))/Val(cz:4))
+ACN(d:FAC+6,  (Val(el:Val(dz:1)+2)+Val(em:Val(dz:1)+2))/Val(cz:4))
+* Total USD
+*SCN(d:FAC+7,  (Val(ei:Val(dz:1)+2)+Val(ej:Val(dz:1)+2))/Val(cz:4))
+SCN(d:FAC+7,  (Val(el:Val(dz:1)+2)+Val(em:Val(dz:1)+2))/Val(cz:4))
+
+* Realizado ARP
+*ACN(Val(ax3)+3:FAC+3,  Val(ei:Val(dz:1)+2)+Val(ej:Val(dz:1)+2))
+ACN(Val(ax3)+3:FAC+3,  Val(el:Val(dz:1)+2)+Val(em:Val(dz:1)+2))
+* Total ARP
+*SCN(Val(ax3)+3:FAC+4,  Val(ei:Val(dz:1)+2)+Val(ej:Val(dz:1)+2))
+SCN(Val(ax3)+3:FAC+4,  Val(el:Val(dz:1)+2)+Val(em:Val(dz:1)+2))
+* Realizado USD
+*ACN(Val(ax3)+3:FAC+6,  (Val(ei:Val(dz:1)+2)+Val(ej:Val(dz:1)+2))/Val(cz:4))
+ACN(Val(ax3)+3:FAC+6,  (Val(el:Val(dz:1)+2)+Val(em:Val(dz:1)+2))/Val(cz:4))
+* Total USD
+*SCN(Val(ax3)+3:FAC+7,  (Val(ei:Val(dz:1)+2)+Val(ej:Val(dz:1)+2))/Val(cz:4))
+SCN(Val(ax3)+3:FAC+7,  (Val(el:Val(dz:1)+2)+Val(em:Val(dz:1)+2))/Val(cz:4))
+
+SetFont(d:FAC..d:FAC+7,1)
+SetFont(Val(ax3)+3:FAC..Val(ax3)+3:FAC+7,1)
+FormatoCeldas(d:FAC..d:FAC+7,Exe('F2'))
+FormatoCeldas(Val(ax3)+3:FAC..Val(ax3)+3:FAC+7,Exe('F2'))
+
+SetFilaActual(FAC+9)

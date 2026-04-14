@@ -1,0 +1,147 @@
+creardialogo
+vehiculo1:'Vehiculo';;;;;;;;;;;iif (Vacio(UsrVehiculos(UsuarioActivo())), SQLSet("Select Codigo from "~Dbo()~".VEHICULOS"), SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+fecha1:'Fecha';;;;;;;;NO;FSys()
+nroperacion1: 'NrOperacion';;;;;;;;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (not Vacio(dialogo.vehiculo1))
+if (not Incluido(dialogo.vehiculo1, UsrVehiculos(UsuarioActivo())) y not Vacio(UsrVehiculos(UsuarioActivo())))
+Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+endif
+endif
+
+MostrarCuadroDeMensajes()
+
+if (NoVacio(dialogo.nroperacion1))
+
+Act(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', dialogo.nroperacion1))
+
+Sqladd("SELECT U.Vehiculo FROM "~Dbo()~".USRVEHICULO U,"~Dbo()~".VEHICULOS V ")
+Sqladd("WHERE  U.Codigo='"~UsuarioActivo()~"' and U.Vehiculo=V.Codigo ")
+Sqladd("       and (Status='HAB' or Status Is Null or Status='')")
+
+recorrer sql
+Dfa()
+Act(vh2, Fbn()['Vehiculo']~'|'~Val(vh2))
+proximo
+if (not Incluido(Val(vh1), Val(vh2)) y NoVacio(Val(vh2)))
+Cancelar('Usuario no Habilitado para Trabajar con el Vehiculo ')
+endif
+
+endif
+
+Act(z1, SQLSet("Select Vehiculo From "~Dbo()~".USRVEHICULO Where Codigo = '"~UsuarioActivo()~"' "))
+
+SetFilaActual(0)
+
+Act(ta1, 'MOVPENDIENTES')
+
+if (NoVacio(dialogo.vehiculo1) y not Incluido(dialogo.vehiculo1, Var('VLIQUIDA')~Var('VLIQUIDA2')))
+Act(ta1, 'MOVEJECUTADOS')
+endif
+
+
+Sqladd("Select * from  "~Dbo()~"."~Val(ta1)~"  ")
+Sqladd("where FechaMov <='"~IdxDate(dialogo.fecha1)~"' and NrSaldo =1 ")
+Sqladd("and Especie<>'"~Var('MONELOCA')~"' and ")
+Sqladd(" (Leyenda like '%IVA %' or Leyenda like '%WH %' or Leyenda like  '%Impto.Int %' or Leyenda like '%Imp_Cs_Fin%' or Leyenda like '%Imp.DB%') ")
+if (NoVacio(dialogo.vehiculo1))
+Sqladd("and EnteCustodia = '"~dialogo.vehiculo1~"' ")
+else
+if (NoVacio(UsrVehiculos(UsuarioActivo())))
+Sqladd(" and EnteCustodia IN ("~Pipe2Comillas(Val(z1))~") ")
+endif
+endif
+if (NoVacio(dialogo.nroperacion1))
+Sqladd("and NrOperacion = '"~dialogo.nroperacion1~"' ")
+endif
+Sqladd("Order By NrOperacion")
+
+recorrer sql
+Message(' Operacion '~Fbn()['NrOperacion']~' '~Fbn()['Leyenda']~' ...')
+
+Act(a:fac, Fbn()['NrOperacion'])
+Acd(b:fac, Fbn()['FechaMov'])
+Act(c:fac, Fbn()['Cliente'])
+Act(d:fac, Fbn()['Especie'])
+Acn(e:fac, -Fbn()['Cantidad'])
+Act(f:fac, BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', Val(a:fac)))
+Act(g:fac, Fbn()['Leyenda'])
+Acn(h:fac, CotizacionC(Fbn('Especie'), null, null, null, dialogo.fecha1 - 1, 1, null, Var('MONELOCA')))
+Acn(i:fac, Val(h:fac))
+Acn(j:fac, BuscarCampo('OPERACIONES', 'Precio1', 'NrOperacion', Val(a:fac)))
+Acn(k:fac, 1)
+Acn(p:fac, Fbn()['NrMov'])
+Acn(o:fac, Fbn('NrGrupo2'))
+Act(q:fac, Fbn()['Concepto'])
+proximo
+
+if (Fac() > 0)
+
+crearlistbox;'Arial,8,B'
+'Liquida';k1..k:fac;SI;SI;;60;combo;'Si|No|'
+'# Operacion';a1..a:fac;NO;SI;;80;string
+'TipoOp';f1..f:fac;NO;SI;;80;string
+'Fecha';b1..b:fac;NO;SI;;70;fecha
+'Entidad';c1..c:fac;NO;SI;;70;string
+'Especie';d1..d:fac;NO;SI;;70;string
+'Cantidad';e1..e:fac;NO;SI;;100;numero;'###,###,###.##p'
+'Leyenda';g1..g:fac;NO;SI;;150;string
+'Cotizacion';h1..h:fac;SI;Val(k:flb) = 1 o (Val(h:flb) <= Val(i:flb) * (1 + Var('RPRECIO2') / 100) y Val(h:flb) >= Val(i:flb) * (1 - Var('RPRECIO2') / 100));'Rango de Precio Excedido '~PYC(Val(i:flb) * (1 - Var('RPRECIO2') / 100), 0, 2)~' '~PYC(Val(i:flb) * (1 + Var('RPRECIO2') / 100), 0, 2);100;numero;'###,###,###.##p'
+finlistbox
+
+if (ok)
+recorrer&i 1, Fac()
+
+if (Val(k:&i) = 0)
+Message('Actualizando Operacion Nro. '~Val(a:&i))
+if (not Incluido(Val(q:&i), 'CUOTAS|COMISI'))
+Sqladd("Update "~Dbo()~".OPERACIONES Set ")
+Sqladd("IntDevengados2 ="~FStr(Val(h:&i), 0, 2)~" ")
+Sqladd("where NrOperacion='"~Val(a:&i)~"' and (IntDevengados2<=0 or IntDevengados2 Is Null) ")
+Sqlnew()
+else
+if (Incluido(Val(q:&i), 'CUOTAS'))
+Sqladd("Update "~Dbo()~".CUOTAS Set ")
+Sqladd("Cotizacion1 ="~FStr(Val(h:&i), 0, 2)~" ")
+Sqladd("where NrOperacion='"~Val(a:&i)~"' and Cotizacion1<0 ")
+Sqladd("and NrCuota="~FStr(Val(o:&i), 0, 0)~" ")
+Sqlnew()
+else
+Sqladd("Update "~Dbo()~".COMISIONES2 Set ")
+if (Eqstr(Val(d:&i), BuscarCampo('OPERACIONES', 'Especie', 'NrOperacion', Val(a:&i))))
+Sqladd("Cotizacion1 ="~FStr(Val(h:&i), 0, 2)~" ")
+Sqladd("where NrOperacion='"~Val(a:&i)~"' and (Cotizacion1<=0 or Cotizacion1 Is NUll) ")
+else
+Sqladd("Cotizacion2 ="~FStr(Val(h:&i), 0, 2)~" ")
+Sqladd("where NrOperacion='"~Val(a:&i)~"' and (Cotizacion2<=0 or Cotizacion2 Is NUll) ")
+endif
+Sqladd("and NrComision="~FStr(Val(o:&i), 0, 0)~" ")
+Sqlnew()
+endif
+endif
+
+Sqladd("Update "~Dbo()~"."~Val(ta1)~" Set ")
+Sqladd("Especie = '"~Var('MONELOCA')~"', Cantidad="~FStr(-Val(e:&i) * Val(h:&i), 0, 2)~" ")
+Sqladd("where NrOperacion='"~Val(a:&i)~"' and NrMov="~Val(p:&i)~" ")
+Sqladd("and NrGrupo2="~Val(o:&i)~" ")
+if (NoVacio(Val(q:&i)))
+Sqladd("and Concepto='"~Val(q:&i)~"'  ")
+endif
+Sqladd("and Leyenda='"~Val(g:&i)~"' and FechaMov='"~IdxDate(Val(b:&i))~"' ")
+if (NoVacio(dialogo.vehiculo1))
+Sqladd("and EnteCustodia = '"~dialogo.vehiculo1~"' ")
+endif
+Sqlnew()
+Sqlexec()
+endif
+proximo
+endif
+else
+Messagebox('No existen movimientos para convertir ....')
+
+endif

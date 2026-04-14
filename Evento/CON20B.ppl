@@ -1,0 +1,266 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:       'Fecha'       ;1;1;;;;;;;fsys
+  Vehiculo1:   'Vehiculo'     ;2;;;NO;;;;;Var('VEHICON')
+  ListaTabla1: 'Operaciones'  ;1;2;;;;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES' 
+  Check1:      'Contab.Procesada' ;3;1;;NO;NO;
+  Radio1:       'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos'   ; 4;1;;NO;NO;;;;4;
+FinDialogo
+
+If Not Ok
+   Raise('Evento Cancelado')
+Endif
+
+
+Message('--- Asientos de Egreso de Titulos ---')
+
+ACT(ME:1, Var('MONEEXTR'))
+ACT(ML:1, Var('MONELOCA'))
+ACN(NA:1, Var('ASINUM'))
+ACN(SL:2, Var('SALDOPOCON'))
+ACT(VC:1, Dialogo.Vehiculo1)
+ACD(FE:1, Habiles(Dialogo.Fecha1,-Var('FVALORCONT'),'ARG'))
+ACT(CM:1, Var('CLIENTEMAE'))
+
+let &tipoAsiento Var('TIPASIEGTI')
+let &saldoDelDia 0
+let &saldoDeOperaciones 0
+
+*Busco books de partidas que son de INV
+let &bookPartidas ''
+(.'BOOKPARTID'.)
+Recorrer SQL
+    let &bookPartidas &bookPartidas~fbn('Books')
+Proximo
+
+*SQL.ADD("Select P.CantidadFin Cantidad, P.Especie, E.Tipo, P.Cuenta, P.Estrategia ")
+SQL.ADD("Select E.MonedaEmision, P.Vehiculo Vehiculo1, 'TIC' TipoOp, E.Tipo TipoEspecie, P.Book Book1, ")
+*SQL.ADD("P.Estrategia CuentaCustodia, '' Concepto, P.Especie, P.CantidadFin Cantidad ")
+SQL.ADD("P.Estrategia CuentaCustodia, '' Concepto, P.Especie, Sum(P.CantidadFin) Cantidad ")
+SQL.ADD("from "~DBO~".POSICIONES P ")
+SQL.ADD("   JOIN "~DBO~".ESPECIES E ON P.Especie = E.Codigo ")
+SQL.ADD("   JOIN "~DBO~".CUENTAS C ON P.Estrategia = C.Codigo ")
+**Book trading
+SQL.ADD("where P.Book Not IN ("~Pipe2Comillas(&bookPartidas)~") ")
+**Cuenta no de garantia
+SQL.ADD("AND (C.CB2 Is Null OR C.CB2 = '' OR C.CB2 =' ' OR C.CB2='NO') ")
+**Saldo 122
+SQL.ADD("AND P.NrSaldo = "~Fstr(Val(SL:2), 0, 0)~" ")
+SQL.ADD("AND P.Fecha IN (Select Max(Fecha) From "~DBO~".POSICIONES P1 ")
+SQL.ADD("      Where P1.Especie = P.Especie ")
+SQL.ADD("      AND P1.Vehiculo = P.Vehiculo ")
+SQL.ADD("      AND P1.Cliente = P.Cliente ")
+SQL.ADD("      AND P1.NrSaldo = P.NrSaldo ")
+SQL.ADD("      AND P1.Book = P.Book ")
+SQL.ADD("      AND (P1.Cupon = P.Cupon OR ((P1.Cupon Is Null OR P1.Cupon = '' OR P1.Cupon = ' ') AND (P.Cupon Is Null OR P.Cupon = '' OR P.Cupon = ' ' ))) ")
+SQL.ADD("      AND (P1.Sector = P.Sector OR ((P1.Sector Is Null OR P1.Sector = '' OR P1.Sector =' ') AND (P.Sector Is Null OR P.Sector = '' OR P.Sector = ' ' ))) ")
+SQL.ADD("      AND (P1.CallPut = P.CallPut OR ((P1.CallPut Is Null OR P1.CallPut = '' OR P1.CallPut = ' ') AND (P.CallPut Is Null OR P.CallPut = '' OR P.CallPut = ' ' ))) ")
+SQL.ADD("      AND (P1.FechaEj = P.FechaEj OR ((P1.FechaEj  Is Null OR P1.FechaEj = '' OR P1.FechaEj = ' ') AND (P.FechaEj IS Null OR P.FechaEj = '' OR P.FechaEj = ' ' ))) ")
+SQL.ADD("      AND (P1.PrecioEj = P.PrecioEj OR ((P1.PrecioEj Is Null OR P1.PrecioEj = '' OR P1.PrecioEj =' ') AND (P.PrecioEj Is Null OR P.PrecioEj = '' OR P.PrecioEj = ' ' ))) ")
+SQL.ADD("      AND (P1.Estrategia = P.Estrategia OR ((P1.Estrategia Is Null OR P1.Estrategia = '' OR P1.Estrategia = ' ') AND (P.Estrategia Is Null OR P.Estrategia = '' OR P.Estrategia = ' ' ))) ")
+SQL.ADD("      AND P1.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+*SQL.ADD("Order by E.Codigo, P.Book, P.Estrategia ")
+SQL.ADD("Group by P.Especie, P.Book, P.Estrategia, E.MonedaEmision, P.Vehiculo, E.Tipo, P.Book, P.Estrategia")
+SQL.ADD("Order by P.Especie, P.Book, P.Estrategia ")
+
+watch(SQL.batch)
+
+Recorrer SQL
+    ACD(FV:1, Dialogo.Fecha1)
+    let &tipoOp fbn('TipoOp')
+    let &posicion fbn('Cantidad')
+    let &vehiculo fbn('Vehiculo1')
+
+    If Vacio(&especieAnterior) AND Vacio(&cuentaCustodiaAnterior) AND Vacio(&bookAnterior)
+        let &especieAnterior fbn('especie')
+        let &cuentaCustodiaAnterior fbn('CuentaCustodia') 
+        let &bookAnterior fbn('Book1') 
+        let &monedaEmisionAnterior fbn('MonedaEmision')
+        let &tipoEspecieAnterior fbn('tipoEspecie')
+        let &sumaPosiciones 0  
+    Else
+        let &especieAnterior &especieActual
+        let &cuentaCustodiaAnterior &cuentaCustodiaActual 
+        let &bookAnterior &bookActual        
+        let &monedaEmisionAnterior &monedaEmisionActual
+        let &tipoEspecieAnterior &tipoEspecieActual
+    EndIf
+
+    let &especieActual fbn('especie')
+    let &cuentaCustodiaActual fbn('CuentaCustodia')
+    let &bookActual fbn('Book1') 
+    let &monedaEmisionActual fbn('MonedaEmision') 
+    let &tipoEspecieActual fbn('tipoEspecie')     
+        
+    If EqStr(&especieAnterior,&especieActual) AND EqStr(&cuentaCustodiaActual,&cuentaCustodiaAnterior) AND EqStr(&bookActual,&bookAnterior)
+        **Si entro por aca uso las variables Actual
+        Let &PrecioNIIF CotizacionNIIF(&especieActual, Dialogo.Fecha1, &bookActual)
+        IF Vacio(&PrecioNIIF)
+            let &cotizacionNiif 0
+        ELSE
+            let &cotizacionNiif &PrecioNIIF.PrecioCotizacionDeterminada
+        ENDIF
+        let &posicionValuada &posicion * &cotizacionNiif
+        
+        let &sumaPosiciones &sumaPosiciones + &posicionValuada
+        let &nominales &nominales + &posicion
+    Else
+        **Cambia los valores del corte de control Especie/Cuenta/Book
+        **Si entro por acá uso las variables Anterior
+        **Valido si la suma hasta aca es negativa para generar asiento
+        If &sumaPosiciones >= 0
+            let &sumaCantOpValuada 0
+            **Busco Operaciones TIPO y TIPP vigentes valuadas al dia de hoy para el tipo de especie, cuenta custodia y book
+            SQL.ADD("SELECT Cantidad  from "~DBO~".OPERACIONES O")
+            SQL.ADD("JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo ")
+            SQL.ADD("WHERE O.TipoOp in ('TIPO','TIPP') ")
+            SQL.ADD("AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"'" )
+            SQL.ADD("AND O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"'")
+            SQL.ADD("AND O.Cuenta1 = '"~&cuentaCustodiaAnterior~"' ")
+            SQL.ADD("AND O.Book1 = '"~&bookAnterior~"' ")
+            SQL.ADD("AND E.Codigo = '"~&especieAnterior~"' ")
+            Recorrer SQL
+                let &cantidadOperacion fbn('Cantidad')
+                Let &PrecioNIIF CotizacionNIIF(&especieAnterior, Dialogo.Fecha1, &bookAnterior)
+                IF Vacio(&PrecioNIIF)
+                    let &cotizacionNiif 0
+                ELSE
+                    let &cotizacionNiif &PrecioNIIF.PrecioCotizacionDeterminada
+                ENDIF
+
+                let &cantidadOpValuada &cantidadOpValuada * &cotizacionNiif
+                let &sumaCantOpValuada &sumaCantOpValuada + &cantidadOpValuada
+                let &nominales &nominales + &cantidadOperacion
+            Proximo
+            let &sumaPosiciones &sumaPosiciones + &sumaCantOpValuada
+        EndIf
+        **Vuelvo a controlar si es negativo por si pasò por el if anterior ya que las op compensan la cantidad de la posicion
+        If &sumaPosiciones < 0
+            *let &especie &especieAnterior
+            let &Issuer BuscarCampo('ESPECIES','issuer','Codigo', &especieAnterior)
+            SQL.ADD(" SELECT '"~&especieAnterior~"' Especie, '"~&monedaEmisionAnterior~"' MonedaEmision, ")
+            SQL.ADD(" '"~&vehiculo~"' Vehiculo1, 'TIC' TipoOp, '"~&bookAnterior~"' Book1, '"~&tipoEspecieAnterior~"' TipoEspecie, ")
+            SQL.ADD(" Codigo CodAsi, '"~&cuentaCustodiaAnterior~"' CuentaCustodia, '' Concepto, '"~&vehiculo~"' Cliente, ")
+            SQL.ADD(" '"~&Issuer~"' Issuer, "~FStr(&nominales,0,0)~" Cantidad  ")
+            SQL.ADD(" From "~DBO~".MODELOSASIENTO ")
+            SQL.ADD(" Where TipoAsiento IN ("~Pipe2Comillas(&tipoAsiento)~") ")
+            SQL.ADD(" AND '|'+rtrim(Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+            SQL.ADD(" AND Habilitado = 'SI' ")
+            Recorrer SQL
+                let &codAsi fbn('CodAsi')
+                ACT(BK:1, &bookAnterior)
+                ACT(MN:99, fbn('MonedaEmision'))
+                
+                ACN(CK:1, 0)
+                IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+                    ACN(CK:1, 1)
+                    IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where Modelo = '"~&codAsi~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~&vehiculo~"' "))
+                        ACN(CK:1, 0)
+                    ENDIF
+                ENDIF
+                IF Val(CK:1) = 0
+                    Message('Modelo: '~&codAsi)
+                    SQL.GenerarAsientoOp(&codAsi, '','','',Val(NA:1),Val(FV:1),&vehiculo,,,,,,&tipoOp,,,,,,,fsys,Dialogo.Fecha1)
+                    SQL.EXEC
+                ENDIF
+            Proximo
+        EndIf
+        **Reseteo los valores y sumo la posicion del registro que estoy procesando
+        **A partir de aca uso las variable Actual
+        let &sumaPosiciones 0
+        Let &PrecioNIIF CotizacionNIIF(&especieActual, Dialogo.Fecha1, &bookActual)
+        IF Vacio(&PrecioNIIF)
+            let &cotizacionNiif 0
+        ELSE
+            let &cotizacionNiif &PrecioNIIF.PrecioCotizacionDeterminada
+        ENDIF
+        let &posicionValuada &posicion * &cotizacionNiif
+        
+        let &sumaPosiciones &sumaPosiciones + &posicionValuada    
+        let &nominales &nominales + &posicion    
+    EndIf
+Proximo
+
+**Caso de ultimo registro
+**Valido si la suma hasta aca es negativa para generar asiento
+If &sumaPosiciones >= 0
+    let &sumaCantOpValuada 0
+    **Busco Operaciones TIPO y TIPP vigentes valuadas al dia de hoy para el tipo de especie, cuenta custodia y book
+    SQL.ADD("SELECT Cantidad  from "~DBO~".OPERACIONES O")
+    SQL.ADD("JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo ")
+    SQL.ADD("WHERE O.TipoOp in ('TIPO','TIPP') ")
+    SQL.ADD("AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"'" )
+    SQL.ADD("AND O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"'")
+    SQL.ADD("AND O.Cuenta1 = '"~&tipoEspecieActual~"' ")
+    SQL.ADD("AND O.Book1 = '"~&bookActual~"' ")
+    SQL.ADD("AND E.Tipo = '"~&especieActual~"' ")
+    Recorrer SQL
+        let &cantidadOperacion fbn('Cantidad')
+        Let &PrecioNIIF CotizacionNIIF(&especieActual, Dialogo.Fecha1, &bookActual)
+        IF Vacio(&PrecioNIIF)
+            let &cotizacionNiif 0
+        ELSE
+            let &cotizacionNiif &PrecioNIIF.PrecioCotizacionDeterminada
+        ENDIF
+        let &cantidadOpValuada &cantidadOpValuada * &cotizacionNiif
+        let &sumaCantOpValuada &sumaCantOpValuada + &cantidadOpValuada
+        let &nominales &nominales + &cantidadOperacion 
+    Proximo
+    let &sumaPosiciones &sumaPosiciones + &sumaCantOpValuada
+EndIf
+**Vuelvo a controlar si es negativo por si pasò por el if anterior ya que las op compensan la cantidad de la posicion
+If &sumaPosiciones < 0
+
+    let &especie &especieActual
+    let &Issuer BuscarCampo('ESPECIES','issuer','Codigo', &especieAnterior)
+    
+    SQL.ADD(" SELECT '"~&especieActual~"' Especie, '"~&monedaEmisionActual~"' MonedaEmision, ")
+    SQL.ADD(" '"~&vehiculo~"' Vehiculo1, 'TIC' TipoOp, '"~&bookActual~"' Book1, '"~&tipoEspecieActual~"' TipoEspecie, ")
+    SQL.ADD(" Codigo CodAsi, '"~&cuentaCustodiaActual~"' CuentaCustodia, '' Concepto, '"~&vehiculo~"' Cliente, ")
+    SQL.ADD(" '"~&Issuer~"' Issuer , "~FStr(&nominales,0,0)~" Cantidad ")
+    SQL.ADD(" From "~DBO~".MODELOSASIENTO ")
+    SQL.ADD(" Where TipoAsiento IN ("~Pipe2Comillas(&tipoAsiento)~") ")
+    SQL.ADD(" AND '|'+rtrim(Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+    SQL.ADD(" AND Habilitado = 'SI' ")
+    Recorrer SQL
+        let &codAsi fbn('CodAsi')
+        ACT(BK:1, &bookAnterior)
+        ACT(MN:99, fbn('MonedaEmision'))
+        ACN(CK:1, 0)
+        IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+            ACN(CK:1, 1)
+            IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where Modelo = '"~&codAsi~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~&vehiculo~"' "))
+                ACN(CK:1, 0)
+            ENDIF
+        ENDIF
+        IF Val(CK:1) = 0
+            Message('Modelo: '~&codAsi)
+            SQL.GenerarAsientoOp(&codAsi, '','','',Val(NA:1),Val(FV:1),&vehiculo,,,,,,&tipoOp,,,,,,,fsys,Dialogo.Fecha1)
+            SQL.EXEC
+        ENDIF
+    Proximo
+EndIf
+
+
+**-----------------------------------------**
+Message('--- Reversa asientos de Egreso de Titulos ---')
+**--Reversamos los asientos de ayer
+ACD(FV:2,Habiles(Dialogo.Fecha1,-1,'ARG'))
+
+SQL.ADD(" Select FechaValor, NrUnicoAsiento ")
+SQL.ADD(" From "~DBO~".ASIENTOSCON A ")
+SQL.ADD(" JOIN "~DBO~".MODELOSASIENTO MA ON A.Modelo = MA.Codigo ")
+SQL.ADD(" Where MA.TipoAsiento IN ("~Pipe2Comillas(&tipoAsiento)~") ")
+SQL.ADD(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+SQL.ADD(" AND MA.Habilitado = 'SI' ")
+SQL.ADD(" AND (A.Estado is NULL OR A.Estado = '' OR A.Estado ='E') AND (A.NrAsiento is NULL OR A.NrAsiento = '') ")
+SQL.ADD(" AND A.FechaGeneracion = '"~IdxDate(Val(FV:2))~"' ")
+watch(SQL.batch)
+
+Recorrer SQL
+    *ACD(FV:3, fbn('FechaValor'))
+    ACT(AS:1, fbn('NrUnicoAsiento'))
+    ACD(FV:3, fbn('FechaValor'))
+    ***---Llamo a evento que realiza ContraAsiento
+    EjecutarEvento('CONT46', Fecha1=Dialogo.Fecha1, NrUnicoAsiento1=Val(AS:1), Fecha2=Val(FV:3), Radio1=0)
+Proximo

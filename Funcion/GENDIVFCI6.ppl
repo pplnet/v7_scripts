@@ -1,0 +1,191 @@
+﻿***---Para FCI, este evento se usa solo para Pago de dividendos en efectivo. Si hay un pago de dividendos en Especie, se debe ingresar
+***---una FCS con la marca CB7=1 que significa que es un interes en Cuotas Parte. Por eso comento los calculos del nuevo precio de posicion
+***---y no actualizo la posicion.
+SetFilaActual(0)
+SQL.ADD(" Select P.CantidadFin, P.Book, P.PrecioFin, P.NrSaldo ")
+SQL.ADD(" From "~DBO~".POSICIONES P ")
+SQL.ADD(" Where P.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD(" AND P.NrSaldo IN ('101','121','131') ")
+SQL.ADD(" AND P.Cliente = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND P.Fecha = (Select Max(D.Fecha) From "~DBO~".POSICIONES D ")
+SQL.ADD("                Where D.Cliente = P.Cliente ")
+SQL.ADD("                AND D.Especie = P.Especie ")
+SQL.ADD("                AND D.NrSaldo = P.NrSaldo ")
+SQL.ADD("                AND D.Book = P.Book ")
+SQL.ADD("                AND D.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD(" Order By P.NrSaldo ")
+Recorrer SQL
+  IF fbn('CantidadFin') <> 0
+    ACT(A:fac, fbn('Book') )
+    ACN(B:fac, fbn('CantidadFin') )
+    ACN(E:fac, fbn('PrecioFin'))
+    ACN(I:fac, fbn('NrSaldo'))
+    ***---Nuevo Precio Posicion (Calculo Obtenido de la fc DIVIPOSIC)
+    ***---Si me pagan en efectivo, quiere decir que el costo por mi posicion baja. Entonces baja el precio de la posicion
+    ***---Si me pagan en acciones, tambien baja el precio de la posicion porque quiere decir que por el mismo costo original ahora tengo mas acciones.
+    ***---Posicion que se incrementa
+    IF Dialogo.Radio2 = 0
+        ACN(F:fac, Dialogo.Cantidad2)
+    ELSE
+        ACN(F:fac, fbn('CantidadFin') * Dialogo.Cantidad2 / 100)
+    ENDIF
+    ***---Valuacion Posicion Original con su Nuevo Precio. A la posicion valuada le resto el monto que cobro
+    ACN(H:fac, (fbn('CantidadFin')*fbn('PrecioFin')) - Dialogo.Cantidad1)
+    ***---Nuevo Precio de la Nueva Posicion
+    ACN(G:fac, Val(H:fac) / (fbn('CantidadFin')+Val(F:fac)))
+    ***---Resto/sumo a la posicion a cobrar, los prestamos tomados/colocados vigentes
+    SQL.ADD(" Select Sum(C.Cantidad2) Cantidad, O.MB3 ")
+    SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+    SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+    SQL.ADD(" AND O.TipoOp In ('SEPVMV', 'SEPTMV') ")
+    SQL.ADD(" AND C.Fecha2 > '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+    SQL.ADD(" AND O.Especie = '"~Dialogo.Especie1~"' ")
+    SQL.ADD(" AND O.Book1 = '"~Dialogo.Book1~"' ")
+    SQL.ADD(" AND O.MB3 = '1' ")
+    SQL.ADD(" Group By O.MB3 ")
+    Recorrer SQL
+        DFA
+        ***---Coloque prestamo
+        SCN(B:fac, -fbn('Cantidad'))
+    Proximo
+    ***---Resto las TRANFC recibidas
+    SQL.ADD(" Select Sum(O.Cantidad) Cantidad, O.MB3 ")
+    SQL.ADD(" From "~DBO~".OPERACIONES O ")
+    SQL.ADD(" Where O.TipoOp In ('TRANFC') ")
+    SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+    SQL.ADD(" AND O.Especie = '"~Dialogo.Especie1~"' ")
+    SQL.ADD(" AND O.Book1 = '"~Dialogo.Book1~"' ")
+    SQL.ADD(" AND O.MB3 = 0 ")
+    SQL.ADD(" Group By O.MB3 ")
+    Recorrer SQL
+        DFA
+        SCN(B:fac, -fbn('Cantidad'))
+    Proximo
+    IF fbn('NrSaldo') = 101
+        ***---Precio en moneda que Cotiza
+        If Dialogo.Radio1 = 1
+           IF Dialogo.Radio2 = 0
+               ***---Cuotas partes en VN
+               ACN(D:fac, Dialogo.Cantidad2)
+           ELSE
+               ***---Cuotas partes en %
+               ACN(C:fac, Dialogo.Cantidad2)
+               ACN(D:fac, val(b:fac)*val(c:fac)/100)
+           ENDIF
+        Else
+          ACN(D:fac, Dialogo.Cantidad1)
+        EndIf
+    ELSE
+        If Dialogo.Radio1 = 1
+           IF Dialogo.Radio2 = 0
+               ***---Cuotas partes en VN
+               ACN(D:fac, Dialogo.Cantidad2)
+           ELSE
+               ***---Cuotas partes en %
+               ACN(C:fac, Dialogo.Cantidad2)
+               ACN(D:fac, val(b:fac)*val(c:fac)/100)
+           ENDIF
+        Else
+          IF Eqstr(Dialogo.Especie2, Var('MONELOCA'))
+              IF fbn('NrSaldo') = 121
+                  ***---Precio en ARP
+                  ACN(D:fac, Dialogo.Cantidad1)
+              ELSE
+                  ***---Precio en USD
+                  ACN(D:fac, Dialogo.Cantidad1*COTIZACIONC(Dialogo.Especie2,,,,Dialogo.Fecha1-1,1,SI,Var('MONEEXTR')))
+              ENDIF
+          ELSE
+              IF Eqstr(Dialogo.Especie2, Var('MONEEXTR'))
+                  IF fbn('NrSaldo') = 131
+                      ***---Precio en USD
+                      ACN(D:fac, Dialogo.Cantidad1)
+                  ELSE
+                      ***---Precio en ARP
+                      ACN(D:fac, Dialogo.Cantidad1*COTIZACIONC(Dialogo.Especie2,,,,Dialogo.Fecha1-1,1,SI,Var('MONELOCA')))
+                  ENDIF
+              ELSE
+                  IF fbn('NrSaldo') = 131
+                      ***---Precio en USD
+                      ACN(D:fac, Dialogo.Cantidad1*COTIZACIONC(Dialogo.Especie2,,,,Dialogo.Fecha1-1,1,SI,Var('MONEEXTR')))
+                  ELSE
+                      ***---Precio en ARP
+                      ACN(D:fac, Dialogo.Cantidad1*COTIZACIONC(Dialogo.Especie2,,,,Dialogo.Fecha1-1,1,SI,Var('MONELOCA')))
+                  ENDIF
+              ENDIF
+          ENDIF
+        EndIf
+    ENDIF
+  ELSE
+    DFA
+  ENDIF
+Proximo
+ACN(FC:99,fac)
+If Val(FC:99) =0
+   Cancelar('No hay Posicion para el Fondo Solicitado')
+EndIf
+CrearListBox ; 'MS Sans Serif,8,'; 'Dividendos FCI'
+  'Book     '         ;A:1..A:Fac;NO;SI;'Error'; 90; STRING;12
+  'NrSaldo'           ;I:1..I:fac;NO;SI;'Error';120;NUMERO;'#,###,###,###.##'
+  'Posicion'          ;B:1..B:fac;NO;SI;'Error';120;NUMERO;'#,###,###,###.##'
+  '%'                 ;C:1..C:Fac;NO;SI;'Error';120;NUMERO;'#####.########'
+  IIF(Dialogo.Radio1=0, 'Monto a Cobrar', 'Fondos a Cobrar')   ;D:1..D:fac;NO;SI;'Error';120;NUMERO;'#,###,###,###.########'
+FinListBox
+
+If Not Ok 
+   Cancelar
+Endif
+
+Recorrer&j 1,Fac
+   ACT(ZO:99,UsuarioActivo)
+
+   ACN(ZC:66, BuscarCampo('VEHICULOS','Alias1','Codigo', Dialogo.Vehiculo1) )
+   ACT(Z3,GetNumerador(Val(ZC:66))) 
+   ACT(ZC:77, BuscarCampo('ESPECIES','Issuer','Codigo', Dialogo.Especie1) )
+
+   SQL.ADD(" INSERT INTO "~DBO~".OPERACIONES ")
+   SQL.ADD(" (TipoOp, CB7, NrOperacion, Especie, ")
+   SQL.ADD(" Book1, ContraEspecie, Cliente1, Cantidad, ")
+   if Dialogo.Radio1 = 0
+      SQL.ADD(" TotalNetoCli1, RB1, ")
+   Else
+      SQL.ADD(" TotalBrutoCli1, RB2, ")
+   EndIf
+   SQL.ADD(" Cuenta2, FechaOp, FechaPago, FechaCarga, ")
+   SQL.ADD(" FechaCargaSys, TipoCambio3, Numerador, MB3, ")
+   SQL.ADD(" MB4, ")
+   SQL.ADD(" MB2, UsrInput, Vehiculo1, Precio3, ")
+   SQL.ADD(" Spread, Operador, Cuenta1) ")
+   SQL.ADD(" Values ")
+   SQL.ADD(" ('DIVIDE', '1', '"~Val(Z3)~"', '"~Dialogo.Especie1~"', ")
+   SQL.ADD(" '"~Val(A:&j)~"' , '"~Dialogo.Especie2~"', '"~Val(ZC:77)~"', "~FStr(val(B:&j),0,2)~", ")
+   SQL.ADD(" "~FStr(Val(D:&j),0,8)~", 1, ")
+   SQL.ADD(" '"~Dialogo.Cuenta3~"', '"~IdxDate(Dialogo.Fecha1)~"', '"~IdxDate(Dialogo.Fecha2)~"', "~SQLAhora~", ")
+   SQL.ADD(" '"~IdxDate(FSYS)~"', "~Fstr(Val(I:&j), 0, 0)~", "~FStr(Val(ZC:66),0,0)~", 0, ")
+   SQL.ADD(" 1, ")
+   SQL.ADD(" -1 , '"~UsuarioActivo~"', '"~Dialogo.Vehiculo1~"', "~Fstr(Val(E:&j), 0, 8)~", ")
+   SQL.ADD(" "~Fstr(Val(G:&j), 0, 8)~", '"~UsuarioActivo~"', '"~Dialogo.Cuenta4~"') ")
+   SQL.NEW
+   SQL.EXEC
+
+*   MessageBox('GENDIVFCI - Op '~Val(Z3))
+
+   SQL.ADD("SELECT NrInstancia FROM "~DBO~".INSTANCIAS ")
+   SQL.ADD(" Where Tabla = 'OPERACIONES' ")
+   SQL.ADD(" ORDER BY NrInstancia ")
+
+   Recorrer SQL
+      if Val(I:&j) = 101  
+         ACN(II:99, 19)
+      Else
+         ACN(II:99, FBN['NrInstancia'])
+      Endif 
+      EjecutarEvento('INSBIT',String1='OPERACIONES',Entero1=val(II:99),NrOperacion1=Val(Z:3))
+  Proximo
+   SQL.ActualizarMovimientos2(Val(Z:3),SI,NO,NO,SI)
+   SQL.EXEC
+   ***---Calculo de Resultados Realizados
+   EjecutarEvento('DIVFON',Radio2=0,NrOperacion1=Val(Z:3),Radio1=0,Fecha1=Dialogo.Fecha2,Check1=1)
+Proximo
+  

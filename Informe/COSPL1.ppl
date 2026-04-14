@@ -1,0 +1,328 @@
+﻿ModoReproceso(SinDialogo)
+MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1     : 'Fecha Vig.'        ;;;;;;Dialogo.Fecha1 <> 0 Y Dialogo.Fecha1 <= Fsys;'Fecha Vigencia Invalida';NO;Fsys;
+  Check1     : 'Interes'           ;;;;;;;;;1
+  Radio1     : 'Consolidado|NO|SI' ;;;;;;;;;0
+  Lista1     : 'Vehiculo'          ;1;2;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') "));
+  Vehiculo1  : 'Grupo'             ;;;;;NO;;;;;;
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,6,")
+CrearFont(5,"Arial,12,BI")
+
+ACT(LS:500, Dialogo.Lista1)
+
+IF NoVacio(Val(LS:500))
+    ACT(LS:1000, Val(LS:500))
+ELSE
+    ACT(LS:1000, IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")))
+ENDIF
+
+ACT(LS:2000, Val(LS:1000))
+
+ACT(LS:100, SQLSet(" Select Codigo From "~DBO~".ESPECIES Where Codigo IN ("~Pipe2Comillas(Descendientes('ESPECIES','MONEDA'))~") "))
+
+***---FP1 = Fila donde comienza el titulo 'PASIVOS' del Informe 'General Resumen Operaciones Financieras'.
+***---FO1 = Fila donde comienzan las ONs del Informe 'General Resumen Operaciones Financieras'.
+***---DA1 = Cantidad de dias para el pasaje del plazo de dias a anios
+
+ACN(FP:1, 15)
+ACN(FO:1, 29)
+ACN(BD:1, 0)
+ACN(DA:1, 360)
+
+ACN(XX:1, 0)
+ACN(XX:2, 0)
+ACN(XX:3, 0)
+ACN(XX:4, 0)
+
+ACD(FE:1, Dialogo.Fecha1)
+ACN(CK:1, Dialogo.Check1)
+ACN(RA:1, Dialogo.Radio1)
+
+SetFilaActual(1)
+
+(.'COSPLA3'.)
+SetFilaActual(1)
+
+ACN(EL:1, Elementos(Val(LS:1000)))
+ACN(EL:2, Elementos(Val(LS:100)))
+
+***---Para las ON se toma especie de ultimo Swap
+***---Cuando se tome especie ultimo swap para todos los prestamos, unificar querys como
+***---en query de COSPLAB
+IF Val(RA:1) = 0
+    ***---No Consolidado
+    Recorrer&k 1, Val(EL:1)
+
+        BorrarCeldas(LS:100..LS:100)
+        ***---Busco las especies por cada vehiculo
+        SQL.ADD(" Select Distinct Especie ")
+        SQL.ADD(" From "~DBO~".OPERACIONES ")
+        SQL.ADD(" Where FechaOp <= '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND FechaVto > '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND Vehiculo1 IN ('"~ItemLista(Val(LS:1000), &k)~"') ")
+        SQL.ADD(" AND (TipoOp IN ('MMPCL','MMPLME','MMPCOS','MMPI','MMPSC','MMFRN') ")
+        SQL.ADD(" OR (TipoOp = 'AJPOFI' AND RB9 <> 0)) ")
+        SQL.ADD(" AND Cantidad <> 0 ")
+
+        SQL.ADD(" UNION ")
+
+        SQL.ADD(" Select Distinct O.Especie ")
+        SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+        SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+        SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND C.Fecha2 > '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND O.Vehiculo1 IN ('"~ItemLista(Val(LS:1000), &k)~"') ")
+        SQL.ADD(" AND O.TipoOp IN ('MMPCLM','MMPOSM','MMPIM','MMSCMV','MMFCMV') ")
+        SQL.ADD(" AND C.Cantidad1 <> 0 ")
+
+        SQL.ADD(" UNION ")
+
+        ***---ONs
+        SQL.ADD(" Select Distinct CASE OT.Especie WHEN  Null THEN O.Especie ELSE  OT.Especie END Especie ")
+        SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".OPERACIONES OT ")
+        SQL.ADD(" Where O.NrOperacion *= OT.OperacionRef  ")
+        SQL.ADD(" AND O.TipoOp = 'MMON' ")
+        SQL.ADD(" AND (OT.NrOperacion Is Null OR OT.NrOperacion IN ( ")
+        SQL.ADD("      Select Max(OT1.NrOperacion) From "~DBO~".OPERACIONES OT1 ")
+        SQL.ADD("      Where O.NrOperacion = OT1.OperacionRef)) ")
+        SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND O.FechaVto > '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND O.Vehiculo1 IN ('"~ItemLista(Val(LS:1000), &k)~"') ")
+        SQL.ADD(" AND O.TotalNetoCli3 <> 0 ")
+
+        SQL.ADD(" UNION ")
+
+        SQL.ADD(" Select Distinct CASE OT.Especie WHEN  Null THEN  O.Especie ELSE  OT.Especie END Especie ")
+        SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C, "~DBO~".OPERACIONES OT ")
+        SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+        SQL.ADD(" AND O.NrOperacion *= OT.OperacionRef  ")
+        SQL.ADD(" AND O.TipoOp = 'MMONM' ")
+        SQL.ADD(" AND (OT.NrOperacion Is Null OR OT.NrOperacion IN ( ")
+        SQL.ADD("      Select Max(OT1.NrOperacion) From "~DBO~".OPERACIONES OT1 ")
+        SQL.ADD("      Where O.NrOperacion = OT1.OperacionRef)) ")
+        SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND C.Fecha2 > '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND O.Vehiculo1 IN ('"~ItemLista(Val(LS:1000), &k)~"') ")
+        SQL.ADD(" AND C.Cantidad4 <> 0 ")
+        SQL.ADD(" Order By 1 ")
+
+        Recorrer SQL
+            DFA
+            ACT(LS:100, Val(LS:100)~Copy(fbn('Especie'), 1, 3)~'|')
+         
+        Proximo
+
+        ACN(EL:2, Elementos(Val(LS:100)))
+
+        SCN(BD:1, 1)
+
+        IF Val(EL:2) > 0
+            IF Val(RA:1) = 0
+                IF Val(BD:1) > 1
+                    ifa
+                    SaltarHoja(fac)
+                    ifa
+                ENDIF
+                    ACT(A:fac, 'Operaciones Financieras CONFIDENCIAL')
+                    SetFont(A:fac, 2)
+                    ifa
+                    ACT(A:fac, 'MONTO DE CAPITALES Y COSTO DE LA DEUDA AL '~Val(FE:1))
+                    SetFont(A:fac, 3)
+                    ifa
+                    ACT(A:fac, 'Capital '~IIF(Val(CK:1) = 1, '+ Interes'))
+                    ifa
+                    ACT(A:fac, 'NO Consolidado')
+                    ifa
+                    ACT(A:fac, 'Vehiculo: '~ItemLista(Val(LS:1000), &k))
+                    SetFont(A:fac-3..A:fac, 2)
+            ENDIF
+            Recorrer&i 1, Val(EL:2)
+
+                ACN(XX:4, 1)
+                (.'COSPLA2'.)
+
+                ACN(FI:55, fac+1)
+                (.'COSPLA1'.)
+
+            Proximo
+        ENDIF
+        IF Val(XX:3) > 0
+
+            SetFilaActual(fac+3)
+            AFI(fac, 30)
+            ACT(A:fac, 'Total Gral. DEUDAS (expresado en U$S)')
+            ACN(B:fac, Val(XX:1))
+            ACN(C:fac, Val(XX:2))
+            ACN(D:fac, Val(XX:3))
+            ACN(XX:1, 0)
+            ACN(XX:2, 0)
+            ACN(XX:3, 0)
+            AgregarMarco(A:fac..D:fac, 0, 2, Exe('COLOR6'))
+            SetFont(A:fac..D:fac, 3)
+        ENDIF
+    Proximo
+ELSE
+
+    ***---Consolidado
+    ACT(A:fac, 'Operaciones Financieras CONFIDENCIAL')
+    SetFont(A:fac, 2)
+    ifa
+    ACT(A:fac, 'MONTO DE CAPITALES Y COSTO DE LA DEUDA AL '~Val(FE:1))
+    SetFont(A:fac, 3)
+    ifa
+    ACT(A:fac, 'Capital '~IIF(Val(CK:1) = 1, '+ Interes'))
+    ifa
+    ACT(A:fac, 'Consolidado')
+    ifa
+    ACT(A:fac, 'Vehiculos : '~Val(LS:1000))
+    SetFont(A:fac-3..A:fac, 2)
+    Recorrer&i 1, Val(EL:2)
+
+        BorrarCeldas(LS:1000..LS:1000)
+        ***---Busco los vehiculos por cada especie
+        ***---Las ONs las separo. Pregunto por Especie de ONs sin Swap y para las ONs que tienen 
+        ***---Swap pregunto por la especie del Swap
+        SQL.ADD(" Select Distinct Vehiculo1 ")
+        SQL.ADD(" From "~DBO~".OPERACIONES ")
+        SQL.ADD(" Where FechaOp <= '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND FechaVto > '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND Especie IN ('"~ItemLista(Val(LS:100), &i)~"') ")
+        SQL.ADD(" AND Vehiculo1 IN ("~Pipe2Comillas(Val(LS:2000))~") ")
+        SQL.ADD(" AND (TipoOp IN ('MMPCL','MMPLME','MMPCOS','MMPI','MMPSC','MMFRN') ")
+        SQL.ADD(" OR (TipoOp = 'AJPOFI' AND RB9 <> 0) ")
+        ***---ONs sin Swap
+        SQL.ADD(" OR (TipoOp = 'MMON' AND OperacionRef Is Null)) ")
+
+        SQL.ADD(" UNION ")
+
+        SQL.ADD(" Select Distinct O.Vehiculo1 ")
+        SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+        SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+        SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND C.Fecha2 > '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND O.Especie IN ('"~ItemLista(Val(LS:100), &i)~"') ")
+        SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:2000))~") ")
+        SQL.ADD(" AND (O.TipoOp IN ('MMPCLM','MMPOSM','MMPIM','MMSCMV','MMONM','MMFCMV') ")
+        ***---ONs Sin Swap
+        SQL.ADD(" OR (O.TipoOp = 'MMONM' AND OperacionRef Is Null)) ")
+
+        SQL.ADD(" UNION ")
+
+        SQL.ADD(" Select Distinct O.Vehiculo1 ")
+        SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".OPERACIONES OT ")
+        SQL.ADD(" Where O.NrOperacion = OT.OperacionRef ")
+        SQL.ADD(" AND OT.NrOperacion IN ( ")
+        SQL.ADD("      Select Max(OT1.NrOperacion) From "~DBO~".OPERACIONES OT1 ")
+        SQL.ADD("      Where O.NrOperacion = OT1.OperacionRef) ")
+        SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND O.FechaVto > '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND OT.Especie IN ('"~ItemLista(Val(LS:100), &i)~"') ")
+        SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:2000))~") ")
+        SQL.ADD(" AND O.TipoOp = 'MMON' ")
+        ***---ONs con Swap
+        SQL.ADD(" AND O.OperacionRef Is Not Null ")
+
+        SQL.ADD(" UNION ")
+
+        ***---ONs con Swap
+        SQL.ADD(" Select Distinct O.Vehiculo1 ")
+        SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C, "~DBO~".OPERACIONES OT ")
+        SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+        SQL.ADD(" AND O.NrOperacion = OT.OperacionRef ")
+        SQL.ADD(" AND OT.NrOperacion IN ( ")
+        SQL.ADD("      Select Max(OT1.NrOperacion) From "~DBO~".OPERACIONES OT1 ")
+        SQL.ADD("      Where O.NrOperacion = OT1.OperacionRef) ")
+        SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND C.Fecha2 > '"~IdxDate(Val(FE:1))~"' ")
+        SQL.ADD(" AND OT.Especie IN ('"~ItemLista(Val(LS:100), &i)~"') ")
+        SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:2000))~") ")
+        SQL.ADD(" AND O.TipoOp = 'MMONM' ")
+        ***---ONs con Swap
+        SQL.ADD(" AND O.OperacionRef Is Not Null ")
+        SQL.ADD(" Order By 1 ")
+        Recorrer SQL
+
+            DFA
+            ACT(LS:1000, Val(LS:1000)~fbn('Vehiculo1')~'|')
+        Proximo
+        ACN(EL:1, Elementos(Val(LS:1000)))
+
+        SCN(BD:1, 1)
+
+        IF Val(EL:1) > 0
+            (.'COSPLA2'.)
+            ACN(FI:55, fac+1)
+            Recorrer&k 1, Val(EL:1)
+ 
+                ACN(XX:4, 1)
+                (.'COSPLA1'.)
+            Proximo
+            SetFont(A:Val(FI:55)..F:fac, 1)
+            SetFilaActual(fac+2)
+            AgregarMarco(A:Val(FI:55)..F:fac, 1, 2)
+            ACT(A:fac, 'TOTAL CONSOLIDADO '~ItemLista(Val(LS:100), &i))
+            ACN(B:fac, Val(TT:1))
+            ACN(C:fac, Val(TT:2))
+            ACN(D:fac, Val(TT:3))
+            ACN(E:fac, Val(TT:4) / Val(D:fac))
+            ACN(F:fac, Val(TT:5) / Val(D:fac))
+            SetFont(A:fac..F:fac, 2)
+            AgregarMarco(A:fac..F:fac, 0, 2, Exe('COLOR6'))
+            FormatoCeldas(E:Val(FI:55)..E:fac, Exe('F8'))
+            SCN(XX:1, Val(TT:1))
+            SCN(XX:2, Val(TT:2))
+            SCN(XX:3, Val(TT:3))
+            ACN(TT:1, 0)
+            ACN(TT:2, 0)
+            ACN(TT:3, 0)
+            ACN(TT:4, 0)
+            ACN(TT:5, 0)
+        ENDIF
+    Proximo
+
+    SetFilaActual(fac+3)
+    AFI(fac, 30)
+    ACT(A:fac, 'TOTAL CONSOLIDADO EXPRESADO EN USD')
+    ACN(B:fac, Val(XX:1))
+    ACN(C:fac, Val(XX:2))
+    ACN(D:fac, Val(XX:3))
+    AgregarMarco(A:fac..D:fac, 0, 2, Exe('COLOR6'))
+    SetFont(A:fac..D:fac, 3)
+ENDIF
+
+IF Val(XX:4) = 0
+    Cancelar('No Hay Datos que Concuerden con los Datos Ingresados')
+ENDIF
+
+***---FP1+2 = Prestamos Terceros Locales
+***---FP1+3 = Prestamos Terceros Off-Shore
+***---FP1+4 = Financiacion de Importaciones (Buyer Credits)
+***---FP1+5 = Prestamos Sindicados
+***---FP1+6 = Tomas Vinculadas
+***---FP1+7 = Operaciones de Cambio a Termino
+***---FP1+8 = Titulos Vendidos a Termino
+***---FP1+9 = Impuesto al Endeudamiento a Pagar
+***---FP1+10 = WHT a Pagar
+***---FP1+11 = Otros Conceptos
+***---FP1+12 = Deudas por Unwind de Derivados
+***---FP1+13 = Cartas de Credito
+
+
+ACO(1, 30)
+ACO(2, 10)
+ACO(3, 10)
+ACO(4, 10)
+ACO(5, 8)
+ACO(6, 6)
+SetMargins(0, 1, 0, 0)
+LimitesVision(G:fac+1)

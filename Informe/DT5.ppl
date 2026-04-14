@@ -1,0 +1,241 @@
+﻿MostrarCuadroDeMensajes
+
+ACT(VH:1, SQLSet(" Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+
+CrearDialogo
+  Fecha1:   'Fecha'     ;1;1;;;;;;;fsys
+  Radio2 : 'Tipo Cta|Cta.Cte|Interm|Recaud|C.Ahorro|Todos' ;2;1;;;;;;;4
+  Check1:  'Incluye Pagadoras';3;1;;;;;;;1
+  Lista3:   'Monedas'   ; 4;1;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".ESPECIES WHERE Tipo='MON' ");
+  Lista1:   'Vehiculos' ;-2;2;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"), Val(VH:1))
+  Lista2:   'Bancos'    ;  ;1;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CLIENTES WHERE Sector='BAN' ");
+  Lista4:   'Cuentas'   ;-7;2;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS  WHERE Comitente IN ("~Pipe2Comillas(Dialogo.Lista2)~") "~IIF(NOVACIO(Dialogo.Lista1)," AND Cliente IN ("~Pipe2Comillas(Dialogo.Lista1)~")",iif(NoVacio(UsrVehiculos(UsuarioActivo))," AND Cliente IN ("~Pipe2Comillas(Val(VH:1))~") " ) )~"  ");
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+CrearFont(1,"Arial, 8,")
+CrearFont(2,"Arial, 8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,10,")
+CrearFont(5,"Arial, 8,BI")
+CrearFont(6,"Arial, 8,I")
+
+ACT(a:1, 'Monedas: '~iif(vacio(Dialogo.Lista3),'Todas',Pipe2Comillas(Dialogo.Lista3)))
+ACT(a:2, 'Vehiculos: '~iif(vacio(Dialogo.Lista1),'Todos',Pipe2Comillas(Dialogo.Lista1)))
+ACT(a:3, 'Bancos: '~iif(vacio(Dialogo.Lista2),'Todos',Pipe2Comillas(Dialogo.Lista2)))
+ACT(a:4, 'Cuentas: '~iif(vacio(Dialogo.Lista4),'Todas',Pipe2Comillas(Dialogo.Lista4)))
+
+If Dialogo.Radio2=0
+  ACT(a:5, 'Tipo de Cta: Cuenta Corriente')
+Endif
+If Dialogo.Radio2=1
+  ACT(a:5, 'Tipo de Cta: Intermedia')
+Endif
+If Dialogo.Radio2=2
+  ACT(a:5, 'Tipo de Cta: Recaudadora')
+Endif
+If Dialogo.Radio2=3
+  ACT(a:5, 'Tipo de Cta: Caja de Ahorro')
+Endif
+If Dialogo.Radio2=4
+  ACT(a:5, 'Tipo de Cta: Todas')
+Endif
+If Dialogo.Check1=0
+  ACT(a:5, Val(a:5)~' - No incluye Cuentas Pagadoras.')
+Else
+  ACT(a:5, Val(a:5)~' - Incluye Cuentas Pagadoras.')
+Endif
+SetFont(a:1..a:5,2)
+
+ACT(c:6, 'Disponibilidades al '~Dialogo.Fecha1)
+SetFont(c:6,3)
+
+SetFilaActual(7)
+
+SQL.ADD(" SELECT M.*, E.Nombre, E.Codigo MonedaFPA, V.Descripcion, V.Codigo VehiculoFPA, ")
+SQL.ADD(" C.Numero, C.Codigo CuentaFPA, C.Alias3, C.TipoCuenta, B.Codigo BancoFPA, B.RazonSocial ")
+SQL.ADD(" FROM "~DBO~".MOVDATANET M, "~DBO~".CUENTAS C, "~DBO~".CLIENTES B, "~DBO~".ESPECIES E, "~DBO~".VEHICULOS V, "~DBO~".DATANET D ")
+SQL.ADD(" WHERE M.Moneda    = E.Alias3 ")
+SQL.ADD(" AND   M.Vehiculo  = V.Codigo ")
+SQL.ADD(" AND   M.Cuenta    = C.Numero ")
+SQL.ADD(" AND   M.Banco     = B.Alias2 ")
+SQL.ADD(" AND   C.Comitente = B.Codigo ")
+SQL.ADD(" AND   D.NrDatanet = M.NrDatanet ")
+SQL.ADD(" AND   M.TipoMov   IN  ('DIS') ")
+SQL.ADD(" AND   D.FechaDesde = "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND   D.FechaHasta = "~IdxDate2(Dialogo.Fecha1)~" ")
+If NoVacio(Dialogo.Lista1)
+  SQL.ADD(" AND V.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    SQL.ADD(" AND V.Codigo IN ("~Pipe2Comillas(Val(VH:1))~") ")
+  Endif
+Endif
+If NoVacio(Dialogo.Lista2)
+  SQL.ADD(" AND B.Codigo IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+If NoVacio(Dialogo.Lista3)
+  SQL.ADD(" AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista3)~") ")
+Endif
+If NoVacio(Dialogo.Lista4)
+  SQL.ADD(" AND C.Codigo IN ("~Pipe2Comillas(Dialogo.Lista4)~") ")
+Endif
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT')")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC')")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA')")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+SQL.ADD(" ORDER BY V.Codigo, B.Codigo, C.Codigo, E.Codigo, M.FechaAcreditacion ")
+
+ACT(va:1,'')
+ACT(ba:1,'')
+ACT(ea:1,'')
+ACT(ca:1,'')
+
+Recorrer SQL
+  If Not Eqstr(fbn('VehiculoFPA'),Val(va:1)) o Not Eqstr(fbn('BancoFPA'),Val(ba:1)) o Not Eqstr(fbn('CuentaFPA'),Val(ca:1)) o Not Eqstr(fbn('MonedaFPA'),Val(ea:1))
+    If Not Eqstr(Val(va:1),'')
+      SaltarHoja
+    Endif
+    message('Vehiculo: '~fbn('Descripcion')~'  Banco: '~fbn('RazonSocial'))
+    message('_____  Cuenta: '~fbn('Alias3')~' Numero: '~fbn('Numero')~'  (FPA: '~fbn('CuentaFPA')~')')
+    ACT(a:fac, 'Banco: '~fbn('RazonSocial'))
+    ACT(d:fac, 'Vehiculo: '~fbn('Descripcion'))
+    ACT(a:fac+1, 'Disponibilidades en '~fbn('Nombre'))
+    ACT(d:fac+1, 'Cuenta: '~fbn('Alias3')~' Numero: '~fbn('Numero')~'  (FPA: '~fbn('CuentaFPA')~')')
+    SetFont(a:fac..g:fac+1,3)
+    AgregarMarco(a:fac..g:fac+2,0,0,RGB(162,222,251))
+
+    SetFilaActual(fac+4)
+
+    ACT(a:fac,     'Saldo Contable')
+    ACT(b:fac+2,   'Clearing Pendiente')
+    ACT(a:fac+4,   'Saldo Operativo Incial')
+
+    ACT(b:fac+6,   'Creditos del Dia')
+    ACT(b:fac+7,   'Debitos del Dia')
+
+    ACT(a:fac+9,   'Saldo Operativo Actual')
+
+    ACT(b:fac+11,   'Acuerdos')
+
+    ACT(a:fac+13,  'Saldo con Acuerdos')
+
+    ACT(b:fac+15,  'Debitos 24 hs.')
+    ACT(b:fac+16,  'Debitos 48 hs.')
+    ACT(b:fac+17,  'Debitos 72 hs.')
+    ACT(b:fac+18,  'Debitos 96 hs.')
+
+    ACT(b:fac+20,  'Creditos 24 hs.')
+    ACT(b:fac+21,  'Creditos 48 hs.')
+    ACT(b:fac+22,  'Creditos 72 hs.')
+    ACT(b:fac+23,  'Creditos 96 hs.')
+
+    ACT(b:fac+25,  'Saldo Aproximado Esperado')
+
+    ACN(d:fac,     fbn('Importe')*IIF(Eqstr(fbn('DC'),'D'),(-1),1))
+    ACN(d:fac+4,   fbn('Importe2')*iif(Eqstr(fbn('DC2'),'D'),(-1),1))
+    ACN(d:fac+2,   Val(d:fac+4)-Val(d:fac))
+
+    ACN(d:fac+9,   fbn('Importe3')*iif(Eqstr(fbn('DC3'),'D'),(-1),1) )
+
+    ACN(d:fac+11,  fbn('Importe12'))
+
+    ACN(d:fac+13,  Val(d:fac+9)+fbn('Importe12'))
+
+    ACN(d:fac+15,  fbn('Importe4')*-1)
+    ACN(d:fac+16,  fbn('Importe5')*-1)
+    ACN(d:fac+17,  fbn('Importe6')*-1)
+    ACN(d:fac+18,  fbn('Importe7')*-1)
+
+    ACN(d:fac+20,  fbn('Importe8'))
+    ACN(d:fac+21,  fbn('Importe9'))
+    ACN(d:fac+22,  fbn('Importe10'))
+    ACN(d:fac+23,  fbn('Importe11'))
+
+    ACN(d:fac+6,   fbn('Importe8')+fbn('Importe9')+fbn('Importe10')+fbn('Importe11'))
+    ACN(d:fac+7,   (fbn('Importe4')+fbn('Importe5')+fbn('Importe6')+fbn('Importe7'))*-1)
+
+
+    ACN(d:fac+25,  SUM(d:fac+13..d:fac+23))
+
+IF NO
+    SQL.ADD(" SELECT SUM(M.Importe) Total, M.DC FROM "~DBO~".MOVDATANET M, "~DBO~".DATANET D ")
+    SQL.ADD(" WHERE  D.NrDatanet = M.NrDatanet ")
+    SQL.ADD(" AND   M.TipoMov   IN  ('MD') ")
+    SQL.ADD(" AND   M.Moneda     = '"~fbn('Moneda')~"' ")
+    SQL.ADD(" AND   M.Cuenta     = '"~fbn('Cuenta')~"' ")
+    SQL.ADD(" AND   M.Vehiculo   = '"~fbn('Vehiculo')~"' ")
+    SQL.ADD(" AND   M.Banco      = '"~fbn('Banco')~"' ")
+    SQL.ADD(" AND   D.FechaDesde = "~IdxDate2(Dialogo.Fecha1)~" ")
+    SQL.ADD(" AND   D.FechaHasta = "~IdxDate2(Dialogo.Fecha1)~" ")
+    SQL.ADD(" GROUP BY M.DC ")
+    SQL.ADD(" ORDER BY M.DC ")
+    Recorrer SQL
+      dfa
+      If Eqstr(fbn('DC'),'C')
+        SCN(d:fac+6, fbn('Total'))
+      Else
+        SCN(d:fac+7, fbn('Total'))
+      Endif
+    Proximo
+
+    AsignarLink(d:fac+6, 'DT6',Fecha1=Dialogo.Fecha1,Radio1=1,Lista2=fbn('BancoFPA'),Lista3=fbn('MonedaFPA'),Lista1=fbn('VehiculoFPA'))
+    AsignarLink(d:fac+7, 'DT6',Fecha1=Dialogo.Fecha1,Radio1=0,Lista2=fbn('BancoFPA'),Lista3=fbn('MonedaFPA'),Lista1=fbn('VehiculoFPA'))
+ENDIF
+    SetFont(a:fac..b:fac+25,2)
+    SetFont(b:fac+6..b:fac+7,5)
+    SetFont(b:fac+15..b:fac+25,5)
+    SetFont(b:fac+11,5)
+    SetFont(b:fac+2,5)
+    SetFont(d:fac..d:fac+25,1)
+    SetFont(d:fac+6..d:fac+7,6)
+    SetFont(d:fac+15..d:fac+25,6)
+    SetFont(d:fac+11,6)
+    SetFont(d:fac+2,6)
+
+    FormatoCeldas(d:fac..d:fac+25,EXE('F2'))
+    AgregarMarco(a:fac..g:fac,0,0,0)
+    AgregarMarco(a:fac+4..g:fac+4,0,0,0)
+    AgregarMarco(a:fac+9..g:fac+9,0,0,RGB(216,216,216))
+    AgregarMarco(a:fac+13..g:fac+13,0,0,0)
+    AgregarMarco(a:fac+25..g:fac+25,0,0,0)
+
+    SetFilaActual(FAC+26)
+  Endif
+
+  ACT(va:1,fbn('VehiculoFPA'))
+  ACT(ba:1,fbn('BancoFPA'))
+  ACT(ea:1,fbn('MonedaFPA'))
+  ACT(ca:1,fbn('CuentaFPA'))
+Proximo
+
+ifa
+ifa
+ifa
+
+ACO(1,10)
+ACO(2,10)
+ACO(3,10)
+ACO(4,10)
+ACO(5,10)
+ACO(6,10)
+ACO(7,10)
+
+Impresion(1,2)
+Impresion(4,1)
+SetMargins(0,0,0,2)
+LimitesVision(h:fac+2)

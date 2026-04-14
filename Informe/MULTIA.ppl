@@ -1,0 +1,706 @@
+﻿*ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1    : 'Fecha:'         ;;;;  ;  ;Dialogo.Fecha1 <= Fsys y EsHabil(Dialogo.Fecha1, 'ARG');'Fecha Invalida';NO;Fsys
+  Vehiculo1 : 'Vehiculo:'      ;;;;NO;  ;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+FinDialogo
+if Not OK
+  Cancelar
+endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+ACT(w:1, 'Ultimo Paso')
+ACT(w:2, 'Cant Fl CONC')
+ACT(w:3, 'Estado Fl CONC')
+ACT(w:4, 'Existe Fl FIND')
+ACT(w:5, 'Existe Fl CIED')
+ACT(w:6, 'Cli OK Paso 0')
+ACT(w:7, 'Realizo Cierre')
+ACT(w:8, 'Vehiculo Excluido')
+ACT(w:9, 'Multi. Paso 0')
+ACT(w:10, 'Multi. Anterior')
+ACT(w:11, 'Monto Cobrar')
+ACT(w:12, 'M.Cobrar CieCon')
+ACT(w:13, 'Monto Pagar')
+ACT(w:14, 'M.Pagar CieCon')
+ACT(w:15, 'Ult.Paso BY')
+ACT(w:16, 'Multi a pagar')
+ACT(y:1, 'F.Inical Paso 0')
+ACT(y:2, 'F.Final Paso 0')
+ACT(y:3, 'F.Inical Ult.Paso')
+ACT(y:4, 'F.Inical CieCon')
+ACT(y:5, 'F.Inical Tr.Man.')
+
+ACN(x:6, 0)
+ACN(x:9, 0)
+
+if SQL(" Select Count(*) From "~DBO~".TRANSACCIONES2 Where TipoTr2 = 'LIQOCT' AND Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' AND Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")=0
+  Cancelar('El MTM del Dia No Ha Sido Procesado')
+endif
+***---Selecciono el maximo paso del dia
+ACN(x:1, SQL(" Select Max(Paso) From "~DBO~".MTMOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' "))
+ACN(x:2, SQL(" Select Count(*) From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' AND Registro = 'CONC' "))
+ACN(x:4, SQL(" Select 1 From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' AND Registro = 'FIND' "))
+ACN(x:5, SQL(" Select 1 From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' AND Registro = 'CIED' "))
+
+ACN(x:15, -1)
+SetFilaActual(0)
+SQL.ADD("Select * from "~DBO~".TRANSACCIONES2 ")
+SQL.ADD(" where TipoTr2   in ('OCTDEP','OCTRET') ")
+SQL.ADD("   and Fecha1    =  '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   and Vehiculo1 =  '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" order by Precio5 ")
+recorrer SQL
+  SCN(af:1, 1)
+  ACT(ag:FAC, fbn('NrTrans'))
+  ACT(ah:FAC, fbn('TipoTr2'))
+  ACD(ai:FAC, fbn('Fecha1'))
+  ACD(aj:FAC, fbn('Fecha2'))
+  ACN(ak:FAC, fbn('RB1'))
+  if fbn('RB1')=0
+    ACT(al:FAC, 'Autom')
+    if fbn('RB2')=0
+      ACT(am:FAC, 'De MTM')
+    else
+      ACT(am:FAC, 'De MAE')
+    endif
+  else
+    ACT(al:FAC, 'Manual')
+  endif
+  ACN(an:FAC, fbn('Precio5'))
+  if FAC=1
+    if Val(an:FAC)<>0
+      ACN(ae:1,1)
+      ACT(ao:FAC, 'Error 0')
+    endif
+  endif
+  if FAC>1
+    if Val(an:FAC)<>Val(an:FAC-1)+1
+      ACN(ae:1,1)
+      ACT(ao:FAC, 'Error Ant')
+    endif
+  endif
+  ACN(ap:FAC, fbn('Cantidad1'))
+  if EqStr(fbn('TipoTr2'),'OCTDEP')
+    ACN(aq:FAC, fbn('Cantidad1'))
+    SCN(ar:1, fbn('Cantidad1'))
+  else
+    ACN(aq:FAC, -fbn('Cantidad1'))
+    SCN(ar:2, -fbn('Cantidad1'))
+  endif
+  ACN(x:15, fbn('Precio5'))
+proximo
+
+**AgregarBMP(a:1, Exe('LOGO'), 60)
+ACT(A:2, CodigoInforme)
+SetFilaActual(4)
+ACT(d:FAC, 'MULTILATERAL DIARIO')
+SetFont(d:FAC, 3)
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Fecha: '~Dialogo.Fecha1)
+ACT(a:FAC+1, 'Vehiculo: '~Dialogo.Vehiculo1)
+SetFont(a:FAC..a:FAC+1, 2)
+
+SetFilaActual(FAC+3)
+Recorrer&k 0, Val(x:1)
+  if &k = 0
+    *** Paso cero.
+    ACT(A:FAC, 'PASO 0')
+    AgregarMarco(A:FAC..C:FAC, 0, 0, Exe('COLOR8'))
+    if Val(x:5)=1
+      * Flag CIED OK
+      if Val(x:1)=0
+        ACN(x:7, 1)
+        * Ultimo paso = 0
+        ACT(d:FAC, 'FPA')
+        AlinearCeldas(d:FAC, 'D')
+        AgregarMarco(d:FAC..e:FAC, 0, 0, Exe('COLOR8'))
+      endif
+    endif
+    ifa
+    ACT(A:FAC, 'Agente')
+    ACT(B:FAC, 'NrTrans')
+    ACT(C:FAC, 'Cantidad')
+    AgregarMarco(a:FAC..c:FAC+1, 0, 0, Exe('COLOR'))
+    if Val(x:7)=1
+      * Se realizo Cierre y Vuelta = Ultimo paso
+      ***---Si se realizo el cierre del dia => informo vouchers fallados
+      ACT(d:FAC, 'Voucher')
+      ACT(d:FAC+1, 'Confir./Fall.')
+      ACT(e:FAC, 'Transporte')
+      ACT(e:FAC+1, 'Generado')
+      ACT(k:FAC, 'Cantidad1')
+      ACT(k:FAC+1, 'Falla')
+      ACT(m:FAC, 'Cantidad1')
+      ACT(m:FAC+1, 'Voucher')
+      ACT(n:FAC, 'Cantidad3')
+      ACT(n:FAC+1, 'Falla Vou')
+      ACT(o:FAC, 'Cantidad4')
+      ACT(o:FAC+1, 'Conf. Vou')
+      ACT(p:FAC, 'CB3')
+      ACT(p:FAC+1, 'Fallado')
+      ACT(q:FAC, 'CB9')
+      ACT(q:FAC+1, 'Confirmado')
+      AgregarMarco(d:FAC..e:FAC+1, 0, 0, Exe('COLOR'))
+    endif
+    ifa
+    SetFont(a:FAC-2..q:FAC, 2)
+    ACN(z:1, FAC+1)
+    ACN(z:2, FAC)
+    SQL.ADD(" Select Cliente1, NrTrans, Cantidad1 ")
+    SQL.ADD("   from "~DBO~".TRANSACCIONES2 ")
+    SQL.ADD("  where TipoTr2   = 'LIQOCT' ")
+    SQL.ADD("    and Fecha1    = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("    and Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+    Recorrer SQL
+      SCN(z:2, 1)
+      ACT(A:FAC, fbn('Cliente1'))
+      ACT(B:FAC, fbn('NrTrans'))
+      ACLT(B:FAC, fbn('NrTrans'))
+      ACN(C:FAC, fbn('Cantidad1'))
+      SCN(x:9, fbn('Cantidad1'))
+      ACT(aa:Val(z:2), fbn('Cliente1'))
+      ACN(ab:Val(z:2), fbn('Cantidad1'))
+      ACT(ac:Val(z:2), fbn('NrTrans'))
+      if fbn('Cantidad1')<0
+        SCN(x:16, fbn('Cantidad1'))
+      endif
+         
+      if Val(x:7)=1
+        * Se realizo Cierre y Vuelta = Ultimo paso
+        ***---Obtengo Voucher fallado/confirmado
+        SQL.ADD("Select NrTrans,TipoTr2,Cantidad1,Cantidad3,Cantidad4,CB3,CB9 ")
+        SQL.ADD("  from "~DBO~".TRANSACCIONES2 ")
+        SQL.ADD(" where TipoTr2         in ('FXDEP','FXRET') ")
+        SQL.ADD("   and NrOperacionRef1 =  '"~Val(ac:Val(z:2))~"' ")
+        Recorrer SQL
+          DFA
+          ACT(d:FAC, fbn('NrTrans'))
+          ACLT(d:FAC, fbn('NrTrans'))
+          ACT(l:FAC, fbn('TipoTr2'))
+          ACN(m:FAC, fbn('Cantidad1'))
+          ACN(n:FAC, fbn('Cantidad3'))
+          ACN(o:FAC, fbn('Cantidad4'))
+          ACN(p:FAC, fbn('CB3'))
+          ACN(q:FAC, fbn('CB9'))
+        Proximo
+        ***---Obtengo TRANSP generado
+        SQL.ADD("Select NrTrans, Cantidad1 ")
+        SQL.ADD("  from "~DBO~".TRANSACCIONES2 ")
+        SQL.ADD(" where TipoTr2     in ('TRANSP') ")
+        SQL.ADD("   and NrTransRef1 =  '"~Val(d:FAC)~"' ")
+        Recorrer SQL
+          DFA
+          ACT(e:FAC, fbn('NrTrans'))
+          ACLT(e:FAC, fbn('NrTrans'))
+          ACN(k:FAC, fbn('Cantidad1'))
+        Proximo
+        SetFont(e:FAC..q:FAC, 1)
+      endif
+    Proximo
+    SetFont(a:Val(z:1)..q:FAC, 1)
+    recorrer&i Val(z:1), Val(z:2)
+      if Val(ab:&i)<0
+        ACN(ad:&i, Val(ab:&i)/Val(x:16))
+      endif
+    proximo
+    SetFont(aa:Val(z:1)..ad:FAC, 1)
+
+    ifa
+    ACN(C:FAC, Val(x:9))
+    SetFont(C:FAC, 2)
+    FormatoCeldas(c:Val(z:1)..c:FAC, Exe('F2'))
+    AgregarMarco(a:Val(z:1)..c:FAC, 0, 0)
+    if Val(x:7)=1
+      AgregarMarco(d:Val(z:1)..e:FAC-1, 0, 0)
+    endif
+    if Val(x:2)=0
+      ACT(d:FAC, 'No se ha realizado la conciliacion con MAE')
+      ColorCeldas(d:FAC..d:FAC, Exe('COLOR5'))
+    else
+      ACT(x:3, SQL("Select Estado From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' AND Registro = 'CONC' "))
+      if EqStr(Val(x:3),'OK')
+        ACT(d:FAC, 'Conciliacion con MAE OK')
+        ColorCeldas(d:FAC..d:FAC, Exe('COLOR4'))
+      else
+        if EqStr(Val(x:3),'DIF')
+          ACT(d:FAC, 'Conciliacion con MAE con diferencia')
+          ColorCeldas(d:FAC..d:FAC, Exe('COLOR5'))
+        else
+          if EqStr(Val(x:3),'MAN')
+            ACT(d:FAC, 'Conciliacion con MAE Manual')
+            ColorCeldas(d:FAC..d:FAC, Exe('COLOR4'))
+          else
+            ACT(d:FAC, 'Conciliacion con MAE Estado: '~Val(x:3))
+            ColorCeldas(d:FAC..d:FAC, Exe('COLOR5'))
+          endif
+        endif
+      endif
+    endif
+    SetFont(d:FAC, 3)
+
+    SetFilaActual(FAC+2)
+    ACT(A:FAC, 'Multilateral paso 0')
+    ACN(B:FAC, Val(x:9))
+    ***---Guardo ultimo Multilateral
+    ACN(x:10, Val(x:9))
+
+    SQL.ADD("Select NrTrans,TipoTr2,Cantidad1,RB1,RB2 ")
+    SQL.ADD("  from "~DBO~".TRANSACCIONES2 ")
+    SQL.ADD(" where TipoTr2   in ('OCTDEP','OCTRET') ")
+    SQL.ADD("   and Fecha1    =  '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   and Vehiculo1 =  '"~Dialogo.Vehiculo1~"' ")
+    SQL.ADD("   and Precio5   =  "~FStr(&k,1,0)~" ")
+    recorrer SQL
+      DFA
+      ACT(k:FAC, fbn('NrTrans'))
+      ACT(l:FAC, fbn('TipoTr2'))
+      ACN(m:FAC, fbn('Cantidad1'))
+      if fbn('RB1')=0
+        if fbn('RB2')=0
+          ACT(n:FAC, 'Aut.MTM')
+        else
+          ACT(n:FAC, 'Aut.MAE')
+        endif
+      else
+        ACT(n:FAC, 'Manual')
+      endif
+      SCN(o:FAC, 1)
+    proximo
+    SetFont(k:FAC..o:FAC,1)
+    if Vacio(Val(k:FAC))
+      if Val(b:FAC)<0
+        ACT(c:FAC, 'No Existe RET')
+      else
+        ACT(c:FAC, 'No Existe DEP')
+      endif
+      SetFont(c:FAC,2)
+      ColorCeldas(c:FAC, Exe('COLOR5'))
+    else
+      ACT(c:FAC, Val(k:FAC))
+      ACLT(c:FAC, Val(k:FAC))
+      SetFont(c:FAC,1)
+    endif
+
+    ifa
+    ACT(A:FAC, 'Monto a Transferir')
+    if Val(x:9) < 0
+      ACN(B:FAC, Val(x:9))
+    else
+      ACN(B:FAC, 0)
+    endif
+    AgregarMarco(A:FAC-2..C:FAC, 0, 0)
+    SetFont(a:FAC-1..b:FAC, 2)
+    SetFont(d:FAC-1..g:FAC, 2)
+    FormatoCeldas(B:FAC-1..B:FAC, Exe('F2'))
+  else
+    ****************
+    *** NO Paso cero
+    ****************
+    ACN(x:7, 0)
+    SetFilaActual(FAC+2)
+    ACT(A:FAC, 'PASO '~Fstr(&k, 0, 0))
+    ACT(C:FAC, 'MAE')
+    AlinearCeldas(C:FAC, 'C')
+    AgregarMarco(a:FAC..e:FAC, 0, 0, Exe('COLOR8'))
+    if Val(x:5)=1
+      * Flag CIED OK
+      ACN(x:7, 1)
+      if &k = Val(x:1)
+        * Ultimo Paso MAE
+        ACT(f:FAC, 'FPA')
+        AlinearCeldas(f:FAC, 'D')
+        AgregarMarco(f:FAC..g:FAC, 0, 0, Exe('COLOR8'))
+      endif
+    endif
+    ifa
+    ACT(a:FAC, 'Agente')
+    ACT(b:FAC, 'Excluido')
+    ACT(c:FAC, 'Cantidad')
+    ACT(c:FAC+1, 'Paso cero')
+    ACT(d:FAC, 'Cantidad')
+    ACT(d:FAC+1, 'Paso Actual')
+    ACT(e:FAC, 'Cantidad')
+    ACT(e:FAC+1, 'Fallada')
+    if Val(x:7)=1 Y &k=Val(x:1)
+      * Se realizo Cierre y Vuelta = Ultimo paso
+      ***---Si se realizo el cierre del dia => informo vouchers fallados
+      ACT(f:FAC, 'Voucher')
+      ACT(f:FAC+1, 'Confir./Fall.')
+      ACT(g:FAC, 'Transporte')
+      ACT(g:FAC+1, 'Generado')
+      ACT(k:FAC, 'Cantidad1')
+      ACT(k:FAC+1, 'Falla')
+      ACT(m:FAC, 'Cantidad1')
+      ACT(m:FAC+1, 'Voucher')
+      ACT(n:FAC, 'Cantidad3')
+      ACT(n:FAC+1, 'Falla Vou')
+      ACT(o:FAC, 'Cantidad4')
+      ACT(o:FAC+1, 'Conf. Vou')
+      ACT(p:FAC, 'CB3')
+      ACT(p:FAC+1, 'Fallado')
+      ACT(q:FAC, 'CB9')
+      ACT(q:FAC+1, 'Confirmado')
+*      AgregarMarco(a:FAC-1..g:FAC-1, 0, 0, Exe('COLOR8'))
+      AgregarMarco(f:FAC..g:FAC+1, 0, 0, Exe('COLOR'))
+    endif
+    AgregarMarco(a:FAC..e:FAC+1, 0, 0, Exe('COLOR'))
+    ifa
+    SetFont(a:FAC-2..q:FAC, 2)
+    ACN(z:3, FAC+1)
+    ACN(x:11, 0)
+    ACN(x:13, 0)
+    SQL.ADD("Select Cliente, Excluido, Monto, UtilizadoMTM, UtilizadoGAR ")
+    SQL.ADD("  From "~DBO~".MTMOCT ")
+    SQL.ADD(" Where Fecha   = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   and Cliente Is Not Null ")
+    SQL.ADD("   and Cliente <> '' ")
+    SQL.ADD("   and Cliente <> ' ' ")
+    SQL.ADD("   and Paso    = "~Fstr(&k, 0, 0)~" ")
+    SQL.ADD("   and (Especie         Is Null or Especie         = '' or Especie         = ' ') ")
+    SQL.ADD("   and (TipoNegociacion Is Null or TipoNegociacion = '' or TipoNegociacion = ' ') ")
+    SQL.ADD("   and (Variable        Is Null or Variable        = '' or Variable        = ' ') ")
+    SQL.ADD("   and (FechaVar        Is Null or FechaVar        = '' or FechaVar        = ' ') ")
+    Recorrer SQL
+      recorrer&i Val(z:1), Val(z:2)
+        ***---Por cada bilateral chequeo que haya venido el agente en paso cero.
+        if Eqstr(fbn('Cliente'), Val(aa:&i))
+          ACT(A:FAC, fbn('Cliente'))
+          ACN(C:FAC, Val(ab:&i))
+          ACN(D:FAC, fbn('Monto'))
+          ACN(t:FAC, fbn('UtilizadoMTM'))
+          ACN(u:FAC, fbn('UtilizadoGAR'))
+          if [Val(C:FAC)>=0 Y Val(D:FAC)>=0 Y Val(D:FAC) <= Val(C:FAC)] O [Val(C:FAC) < 0 Y Val(D:FAC) < 0 Y Val(D:FAC) >= Val(C:FAC)]
+            ***---Si gano no me deben pagar mas de ese importe y si debo no debo pagar mas de ese importe.
+            ***---Unicos casos de fallas validas que pueden implicar transferir mas dinero.
+            ACN(E:FAC, Val(C:FAC) - Val(D:FAC))
+          else
+            ACT(E:FAC, 'INVALIDO')
+            AlinearCeldas(E:FAC, 'C')
+            ColorCeldas(E:FAC, Exe('COLOR5'))
+          endif
+          if Val(x:7)=1 y &k=Val(x:1)
+            * Se realizo Cierre y Vuelta = Ultimo paso
+            ***---Obtengo Voucher fallado/confirmado
+            SQL.ADD("Select NrTrans,TipoTr2,Cantidad1,Cantidad3,Cantidad4,CB3,CB9 ")
+            SQL.ADD("  from "~DBO~".TRANSACCIONES2 ")
+            SQL.ADD(" where TipoTr2         in ('FXDEP','FXRET') ")
+            SQL.ADD("   and NrOperacionRef1 =  '"~Val(ac:&i)~"' ")
+            Recorrer SQL
+              DFA
+              ACT(F:FAC, fbn('NrTrans'))
+              ACLT(F:FAC, fbn('NrTrans'))
+              ACT(l:FAC, fbn('TipoTr2'))
+              ACN(m:FAC, fbn('Cantidad1'))
+              ACN(n:FAC, fbn('Cantidad3'))
+              ACN(o:FAC, fbn('Cantidad4'))
+              ACN(p:FAC, fbn('CB3'))
+              ACN(q:FAC, fbn('CB9'))
+              ** Esto es nuevo por falla Banco
+              ACN(E:FAC, Val(n:FAC))
+            Proximo
+            ***---Obtengo TRANSP generado
+            SQL.ADD("Select NrTrans, Cantidad1 ")
+            SQL.ADD("  from "~DBO~".TRANSACCIONES2 ")
+            SQL.ADD(" where TipoTr2     in ('TRANSP') ")
+            SQL.ADD("   and NrTransRef1 =  '"~Val(f:FAC)~"' ")
+            Recorrer SQL
+              DFA
+              ACT(g:FAC, fbn('NrTrans'))
+              ACLT(g:FAC, fbn('NrTrans'))
+              ACN(k:FAC, fbn('Cantidad1'))
+            Proximo
+            SetFont(f:FAC..u:FAC, 1)
+          endif
+          ACN(x:6, 1)
+          Break
+        endif
+      Proximo
+      if Val(x:6) = 0
+        ***---No vino el agente en el paso cero
+        ACT(A:FAC, fbn('Cliente'))
+        ACT(A:FAC, Val(A:FAC)~' AGENTE NO PROCESADO EN EL PASO CERO')
+        ACN(C:FAC, 0)
+        ACN(D:FAC, fbn('Monto'))
+        ACT(E:FAC, 'INVALIDO')
+        AlinearCeldas(E:FAC, 'C')
+        ColorCeldas(E:FAC, Exe('COLOR5'))
+        SetFont(E:FAC, 2)
+      endif
+      if Eqstr(Copy(fbn('Excluido'),1,1), 'S')
+        ***---Agente Excluido
+        SCN(x:11, Val(e:FAC))
+        ACT(B:FAC, 'SI')
+      else
+        ACT(B:FAC, 'NO')
+      endif
+      ACN(x:8, 0)
+      if Eqstr(Copy(fbn('Excluido'),2,1), 'S')
+        ***---Vehiculo Excluido. Obtengo monto de la falla del Transporte generado, ya que no viene del MAE
+        if Val(k:FAC) < 0
+          SCN(x:13, Val(k:FAC))
+        endif
+        ACN(x:8, 1)
+      endif
+      ACN(x:6, 0)
+    Proximo
+    SetFont(A:Val(z:3)..E:FAC, 1)
+    SetFont(t:Val(z:3)..u:FAC, 1)
+    ifa
+    ACN(C:FAC, Sum(C:Val(z:3)..C:FAC-1))
+    ACN(D:FAC, Sum(D:Val(z:3)..D:FAC-1))
+    ACN(E:FAC, Sum(E:Val(z:3)..E:FAC-1))
+    FormatoCeldas(c:Val(z:3)..e:FAC, Exe('F2'))
+    FormatoCeldas(k:Val(z:3)..o:FAC, Exe('F2'))
+    FormatoCeldas(t:Val(z:3)..u:FAC, Exe('F2'))
+    if Val(x:7)=1 y &k=Val(x:1)
+      AgregarMarco(a:Val(z:3)..g:FAC,0,0)
+    else
+      AgregarMarco(a:Val(z:3)..e:FAC,0,0)
+    endif
+    ifa
+    if Val(x:8) = 1
+      ACT(A:FAC, 'EXCLUIDO '~Dialogo.Vehiculo1)
+      ColorCeldas(A:FAC, Exe('COLOR5'))
+    endif
+    ifa
+    ACT(A:FAC, 'Multilateral paso '~Fstr(&k, 0, 0))
+    ACN(B:FAC, Val(D:FAC-2))
+    ACT(D:FAC, 'Monto a pagar '~Dialogo.Vehiculo1~' fuera OCT (Fuente FPA)')
+    ACN(G:FAC, Val(x:13))
+
+    ifa
+    ACT(A:FAC, 'Monto a Transferir')
+    if Val(B:FAC-1) < 0
+      if Val(x:10)>0
+        ACN(B:FAC, Val(B:FAC-1))
+      else
+        ACN(B:FAC, Val(B:FAC-1) - Val(x:10))
+      endif
+    else
+      ACN(B:FAC, 0)
+    endif
+    ACT(D:FAC, 'Monto a cobrar '~Dialogo.Vehiculo1~' fuera OCT (Fuente MAE)')
+    ACN(G:FAC, Val(x:11))
+    SetFont(A:FAC-3..G:FAC, 2)
+    FormatoCeldas(b:FAC-1..g:FAC, Exe('F2'))
+    AgregarMarco(a:FAC-2..g:FAC, 0, 0)
+    ***---Guardo ultimo Multilateral
+    ACN(x:10, Val(d:FAC-3))
+
+    SQL.ADD("Select NrTrans,TipoTr2,Cantidad1,RB1,RB2 ")
+    SQL.ADD("  from "~DBO~".TRANSACCIONES2 ")
+    SQL.ADD(" where TipoTr2   in ('OCTDEP','OCTRET') ")
+    SQL.ADD("   and Fecha1    =  '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   and Vehiculo1 =  '"~Dialogo.Vehiculo1~"' ")
+    SQL.ADD("   and Precio5   =  "~FStr(&k,1,0)~" ")
+    recorrer SQL
+      DFA
+      ACT(k:FAC, fbn('NrTrans'))
+      ACT(l:FAC, fbn('TipoTr2'))
+      ACN(m:FAC, fbn('Cantidad1'))
+      if fbn('RB1')=0
+        if fbn('RB2')=0
+          ACT(n:FAC, 'Aut.MTM')
+        else
+          ACT(n:FAC, 'Aut.MAE')
+        endif
+      else
+        ACT(n:FAC, 'Manual')
+      endif
+      SCN(o:FAC, 1)
+    proximo
+    SetFont(k:FAC..o:FAC,1)
+    if Vacio(Val(k:FAC))
+      if Val(b:FAC)<0
+        ACT(c:FAC, 'No Existe RET')
+      else
+        ACT(c:FAC, 'No Existe DEP')
+      endif
+      SetFont(c:FAC,2)
+      ColorCeldas(c:FAC, Exe('COLOR5'))
+    else
+      ACT(c:FAC, Val(k:FAC))
+      ACLT(c:FAC, Val(k:FAC))
+      SetFont(c:FAC,1)
+    endif
+  endif
+Proximo
+
+if Val(x:4) = 1
+  SetFilaActual(FAC+3)
+  ACT(A:FAC, 'LAS OPERACIONES DEL DIA HAN FINALIZADO !!!!!!')
+  if Val(x:7) = 0
+    ACT(F:FAC, 'DEBE REALIZAR EL CIERRE DEL DIA !!!!!!')
+  endif
+  SetFont(A:FAC..F:FAC, 3)
+  ColorCeldas(A:FAC..F:FAC, Exe('COLOR5'))
+endif
+
+if Val(x:1)<>Val(x:15)
+  Message('Diferencia entre ultimo paso MAE ('~FStr(Val(x:1),1,0)~') y ultimo Paso Cob/Pag ('~FStr(Val(x:15),1,0)~')')
+  if Val(x:1)>Val(x:15)
+    Message('Pasos MAE sin Transacciones')
+  else
+*    MessageBox('Mas Transacciones que Pasos MAE')
+    SetFilaActual(FAC+2)
+    ACT(a:FAC, 'Transacciones Manuales')
+    SetFont(a:FAC..e:FAC, 2)
+    AgregarMarco(a:FAC..e:FAC,0,0,Exe('COLOR8'))
+    IFA
+    ACT(a:FAC, 'Paso')
+    ACT(b:FAC, 'Nr.Trans')
+    ACT(c:FAC, 'Tipo Trans')
+    ACT(d:FAC, 'Cantidad')
+    ACT(e:FAC, 'Metodo Ing.')
+    SetFont(a:FAC..e:FAC, 2)
+    AgregarMarco(a:FAC..e:FAC,0,0,Exe('COLOR'))
+    ACN(z:5, FAC+1)
+    recorrer&i 1,Val(af:1)
+      if Val(an:&i)>Val(x:1)
+        IFA
+        ACN(a:FAC, Val(an:&i))
+        ACT(b:FAC, Val(ag:&i))
+        ACLT(b:FAC, Val(ag:&i))
+        if EqStr(Val(ah:&i),'OCTDEP')
+          ACT(c:FAC, 'Cobro')
+        else
+          ACT(c:FAC, 'Pago')
+        endif
+        ACN(d:FAC, Val(aq:&i))
+        ACT(e:FAC, Val(al:&i)~' '~Val(am:&i))
+        SetFont(a:FAC..e:FAC, 1)
+      endif
+    proximo
+    SetFont(a:Val(z:5)..e:FAC,1)
+    FormatoCeldas(a:Val(z:5)..a:FAC,Exe('F0'))
+    FormatoCeldas(d:Val(z:5)..d:FAC,Exe('F2'))
+    AgregarMarco(a:Val(z:5)..e:FAC,0,0)
+  endif
+endif
+
+if Val(x:4)=0 Y Val(x:5)=1
+  ***---Si el Cierre del dia fue realizado pero no se recibio el Fin del Dia, entonces informo cierre de FPA
+  SetFilaActual(FAC+2)
+  ACT(A:FAC, 'CIERRE REALIZADO SIN HABER RECIBIDO EL FIN DEL DIA DESDE EL MAE')
+  SetFont(A:FAC, 2)
+  ifa
+  ACT(A:FAC, 'Agente')
+  ACT(B:FAC, 'Cantidad')
+  ACT(B:FAC+1, 'Paso cero')
+  ACT(C:FAC, 'Cantidad')
+  ACT(C:FAC+1, 'Paso Actual')
+  ACT(D:FAC, 'Cantidad')
+  ACT(D:FAC+1, 'Fallada')
+  ACT(E:FAC, 'Voucher')
+  ACT(E:FAC+1, 'Confir./Fall.')
+  ACT(F:FAC, 'Transporte')
+  ACT(F:FAC+1, 'Generado')
+  ACT(k:FAC, 'Cantidad1')
+  ACT(k:FAC+1, 'Falla')
+  ACT(m:FAC, 'Cantidad1')
+  ACT(m:FAC+1, 'Voucher')
+  ACT(n:FAC, 'Cantidad3')
+  ACT(n:FAC+1, 'Falla Vou')
+  ACT(o:FAC, 'Cantidad4')
+  ACT(o:FAC+1, 'Conf. Vou')
+  ACT(p:FAC, 'CB3')
+  ACT(p:FAC+1, 'Fallado')
+  ACT(q:FAC, 'CB9')
+  ACT(q:FAC+1, 'Confirmado')
+  AgregarMarco(A:FAC-1..F:FAC-1, 0, 0, Exe('COLOR8'))
+  AgregarMarco(A:FAC..E:FAC+1, 0, 0, Exe('COLOR'))
+  AgregarMarco(F:FAC..F:FAC+1, 0, 0, Exe('COLOR'))
+  SetFont(A:FAC..q:FAC+1, 2)
+
+  SetFilaActual(FAC+2)
+  ACN(z:4, FAC)
+  Recorrer&i Val(z:1), Val(z:2)
+    ACT(A:FAC, Val(aa:&i))
+    ACN(B:FAC, Val(ab:&i))
+    SQL.ADD("Select NrTrans,TipoTr2,Cantidad1,Cantidad3,Cantidad4,CB3,CB9 ")
+    SQL.ADD("  From "~DBO~".TRANSACCIONES2 ")
+    SQL.ADD(" Where NrOperacionRef1 = '"~Val(ac:&i)~"' ")
+    SQL.ADD("   and TipoTr2 IN ('FXDEP','FXRET') ")
+    Recorrer SQL
+      DFA
+      ACT(E:FAC, fbn('NrTrans'))
+      ACLT(E:FAC, fbn('NrTrans'))
+      ACT(l:FAC, fbn('TipoTr2'))
+      ACN(m:FAC, fbn('Cantidad1'))
+      ACN(n:FAC, fbn('Cantidad3'))
+      ACN(o:FAC, fbn('Cantidad4'))
+      ACN(p:FAC, fbn('CB3'))
+      ACN(q:FAC, fbn('CB9'))
+    Proximo
+    SQL.ADD("Select NrTrans, Cantidad1 ")
+    SQL.ADD("  From "~DBO~".TRANSACCIONES2 ")
+    SQL.ADD(" Where NrTransRef1 = '"~Val(E:FAC)~"' ")
+    SQL.ADD("   and TipoTr2 in ('TRANSP') ")
+    Recorrer SQL
+      DFA
+      ACT(F:FAC, fbn('NrTrans'))
+      ACLT(F:FAC, fbn('NrTrans'))
+      ACN(D:FAC, fbn('Cantidad1'))
+      ACN(k:FAC, fbn('Cantidad1'))
+    Proximo
+    ACN(C:FAC, Val(B:FAC) - Val(D:FAC))
+    if Val(B:FAC) < 0 Y Val(C:FAC) > Val(B:FAC)
+      SCN(x:14, Val(B:FAC) - Val(C:FAC))
+    endif
+    if Val(B:FAC) >= 0 Y Val(C:FAC) < Val(B:FAC)
+      SCN(x:12, Val(B:FAC) - Val(C:FAC))
+    endif
+    ifa
+  Proximo
+  SetFont(A:Val(z:4)..q:FAC-1, 1)
+  FormatoCeldas(B:Val(z:4)..D:FAC-1, Exe('F2'))
+  FormatoCeldas(k:Val(z:4)..o:FAC-1, Exe('F2'))
+  AgregarMarco(A:Val(z:4)..F:FAC-1, 0, 0)
+***************************************************************
+  ifa
+  ACT(A:FAC, 'Multilateral paso actual')
+  ACN(B:FAC, Sum(C:Val(z:4)..C:FAC-2))
+  ACT(D:FAC, 'Monto a pagar '~Dialogo.Vehiculo1~' fuera OCT (Fuente FPA)')
+  ACN(G:FAC, Val(x:14))
+  ifa
+  ACT(A:FAC, 'Monto a Transferir')
+  ACN(B:FAC, 0)
+  ACT(D:FAC, 'Monto a cobrar '~Dialogo.Vehiculo1~' fuera OCT (Fuente FPA)')
+  ACN(G:FAC, Val(x:12))
+  SetFont(A:FAC-2..G:FAC, 2)
+  FormatoCeldas(B:FAC-1..G:FAC, Exe('F2'))
+  AgregarMarco(A:FAC-2..G:FAC, 0, 0)
+***************************************************************
+endif
+
+SetFont(w:1..z:20,1)
+SetFont(ae:1..as:2,1)
+if Val(af:1)>2
+  SetFont(ag:3..as:Val(af:1),1)
+endif
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Fin del Informe')
+SetFont(a:FAC, 2)
+
+ACO(1, 13)
+ACO(2, 9)
+ACO(3, 9)
+ACO(4, 9)
+ACO(5, 9)
+ACO(6, 9)
+ACO(7, 9)
+ACO(11, 10)
+ACO(13, 10)
+ACO(14, 10)
+ACO(15, 10)
+ACO(16, 10)
+ACO(17, 10)
+ACO(23, 10)
+ACO(24, 10)
+ACO(25, 10)
+LimitesVision(h:FAC+1)

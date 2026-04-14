@@ -1,0 +1,78 @@
+﻿* Parametros Entrada: aa1: Fecha1, aa2: Fecha2, aa3: Fuente Referencia, aa4: Especie
+* Producer range swap:
+*  = Precio fijo - Precio flotante
+*  - Si el precio esta por debajo del fade out, ese dia el fade out se convierte en precio fijo
+* Consumer range swap:
+*  = Precio flotante - Precio fijo
+*  - Si el precio esta por arriba del fade out, ese dia el fade out se convierte en precio fijo
+
+Message("Calculando Resultado Reset Range Swap "~val(aa3)~" "~VAL(aa1)~"' al "~VAL(aa2))
+  
+SQL.ADD("SELECT * FROM "~DBO~".CURVAFUTUROSCOMM Where Especie='"~VAL(aa4)~"' and ")
+SQL.ADD("Fecha>='"~IdxDate(VAL(aa1))~"' and Fecha<='"~IdxDate(VAL(aa2))~"' Order By Fecha")
+
+ACN(ab1,0)
+ACN(ab2,0)
+ACN(ab3,0)
+
+*- df1: Cantidad de Dias que se ejercio a precio fijo
+*- pf1: Precio Promedio de dias que se ejercio a precio fijo
+
+*- dr1: Cantidad de Dias que se ejercio convirtiendose el FadeOut en Precio Fijo -> de Reset
+*- pr1: Precio Promedio de dias que se ejercio convirtiendose el FadeOut en Precio Fijo -> de Reset
+
+acn(df1,0)
+acn(pf1,0)
+acn(dr1,0)
+acn(pr1,0)
+
+Recorrer SQL
+
+   dfa
+   *- Por Cada precio verifico si cumple las condiciones 
+   *-  
+   IF Not Incluido(VAL(aa3),VAR('PRECOMMFUT')) y FBN['PrecioCon']<>0 
+      ACN(ab3,FBN['PrecioCon'])
+   Else 
+      ACN(ab3,FBN['PrecioFut'])
+   EndIf
+
+   If EqStr(val(z8),'1')   
+      *- Producer 
+      IF val(ab3)<val(z9) 
+         * Si el precio real esta por debajo del fade out 
+         * el resultado por barril es = FadeOut - Precio Flotante
+         scn(dr1,1)
+         scn(pr1,val(z9)-val(ab3))            
+      Else 
+         scn(df1,1)
+         scn(pf1,val(z12)-val(ab3))            
+      EndIf
+      If val(df1)>46 Y Incluido(VAL(A:FAC),'BO000031')
+         Message('Dias R '~Fstr(val(dr1),0,2))
+         Message('Suma Dif.Precios R '~Fstr(val(pr1),0,2))
+         Message('Dias F '~Fstr(val(df1),0,2))
+         Message('Suma Dif.Precios F '~Fstr(val(pf1),0,2))
+      EndIf
+   Else 
+      *- Consumer
+      IF val(ab3)>val(z9) 
+         * Si el precio real esta por debajo del fade out 
+         * el resultado por barril es = FadeOut - Precio Flotante
+         scn(dr1,1)
+         scn(pr1,val(ab3)-val(z9))            
+      Else 
+         scn(df1,1)
+         scn(pf1,val(ab3)-val(z12))            
+      EndIf
+      message('Dias R '~Fstr(val(dr1),0,2))
+      message('Suma Dif.Precios R '~Fstr(val(pr1),0,2))
+      message('Dias F '~Fstr(val(df1),0,2))
+      message('Suma Dif.Precios F '~Fstr(val(pf1),0,2))
+   EndIf
+Proximo 
+
+*- Calculo La ganancia Diaria : suma de resultados/Cantidad de Dias 
+ACN(Z2,val(pr1)+val(pf1))
+message('Resultado '~Fstr(val(z2),0,2))
+

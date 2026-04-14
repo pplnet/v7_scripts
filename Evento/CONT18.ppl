@@ -1,0 +1,116 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:       'Fecha'       ; 1;;;;;;;;fsys
+  Vehiculo1:   'Vehiculo'     ;2;;;NO;;;;;Var('VEHICON')
+  ListaTabla1: 'Operaciones'  ;1;2;;;;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES' 
+  Check1:      'Contab.Procesada' ;;;;NO;NO;
+  Radio1:       'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos'   ; 4;1;;NO;NO;;;;0;
+  Radio2:      'Procesa|Fin de Mes|Diario'           ;;;;NO;;;;;1;;;;;
+FinDialogo
+
+If Not Ok
+   Raise('Evento Cancelado')
+Endif
+**Cintia 23-2-23 Administracion de partidas - Issue 6089
+***---Obtengo carteras que valuan por Partida
+(.'BOOKPARTID'.)
+Recorrer SQL
+    let &BValuaPartida &BValuaPartida~fbn('Books')
+Proximo
+*************
+
+ACT(ML:1, Var('MONELOCA'))
+ACN(NA:1, Var('ASINUM'))
+ACT(VC:1, Dialogo.Vehiculo1)
+ACD(FE:1, Habiles(Dialogo.Fecha1,-Var('FVALORCONT'),'ARG'))
+ACN(X:1, SQL("Select 1 from "~DBO~".VARIABLES where Codigo = 'DIASCONT' "))
+IF Val(X:1) = 1
+   ACN(X:1, Trunc(Var('DIASCONT'),0))
+ENDIF
+IF Val(X:1) < 1
+   ACN(X:1, 1)
+ENDIF
+***---Saldos en Garantia
+ACT(SG:1, Var('BLOQGARA'))
+***---Saldo Contable Lisbre disponibilidad. Falta definir manejo contable de garantias, teniendo en cuenta variable BLOQGARA
+ACN(SL:2, Var('SALDOPOCON'))
+ACD(X:2, Habiles(PriDeMes(Dialogo.Fecha1,SI)-1,Val(X:1),'ARG'))
+ACD(FV:1, PriDeMes(Dialogo.Fecha1, SI)-1)
+ACD(FV:2, PriDeMes(Val(FV:1), SI)-1)
+***---Habil Anterior
+ACD(FE:2, Habiles(Dialogo.Fecha1, -1, 'ARG', SI))
+***---Habil Siguiente
+ACD(FE:3, Habiles(Dialogo.Fecha1, 1, 'ARG', SI))
+***---PriDeMes
+ACD(PM:1, PriDeMes(Dialogo.Fecha1, SI))
+***---FinDeMes
+ACD(FM:1, FinDeMes(Dialogo.Fecha1, SI))
+
+
+IF (Dialogo.Radio1 = 0 O Dialogo.Radio1 = 4) Y Dialogo.Radio2=1
+    ***---Securities => Acciones, Titulos y Futuros de Titulos
+    *Diario
+    
+    ACD(FE:99, Dialogo.Fecha1)
+    *Resultado Realizado del dia
+    (.'REZTIT'.)
+    watch(sql.batch)
+    Recorrer SQL
+        ACD(FV:1, Dialogo.Fecha1)
+        ACT(VH:1, fbn('Vehiculo1'))
+        ACT(BK:1, fbn('Book'))
+        ACT(CP:99, fbn('Cupon'))
+        ACT(TS:1, fbn('TipoEspecie'))
+        ACT(MS:1, fbn('MonedaEmision'))
+        ACN(RT:1, fbn('Day'))
+        ACN(RR:1,fbn('DAY'))
+        **Cintia 230223 - Administracion de partidas - Issue 6089
+        **Cuando es valuación a Partida, el NrOperacion no será Vacío
+        IF Not Eqstr(fbn('MonedaEmision'), Val(ML:1)) Y NoVacio(fbn('NrOperacion'))
+          ACT(MN:99, fbn('MonedaEmision'))
+          ACN(RT:1, Val(RT:1) * #TCCONTABLE)
+          ACN(RR:1, Val(RR:1) * #TCCONTABLE)
+        ENDIF   
+        **
+        ACT(CL:1,fbn('Cliente'))
+        ACT(CC:1,fbn('CuentaCustodia'))
+        ACT(CO:1,fbn('Concepto')) 
+        ACN(SL:1,fbn('NrSaldo'))
+        ACT(IS:1,fbn('Issuer'))
+        **Cintia 230223 - Administracion de partidas - Issue 6089
+        ACT(NO:1,Fbn('NrOperacion'))
+        **
+        SQL.ADD(" Select Codigo CodAsi, '"~Val(VH:1)~"' Vehiculo1, '"~fbn('Especie')~"' Especie, '"~Val(VH:1)~"' Vehiculo, ")
+        SQL.ADD(" '"~Val(TS:1)~"' TipoEspecie, '"~Val(MS:1)~"' MonedaEmision, '"~Val(BK:1)~"' Book1, 'TIC' TipoOp, '"~Val(CL:1)~"' Cliente,  ")
+        SQL.ADD(" '"~Val(CC:1)~"' CuentaCustodia, '"~Val(CO:1)~"' Concepto,'"~Val(CL:1)~"' Cliente1, '"~Val(IS:1)~"' Issuer  ")
+        SQL.ADD(" From "~DBO~".MODELOSASIENTO ")
+        SQL.ADD(" Where (TipoAsiento = '"~Var('TIPASIREZT')~"') ")
+        SQL.ADD(" AND '|'+rtrim(Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+        SQL.ADD(" AND Habilitado = 'SI' ")
+        **Este cambio se realizó porque pinchaba el ACLO del CB0001 para el modelo RERZTIT (Se agrega tipoop en el mismo) - Cintia 280223
+        *SQL.ADD(" AND (TipoOp Is Null OR TipoOp = '') ")
+        SQL.ADD(" AND TipoOp  = 'TIV' ")
+        Recorrer SQL
+            IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+                ACN(CK:1, 1)
+                IF Vacio(SQL(" Select A.NrUnicoAsiento from "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1 Where A.NrUnicoAsiento = A1.NrUnicoAsiento AND  A.Modelo = '"~fbn('CodAsi')~"' AND A.Estado IN ('E','A') AND A1.Alias1 = '"~fbn('Especie')~"' AND A.Vehiculo = '"~fbn('Vehiculo')~"' AND A.Fecha1 = '"~Idxdate(val(FV:1))~"' AND A1.Alias2 = '"~val(BK:1)~"' AND (A.NrOperacion = '' OR A.NrOperacion = ' ' OR A.NrOperacion Is Null) "))
+                    ACN(CK:1, 0)
+                ENDIF
+            ENDIF
+            IF Val(CK:1) = 0
+                **Cintia 230223 - Administracion de partidas - Issue 6089
+                If Vacio(Val(NO:1))
+                    Message(fbn('Especie')~'  - Modelo: '~fbn('CodAsi')~' Valuacion a Mercado')
+                    SQL.GenerarAsientoOp(fbn('CodAsi'),,,,Val(NA:1),Val(FV:1),fbn('Vehiculo1'),,Val(BK:1),,,,,,,,,,,fsys,Dialogo.Fecha1)
+                    SQL.EXEC
+                Else
+                    Message(Val(NO:1)~' '~fbn('Especie')~'  - Modelo: '~fbn('CodAsi')~' Valuacion a Partida')
+                    SQL.GenerarAsientoOp(fbn('CodAsi'),Val(NO:1),,,Val(NA:1),Val(FV:1),fbn('Vehiculo1'),,Val(BK:1),,,,,,,,,,,fsys,Dialogo.Fecha1)
+                    SQL.EXEC
+                Endif
+                **
+            ENDIF
+        Proximo
+    Proximo   
+    
+EndIf

@@ -1,0 +1,98 @@
+MostrarCuadroDeMensajes()
+creardialogo
+nroperacion1: 'Operacion';;;;;;Incluido(BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', dialogo.nroperacion1), Var('TIPOOPNC'));'El Tipo de Operacion no Esta Habilitado para Nota de Credito';NO;;;;;;" TipoOp IN ("~Pipe2Comillas(Var('TIPOOPNC'))~") ";
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Acn(bd:1, 0)
+Sqladd(" Select Distinct NrSisExterno Factura, Cantidad2 MontoFactura, Cliente1 ")
+Sqladd(" From "~Dbo()~".IMPUESTOS ")
+Sqladd(" Where NrOperacion = '"~dialogo.nroperacion1~"' ")
+Sqladd(" AND (Check2 = 0 OR Check2 Is Null OR Check2 = '' OR Check2 = ' ') ")
+Sqladd(" Order By NrSisExterno ")
+recorrer sql
+if (Incluido(Copy(Fbn('Factura'), 5, 1), Var('TIPONCVAL')))
+Acn(bd:1, 1)
+Act(nf:fac, Fbn('Factura'))
+Acn(mf:fac, Fbn('MontoFactura'))
+Act(cl:fac, Fbn('Cliente1'))
+endif
+proximo
+if (Val(bd:1) = 0)
+Cancelar(" La Operacion "~dialogo.nroperacion1~" No Tiene Factura Asignada")
+endif
+if (Val(bd:1) > 0)
+crearlistbox;'Arial,8,B';'Seleccione La Factura a Anular'
+'OK';w:1..w:fac;;Sum(w:1..w:fac) = 1;'Debe Eligir Una Factura';45;check;
+'Factura';nf:1..nf:fac;NO;;;150;string
+finlistbox
+if (not ok)
+Cancelar()
+endif
+endif
+recorrer&k 1, Fac()
+if (Val(w:&k) = 1)
+Act(nf:1, Val(nf:&k))
+Acn(mf:1, Val(mf:&k))
+Act(cl:1, Val(cl:&k))
+break
+endif
+proximo
+
+crearlistbox;'Arial,8,B';'Ingreso de Datos de Nota de Credito para la Factura '~Val(nf:1)
+'Centro Emisor';ce:1..ce:1;;Longitud(Val(ce:flb)) = 4;'Centro Emisor Invalido -  Debe ser de 4 Caracteres';85;string;;RGB(2, 255, 255)
+'Tipo NC';tf:1..tf:1;;;;75;combo;Var('TIPONCVAL')
+'Nro. NC';fa:1..fa:1;;Longitud(Val(fa:flb)) = 8;'Nro. de NC Invalido - Debe ser de 8 Caracteres';70;string
+'Fecha NC';fx:1..fx:1;;Val(fx:flb) <= FSys() y Anio(Val(fx:flb)) > 2000;'Fecha de NC Invalida';60;fecha;RGB(2, 255, 255)
+'Codigo Barra';cb:1..cb:1;;Longitud(Val(cb:flb)) = 40;'Codigo de Barra Invalido';250;string;50;RGB(2, 255, 255)
+'C.A.I.';ca:1..ca:1;NO;Longitud(Val(ca:flb)) = 14;'C.A.I. Invalido';100;string;;;Copy(Val(cb:flb), 18, 14);
+'F.Vto.C.A.I.';fc:1..fc:1;NO;Anio(Val(fc:flb)) > 2000;'Vto. del CAI Invalido';65;fecha;;fecha(Copy(Val(cb:flb), 38, 2)~'/'~Copy(Val(cb:flb), 36, 2)~'/'~Copy(Val(cb:flb), 32, 4));
+'Monto Factura';mf:1..mf:1;NO;;;85;numero;'###,###,###,###.##';;;;;
+finlistbox
+if (not ok)
+Cancelar()
+endif
+Act(lw:1, Var('TIPONCVAL'))
+Act(tf:2, ItemLista(Val(lw:1), Num(Val(tf:1)) + 1))
+Act(fl:1, Val(ce:1)~Val(tf:2)~Val(fa:1))
+if (Query(" Select 1 From "~Dbo()~".IMPUESTOS Where String26 = '"~Val(fl:1)~"' AND Cliente1 = '"~Val(cl:1)~"' ") = 1)
+Cancelar(" Nro. NC Legal "~Val(fl:1)~" Ya Existente para el Proveedor "~Val(cl:1))
+endif
+Sqladd(" Update "~Dbo()~".IMPUESTOS ")
+Sqladd(" Set String26 = '"~Val(fl:1)~"', ")
+Sqladd(" Fecha6 = '"~IdxDate(Val(fx:1))~"', ")
+Sqladd(" String27 = '"~Val(cb:1)~"', ")
+Sqladd(" String28 = '"~Val(ca:1)~"', ")
+Sqladd(" Fecha7 = '"~IdxDate(Val(fc:1))~"', ")
+Sqladd(" Check2 = 1 ")
+Sqladd(" Where NrOperacion = '"~dialogo.nroperacion1~"' ")
+Sqladd(" AND NrSisExterno = '"~Val(nf:1)~"' ")
+Sqladd("  ")
+Sqlnew()
+Sqlexec()
+
+Sqladd(" Select Distinct NrTrans1 From "~Dbo()~".IMPUESTOS ")
+Sqladd(" Where NrOperacion = '"~dialogo.nroperacion1~"' ")
+Sqladd(" AND NrSisExterno = '"~Val(nf:1)~"' ")
+recorrer sql
+Act(nr:1, Fbn('NrTrans1'))
+Sqladd(" Select NrMov From "~Dbo()~".MOVEJECUTADOS ")
+Sqladd(" Where NrOperacion = '"~dialogo.nroperacion1~"' ")
+Sqladd(" AND NrTrans2 = '"~Fbn('NrTrans1')~"' ")
+recorrer sql
+Dfa()
+Sqladd(" Select NrTrans2 From "~Dbo()~".MOVEJECUTADOS ")
+Sqladd(" Where NrOperacion = '"~dialogo.nroperacion1~"' ")
+Sqladd(" AND NrTrans2 <> '"~Val(nr:1)~"' ")
+Sqladd(" AND NrGrupo2 = "~FStr(Fbn('NrMov'), 0, 0)~" ")
+recorrer sql
+Dfa()
+Ejecutarevento('ANUVOU', 'nrtrans1', Fbn('NrTrans2'), 'check1', 1)
+proximo
+proximo
+Ejecutarevento('ANUVOU', 'nrtrans1', Fbn('NrTrans1'), 'check1', 1)
+proximo
+

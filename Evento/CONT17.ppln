@@ -1,0 +1,63 @@
+creardialogo
+fecha1: 'Fecha';1;;;;;;;;FSys()
+vehiculo1: 'Vehiculo';2;;;NO;;;;;Var('VEHICON')
+listatabla1: 'Transacciones';1;2;;;;;;;;;;;;;'NrTrans';'NrTrans;Cliente1;Fecha1;Fecha2;Especie;Cantidad1;Cuenta2';'TRANSACCIONES2'
+check1: 'Contab.Procesada';;;;NO;NO;
+
+findialogo
+
+if (not ok)
+raise('Evento Cancelado')
+endif
+
+Message('--- Asientos de Cobro de Dividendos en Efectivo ---')
+
+Act(me:1, Var('MONEEXTR'))
+Act(ml:1, Var('MONELOCA'))
+Acn(na:1, Var('ASINUM'))
+Acd(fe:1, Habiles(FSys(), -Var('FVALORCONT'), 'ARG'))
+Act(vc:1, dialogo.vehiculo1)
+
+Sqladd(" SELECT T.Especie2 ContraEspecie, T.Especie, T.Fecha2 FechaOp, T.Cliente1 Cliente1, T.Vehiculo1, T.Especie2 MonedaLiq,")
+Sqladd(" MA.Codigo CodAsi, E.Cotiza, E.MonedaEmision, T.TipoTr2, E.Indexado, E.Jerarquia, T.Book1, T.Fecha2, T.RB10, ")
+Sqladd(" T.NrTrans, Case When T.RB10=0 Then T.Cantidad9 Else T.Cantidad2 End Cantidad, T.Cantidad3, E.EntidadEmisora, T.Cliente1 Cliente, E.Issuer, E.Alias1 as EspBanTotal, E.Tipo TipoEspecie, ")
+Sqladd(" T.Especie2 Moneda, CASE WHEN T.RB10=0 THEN T.Cuenta2 ELSE T.Cuenta1 END Cuenta2, 'TIC' as TipoOp, ")
+Sqladd(" '' as CuentaCustodia, '' as Concepto, T.Mercado1, T.Cantidad14,T.Cantidad15 ")
+Sqladd(" FROM "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".MODELOSASIENTO MA, "~Dbo()~".ESPECIES E ")
+Sqladd(" Where T.TipoTr2 = MA.TipoTr2 ")
+Sqladd(" AND T.Especie = E.Codigo ")
+Sqladd(" AND T.TipoTr2 IN ('PDIVID') ")
+Sqladd(" AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIDIVI'))~") ")
+Sqladd(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+Sqladd(" AND T.Fecha3 = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND T.Fecha2 >= '"~IdxDate(Val(fe:1))~"' ")
+if (NoVacio(dialogo.listatabla1))
+Sqladd(" AND T.NrTrans IN ("~Pipe2Comillas(dialogo.listatabla1)~") ")
+endif
+
+Sqladd(" ORDER BY T.NrTrans ")
+Watch(Sqlbatch())
+recorrer sql
+let(&comi3eros, Fbn('Cantidad14'))
+let(&ivacomi3eros, Fbn('Cantidad15'))
+Acd(fv:1, Fbn('Fecha2'))
+Act(vh:1, Fbn('Vehiculo1'))
+Acd(fo:1, Fbn('FechaOp'))
+Act(bk:1, Fbn('Book1'))
+Act(em:1, Fbn('MonedaEmision'))
+Act(ix:1, Fbn('Indexado'))
+let(&merctapte, BuscarCampo('CUENTAS', 'Mercado', 'Codigo', Fbn('Cuenta2')))
+Acn(ck:1, 0)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(Query(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrTrans2 = '"~Fbn('NrTrans')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+let(&codasi, Fbn('CodAsi'))
+if (Val(ck:1) = 0)
+Message(Fbn('NrTrans')~' - Modelo: '~Fbn('CodAsi'))
+Sqlgenerarasientoop(&codasi, '', '', '', Val(na:1), Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoTr2'), null, Fbn('NrTrans'), null, null, null, null, FSys(), dialogo.fecha1)
+Sqlexec()
+endif
+proximo

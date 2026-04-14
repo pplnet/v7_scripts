@@ -1,0 +1,167 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:    'D.FechaVto'  ;1;1;;;;;;;FSYS
+  Fecha2:    'H.FechaVto'  ;2;1;;;;;;;FSYS
+  Fecha3:    'D.FechaCarga';1;2;;;;;;;FSYS
+  Fecha4:    'H.FechaCarga';2;2;;;;;;;FSYS
+  Vehiculo1: 'Vehiculo' ;3;1;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))] ;'Vehiculo Invalido';NO;BuscarCampo('USRVEHICULO','Vehiculo','Codigo',USUARIOACTIVO);;;;;iif(NoVacio(UsrVehiculos(UsuarioActivo)), " Codigo in (Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"') ")
+  Especie1:  'Moneda'   ;4;;;;;Eqstr(BuscarCampo('ESPECIES','Tipo','Codigo',Dialogo.Especie1),'MON');'Moneda Invalida';NO;'ARP';;;;;" Tipo = 'MON' "
+  Radio2:  'Tipo Cuenta|Cta.Cte|Interm|Recaud|C.Ahorro|Todos' ;5;1;;;;;;;4
+  Check1:  'Incluye Pagadoras';6;1;;;;;;;1
+  Lista1:    'Bancos'   ; 7;1;1;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CLIENTES WHERE Sector='BAN' ");
+  Lista2:    'Cuentas'  ; 1;2;1;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS  WHERE Cliente = '"~Dialogo.Vehiculo1~"' AND Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ");
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+CrearFont(1,"Arial, 8,")
+CrearFont(2,"Arial, 8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,10,")
+CrearFont(5,"Arial, 8,BI")
+
+ACT(a:2, 'Moneda: '~Dialogo.Especie1)
+ACT(a:3, 'Vehiculos: '~Dialogo.Vehiculo1)
+ACT(a:4, 'Bancos:  '~iif(vacio(Dialogo.Lista1),'Todos',Pipe2Comillas(Dialogo.Lista1)))
+ACT(a:5, 'Cuentas: '~iif(vacio(Dialogo.Lista2),'Todas',Pipe2Comillas(Dialogo.Lista2)))
+If Dialogo.Radio2=0
+  ACT(a:6, 'Tipo de Cta: Cuenta Corriente')
+Endif
+If Dialogo.Radio2=1
+  ACT(a:6, 'Tipo de Cta: Intermedia')
+Endif
+If Dialogo.Radio2=2
+  ACT(a:6, 'Tipo de Cta: Recaudadora')
+Endif
+If Dialogo.Radio2=3
+  ACT(a:6, 'Tipo de Cta: Caja de Ahorro')
+Endif
+If Dialogo.Radio2=4
+  ACT(a:6, 'Tipo de Cta: Todas')
+Endif
+If Dialogo.Check1=0
+  ACT(a:6, Val(a:6)~' - No incluye Cuentas Pagadoras.')
+Else
+  ACT(a:6, Val(a:6)~' - Incluye Cuentas Pagadoras.')
+Endif
+SetFont(a:2..a:6,2)
+
+ACT(b:7, 'Estimaciones proyectadas del '~Dialogo.Fecha1~' al '~Dialogo.Fecha2)
+SetFont(b:7,3)
+
+SetFilaActual(9)
+
+SQL.ADD(" SELECT C.Codigo, C.Numero, C.Comitente, B.RazonSocial, T.NrTrans, T.Cantidad1, T.Observaciones, T.Fecha1, T.RB1, T.Fecha2 ")
+SQL.ADD(" FROM "~DBO~".CUENTAS C, "~DBO~".CLIENTES B, "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD(" WHERE  C.Comitente = B.Codigo  ")
+SQL.ADD(" AND    C.Codigo    = T.Cuenta2 ")
+SQL.ADD(" AND    T.Fecha1    >= "~IdxDate2(Dialogo.Fecha3)~" ")
+SQL.ADD(" AND    T.Fecha1    <= "~IdxDate2(Dialogo.Fecha4)~" ")
+SQL.ADD(" AND    T.Fecha2    >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD(" AND    T.Fecha2    <= "~IdxDate2(Dialogo.Fecha2)~" ")
+SQL.ADD(" AND    T.TipoTr2   = 'PROYEC' ")
+SQL.ADD(" AND    C.Cliente   = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND    T.Especie   = '"~Dialogo.Especie1~"' ")
+If Novacio(Dialogo.Lista1)
+  SQL.ADD(" AND C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+If Novacio(Dialogo.Lista2)
+  SQL.ADD(" AND C.Codigo IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+If Dialogo.Radio2=0
+  SQL.ADD(" AND C.TipoCuenta IN ('CC','CCE','CCD')")
+Endif
+If Dialogo.Radio2=1
+  SQL.ADD(" AND C.TipoCuenta IN ('INT')")
+Endif
+If Dialogo.Radio2=2
+  SQL.ADD(" AND C.TipoCuenta IN ('REC')")
+Endif
+If Dialogo.Radio2=3
+  SQL.ADD(" AND C.TipoCuenta IN ('CA')")
+Endif
+If Dialogo.Check1=0
+  SQL.ADD(" AND (C.Pagadora <>'SI' OR C.Pagadora IS NULL) ")
+Endif
+SQL.ADD("ORDER BY 3, 1 ")
+
+ACN(z:1,0)
+ACT(ba:1,'')
+ACT(ca:1,'')
+
+ACT(a:fac, 'Transaccion')
+ACT(b:fac, 'FechaCarga')
+ACT(c:fac, 'Cod.Cuenta')
+ACT(d:fac, 'Nro.Cuenta')
+ACT(e:fac, 'FechaVto')
+ACT(f:fac, 'Importe')
+ACT(g:fac, 'Columna')
+ACT(h:fac, 'Observaciones')
+AgregarMarco(a:fac..h:fac,0,0,EXE('COLOR6'))
+SetFont(a:fac..h:fac,2)
+AlinearCeldas(a:fac..h:fac,'C')
+dfa
+
+Recorrer SQL
+  message('Cuenta: '~fbn('Codigo')~' - '~fbn('Numero'))
+  If Not Eqstr(Val(ba:1),fbn('Comitente'))
+    ifa
+    ACT(a:fac, 'Banco: '~fbn('Comitente')~' - '~fbn('RazonSocial'))
+    SetFont(a:fac,5)
+    AgregarMarco(a:fac..h:fac,0,0,EXE('COLOR8'))
+    ACT(ca:1,'')
+    ifa
+  Endif
+  If Not eqstr(Val(ca:1),fbn('Codigo')) y Not eqstr(Val(ca:1),'')
+   ifa
+  Endif
+  ACT(a:fac, fbn('NrTrans'))
+  ACLT(a:fac, fbn('NrTrans'))
+  ACD(b:fac, fbn('Fecha1'))
+  ACT(c:fac, fbn('Codigo'))
+  ACT(d:fac, fbn('Numero'))
+  ACD(e:fac, fbn('Fecha2'))
+  ACN(f:fac, fbn('Cantidad1'))
+  If Eqstr(fbn('RB1'),'0')
+    ACT(g:fac, 'Ingresos Proyectados')
+  Endif
+  If Eqstr(fbn('RB1'),'1')
+    ACT(g:fac, 'Egresos Proyectados')
+  Endif
+  If Eqstr(fbn('RB1'),'2')
+    ACT(g:fac, 'Ingresos Op.Financieras')
+  Endif
+  If Eqstr(fbn('RB1'),'3')
+    ACT(g:fac, 'Egresos Op.Financieras')
+  Endif
+  If Eqstr(fbn('RB1'),'4')
+    ACT(g:fac, 'Ingresos Prest.Instcia.')
+  Endif
+  If Eqstr(fbn('RB1'),'5')
+    ACT(g:fac, 'Egresos Prest.Instcia.')
+  Endif
+
+  ACT(h:fac, fbn('Observaciones'))
+  SetFont(a:fac..h:fac,1)
+  Formatoceldas(f:fac, EXE('F2'))
+  ACT(ba:1, fbn('Comitente'))
+  ACT(ca:1, fbn('Codigo'))
+Proximo
+
+ifa
+ifa
+ACT(a:fac, 'Fin del Informe.')
+SetFont(a:fac,2)
+
+ACO(1,8)
+ACO(4,15)
+ACO(6,10)
+ACO(7,12)
+ACO(8,25)
+
+Impresion(1,2)
+Impresion(4,1)
+LimitesVision(i:fac+2)
+SetMargins(0,0,0,2)

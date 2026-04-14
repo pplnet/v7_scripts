@@ -1,0 +1,239 @@
+﻿*- Parametros de entrada
+*- DT1: Nr.Orden a Actualizar los movimientos
+
+*- mp1: Nro. Orden  
+*- mp2: Fecha Movimiento 
+*- mp3: Cliente 
+*- mp4: Especie 
+*- mp5: CallPut 
+*- mp6: FechaEj 
+*- mp7: PrecioEj 
+*- mp8: Mercado
+*- mp9: EnteCustodia 
+*- mp10: Cantidad 
+*- mp11: Formula 
+*- mp12: Leyenda 
+*- mp13: Bits 
+*- mp14: NrSaldo  
+*- mp15: NrGrupo
+*- mp16: Concepto (NrSaldo Original)
+*- mp19: Cuenta 
+*- mp20: NrGrupo2
+*- mp22: Nro. de Movimiento 
+*- mp23: Com.Renta
+*- mp25: Com.Amortizacion
+*- mp27: Cupon   
+*- mp50: Leyendo para ver si viene de movimientos pendientes
+
+* TIV
+* MOVIMIENTOS  ---  SOLO TIV -----
+
+*- Datos a Recuperar de la Orden
+*- vc1: Numerador LD - vc6 BV
+
+* VCAN9
+ACN(vc1,BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALLIBRECU')) )
+* VCAN8
+ACN(vc3,BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALBLOQVTA'))+100)
+
+*- Nr.Orden para Mov. 
+ACT(mp1,val(dt1))
+
+SQL.ADD("SELECT FechaOrden,TipoOrden,Cliente,Especie,Vehiculo,Cantidad1,Cantidad2,Cantidad3,  ")
+SQL.ADD("       Cantidad5,Cantidad6,Cantidad7,Cuenta1,Cuenta2,Cuenta3,FechaVto,Mercado        ") 
+SQL.ADD("FROM "~DBO~".ORDENES WHERE NrOrden ='"~val(dt1)~"' ")
+
+Recorrer SQL
+   dfa
+
+   *- Variables de la Orden
+   *- vt9: Especie Arancelada 
+   ACT(vt9,BuscarCampo('ESPECIES','Codigo','CodNumCajaValores',BuscarCampo('Especies','Alias8','Codigo',FBN('Especie'))) )
+
+   *- Escribe los datos en la celdas mp1 .. mp30 para Invocar a la Fc.IMMOVPEND
+   *------------------------------------------------------------------------------------------------
+   *-- FechaOrden;Cliente;Especie;;;;VTXT11;Vehiculo;VCAN9    ;-Cantidad1;;'Bloqueo orden '~TipoOrden
+   *   ;SI;SI;1;ESTADO<>2 y Not EqStr(CLIENTE,VAR('VEHICULODE'))
+   *   ;;Cuenta1;;1;;;IF(NoVacio(VTXT8),VTXT8);
+
+   ACD(mp2,FBN('FechaOrden') )
+   ACT(mp3,FBN('Cliente') )
+   ACT(mp4,FBN('Especie') )
+   ACT(mp5,'' )
+   ACT(mp6,'' )
+   ACT(mp7,'' )
+   ACT(mp8,BuscarCampo('CUENTAS','Mercado','Codigo',FBN['CUENTA1']) )
+   ACT(mp9,FBN('Vehiculo'))
+   ACN(mp10,-FBN('Cantidad1'))
+   ACT(mp11,'' )
+   ACT(mp12,'Bloqueo Orden '~FBN('TipoOrden') )
+   ACT(mp13,'AV')
+   *- mp17: FechaEje
+   ACD(mp17,Fsys)
+
+   *- mp14: Nr.Saldo
+   ACN(mp14,val(vc1))
+
+   *- mp15: NrGrupo Nada 
+   *- mp16: Concepto nada 
+   *- mp20: NrGrupo2 nada
+   *- mp19: Cuenta
+   ACT(mp19,FBN('Cuenta1'))
+
+   *- Nro.Mov.
+   ACN(mp22,1)
+
+   *- Cupon 
+   IF EQSTR(BuscarCampo('ESPECIES','Tipo','Codigo',FBN['ESPECIE']),'PRI')
+      ACT(mp27,NrCupon2(Fbn['Especie'],FBN['FECHAVTO']) )
+   else
+      ACT(mp27,SQL("Select A.NrCupon from "~DBO~".AGENDACUPONES A where A.Especie='"~FBN['Especie']~"' and A.FechaCorte=(select Min(FechaCorte) from "~DBO~".AGENDACUPONES C where C.Especie = A.Especie and C.Estado='PEN' ) ") )
+   endif
+
+   *- Elimino el mov. previamente vc5: Tabla
+   ACT(vc5,'MOVPENDIENTES' )
+   IF EqStr(val(mp13),'AV')
+      ACT(vc5,'MOVEJECUTADOS' )
+   ENDIF
+      
+   (.'DELMOVTR'.)
+   (.'IMMOVPEND'.)      
+
+
+   *------------------------------------------------------------------------------------------------
+   *---- 
+   *---- FechaOrden;Cliente;Especie;;;;VTXT11;Vehiculo;VCAN8    ; Cantidad1;;
+   *---- 'Bloqueo orden '~TipoOrden;SI;SI;1;
+   *---- ESTADO<>2 y Not EqStr(CLIENTE,VAR('VEHICULODE'));;Cuenta1;;2;;;IF(NoVacio(VTXT8),VTXT8);
+   *----
+
+   *- mp10: Cantidad
+   ACN(mp10,FBN('Cantidad1') )
+
+   *- mp14: Nr.Saldo
+   ACN(mp14,val(vc3))
+
+   *- Nro.Mov.
+   ACN(mp22,2)
+
+   *- Elimino el mov. previamente vc5: Tabla
+   ACT(vc5,'MOVPENDIENTES' )
+   IF EqStr(val(mp13),'AV')
+      ACT(vc5,'MOVEJECUTADOS' )
+   ENDIF
+      
+   (.'DELMOVTR'.)
+   (.'IMMOVPEND'.)      
+
+***-----------------------------------------------------------------------------
+
+   *- MOVIMIENTO DE DESBLOQUEO 
+****   *- Fecha1;Cliente1;Especie;;;;Mercado1;Vehiculo1;VCAN12;-Cantidad1;;'Desbloqueo '~Especie;SI;RB2=1;;CB6=1 y Not EqStr(CLIENTE1,VEHICULO1) y VCAN20=1;;Cuenta1;;7;;;Cupon1;
+   *- FSys;Cliente;Especie;;;;VTXT11;Vehiculo;VCAN9    ; Cantidad5;;'Desbloqueo de resto orden '~TipoOrden;SI;SI;1;ESTADO<>2 y CB1=1 y Not EqStr(CLIENTE,VAR('VEHICULODE'));;Cuenta1;;7;;;IF(NoVacio(VTXT8),VTXT8);
+   ACD(mp2,FSYS )
+   ACT(mp3,FBN('Cliente'))
+   ACT(mp4,FBN('Especie') )
+   ACT(mp5,'')
+   ACT(mp6,'')
+   ACT(mp7,'')
+   ACT(mp8,BuscarCampo('CUENTAS','Mercado','Codigo',FBN['CUENTA1']))
+   ACT(mp9,FBN('Vehiculo'))
+
+   *- mp14: Nr.Saldo
+   ACN(mp14,val(vc1))
+
+   ACN(mp10,FBN('Cantidad5'))
+
+   ACT(mp11,'')
+   ACT(mp12,'Desbloqueo Resto de  Orden '~FBN('TipoOrden') )
+
+   *- Condicion de Automatico 
+   ACT(mp13,'AV')
+
+   *- mp17: FechaEje
+   ACD(mp17,Fsys)
+
+   *- mp15: NrGrupo Nada, 
+   *- mp16: Concepto nada, 
+   *- mp20: NrGrupo2 nada
+
+   *- mp19: Cuenta
+   ACT(mp19,FBN('Cuenta1'))
+
+   *- Nro.Mov.
+   ACN(mp22,7)
+
+   *- Cupon 
+   IF EQSTR(BuscarCampo('ESPECIES','Tipo','Codigo',FBN['ESPECIE']),'PRI')
+      ACT(mp27,NrCupon2(Fbn['Especie'],FBN['FECHAVTO']) )
+   else
+      ACT(mp27,SQL("Select A.NrCupon from "~DBO~".AGENDACUPONES A where A.Especie='"~FBN['Especie']~"' and A.FechaCorte=(select Min(FechaCorte) from "~DBO~".AGENDACUPONES C where C.Especie = A.Especie and C.Estado='PEN' ) ") )
+   endif
+
+*   ACT(mp27,FBN('Cupon1'))
+
+
+   *- Elimino el mov. previamente vc5: Tabla
+   ACT(vc5,'MOVPENDIENTES' )
+   IF EqStr(val(mp13),'AV')
+      ACT(vc5,'MOVEJECUTADOS' )
+   ENDIF
+      
+   (.'DELMOVTR'.)
+   (.'IMMOVPEND'.)      
+
+****------------------------------------------------------------------------------------
+
+   *- MOVIMIENTO DE DESBLOQUEO 8
+   *-- FSys;Cliente;Especie;;;;VTXT11;Vehiculo;VCAN8    ;-Cantidad5;;'Desbloqueo de resto orden '~TipoOrden;SI;SI;1;
+   *-- ESTADO<>2 y CB1=1 y Not EqStr(CLIENTE,VAR('VEHICULODE'));;Cuenta1;;8;;;IF(NoVacio(VTXT8),VTXT8);
+
+   ACD(mp2,Fsys )
+   ACT(mp3,FBN('Cliente') )
+   ACT(mp4,FBN('Especie') )
+   ACT(mp5,'')
+   ACT(mp6,'')
+   ACT(mp7,'')
+   ACT(mp8,FBN('Mercado'))
+   ACT(mp9,FBN('Vehiculo'))
+
+   *- mp14: Nr.Saldo
+   ACN(mp14,val(vc3))
+
+   ACN(mp10,-FBN('Cantidad5'))
+
+   ACT(mp11,'')
+   ACT(mp12,'Desbloqueo Resto de  Orden '~FBN('TipoOrden') )
+
+   *- Condicion de Automatico 
+
+   ACT(mp13,'AV')
+   *- mp17: FechaEje
+   ACD(mp17,Fsys)
+
+
+   *- mp15: NrGrupo Nada, mp16: Concepto nada, mp20: NrGrupo2 nada
+   *- mp19: Cuenta
+   ACT(mp19,FBN('Cuenta1'))
+
+   *- Nro.Mov.
+   ACN(mp22,8)
+
+      *- Cupon 
+*   ACT(mp27,FBN('Cupon1'))
+   IF EQSTR(BuscarCampo('ESPECIES','Tipo','Codigo',FBN['ESPECIE']),'PRI')
+      ACT(mp27,NrCupon2(Fbn['Especie'],FBN['FECHAVTO']) )
+   else
+      ACT(mp27,SQL("Select A.NrCupon from "~DBO~".AGENDACUPONES A where A.Especie='"~FBN['Especie']~"' and A.FechaCorte=(select Min(FechaCorte) from "~DBO~".AGENDACUPONES C where C.Especie = A.Especie and C.Estado='PEN' ) ") )
+   endif
+
+   ACT(vc5,'MOVPENDIENTES' )
+   IF EqStr(val(mp13),'AV')
+      ACT(vc5,'MOVEJECUTADOS' )
+   ENDIF
+      
+   (.'DELMOVTR'.)
+   (.'IMMOVPEND'.)      
+
+Proximo
+

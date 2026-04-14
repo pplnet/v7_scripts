@@ -1,0 +1,131 @@
+﻿* DELIA2 Detalle de Limites Posicion Activos (Repos)
+ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1    : 'Fecha'          ;;;;;;;;;FSys
+  Vehiculo1 : 'Vehiculo'       ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(4)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,1)
+
+ACT(a:FAC,"Detalle de Limites Posicion Activos")
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(5)
+ACN(w1,FAC)
+
+ACT(a:FAC+1, 'Fecha : '~Dialogo.Fecha1)
+
+ACT(a:FAC+2, 'Tipo de Saldo : Ajuste por REPOS')
+
+If NoVacio(Dialogo.Vehiculo1)
+   ACT(a:FAC+3, 'Vehiculo : '~Dialogo.Vehiculo1)
+Else
+   ACT(a:FAC+3, 'Vehiculo : Todos')
+EndIf
+
+SetFont(a:fac..N:FAC+3,2)
+
+SetFilaActual(fac+7)
+
+ACT(a:FAC, 'Especie')
+ACT(b:FAC, 'Vehiculo')
+ACT(c:FAC, 'Cantidad')
+ACT(d:FAC, 'Cotizacion')
+ACT(e:FAC, 'Valor Hoy '~VAR('MONEEXTR'))
+ACT(f:FAC, 'Imp.Futuro '~VAR('MONEEXTR'))
+ACT(g:FAC, 'Resultado')
+ACT(h:FAC, 'NrOperacion')
+
+SetFont(a:fac..h:FAC,2)
+AgregarMarco(a:FAC..h:FAC,2,0,Exe('COLOR'))
+
+*- Ajuste por Repos
+SQL.ADD("Select O.*,E.VTeorico,E.InteresesC,E.Cotiza  ")  
+SQL.ADD("from "~DBO~".OPERACIONES O,"~DBO~".ESPECIES E ")
+SQL.ADD("where O.Especie=E.Codigo ")
+if NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("and O.Vehiculo1='"~Dialogo.Vehiculo1~"' ")
+endif
+SQL.ADD(" and  FechaOp2<= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and  (FechaVto>= '"~IdxDate(Dialogo.Fecha1)~"' or FechaVto2>='"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD(" and  TipoOp In ('SERA','SERAV','SERP','SERPV') ") 
+SQL.ADD(" Order By Especie ")
+
+acn(x1,fac)
+
+Recorrer SQL
+  ACT(a:FAC, FBN['Especie'])
+  ACT(b:FAC, FBN['Vehiculo1'])
+  ACN(c:FAC, FBN['Cantidad'])
+  ACT(h:FAC, FBN['NrOperacion'])
+  ACLO(h:FAC, FBN['NrOperacion'])
+
+  acn(d:fac,CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD'))
+
+  ACT(ab:fac,FBN['InteresesC'])
+  ACN(ac:fac,FBN['VTeorico'])
+
+  if EqStr(Val(ab:fac),'CLE')
+     * ensuciar el precio 
+     ** calcular la tasa (%) x95:Dif. de dias x96:Especie x97:Fecha de Liquidacion   x98:Tasa Base x99:Tasa 
+     ACT(x96,fbn('Especie'))
+     ACD(x97,Dialogo.Fecha1)
+     ACN(x98,0)
+     ACN(x99,0)
+
+     (.'CALCINT'.)
+
+     *TotalIntereses
+     ACN(y98,Val(ac:fac)*Val(c:fac)*Val(x99)*100/DIASA(EspecieDiasAnio(fbn('Especie')),Fsys)/100*Val(x95))
+
+     * Total Neto
+     ACN(y99,(Val(ac:fac)*Val(c:fac)*Val(d:fac))+Val(y98))
+
+     * Precio Sucio
+     ACN(d:fac, Val(y99)/Val(c:fac))
+  endif
+
+  ACN(e:FAC, val(c:fac)*val(d:fac))
+  ACN(f:FAC, FBN['TotalNetoCli2']*CotizacionC(fbn('ContraEspecie'),,,,Dialogo.Fecha1,1,SI,'USD'))
+  If Incluido(FBN['TipoOp'],'SERP|SERPV')
+     ACN(g:FAC, val(f:fac)-val(e:fac))
+  Else 
+     ACN(g:FAC, val(e:fac)-val(f:fac))
+  EndIf
+Proximo
+ifa
+
+ACT(a:fac,'Total ')
+ACN(g:fac, Sum(g:val(x1)..g:fac))
+
+FormatoCeldas(c:val(x1)..d:fac,Exe('F2'))
+FormatoCeldas(d:val(x1)..d:fac,Exe('F7'))
+SetFont(a:val(x1)+1..h:FAC,1)
+SetFont(a:FAC..h:FAC,2)
+
+ACO(1,8)
+ACO(2,8)
+ACO(3,10)
+ACO(4,6)
+ACO(5,10)
+ACO(6,10)
+ACO(7,10)
+ACO(8,10)
+
+Impresion(1,1)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(h:FAC)
+

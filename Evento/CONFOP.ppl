@@ -1,0 +1,601 @@
+﻿HojaVisible(NO)
+MostrarCuadroDeMensajes
+
+* FJL 5/9/19 - Control de Memoria disponible
+(.'CONTMEM'.)
+
+CrearDialogo
+  Fecha1   : 'Fecha Liq.'        ;;;;;;Dialogo.Fecha1<>0;'Fecha Incorrecta';NO;FSys;
+  Cliente1 : 'Cliente'           ;;;;;;;;;
+  Especie1 : 'Especie'           ;;;;;;;;;
+  Mercado1 : 'Mercado'           ;;;;;;;;;
+  Cuenta1  : 'Cuenta'            ;;;;;;;;;
+  Vehiculo1: 'Vehiculo'          ;;;;;;;;;Var('VEHICULODE');
+  String1  : 'NrOperacionRef4'   ;;;;;Dialogo.Check1=0;;;;;;;;'!!!!!!!!'
+  NrTrans1 : 'NrTrans'           ;;;;;Dialogo.Check1=0;;;;;;;;'!!!!!!!!'
+  Check1   : 'Manual'            ;;;;;NO;;;;1;
+  Check2   : 'Interfase'         ;;;;NO;NO;;;;1;
+FinDialogo
+
+If Not Ok
+   Cancelar 
+EndIf
+
+* Tomo el mercado de la transaccion y no del movimiento porque es el mercado del Cliente
+*SQL.ADD("Select T.Cliente1, M.Especie, M.NrTrans2, M.Mercado, T.TipoTr2, IsNull(T.Cantidad1,0) Cantidad1, T.UsrInput,     ")
+SQL.ADD("Select T.Cliente1, M.Especie, M.NrTrans2, T.Mercado1 Mercado, T.TipoTr2, IsNull(T.Cantidad1,0) Cantidad1, T.UsrInput,     ")
+SQL.ADD("       T.Vehiculo1, T.Cuenta1, T.Cuenta2, T.Fecha1, T.Fecha2, T.NrOperacionRef4, T.NrOperacionRef1, T.Cantidad11 ")
+SQL.ADD("from "~DBO~".MOVEJECUTADOS M  with (NOLOCK Index = INDME5),"~DBO~".TRANSACCIONES2 T,                             ")
+SQL.ADD("     "~DBO~".ESPECIES E, "~DBO~".CLIENTES C, "~DBO~".OPERACIONESBITS OB                                          ")
+SQL.ADD("where ((T.TipoTr2 ='COMP' AND M.NrTrans2 = T.NrTrans) OR (T.TipoTr2 <>'COMP' AND M.NrOperacion = T.NrTrans))     ")
+SQL.ADD("  AND M.Especie=E.Codigo                                                                                         ")
+SQL.ADD("  AND M.Cliente=C.Codigo                                                                                         ")
+
+If Dialogo.Check1=0
+*   SQL.ADD("  AND  T.NrOperacionRef1 = (SELECT TT.NrOperacionRef1 from "~DBO~".TRANSACCIONES2 TT WHERE TT.NrOperacionRef4 ='"~MIRT(TRIM(Dialogo.String1))~"') ")
+   SQL.ADD("  AND  T.NrTrans = '"~Trim(Dialogo.NrTrans1)~"' ")
+EndIf
+If Dialogo.Check1=1
+   If NoVacio(Dialogo.Cliente1)
+      SQL.ADD("and T.Cliente1 = '"~Dialogo.Cliente1~"' ")
+   EndIf
+   If NoVacio(Dialogo.Especie1)
+      SQL.ADD("and M.Especie = '"~Dialogo.Especie1~"' ")
+   EndIf
+   If NoVacio(Dialogo.Mercado1)
+      SQL.ADD("and M.Mercado = '"~Dialogo.Mercado1~"' ")
+   EndIf
+   If NoVacio(Dialogo.Cuenta1)
+      SQL.ADD("and M.Cuenta = '"~Dialogo.Cuenta1~"' ")
+   EndIf
+EndIf
+SQL.ADD("  AND T.Vehiculo1 = '"~Dialogo.Vehiculo1~"'                                               ")
+SQL.ADD("  AND T.NrTrans=OB.NrOperacion AND M.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"'             ")
+*SQL.ADD("  AND T.Fecha2 = '"~IdxDate(Dialogo.Fecha1)~"' AND OB.NrBit in(3,6,14) AND OB.Valor='1'           ")
+SQL.ADD("  AND T.Fecha2 = '"~IdxDate(Dialogo.Fecha1)~"' AND OB.NrBit in(14) AND OB.Valor='1'           ")
+
+*- Extrabursatil                                                                                   
+SQL.ADD(" and M.NrGrupo <> '15'                                                                    ")
+SQL.ADD(" and T.TipoTr2 in ('DEP','RET','COMP','MATCH')                                            ")
+
+*SQL.ADD(" order by M.NrTrans2 ")
+*SQL.ADD(" order by M.Cliente, M.Especie, M.Cuenta, M.Mercado, M.NrTrans2")
+SQL.ADD(" order by M.Cliente, M.Especie, M.Cuenta, T.Mercado1, M.NrTrans2")
+watch(SQL.BATCH())
+ACT(TR:1,'')
+
+Recorrer SQL
+  If Not EqStr(FBN['NrTrans2'],Val(TR:1))
+     ACT(b:Fac,FBN['NrTrans2'])
+     ACT(c:Fac,FBN['TipoTr2'])
+     ACD(d:Fac,FBN['Fecha1'])
+     ACD(e:Fac,FBN['Fecha2'])
+     ACT(f:Fac,fbn['Cliente1'])
+     ACT(g:Fac,FBN['Mercado'])
+     ACT(h:Fac,fbn['Especie'])
+     ACN(i:Fac,FBN['Cantidad1'])
+     ACT(j:Fac,FBN['Cuenta1'])
+     ACT(k:Fac,FBN['Cuenta2'])     
+     ACT(l:Fac,FBN['NrOperacionRef4'])
+     IF NoVacio(FBN['NrOperacionRef1'])
+        ACT(m:Fac,FBN['NrOperacionRef1'])
+     Else
+        ACT(m:Fac,SQL(" Select NrOperacion from "~DBO~".MOVEJECUTADOS where NrTrans2 = '"~FBN['NrTrans2']~"' and NrOperacion <> '"~FBN['NrTrans2']~"' "))
+     EndIf
+     ACT(n:Fac,FBN['Vehiculo1'])
+     ACT(o:Fac,FBN['UsrInput'])
+     ACN(p:fac, FBN['Cantidad11'])
+     If Dialogo.Check1=0
+        ACN(a:fac,1)
+     EndIf
+     SCN(zz1,1)
+  Else
+     DFA
+  EndIf
+  ACT(TR:1,FBN['NrTrans2'])
+Proximo
+
+If Val(zz1) = 0 
+   if Dialogo.Check1=1
+      Cancelar('No Existen liquidaciones para confirmar especificaciones')
+   endif   
+EndIf
+
+If Dialogo.Check1=1
+   CrearListBox; 'Arial,8,';'Seleccione las Operaciones a Autorizar'
+      'Autoriza'     ;a:1..a:Fac;  ;;;50 ;CHECK
+      'Voucher'      ;b:1..b:Fac;NO;;;60 ;STRING;;
+      'Tipo   '      ;c:1..c:Fac;NO;;;60 ;STRING;;
+      'Fecha1'       ;d:1..d:Fac;NO;;;70 ;FECHA;;
+      'Fecha2'       ;e:1..e:Fac;NO;;;70 ;FECHA;;
+      'Cliente'      ;f:1..f:Fac;NO;;;70 ;STRING;;
+      'Mercado'      ;g:1..g:Fac;NO;;;70 ;STRING;;
+      'Especie '     ;h:1..h:Fac;NO;;;80 ;STRING;;
+      'Cantidad'     ;i:1..i:Fac;NO;;;100;NUMERO;'###,###,###,###.##'
+      'Cta.Cliente'  ;j:1..j:Fac;NO;;;100;STRING;RGB(180,180,193);
+      'Cta.Vehiculo' ;k:1..k:Fac;NO;;;100;STRING;RGB(180,180,193);
+   FinListBox
+   
+   If Not OK 
+      Cancelar
+   EndIf
+EndIf
+
+* Fila consolidacion trnsferencia
+acn(bz:2,1)
+* Fila Vouchers
+acn(bz:3,1)
+If Val(zz1) >= 1
+   Recorrer&i 1, Fac
+     If Val(a:&i)=1
+        ACN(ZZ:2,0)
+        Message('Confirmando Liquidacion...')
+        EjecutarEvento('CONCUS', Vehiculo1=Dialogo.Vehiculo1, String1=Val(l:&i),NrTrans1=Val(b:&i))
+        * Para debuggear
+        If [DesciendeDeEspecie(Val(h:&i),'MONEDA') y Eqstr(Val(g:&i),VAR('MERCADOBT'))]
+           acn(xx:1,1)
+        endif
+        If [Not Eqstr(val(f:&i)~val(h:&i)~val(j:&i),val(bz:1)) y NoVacio(val(bz:1))]
+           acn(xx:2,1)
+        endif
+        If DesciendeDeEspecie(val(bb:val(bz:2)),'MONEDA') y Eqstr(Val(bi:val(bz:2)),VAR('MERCADOBT'))
+           acn(xx:3,1)
+        endif
+        If [DesciendeDeEspecie(Val(h:&i),'MONEDA') y Eqstr(Val(g:&i),VAR('MERCADOBT'))] o [[Not Eqstr(val(f:&i)~val(h:&i)~val(j:&i),val(bz:1)) y NoVacio(val(bz:1))] y DesciendeDeEspecie(val(bb:val(bz:2)),'MONEDA') y Eqstr(Val(bi:val(bz:2)),VAR('MERCADOBT'))]
+           #ifdef BIND
+            * Parámetros Salida
+            * RR:1  'OK/NOK'  
+            * RR:2  'Mensaje'
+
+            * Parámetros entrada
+            * RR:10  'Referencia'  
+            * RR:11  'Sucursal'  
+            * RR:12  'Cuenta(1a7)'    
+            * RR:13  'SubOperacion-Cuenta (9a10)'
+            * RR:14  'Moneda'
+            * RR:15  'Importe'
+            * RR:16  'Observaciones'
+            * RR:17  'Importe a Bloquear'
+            * RR:18  'Importe a Debitar / Acreditar'
+            * RR:19  'Cliente'
+            * RR:20  'Cuenta'
+            * RR:21  'Especie'
+            * RR:22  'Importe Bloqueado'
+            * RR:23  'Importe Debitado / Acreditado'
+            * RR:24  'Tipo operacion'
+            * RR:25  'Mercado'
+            * RR:26  'Tipo Transferencia'
+            * RR:27  'Capital'
+            * RR:28  'Comisiones'
+            * RR:29  'Derechos'
+            * RR:30  'Iva'
+            * RR:31  'Intereses'
+            * RR:32  'Cod Evento (producto)'
+            * RR:33  'Fecha Valor'
+            * RR:34  'Referencia Corte'
+            * RR:35  'Referencia Acciones'
+            * RR:36  'Transaccion'
+            * RR:37  'Fecha Cont'
+            * RR:38  'Modulo' 
+            * RR:39  'Relacion'
+            * RR:40  'Tipo: 1 Resta_Liquidacion/'
+            * RR:41  'Referencia CAMEST'
+            * RR:47  'Capital Accion'
+            * RR:48  'Comisiones Accion'
+            * RR:49  'Derechos Accion'
+            * RR:50  'Iva Accion'
+            * RR:51  'Intereses Accion'
+            * RR:57  'Capital Cupon'
+            * RR:58  'Comisiones Cupon'
+            * RR:59  'Derechos Cupon'
+            * RR:60  'Iva Cupon'
+            * RR:61  'Intereses Cupon'
+            * RR:67  'Capital Camest'
+            * RR:68  'Comisiones Camest'
+            * RR:69  'Derechos Camest'
+            * RR:70  'Iva Camest'
+            * RR:71  'Intereses Camest'
+          
+            * Cliente / Especie / Cuenta / 
+            IF Not Eqstr(val(f:&i)~val(h:&i)~val(j:&i),val(bz:1)) y NoVacio(val(bz:1))
+*               (.'CONFOPPROD'.)
+               *  Interfase Bantotal
+               BorrarCeldas(rr:1..rr:80)
+               ACT(rr:10, Val(bq:val(bz:2)))
+               ACT(rr:12, Copy(Val(bh:val(bz:2)),1,7))
+               ACT(rr:13, Copy(Val(bh:val(bz:2)),9,2))
+*              En entrepartes no se bloquea               
+*               ACN(rr:17, Val(bw:val(bz:2)))
+               ACN(rr:17, 0)
+               ACN(rr:18, Val(bf:val(bz:2)))
+               ACT(rr:19, Val(by:val(bz:2)))
+               ACT(rr:20, Val(bh:val(bz:2)))
+               ACT(rr:21, Val(bb:val(bz:2)))
+               ACT(rr:25, Val(bi:val(bz:2)))
+               ACT(rr:26, 'LIQEPA')
+               ACT(rr:27, ABS(val(da:1)))
+               ACT(rr:28, ABS(val(da:2)))
+               ACT(rr:29, ABS(val(da:3)))
+               ACT(rr:30, ABS(val(da:4)))
+               ACT(rr:31, ABS(val(da:5)))
+               ACT(rr:32, val(dz:2))
+               ACT(rr:33, Dialogo.Fecha1)
+               * En la entre partes no hay bloqueo
+               if Val(bw:val(bz:2))<>0 y NO
+                  * Desbloqueo de Saldo
+                  ACN(rr:15, ABS(Val(bw:val(bz:2))))
+*                  ACN(rr:27, val(rr:15))
+                  if Dialogo.Check2=1
+                     (.'DESBSALCTA'.)
+                     if Eqstr(Val(rr:1),'OK')
+                        acn(rr:22, val(rr:17))
+                     endif
+                  else
+                     act(rr:1,'OK')
+                     acn(rr:22, val(rr:17))
+                     Messagebox('Desbloqueo '~val(rr:10)~' '~val(rr:12)~' '~val(rr:13)~' '~val(rr:15))
+                  endif   
+               else
+                  act(rr:1,'OK')
+               endif   
+               (.'GRAVOUCONS'.)
+               If Eqstr(val(rr:1),'OK')
+                  if Val(rr:18)<0
+                     * Debito de Saldo
+                     ACN(rr:15, ABS(Val(rr:18)))
+*                     ACN(rr:27, val(rr:15))
+                     ACT(rr:24, 'DB')
+                     BorrarCeldas(rr:1..rr:2)
+                     if Dialogo.Check2=1
+                        (.'DEBISALCTA'.)
+                        if Eqstr(Val(rr:1),'OK')
+                           acn(rr:23, val(rr:18))
+                        endif
+                     else
+                        act(rr:1,'OK')
+                        acn(rr:23, val(rr:18))
+                        Messagebox('Debito '~val(rr:10)~' '~val(rr:12)~' '~val(rr:13)~' '~val(rr:15))
+                     endif   
+                  else
+                  if Val(rr:18)>0
+                     * Credito de Saldo
+                     ACN(rr:15, ABS(Val(rr:18)))
+*                        ACN(rr:27, val(rr:15))
+                        ACT(rr:24, 'CR')
+                        BorrarCeldas(rr:1..rr:2)
+                        if Dialogo.Check2=1
+                           (.'ACRESALCTA'.)
+                           if Eqstr(Val(rr:1),'OK')
+                              acn(rr:23, val(rr:18))
+                           endif
+                        else
+                           act(rr:1,'OK')
+                           acn(rr:23, val(rr:18))
+                           Messagebox('Credito '~val(rr:10)~' '~val(rr:12)~' '~val(rr:13)~' '~val(rr:15))
+                        endif   
+                     endif                                
+                  endif
+               else
+               if Val(rr:18)<0
+                     * Debito de Saldo
+                     ACT(rr:24, 'DB')
+                  else   
+                  if Val(rr:18)>0
+                        * Credito de Saldo
+                        ACT(rr:24, 'CR')
+                     endif
+                  endif
+               endif
+               If Eqstr(val(rr:1),'OK')
+                  Recorrer&j 1,(val(bz:3)-1)
+                     if Vacio(Val(bu:&j))
+                        Break
+                     endif   
+                     EjecutarEvento('03CONF', Radio1=2, Mercado1='', Especie1='', Vehiculo1=Dialogo.Vehiculo1, Radio2=0, Fecha1=Dialogo.Fecha1, Cliente1='', NrTrans1=Val(bu:&j), Check1=1, Check2=0)
+                     Borrarceldas(bu:&j..bu:&j)
+                  Proximo   
+               Endif
+               (.'VOUCONSSTA'.) 
+               SCN(bz:2,1)   
+               ACN(bz:3,1)
+               Borrarceldas(da:1..da:5)   
+               Borrarceldas(db:1..db:10)   
+               Borrarceldas(db:999..db:999)   
+               Borrarceldas(dz:1..dz:2)   
+            endif
+            if [DesciendeDeEspecie(Val(h:&i),'MONEDA') y Eqstr(Val(g:&i),VAR('MERCADOBT'))]
+                ACT(bh:val(bz:2), Val(j:&i))
+                ACT(bq:val(bz:2), val(bq:val(bz:2))~Val(b:&i)~'|')
+                ACT(by:val(bz:2), Val(f:&i))
+                ACT(bb:val(bz:2), Val(h:&i))                       
+                ACT(bi:val(bz:2), Val(g:&i)) 
+                * Las TCOPRI/MAV son negativas
+                ACT(bv:val(bz:2),SQL("SELECT O.TipoOp from "~DBO~".MOVEJECUTADOS M, "~DBO~".OPERACIONES O where NrTrans2 in('"~Val(b:&i)~"') and M.NrOperacion<>M.NrTrans2 and O.NrOperacion=M.NrOperacion"))
+                if Incluido(val(bv:val(bz:2)),'DDC|DDV|FXCF|FXVF|')
+                   if Eqstr(Val(c:&i),'RET')
+                      SCN(bf:val(bz:2), -Val(i:&i))
+                   else   
+                      SCN(bf:val(bz:2), Val(i:&i))
+                   endif   
+                else   
+                   if Eqstr(Val(c:&i),'RET') y Not Incluido(val(bv:val(bz:2)),'TCOPRI|')
+                      SCN(bf:val(bz:2), Val(i:&i))
+                   else
+                      SCN(bf:val(bz:2), -Val(i:&i))
+                   endif   
+                endif   
+                SCN(bw:val(bz:2), Val(p:&i))
+                * Lista de Vouchers
+                ACT(bu:val(bz:3), Val(b:&i))
+                (.'CONFOPPROD'.)
+                SCN(bz:3,1)
+                act(bz:1,val(f:&i)~val(h:&i)~val(j:&i))
+            Endif   
+           #endif
+        Endif          
+*----------------Hasta
+        * No hay mas vouchers pendientes de confirmacion
+        if round(SQL("SELECT count(1) FROM "~DBO~".OPERACIONESBITS WHERE NrOperacion in(SELECT Nrtrans FROM "~DBO~".TRANSACCIONES2 WHERE NrOperacionRef1='"~val(m:&i)~"' and Nrtrans<>'"~val(b:&i)~"') and Valor=1 and NrBit=14 "),0)=round(0,0)
+           if Round(SQL("SELECT count(1) FROM "~DBO~".MOVPENDIENTES WHERE Nroperacion='"~val(m:&i)~"' "),2)=Round(0,2)
+              *- Pasa de Instancia az5: Instancia Nueva az6: Instancia Vieja
+              ACT(az3,val(m:&i))
+              ACT(az4,'OPERACIONES')
+              ACN(az5,70)
+              ACN(az6,10)
+              ACT(tp:1,SQL("SELECT TipoOp FROM "~DBO~".OPERACIONES WHERE Nroperacion='"~val(m:&i)~"' "))
+              ** AA 07-02-2023 verificar si hay otra variable para definir si se pasa o no a Terminal
+              if Incluido(Val(tp:1),'FXCF|FXVF')
+              **if Round(SQL("SELECT count(1) FROM "~DBO~".MOVEJECUTADOS WHERE Nroperacion='"~val(m:&i)~"' and NrGrupo2='1002' and Leyenda like 'Liquidacion FIX%'"),2)=Round(1,2)
+                if Round(SQL("SELECT count(1) FROM "~DBO~".MOVEJECUTADOS WHERE Nroperacion='"~val(m:&i)~"' and Leyenda like 'Liquidacion FIX%'"),2)=Round(1,2)   
+                    * Inicio Func MODIINSTAN Fut Monedas
+                    *Bucle para contemplar todas las operaciones del voucher
+                    SQL.ADD("SELECT NrOperacion FROM "~DBO~".MOVEJECUTADOS WHERE NrTrans2 = '"~val(b:&i)~"'")
+                    Recorrer SQL
+                        ACT(az3,FBN['NrOperacion'])
+                        ACT(az4,'OPERACIONES')
+                        ACN(az5,70)
+                        ACN(az6,10)
+                        ***********************
+                        (.'MODIINSTAN'.)
+                        ***********************
+                        * Fin Func MODIINSTAN  Fut Monedas                  
+                    PROXIMO
+                 endif
+              else   
+                 * Inicio Func MODIINSTAN
+                 ***********************
+                 (.'MODIINSTAN'.)
+                 ***********************
+                 * Fin Func MODIINSTAN
+              endif   
+           endif   
+        endif
+*---- Desde faltaba uno --------------------------------------------        
+     Else   
+       If [[Not Eqstr(val(f:&i)~val(h:&i)~val(j:&i),val(bz:1)) y NoVacio(val(bz:1))] y DesciendeDeEspecie(val(bb:val(bz:2)),'MONEDA') y Eqstr(Val(bi:val(bz:2)),VAR('MERCADOBT'))]
+          #ifdef BIND
+    *          (.'CONFOPPROD'.)
+              * Cliente / Especie / Cuenta / 
+               *  Interfase Bantotal
+               BorrarCeldas(rr:1..rr:80)
+               ACT(rr:10, Val(bq:val(bz:2)))
+               ACT(rr:12, Copy(Val(bh:val(bz:2)),1,7))
+               ACT(rr:13, Copy(Val(bh:val(bz:2)),9,2))
+    *          En entrepartes no se bloquea               
+    *           ACN(rr:17, Val(bw:val(bz:2)))
+               ACN(rr:17, 0)
+               ACN(rr:18, Val(bf:val(bz:2)))
+               ACT(rr:19, Val(by:val(bz:2)))
+               ACT(rr:20, Val(bh:val(bz:2)))
+               ACT(rr:21, Val(bb:val(bz:2)))
+    *cambie &i por BZ           
+               ACT(rr:25, Val(bi:val(bz:2)))
+               ACT(rr:26, 'LIQEPA')
+               ACT(rr:27, ABS(val(da:1)))
+               ACT(rr:28, ABS(val(da:2)))
+               ACT(rr:29, ABS(val(da:3)))
+               ACT(rr:30, ABS(val(da:4)))
+               ACT(rr:31, ABS(val(da:5)))
+               ACT(rr:32, val(dz:2))
+               ACT(rr:33, Dialogo.Fecha1)
+               * En la entre partes no hay bloqueo
+               if Val(bw:val(bz:2))<>0 y NO
+                  * Desbloqueo de Saldo
+                  ACN(rr:15, ABS(Val(bw:val(bz:2))))
+    *              ACN(rr:27, val(rr:15))
+                  if Dialogo.Check2=1
+                     (.'DESBSALCTA'.)
+                     if Eqstr(Val(rr:1),'OK')
+                        acn(rr:22, val(rr:17))
+                     endif
+                  else
+                     act(rr:1,'OK')
+                     acn(rr:22, val(rr:17))
+                     Messagebox('Desbloqueo '~val(rr:10)~' '~val(rr:12)~' '~val(rr:13)~' '~val(rr:15))
+                  endif   
+               else
+                  act(rr:1,'OK')
+               endif   
+               (.'GRAVOUCONS'.)
+               If Eqstr(val(rr:1),'OK')
+                  if val(rr:18)<0
+                     * Debito de Saldo
+                     ACN(rr:15, ABS(val(rr:18)))
+    *                 ACN(rr:27, val(rr:15))
+                     ACT(rr:24, 'DB')
+                     BorrarCeldas(rr:1..rr:2)
+                     if Dialogo.Check2=1
+                        (.'DEBISALCTA'.)
+                        if Eqstr(Val(rr:1),'OK')
+                           acn(rr:23, val(rr:18))
+                        endif
+                     else
+                        act(rr:1,'OK')
+                        acn(rr:23, val(rr:18))
+                        Messagebox('Debito '~val(rr:10)~' '~val(rr:12)~' '~val(rr:13)~' '~val(rr:15))
+                     endif   
+                  else
+                     if val(rr:18)>0
+                     * Credito de Saldo
+                        ACN(rr:15, ABS(val(rr:18)))
+    *                    ACN(rr:27, val(rr:15))
+                        ACT(rr:24, 'CR')
+                        BorrarCeldas(rr:1..rr:2)
+                        if Dialogo.Check2=1
+                           (.'ACRESALCTA'.)
+                           if Eqstr(Val(rr:1),'OK')
+                              acn(rr:23, val(rr:18))
+                           endif
+                        else
+                           act(rr:1,'OK')
+                           acn(rr:23, val(rr:18))
+                           Messagebox('Credito '~val(rr:10)~' '~val(rr:12)~' '~val(rr:13)~' '~val(rr:15))
+                        endif   
+                     endif                                
+                  endif
+               else
+                  if val(rr:18)<0
+                     * Debito de Saldo
+                     ACT(rr:24, 'DB')
+                  else   
+                     if val(rr:18)>0
+                        * Credito de Saldo
+                        ACT(rr:24, 'CR')
+                     endif
+                  endif
+               endif
+               If Eqstr(val(rr:1),'OK')
+                  Recorrer&j 1,(val(bz:3)-1)
+                     if Vacio(Val(bu:&j))
+                        Break
+                     endif   
+                     EjecutarEvento('03CONF', Radio1=2,Mercado1='',Especie1='',Vehiculo1=Dialogo.Vehiculo1,Radio2=0,Fecha1=Dialogo.Fecha1,Cliente1='', NrTrans1=Val(bu:&j), Check1=1)
+                     Borrarceldas(bu:&j..bu:&j)
+                  Proximo   
+               Endif
+               (.'VOUCONSSTA'.)   
+               SCN(bz:2,1)   
+               ACN(bz:3,1)  
+               Borrarceldas(da:1..da:5)   
+               Borrarceldas(db:1..db:10)   
+               Borrarceldas(db:999..db:999)   
+               Borrarceldas(dz:1..dz:2)   
+          #endif
+       Endif          
+*---- Hasta faltaba uno --------------------------------------------     
+     EndIf
+   Proximo
+   *-----------------
+   *cambie &i por bz:(Esta mal)
+   If DesciendeDeEspecie(Val(h:&i),'MONEDA') y Eqstr(Val(g:&i),VAR('MERCADOBT'))
+      #ifdef BIND
+*          (.'CONFOPPROD'.)
+          * Cliente / Especie / Cuenta / 
+           *  Interfase Bantotal
+           BorrarCeldas(rr:1..rr:80)
+           ACT(rr:10, Val(bq:val(bz:2)))
+           ACT(rr:12, Copy(Val(bh:val(bz:2)),1,7))
+           ACT(rr:13, Copy(Val(bh:val(bz:2)),9,2))
+*          En entrepartes no se bloquea               
+*           ACN(rr:17, Val(bw:val(bz:2)))
+           ACN(rr:17, 0)
+           ACN(rr:18, Val(bf:val(bz:2)))
+           ACT(rr:19, Val(by:val(bz:2)))
+           ACT(rr:20, Val(bh:val(bz:2)))
+           ACT(rr:21, Val(bb:val(bz:2)))
+*cambie &i por BZ           
+           ACT(rr:25, Val(bi:val(bz:2)))
+           ACT(rr:26, 'LIQEPA')
+           ACT(rr:27, ABS(val(da:1)))
+           ACT(rr:28, ABS(val(da:2)))
+           ACT(rr:29, ABS(val(da:3)))
+           ACT(rr:30, ABS(val(da:4)))
+           ACT(rr:31, ABS(val(da:5)))
+           ACT(rr:32, val(dz:2))
+           ACT(rr:33, Dialogo.Fecha1)
+           * En la entre partes no hay bloqueo
+           if Val(bw:val(bz:2))<>0 y NO
+              * Desbloqueo de Saldo
+              ACN(rr:15, ABS(Val(bw:val(bz:2))))
+*              ACN(rr:27, val(rr:15))
+              if Dialogo.Check2=1
+                 (.'DESBSALCTA'.)
+                 if Eqstr(Val(rr:1),'OK')
+                    acn(rr:22, val(rr:17))
+                 endif
+              else
+                 act(rr:1,'OK')
+                 acn(rr:22, val(rr:17))
+                 Messagebox('Desbloqueo '~val(rr:10)~' '~val(rr:12)~' '~val(rr:13)~' '~val(rr:15))
+              endif   
+           else
+              act(rr:1,'OK')
+           endif   
+           (.'GRAVOUCONS'.)
+           If Eqstr(val(rr:1),'OK')
+              if val(rr:18)<0
+                 * Debito de Saldo
+                 ACN(rr:15, ABS(val(rr:18)))
+*                 ACN(rr:27, val(rr:15))
+                 ACT(rr:24, 'DB')
+                 BorrarCeldas(rr:1..rr:2)
+                 if Dialogo.Check2=1
+                    (.'DEBISALCTA'.)
+                    if Eqstr(Val(rr:1),'OK')
+                       acn(rr:23, val(rr:18))
+                    endif
+                 else
+                    act(rr:1,'OK')
+                    acn(rr:23, val(rr:18))
+                    Messagebox('Debito '~val(rr:10)~' '~val(rr:12)~' '~val(rr:13)~' '~val(rr:15))
+                 endif   
+              else
+                 if val(rr:18)>0
+                 * Credito de Saldo
+                    ACN(rr:15, ABS(val(rr:18)))
+*                    ACN(rr:27, val(rr:15))
+                    ACT(rr:24, 'CR')
+                    BorrarCeldas(rr:1..rr:2)
+                    if Dialogo.Check2=1
+                       (.'ACRESALCTA'.)
+                       if Eqstr(Val(rr:1),'OK')
+                          acn(rr:23, val(rr:18))
+                       endif
+                    else
+                       act(rr:1,'OK')
+                       acn(rr:23, val(rr:18))
+                       Messagebox('Credito '~val(rr:10)~' '~val(rr:12)~' '~val(rr:13)~' '~val(rr:15))
+                    endif   
+                 endif                                
+              endif
+           else
+              if val(rr:18)<0
+                 * Debito de Saldo
+                 ACT(rr:24, 'DB')
+              else   
+                 if val(rr:18)>0
+                    * Credito de Saldo
+                    ACT(rr:24, 'CR')
+                 endif
+              endif
+           endif
+           If Eqstr(val(rr:1),'OK')
+              Recorrer&j 1,(val(bz:3)-1)
+                 if Vacio(Val(bu:&j))
+                    Break
+                 endif   
+                 EjecutarEvento('03CONF', Radio1=2,Mercado1='',Especie1='',Vehiculo1=Dialogo.Vehiculo1,Radio2=0,Fecha1=Dialogo.Fecha1,Cliente1='', NrTrans1=Val(bu:&j), Check1=1)
+                 Borrarceldas(bu:&j..bu:&j)
+              Proximo   
+           Endif
+           (.'VOUCONSSTA'.)   
+           SCN(bz:2,1)   
+           ACN(bz:3,1)  
+           Borrarceldas(da:1..da:5)   
+           Borrarceldas(db:1..db:10)   
+           Borrarceldas(db:999..db:999)   
+           Borrarceldas(dz:1..dz:2)   
+      #endif
+   Endif          
+   *---------------------   
+EndIf

@@ -1,0 +1,181 @@
+﻿*- Este infomre muestra las tasas estimadas o reales de la
+*- tabla de cotizaciones, las impacta en las operaciones y recalcula
+*- intereses e impuestos
+
+*Actua para Simuladas que Recalculen y Reales
+
+HojaVisible(NO)
+MostrarCuadroDeMensajes
+CrearDialogo
+  Radio1       : 'Tipo|Reales|Simuladas' ;1;1;;NO;NO;;;;1;;;
+  Entero1      : 'Dias+'                 ;2;1;;NO;NO;;;;Dialogo.Radio1+1;Dialogo.Radio1+1;;
+  Fecha1       : "Fecha Vigencia"        ;1;1;;;;Dialogo.Fecha1<>0 y Dialogo.Fecha1<=Fsys;'Fecha Vigencia Invalida';NO;Fsys;
+  NrOperacion1 : "Operacion"             ;2;1;;;;;;;;;;;;"TipoOp Like 'MM%' or TipoOp In ('DTSFVM','DTSVVM','DTSVV','DTSFV','DTCAP','DTFLO')"
+  Lista1       : "Vehiculo"              ;1;2;;Vacio(Dialogo.NrOperacion1);;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")); 
+ 
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+ACT(ls:1000, IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet("Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSet(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo='"~UsuarioActivo~"' AND U.Vehiculo=V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")))
+ACT(ls:1100, SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo Like 'MM%' or Codigo In ('DTSFVM','DTSVVM','DTSVV','DTSFV','DTCAP','DTFLO')"))
+
+
+*- Recupero todos las tablas de feriados con la que pueden trabajar las operaciones que estan por vencer, y 
+*- Reseteo segun la tabla de feriados de fecha1 hasta 10 dias.
+SQL.ADD("SELECT DISTINCT O.TablaFeriados1 ")
+SQL.ADD(" from  "~DBO~".CUOTAS C, "~DBO~".OPERACIONES  O ")
+SQL.ADD(" where O.NrOperacion = C.NrOperacion ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("       AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+   SQL.ADD("       AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+IF NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+ENDIF
+
+SQL.ADD("       and O.TipoOp In ('MMFIMV','MMSIMV','MMPCLM','MMPEM','MMPIM','MMPOSM','MMONM','MMPCCM') ")
+SQL.ADD("       and O.FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and C.Fecha2 > '"~IdxDate(Dialogo.Fecha1)~"' ")
+MESSAGE("       and O.FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' ")
+MESSAGE("       and C.Fecha2 > '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and O.TipoTasa<>'FIJA' ")
+SQL.ADD(" Union ")
+*- Operaciones Unico Vto
+SQL.ADD("SELECT DISTINCT O.TablaFeriados1 ")
+SQL.ADD("FROM "~DBO~".OPERACIONES  O ")
+SQL.ADD("where O.TipoOp In ('MMFRN','MMFRNP','MMPSC','MMPSI','MMPCL','MMPCOS','MMPE','MMPI','MMPLME','MMON','MMPCCV') ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+IF NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+ENDIF
+
+
+SQL.ADD(" and O.FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and O.FechaVto>'"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and O.TipoTasa<>'FIJA' ")
+SQL.ADD(" Union ")
+***---Swap Datos Vehiculo
+SQL.ADD("SELECT DISTINCT O.TablaFeriados1 ")
+SQL.ADD(" From "~DBO~".CUOTAS C, "~DBO~".OPERACIONES O ")
+SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+Endif
+SQL.ADD(" AND O.TipoOp IN ('DTSFVM','DTSVVM','DTCAP','DTFLO') ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND C.Fecha4  > '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.TipoTasa<>'FIJA' AND O.TipoTasa Is Not Null AND O.TipoTasa<>' '  ")
+SQL.ADD(" Union ")
+***---Swap Datos Contraparte
+SQL.ADD("SELECT DISTINCT O.TablaFeriados1 ")
+SQL.ADD(" From "~DBO~".CUOTAS C, "~DBO~".OPERACIONES O  ")
+SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+Endif
+SQL.ADD(" AND O.TipoOp IN ('DTSFVM','DTSVVM','DTCAP','DTFLO') ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND C.Fecha4 > '"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD(" AND O.TipoTasa2<>'FIJA' AND O.TipoTasa2 Is Not Null AND O.TipoTasa2<>' ' ")
+SQL.ADD(" UNION ")
+***---Swaps Unico Vto Datos Vehiculo
+SQL.ADD("SELECT DISTINCT O.TablaFeriados1 ")
+SQL.ADD(" From "~DBO~".OPERACIONES O ")
+SQL.ADD(" Where O.TipoOp IN ('DTSFV','DTSVV')  ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+Endif
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.FechaPrecan > '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.TipoTasa<>'FIJA' AND O.TipoTasa Is Not Null AND O.TipoTasa<>' ' ")
+SQL.ADD(" UNION ")
+***--- Swaps Unico Vto Datos Contraparte
+SQL.ADD("SELECT DISTINCT O.TablaFeriados1 ")
+SQL.ADD(" From "~DBO~".OPERACIONES O")
+SQL.ADD(" Where ")
+SQL.ADD(" O.TipoOp IN ('DTSFV','DTSVV') ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+Endif
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.FechaPrecan > '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.TipoTasa2<>'FIJA' AND O.TipoTasa2 Is Not Null AND O.TipoTasa2<>' '  ")
+SQL.ADD(" Order By 1")
+
+Recorrer SQL
+
+     Message(FBN['TablaFeriados1'])
+     ACT(tf1,FBN['TablaFeriados1'])
+
+     *- f5: Ultimo dia en que ejecute el Informe
+     ACD(f5,HABILES(Dialogo.Fecha1,-1,VAR('FERIADODEF'),SI) )
+
+     *- f6: Dia Siguiente que tendria que haberlo Ejecutado
+     ACD(f6,Habiles(VAL(f5),1,,SI) )
+
+     Recorrer&j val(f6),Dialogo.Fecha1
+
+          If DiaSem(&j)<>1 y DiaSem(&j)<>7
+             ACD(fe2,Habiles(&j,Dialogo.Entero1,,SI))
+
+             If Not EqStr(val(tf1),VAR('FERIADODEF'))
+                ACD(fe4,Habiles(&j,Dialogo.Entero1,val(tf1),SI))
+             Else
+                ACD(fe4,Habiles(&j,Dialogo.Entero1,,SI))
+             EndIf
+
+
+             ACD(fe3,Habiles(&j,Dialogo.Entero1,,SI)+Dialogo.Entero1 )
+             ACD(fe5,Habiles(&j,Dialogo.Entero1,,SI)+Dialogo.Entero1 )
+
+             If DiaSem(&j)=5
+                *- Jueves => Resetea Sabado, Domingo y Lunes
+                ACD(fe2,Habiles(&j,Dialogo.Entero1,,NO))    
+                ACD(fe3,Habiles(&j,Dialogo.Entero1,,NO)+Dialogo.Entero1 )  
+             EndIf
+
+             Message('*- No Es Sabado o Domingo       ')
+             LinkearHoja('SETTA1',1,Fecha1=&j,Fecha2=&j,Fecha4=&j,Fecha3=val(fe2),Fecha5=val(fe4),NrOperacion1=Dialogo.NrOperacion1,Radio1=Dialogo.Radio1,Entero1=Dialogo.Entero1,Lista1=Dialogo.Lista1,Feriado1=val(tf1))
+          
+          EndIf
+    Proximo 
+Proximo 
+
+
+
+
+

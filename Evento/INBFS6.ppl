@@ -1,0 +1,170 @@
+﻿***NUEVOS Filtros*** DESHABILITADOS (Simax 22080) Comentado: **++
+MostrarCuadroDeMensajes
+HojaVisible(NO)
+CrearDialogo
+  Directorio1    : 'Directorio'        ;;;;;;;;;;;;
+  Fecha1         : 'F.Valor'           ;;;;;;;;;;;;
+  Check1         : 'Filtra Asiento'    ;;;;;;;;;;;;
+  Check2         : 'Filtra Oper.'      ;;;;;;;;;;;;
+  Check3         : 'Filtra FValor.'    ;;;;;;;;;;;;
+  NrUnicoAsiento1: 'Nr Asiento'        ;;;;;;;;;;;;
+  NrOperacion1   : 'Operacion'         ;;;;;;;;;;;;
+  Lista1         : 'Vehiculo'          ;;;;;;;;;;;;
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+
+***** Barrera de habilitacion de proceso Contable Vrs Proceso SAP
+IF Eqstr(Var('INTASIENTO'), 'SI')
+   Cancelar('Se esta ejecutando el proceso contable con SAP...Por favor intente en unos minutos')
+*Else
+**** Barrera de habilitacion de proceso Contable
+   IF Eqstr(Var('GENASIENTO'), 'SI')
+      Cancelar('Ya esta siendo ejecutado el proceso contable...Por favor intente en unos minutos')
+   EndIf
+EndIf
+
+***Guarda Variable de directorio, agrega una '\' si no tiene
+If EqStr(Copy(Dialogo.Directorio1,Longitud(Dialogo.Directorio1),1),'\')
+    let &Directorio Dialogo.Directorio1
+Else
+    let &Directorio Dialogo.Directorio1~'\'
+EndIf
+
+***Valida que el directorio que se guardó sea correcto
+  If ExisteDirectorio(&Directorio)
+     **Si el directorio existe, guarda el nombre de archivo en una variable.
+      ACT(FE:1,Var('FILEINTCON')~Pad0(FStr(Dia(FSYS),0,0),2)~Pad0(FStr(Mes(FSYS),0,0),2)~FStr(Anio(FSYS),0,0))
+     
+  Else
+      Cancelar('El directorio '~&Directorio~' no existe')
+  EndIf
+
+
+**Si el nombre del archivo del comprobante es el mismo, le agrega una enumeración al final del nombre del archivo.
+ACT(AR:1,&Directorio~Val(FE:1)~'.csv')
+
+IF ExisteArchivo(Val(AR:1))
+    Recorrer&I 1,9000
+    ACT(AR:1,&Directorio~Val(FE:1)~'_'~Fstr(&I,10,0)~'.csv')
+        IF Not ExisteArchivo(Val(AR:1))
+            Break
+        ENDIF
+    Proximo 
+ENDIF
+
+SQL.ADD(" Update "~DBO~".VARIABLES Set Valor='SI' Where Codigo='INTASIENTO' ")
+SQL.NEW
+SQL.EXEC
+
+SQL.ADD("SELECT A1.NrUnicoAsiento, A1.Alias4, A1.Cuenta, A.FechaValor, A1.Cantidad1, A1.Especie1, ")
+SQL.ADD("A1.Cantidad2, A1.Especie2, A1.Detalle, A1.DebitoCredito, A1.Alias6, ")
+SQL.ADD(" A1.Alias1, A1.Alias2, A1.Valor1, A1.Valor2, A.Modelo, A1.Book,A.Estado, A1.Alias7 ")
+SQL.ADD("FROM "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1")
+SQL.ADD("WHERE A.NrUnicoAsiento=A1.NrUnicoAsiento and (A.Estado IS Null OR A.Estado = '' OR A.Estado = ' ' OR A.Estado = 'COT' OR A.Estado = 'REV') ")
+SQL.ADD(" AND (A.Sector Is Null OR A.Sector = '' OR A.Sector = ' ') ")
+IF Dialogo.Check3 = 1
+    SQL.ADD(" AND A.FechaValor = '"~IdxDate(Dialogo.Fecha1)~"'" )
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD("AND A.Vehiculo in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ENDIF
+IF Dialogo.Check1 = 1
+    SQL.ADD("AND A.NrUnicoAsiento = '"~Dialogo.NrUnicoAsiento1~"' ")
+ENDIF
+IF Dialogo.Check2 = 1
+    SQL.ADD("AND A.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+ENDIF
+
+AbrirAscii(Val(AR:1),0,NO,1)
+
+Recorrer SQL
+    *JRNL_LN_REF
+    ACT(VL:1,FBN['NrUnicoAsiento'])
+    *BUSINESS_UNIT 
+    ACT(VL:2,Pad0(FBN['Alias4'],5))
+    *SOURCE
+    ACT(VL:3,'FPA')
+    *ACCOUNT 
+    ACT(VL:4,FBN['Cuenta'])
+    *DEPTID
+    IF Incluido(BuscarCampo('MODELOSASIENTO','TipoOp','Codigo',FBN['Modelo']),'TRANSF|MMRPAC|MMCPM')
+        ACT(VL:5,'')
+    ELSE
+        ACT(VL:5,FBN['Alias7'])
+    ENDIF
+    *CHARTFIELD1
+    ACT(VL:6,BuscarCampo('BOOKS','Alias1','Codigo',FBN['Book']))
+    *CHARTFIELD2
+    ACT(VL:7,'')
+    *PROGRAM_CODE
+    ACT(VL:8,'')
+    *CHARTFIELD3
+    ACT(VL:9,'')
+    *JOURNAL_DATE 
+    ACT(VL:10,Fecha(FBN['FechaValor'],'dd-mm-yyyy'))
+    *FOREIGN_AMOUNT 
+    ACT(VL:11,Fstr(FBN['Valor1'],0,3))
+    *FOREIGN_CURRENCY
+    ACT(VL:12,BuscarCampo('ESPECIES','Alias10','Codigo',FBN['Alias1']))
+    *MONETARY_AMOUNT 
+    ACT(VL:13,Fstr(FBN['Valor2'],0,3))
+    *CURRENCY_CD 
+    ACT(VL:14,BuscarCampo('ESPECIES','Alias10','Codigo',FBN['Especie2']))
+    *LINE_DESCR
+    ACT(VL:15,Copy(FBN['Alias6'],1,30))
+    *DESCR254
+    ACT(VL:16,Copy(FBN['Detalle'],1,254))
+    *BUSINESS_UNIT_GL 
+    ACT(VL:17,Pad0(FBN['Alias4'],5))
+    *GL_DISTRIB_STATUS 
+    ACT(VL:18,'N')
+    *RATE_MULT 
+    IF Eqstr(FBN['Alias1'], 'ARP')
+        ACT(VL:19,'1')
+    ELSE
+        ACT(VL:19,Fstr(FBN['Valor2'],0,8))
+    ENDIF
+    *RATE_DIV 
+    ACT(VL:20,'1')
+    *APPL_JRNL_ID
+    ACT(VL:21,'GRAL_FPA')
+    *GN_DR_CR_FLAG 
+    IF Eqstr(FBN['DebitoCredito'],'DEB')
+        ACT(VL:22,'D')
+    ELSE
+        ACT(VL:22,'H')
+    ENDIF
+    *PROCESS_INSTANCE
+    ACT(VL:23,'0')
+    
+    ***---Escribo la línea para insertar en el archivo
+    ACT(LN:1,Val(VL:1)~';'~Val(VL:2)~';'~Val(VL:3)~';'~Val(VL:4)~';'~Val(VL:5)~';'~Val(VL:6)~';'~Val(VL:7)~';'~Val(VL:8)~';'~Val(VL:9)~';'~Val(VL:10)~';'~Val(VL:11)~';'~Val(VL:12)~';'~Val(VL:13)~';'~Val(VL:14)~';'~Val(VL:15)~';'~Val(VL:16)~';'~Val(VL:17)~';'~Val(VL:18)~';'~Val(VL:19)~';'~Val(VL:20)~';'~Val(VL:21)~';'~Val(VL:22)~';'~Val(VL:23))
+    EscribirAscii(Val(LN:1))
+
+    ***/Marco asiento como enviado
+    SQL.ADD(" Update "~DBO~".ASIENTOSCON ")
+    IF Eqstr(fbn('Estado'), 'COT')
+        SQL.ADD(" Set Estado = 'COE', ")
+    ELSE
+         IF Eqstr(fbn('Estado'), 'REV')
+            SQL.ADD(" Set Estado = 'REE', ")
+         ELSE
+            SQL.ADD(" Set Estado = 'E', ")
+         ENDIF
+    ENDIF
+    ***/Fecha2 = Fecha de Envio
+    SQL.ADD(" Fecha2 = "~SQLAhora~" ")
+    SQL.ADD(" Where NrUnicoAsiento = '"~Val(VL:1)~"' ")
+    SQL.NEW    
+Proximo
+
+CerrarAscii
+
+** Se coloca la variable INTASIENTO en NO para habilitar el proceso contable con SAP 
+SQL.ADD(" Update "~DBO~".VARIABLES Set Valor='NO' Where Codigo='INTASIENTO' ")
+SQL.NEW
+SQL.EXEC

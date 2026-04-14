@@ -1,0 +1,215 @@
+﻿IF Vacio(UsrVehiculos(UsuarioActivo))
+    ACT(LS:1, SQLSet(" Select Codigo from "~DBO~".VEHICULOS where Status = 'HAB' "))
+ELSE
+    ACT(LS:1, UsrVehiculos(UsuarioActivo))
+ENDIF
+CrearDialogo
+  Fecha1:       'Fecha'                                 ;;;;;;;;;
+  Vehiculo1:    'Vehiculo'                              ;;;;;;;;;
+  Book1:        'Book'                                  ;;;;;;;;;
+  Radio1:       'Expresado en|ARP|USD'                  ;;;;;;;;;
+  Radio2:       'Expresado en|Millones|ImporteOri'      ;;;;;;;;;
+  Precio1:      'CotDolDivisa'                          ;;;;;;;;;
+  Precio2:      'CotDolBillete'                         ;;;;;;;;;
+  String1:      'Moneda'                                ;;;;;;;;;
+  Radio3:       'TipoCuenta|Cta. Ctte.|Saldos Inmovilizados'  ;;;
+FinDialogo
+
+IF Not OK
+  Cancelar
+ENDIF
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+*****************************************************************VAR MONEDAS****************************************************
+let &monedaLocal Var('MONELOCA')
+let &monedaExtr Var('MONEEXTR')
+let &dolBillete Var('DOLBILLETE')
+let &vehiculosDolBillete Var('VEHDOLBI')
+let &cotDolDivisa Dialogo.Precio1
+let &cotDolBillete Dialogo.Precio2
+IF Dialogo.Radio1 = 0
+    let &monedaInforme &monedaLocal
+ELSE
+    let &monedaInforme &monedaExtr
+ENDIF
+
+*****************************************************************ENCABEZADO***************************************************
+SetFilaActual(1)
+IF Dialogo.Radio3 = 0
+    ACT(C:fac,'Saldos Ctas. Comitente por Fecha')
+ELSE
+    ACT(C:fac,'Saldos Inmovilizados por Fecha')
+ENDIF
+SetFont(C:fac..C:fac, 3)
+
+let &filaLogo 1
+@LOGO
+ifa
+ifa
+ifa
+ifa
+ifa
+
+let &ComienzoTitulos fac
+
+ACT(A:fac,'Saldos del: '  ~Dialogo.Fecha1)
+ifa
+ACT(A:fac,'Moneda: '  ~Dialogo.String1)
+ifa
+IF Vacio(Dialogo.Vehiculo1)
+    let &Vehiculos 'Todos'
+ELSE
+    let &Vehiculos Dialogo.Vehiculo1
+ENDIF
+ACT(A:fac,'Vehiculo: '~ &Vehiculos)
+ifa
+
+IF Vacio(Dialogo.Book1)
+    let &Books 'Todos'
+ELSE
+    let &Books Dialogo.Book1
+ENDIF
+ACT(A:fac,'Books: '~ &Books)
+ifa
+
+
+IF Dialogo.Radio1 = 0
+    let &expresion 'ARP'
+ELSE
+    let &expresion 'USD'
+ENDIF
+
+ACT(A:fac,'Expresado en : '~ &expresion)
+ifa
+ACT(A:fac, 'TC Divisa: '~Fstr(&cotDolDivisa,0,2))x
+ifa
+ACT(A:fac, 'TC Billete: '~Fstr(&cotDolBillete,0,2))
+ifa
+
+IF Dialogo.Radio2 = 0
+    ACT(A:fac, 'Expresado en: Millones')
+    let &unidad 1000000
+ELSE
+    ACT(A:fac, 'Expresado en: Importe Original')
+    let &unidad 1
+ENDIF
+ifa
+ifa
+**VH
+ACT(A:fac,'Vehiculo')
+ACT(B:fac,'Cuenta')
+ACT(C:fac,'Nombre')
+ACT(D:fac,'Saldo')
+
+AgregarMarco(A:fac..D:fac, 0, 3, Exe('COLOR6'))
+AlinearCeldas(A:fac..D:fac,'C')
+SetFont(A:&ComienzoTitulos..I:fac, 2)
+******************************************************************SQL**************************************************************************
+If EqStr(Dialogo.String1,'ARP')
+    let &moneda &monedaLocal
+Else
+    let &moneda &monedaExtr
+Endif 
+SQL.ADD("Select S.Saldo/"~Fstr(&unidad, 0, 0)~" Saldo,S.EnteCustodia as 'Vehiculo',C.Alias1 BookCta,")
+SQL.ADD(" V.Alias5 BookDefault,S.Especie,S.Cuenta,C.TipoCuenta, C.Nombre")
+SQL.ADD(" From "~DBO~".SALDOSDIA S, "~DBO~".CUENTAS C, "~DBO~".VEHICULOS V ")
+SQL.ADD(" Where S.Cuenta = C.Codigo  AND V.Codigo = C.Cliente ")
+SQL.ADD("AND S.NrSaldo=50")
+IF Dialogo.Radio3 = 0
+    let &tipoCuenta 'CUS'
+ELSE
+    let &tipoCuenta 'INV'
+ENDIF
+SQL.ADD(" AND S.Especie ='"~&moneda~"' and C.TipoCuenta ='"~&tipoCuenta~"'")
+SQL.ADD(" AND S.Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+If NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("AND S.EnteCustodia= '"~Dialogo.Vehiculo1~"' ")
+Else
+    SQL.ADD(" AND S.EnteCustodia IN ("~Pipe2Comillas(Val(LS:1))~") ")
+Endif
+If NoVacio(Dialogo.Book1)
+    SQL.ADD("AND C.Alias1= '"~Dialogo.Book1~"' ")
+Endif   
+SQL.ADD(" Order By Vehiculo ")
+
+
+ifa
+let &fila fac
+let &comienzoDatos fac
+let &UFila fac
+
+
+Recorrer SQL
+    If Not EqStr(&Cuenta,FBN['Cuenta'])
+        let &filaActual &fila
+        let &fila &fila+1
+        IF Not Eqstr(fbn('Vehiculo'), Val(VH:1)) y NoVacio(Val(VH:1))
+            ACT(A:&filaActual,'Total Vehiculo: '~ Val(VH:1))
+            ACN(D:&filaActual,Val(TV:1))
+            SetFont(A:&filaActual..D:&filaActual,2)
+            AgregarMarco(A:&filaActual..D:&filaActual,1,0,EXE('COLOR8'))
+            ACN(TV:1,0)
+            let &filaActual &fila
+            let &fila &fila+1
+        Endif
+        If  Not Eqstr(fbn('Vehiculo'), Val(VH:1))
+            ACT(A:&filaActual,'VEHICULO: '~FBN['Vehiculo'])
+            SetFont(A:&filaActual..A:&filaActual,2)
+            ifa
+        Endif
+        ACT(VH:1,FBN['Vehiculo'])
+        let &UFila &filaActual
+
+    
+        ACT(A:&filaActual,FBN['Vehiculo'])
+        ACT(B:&filaActual,FBN['Cuenta'])
+        ACT(C:&filaActual,FBN['Nombre'])
+
+        IF Incluido(fbn('Vehiculo'), &vehiculosDolBillete)
+            let &cotVehiculo &cotDolBillete
+        ELSE
+            let &cotVehiculo &cotDolDivisa
+        ENDIF
+        IF Eqstr(&expresion, Dialogo.String1)
+            let &tc 1
+        ELSE
+            IF Eqstr(&expresion, &monedaLocal)
+                let &tc &cotVehiculo
+            ELSE
+                let &tc 1/&cotVehiculo
+            ENDIF
+        ENDIF
+
+        ACN(D:&filaActual,FBN['Saldo']*&tc)
+    
+
+        ACN(TV:1,Val(TV:1)+Val(D:&filaActual))
+
+    Endif
+    let &NrCuenta FBN['Cuenta']
+Proximo
+
+
+let &filaActual &UFila+2
+ACT(A:&filaActual,'Total vehiculo '~ Val(VH:1))
+ACN(D:&filaActual,Val(TV:1))
+SetFont(A:&filaActual..D:&filaActual,2)
+AgregarMarco(A:&filaActual..D:&filaActual,1,0,EXE('COLOR8'))
+let &filaActual &filaActual+2
+AlinearCeldas(C:&comienzoDatos..C:&UFila,'C')
+
+let &ultimoRegistro &filaActual
+
+ACO(1,10)
+ACO(2,15)
+ACO(3,30)
+ACO(4,10)
+
+SetFilaActual(&ultimoRegistro)
+ACT(A:fac,'Fin del Reporte')
+SetFont(A:fac..A:fac,2)
+ifa
+LimitesVision(E:fac)

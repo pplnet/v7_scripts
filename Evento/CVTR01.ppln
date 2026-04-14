@@ -1,0 +1,363 @@
+creardialogo
+fecha1:'Fecha';1;1;;;;;;;FSys()
+cliente1:'Cliente';;;;;;;;;
+especie1:'Especie';;;;;;Vacio(dialogo.especie1) o (NoVacio(dialogo.especie1) y DesciendeDeEspecie(dialogo.especie1, 'TITULO') y not DesciendeDeEspecie(dialogo.especie1, 'CUPON'));'Debe Ingresar una Especie Valida';NO;;;;;;"Status = 'HAB' and Jerarquia Like '002%' and IsNull(EsCupon,'NO')='NO ' "
+mercado1:'Mercado';;;;;;;;;;;;;;" Codigo='CV' "
+nrtrans1:'Transaccion';;;;;;;;;;;;;;" Mercado1='CV' and ((TipoTr2 in ('DTP','RTP') and CB6=1) or (TipoTr2 = 'DRT'))"
+check1:'Reprocesa';;;;;;;
+lista1:'MERCADOS';1;2;;;;;;;'CV|';;SQLSet("Select Codigo From "~Dbo()~".MERCADOS Where Codigo='CV' ")
+string:'Archivo';2;1;;;;;;;Var('PATHCV')~'FTFAOT'~Fecha(dialogo.fecha1, 'yymmdd')~Copy(Hora(Ahora()), 1, 2)~Copy(Hora(Ahora()), 4, 2)~Copy(Hora(Ahora()), 7, 2)~'.txt';;;;'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!';
+check3:'Procesa';2;2;;NO;NO;;;;1
+findialogo
+if (not ok)
+Cancelar()
+endif
+if (dialogo.check3 = 0)
+HojaVisible(SI)
+endif
+
+Act(bu:1, 'Inmediata|Diferida|')
+Act(bu:2, 'I|D|')
+Act(bv:1, 'NO|SI|')
+Act(bv:2, 'N|S|')
+Act(az:1, BuscarCampo('CLIENTES', 'CodDepCajaValores', 'Codigo', Var('VEHICULODE')))
+
+Acn(z1, 0)
+
+Act(ba:1, '*')
+Act(bb:1, '*')
+
+Acn(dd:1, Fac() + 1)
+Acn(dd:2, Fac())
+
+Acn(ax:3, 1)
+
+Message('Recuperando Movimientos...')
+Sqladd(" Select  T.Especie,         T.Cliente1 ClienteTr, T.Fecha1 FechaLiq, T.NrTrans, ")
+Sqladd("         T.Fecha2,          T.Fecha4,             T.NrOperacionRef1, ")
+Sqladd("         T.TipoTr2,         T.Cliente1,           T.Cantidad1 Cantidad, ")
+Sqladd("         T.Cuenta1,         T.Mercado1,           T.Cuenta2,         T.Mercado2, ")
+Sqladd("         C.NrAgenteBolsa,   T.RB1,                T.Cliente3 ")
+Sqladd("   From "~Dbo()~".TRANSACCIONES2 T, "~Dbo()~".CLIENTES C, "~Dbo()~".ESPECIES E   ")
+Sqladd("  Where T.Cliente1 = C.Codigo ")
+Sqladd("    and T.Especie  = E.Codigo ")
+Sqladd("    and E.Jerarquia like '002%' ")
+Sqladd("    and T.Mercado1 In ('CV' )")
+Sqladd("    and T.Mercado2 In ('CV') ")
+Sqladd("    and ((T.TipoTr2  in ('DTP','RTP') and T.CB6=1) ")
+Sqladd("      or (T.TipoTr2  = 'DRT' ) ) ")
+Sqladd("    and T.Vehiculo1 = '"~Var('VEHICULODE')~"' ")
+Sqladd("    and T.Fecha1    = "~IdxDate2(dialogo.fecha1)~" ")
+if (NoVacio(dialogo.mercado1))
+Sqladd("    and T.Mercado1 In ('CV' )")
+Sqladd("    and T.Mercado2 In ('CV') ")
+endif
+if (NoVacio(dialogo.nrtrans1))
+Sqladd(" and T.NrTrans = '"~dialogo.nrtrans1~"' ")
+endif
+if (NoVacio(dialogo.especie1))
+Sqladd(" and (T.Especie = '"~dialogo.especie1~"' or "~Dbo()~".DesciendeDeEspecie(T.Especie,'"~dialogo.especie1~"') = 1) ")
+endif
+if (NoVacio(dialogo.cliente1))
+Sqladd(" and T.Cliente3 = '"~dialogo.cliente1~"' ")
+endif
+if (dialogo.check1 = 0)
+Sqladd(" and Not Exists(SELECT 1 FROM "~Dbo()~".CVTRANSFERENCIAS C  ")
+Sqladd("                 WHERE C.NrTrans = T.NrTrans ")
+Sqladd("                   AND C.Especie = T.Especie ")
+Sqladd("                   AND C.Status  = '1' ")
+Sqladd("                   AND ABS(IsNull(C.Nominal,0)) >= T.Cantidad1 ) ")
+endif
+Sqladd("Order By 1, 2, 3, 4 ")
+
+Watch(Sqlbatch())
+recorrer sql
+
+
+Scn(dd:2, 1)
+Act(a:fac, Fbn('Especie'))
+Act(b:fac, Fbn('ClienteTr'))
+Acn(j:fac, NrCupon2(Fbn('Especie'), Fbn('FechaLiq')))
+
+Act(ba:1, Fbn('Especie'))
+Act(bb:1, Fbn('ClienteTr'))
+Acd(bd:1, Fbn('FechaLiq'))
+Act(bg:1, Fbn('Mercado1'))
+Acn(bj:1, Val(j:fac))
+Act(br:1, Fbn('NrAgenteBolsa'))
+
+if (Incluido(Fbn()['TipoTr2'], 'DTP|RTP'))
+Act(ca:fac, Fbn('Cuenta1'))
+Act(cb:fac, Fbn('Mercado1'))
+Act(cc:fac, Fbn('Cuenta2'))
+Act(cd:fac, Fbn('Mercado2'))
+if (Incluido(Fbn()['TipoTr2'], 'RTP'))
+Act(ce:fac, 'E')
+Acn(c:fac, -Fbn('Cantidad'))
+Acn(p:fac, -Fbn('Cantidad'))
+else
+Act(ce:fac, 'R')
+Acn(c:fac, Fbn('Cantidad'))
+Acn(p:fac, Fbn('Cantidad'))
+endif
+else
+if (Eqstr(Fbn('Cuenta1'), Var('CTAVEHIC')))
+Act(ca:fac, Fbn('Cuenta1'))
+Act(cb:fac, Fbn('Mercado1'))
+Act(cc:fac, Fbn('Cuenta2'))
+Act(cd:fac, Fbn('Mercado2'))
+Act(ce:fac, 'R')
+Acn(c:fac, Fbn('Cantidad'))
+Acn(p:fac, Fbn('Cantidad'))
+else
+Act(ca:fac, Fbn('Cuenta2'))
+Act(cb:fac, Fbn('Mercado2'))
+Act(cc:fac, Fbn('Cuenta1'))
+Act(cd:fac, Fbn('Mercado1'))
+Act(ce:fac, 'E')
+Acn(c:fac, -Fbn('Cantidad'))
+Acn(p:fac, -Fbn('Cantidad'))
+endif
+endif
+Act(cf:fac, BuscarCampo('CUENTAS', 'Comitente', 'Codigo', Val(cc:fac)))
+Act(cg:fac, Fbn('Cliente3'))
+
+Act(cm:fac, BuscarCampo('CUENTAS', 'NrDepositante', 'Codigo', Val(ca:fac)))
+Act(cs:fac, BuscarCampo('CUENTAS', 'Alias2', 'Codigo', Val(ca:fac)))
+Act(cn:fac, BuscarCampo('CUENTAS', 'NrDepositante', 'Codigo', Val(cc:fac)))
+Act(ct:fac, BuscarCampo('CUENTAS', 'Alias2', 'Codigo', Val(cc:fac)))
+
+Acd(d:fac, Fbn('FechaLiq'))
+Act(e:fac, Fbn('NrTrans'))
+Act(f:fac, Fbn('NrOperacionRef1'))
+Act(g:fac, Fbn('Mercado1'))
+Act(l:fac, BuscarCampo('ESPECIES', 'CodNumCajaValores', 'Codigo', Val(a:fac)))
+Act(u:fac, Fbn('TipoTr2'))
+
+Acn(ch:fac, Fbn('RB1'))
+if (Val(ch:fac) = 1)
+Acn(k:fac, 1)
+else
+Acn(k:fac, 0)
+endif
+Acn(ci:fac, 0)
+Acn(cj:fac, 1)
+
+if (dialogo.check1 = 1)
+Act(o:fac, Query("SELECT Max(CVTransfer) FROM "~Dbo()~".CVTRANSFERENCIAS WHERE NrTrans='"~Fbn()['NrTrans']~"' "))
+endif
+Act(m:fac, Val(cm:fac))
+Act(n:fac, Val(cn:fac))
+
+Acn(q:fac, Val(ax:3))
+Act(r:fac, Fbn('NrAgenteBolsa'))
+Act(s:fac, Val(cs:fac))
+Act(t:fac, Val(ct:fac))
+
+Act(v:fac, Val(ce:fac))
+
+Acn(w:fac, iif (Incluido(Val(g:fac), dialogo.lista1), 1, 0))
+if (Val(w:fac) = 1)
+Acn(i:fac, Val(c:fac))
+endif
+Scn(z1, 1)
+proximo
+
+if (Val(z1) = 0)
+Cancelar('Error, NO se encontraron Vouchers con estas caracteristicas!!!')
+endif
+
+
+recorrer&k 1, 20
+
+Acn(x:3, 0)
+Act(bx:&k, 'SI')
+
+crearlistbox;'Arial,8,';' Transferencias a CV del '~Fecha(dialogo.fecha1)
+'Ok?';w:1..w:fac;SI;;;30;check;RGB(220, 220, 193)
+'Tipo';v:1..v:fac;NO;;;50;string;;RGB(180, 180, 193)
+'Fecha';d:1..d:fac;NO;;;80;fecha;RGB(180, 180, 193)
+'Numero';e:1..e:fac;NO;;;60;string;;RGB(180, 180, 193)
+'Especie';a:1..a:fac;NO;;;70;string;;RGB(180, 180, 193)
+'Especie CV';l:1..l:fac;NO;;;70;string;;RGB(180, 180, 193);BuscarCampo('ESPECIES', 'CodNumCajaValores', 'Codigo', Val(a:flb))
+'Cupon';j:1..j:fac;NO;;;50;numero;'###';RGB(180, 180, 193);
+'V.a Transferir';c:1..c:fac;NO;;;90;numero;'#,###,###,###.####';RGB(240, 190, 150);iif (Eqstr(Val(v:flb), 'TOTAL'), Sum(i:Val(ld:flb)..i:Val(lh:flb)), Val(c:flb))
+'Referencia';f:1..f:fac;NO;;;60;string;;RGB(180, 180, 193)
+'Mercado';g:1..g:fac;NO;;;60;string;;RGB(180, 180, 193)
+'Inm/Dif';k:1..k:fac;SI;;;80;combo;Val(bu:1);RGB(220, 220, 193)
+'Reserva Sal';ci:1..ci:fac;SI;;;80;combo;Val(bv:1);RGB(220, 220, 193)
+'Sol.Matching';cj:1..cj:fac;SI;;;80;combo;Val(bv:1);RGB(220, 220, 193)
+'Cta Vehiculo';ca:1..ca:fac;NO;;;100;string;;RGB(180, 180, 193)
+'Cta';m:1..m:fac;NO;;;50;string;;RGB(180, 180, 193)
+'SubCta';s:1..s:fac;NO;;;50;string;;RGB(180, 180, 193)
+'Contraparte';cg:1..cg:fac;NO;;;100;string;;RGB(180, 180, 193)
+'Cta Contraparte';cc:1..cc:fac;NO;;;100;string;;RGB(180, 180, 193)
+'Cta';n:1..n:fac;NO;;;50;string;;RGB(180, 180, 193)
+'SubCta';t:1..t:fac;NO;;;50;string;;RGB(180, 180, 193)
+'A Transf';i:1..i:fac;NO;;;0;numero;'###,###,###,###.####';RGB(180, 180, 193);iif (Eqstr(Val(v:flb), 'TOTAL'), Sum(i:Val(ld:flb)..i:Val(lh:flb)), iif (Val(w:flb) = 1, Val(c:flb), 0))
+'Nro Transf';o:1..o:fac;NO;;;80;string;;RGB(180, 180, 193)
+finlistbox
+
+
+if (not ok)
+if (dialogo.check3 = 1)
+Cancelar('Transferencias CV, ha sido Cancelado!!!')
+else
+Messagebox('Transferencias CV, ha sido Cancelado!!! - No Procesa')
+Acn(x:3, 1)
+break
+endif
+endif
+
+Acn(x:2, 0)
+recorrer&j 1, Fac()
+
+Message('...Validando ')
+if (Val(w:&j) = 1)
+Acn(aw:&j, 1)
+Scn(ax:1, 1)
+Scn(ax:2, 1)
+else
+Acn(aw:&j, 0)
+endif
+if (Val(ax:2) > 0)
+Acn(aw:&j, 1)
+Acn(ax:2, 0)
+if (Round(Val(i:&j), 2) <> Round(0, 2))
+Scn(x:2, 1)
+endif
+else
+if (Val(ax:2) = 0)
+Acn(aw:&j, 0)
+endif
+endif
+proximo
+
+if (Val(ax:1) < 1)
+if (Messagebox('No hay Transferencias para realizar!'~Chr(10)~Chr(13)~'Continua el Ingreso de datos???', 1, 1) = 2)
+Cancelar('La carga de Transferencias, ha sido Cancelada!!!')
+else
+Act(bx:&k, 'NO')
+endif
+endif
+if (Eqstr(Val(bx:&k), 'SI'))
+break
+endif
+proximo
+
+if (Val(x:3) = 0)
+Acn(az:4, 1)
+
+recorrer&i 1, Val(z1)
+if (Val(aw:&i) = 1)
+if (Val(az:4) = 1)
+Scn(az:4, 1)
+Message('Borrando Archivo Original '~dialogo.string)
+if (dialogo.check3 = 1)
+borrararchivo(dialogo.string)
+endif
+Message('Abriendo Archivo '~dialogo.string)
+if (dialogo.check3 = 1)
+AbrirAscii(dialogo.string, 0)
+if (not ok)
+Cancelar('No se pudo abrir el archivo '~dialogo.string)
+endif
+endif
+Act(az:2, Copy(Hora(Ahora()), 1, 2)~Copy(Hora(Ahora()), 4, 2)~Copy(Hora(Ahora()), 7, 2))
+Act(ah:1, '00Aftfaot    '~Fecha(dialogo.fecha1, 'YYYYMMDD')~Val(az:2)~Pad0(FStr(Val(x:2) + 1, 0, 0), 9))
+if (dialogo.check3 = 1)
+EscribirAscii(Val(ah:1))
+endif
+Act(ah:2, '0'~Fecha(dialogo.fecha1, 'YYMMDD')~'FTFAOT'~Copy(Pad0(Val(az:1), 4), 1, 4))
+if (dialogo.check3 = 1)
+EscribirAscii(Val(ah:2))
+endif
+endif
+
+if (Round(Val(i:&i), 2) <> Round(0, 2))
+Act(az:3, Pad0(FStr(Abs(Val(i:&i)) * 10000000, 0, 0), 18))
+Act(aa:1, "1"~"'")
+Act(k:&i, ItemLista(Val(bu:2), Val(k:&i) + 1))
+Act(aa:1, Val(aa:1)~Val(k:&i)~"'")
+Act(aa:1, Val(aa:1)~Val(v:&i)~"'")
+Act(aa:1, Val(aa:1)~Pad0(Val(m:&i), 4)~"'")
+Act(aa:1, Val(aa:1)~Pad0(Val(s:&i), 9)~"'")
+Act(aa:1, Val(aa:1)~Pad0(Val(l:&i), 5)~Pad(' ', 7)~"'")
+Act(aa:1, Val(aa:1)~Copy(Val(az:3), 1, 11)~'.'~Copy(Val(az:3), 12, 7)~"'")
+Act(aa:1, Val(aa:1)~Pad0(Val(n:&i), 4)~"'")
+Act(aa:1, Val(aa:1)~Pad0(Val(t:&i), 9)~"'")
+Act(aa:1, Val(aa:1)~ItemLista(Val(bv:2), Val(ci:&i) + 1)~"'")
+if (Eqstr(Val(v:&i), 'E'))
+Act(aa:1, Val(aa:1)~"50"~"'")
+else
+Act(aa:1, Val(aa:1)~"00"~"'")
+endif
+if (Eqstr(Val(k:&i), 'I'))
+Act(aa:1, Val(aa:1)~Fecha(dialogo.fecha1, '0000')~"'")
+Act(aa:1, Val(aa:1)~Fecha(dialogo.fecha1, '0000')~"'")
+else
+Act(aa:1, Val(aa:1)~Fecha(dialogo.fecha1, 'DDMM')~"'")
+Act(aa:1, Val(aa:1)~Fecha(dialogo.fecha1, 'DDMM')~"'")
+endif
+Act(aa:1, Val(aa:1)~ItemLista(Val(bv:2), Val(cj:&i) + 1))
+Act(cz:&i, Val(aa:1))
+if (dialogo.check3 = 1)
+EscribirAscii(Val(aa:1))
+
+if (dialogo.check1 = 1)
+Sqladd(" UPDATE "~Dbo()~".CVTRANSFERENCIAS ")
+Sqladd("    SET Status     = '2' ")
+Sqladd("  WHERE NrTrans    = '"~Val(e:&i)~"' ")
+Sqladd("    AND CVTransfer = '"~Val(o:&i)~"' ")
+Sqlnew()
+endif
+
+Act(cy:&i, getnumerador(150))
+Sqladd(" INSERT INTO "~Dbo()~".CVTRANSFERENCIAS ( ")
+Sqladd(" CvTransfer, Fecha,     NrOperacion, Monto, ")
+Sqladd(" Nominal,    Especie,   Cupon,       Cliente, ")
+Sqladd(" CtaOrigen,  CtaDestino,  SubCtaOrigen, SubCtaDestino, ")
+Sqladd(" Mercado,    NrTrans,   NrLinea,     Status ")
+Sqladd(" ) Values ( ")
+Sqladd(" '"~Val(cy:&i)~"', ")
+Sqladd(" "~SQLAhora()~", ")
+Sqladd(" '"~Val(f:&i)~"', ")
+Sqladd(" "~FStr(Val(i:&i), 0, 2)~", ")
+Sqladd(" "~FStr(Val(p:&i), 0, 2)~", ")
+Sqladd(" '"~Val(a:&i)~"', ")
+Sqladd(" "~FStr(Val(j:&i), 3, 0)~", ")
+Sqladd(" '"~Val(cg:&i)~"', ")
+if (Eqstr(Val(v:&i), 'E'))
+Sqladd(" '"~Val(m:&i)~"', ")
+Sqladd(" '"~Val(n:&i)~"', ")
+Sqladd(" '"~Val(s:&i)~"', ")
+Sqladd(" '"~Val(t:&i)~"', ")
+else
+Sqladd(" '"~Val(n:&i)~"', ")
+Sqladd(" '"~Val(m:&i)~"', ")
+Sqladd(" '"~Val(t:&i)~"', ")
+Sqladd(" '"~Val(s:&i)~"', ")
+endif
+Sqladd(" '"~Val(g:&i)~"', ")
+Sqladd(" '"~Val(e:&i)~"', ")
+Sqladd(" "~FStr(Val(q:&i), 1, 0)~", ")
+Sqladd(" '1' ")
+Sqladd(" ) ")
+Sqlnew()
+endif
+endif
+endif
+proximo
+if (dialogo.check3 = 1)
+Sqlexec()
+endif
+Act(ah:3, '99Aftfaot    '~Fecha(dialogo.fecha1, 'YYYYMMDD')~Val(az:2)~Pad0(FStr(Val(x:2) + 1, 0, 0), 9))
+if (dialogo.check3 = 1)
+EscribirAscii(Val(ah:3))
+CerrarAscii()
+Messagebox('El Evento Transferencias CV Finalizo OK!!!')
+else
+Messagebox('El Evento Transferencias CV Finalizo OK!!! - Sin Procesar')
+endif
+endif
+

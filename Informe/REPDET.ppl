@@ -1,0 +1,251 @@
+﻿*TASA
+AgregarBMP(a1,Exe('LOGO'),Exe('ESCALOGO'))
+hojavisible(si)
+(.'DIALOGOPNL'.)
+&DifDias := DifDias(Dialogo.Fecha2,Dialogo.Fecha1,no,no) +1
+*********************************************ANOTACIONES****************************************************************
+*AA Saldos
+    *AA:1  Saldo para MMCREM a ese dia(pesificado)
+    *AA:2  SNC suma de saldos MMCREM
+    *AA:3  Promedio de saldos dividido en la cantidad de fechas que 
+    *AA:4  Pivote para guardar la cantidad para las operaciones de Tipo MMCO/MMCT/MMPF
+    *AA:5  Guardar si el saldo de la consulta SQL para MMCREM y tratarlo si existe o si es negativo 
+*BB P&L
+    *BB:1  SNC suma de P&LMMCREM ese dia(pesificado)
+*CC Fechas para operaciones de Tipo MMCO/MMCT/MMPF
+    *CC:1 FechaDesde
+    *CC:2 FechaHasta     
+*DD Controles de igualdad
+    *DD:1 Valor de FAC donde se guardara el mismo Cliente
+    *DD:2 Valor de FAC donde se guardara el mismo Cliente pero diferente Cuenta
+*****************************************FIN ANOTACIONES****************************************************************
+
+*********************************************ENCABEZADOS****************************************************************
+ACT(a:fac+6,'P&L Tasa de Transferencia- Detalle')
+SetFont(a:fac+6,1)
+(.'ENCABEPNL'.)
+*****************************************FIN ENCABEZADOS****************************************************************
+
+ACT(C:11,'')
+ACN(w3,fac)
+*Tasa
+ACT(A:FAC,'TipoOp')
+ACT(B:FAC,'NroOp')
+ACT(C:FAC,'OPERACIÓN')
+ACT(C:FAC+1,'Fecha Concertacíon')
+ACT(D:FAC,'OPERACIÓN')
+ACT(D:FAC+1,'Fecha Vto')
+ACT(E:FAC,'OPERACIÓN')
+ACT(E:FAC+1,'Plazo')
+ACT(F:FAC,'OPERACIÓN')
+ACT(F:FAC+1,'Moneda Origen')
+ACT(G:FAC,'Fecha Ingreso')
+ACT(G:FAC+1,'Período P&L')
+ACT(H:FAC,'Fecha Vto ')
+ACT(H:FAC+1,'Período P&L')
+ACT(I:FAC,'Dias de Vigencia')
+ACT(I:FAC+1,'del período P&L')
+ACT(J:FAC,'Capital')
+ACT(K:FAC,'Tasa de la Op')
+ACT(L:FAC,'Tasa de')
+ACT(L:FAC+1,'transferencia')
+ACT(M:FAC,'Encaje')
+ACT(N:FAC,'SPREAD')
+ACT(O:FAC,'P&L')
+ACT(P:FAC,'Tipo y nro documento')
+ACT(Q:FAC,'Razón social ')
+ACT(R:FAC,'Cuenta')
+ACT(S:FAC,'Oficial')
+ACT(T:FAC,'Cotizacion A3500')
+AgregarMarco(a:FAC..T:FAC+1,1,0,Exe('COLOR6'))
+SetFont(a:FAC..T:FAC+1,1)
+
+(.'CONSPRETSA'.)
+IFA
+Recorrer SQL
+    &DifDiasMMCREM := &DifDias
+    &TipoOp  := FBN['TipoOp']
+    &TasaOP := Num(FBN['Precio1'])
+    *Tasa de transf 
+    &TasaTransf := Num(FBN['Precio4'])
+    &FilaActual := FAC
+    &SaldosNegativos := 0
+    If Dialogo.Radio2 = 0
+        *PRECIO
+    else
+        *Tasa MMCREM Y MAS DE UN DIA
+        If EqStri(FBN['TipoOp'], 'MMCREM')
+            (.'FECHAP&L'.)
+            Recorrer&i 0, Num(&DifDias2)
+                *Saldo negativo no se tienen en cuenta
+                ACN(AA:5,SQL("SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM "~DBO~".SALDOSREM WHERE Fecha = '"~IDxDate(Val(CC:1)+&i)~"' AND NrOperacion = '"~FBN['NrOperacion']~"') THEN 1 WHEN EXISTS (SELECT 1 FROM "~DBO~".SALDOSREM WHERE Fecha = '"~IDxDate(Val(CC:1)+&i)~"' AND NrOperacion = '"~FBN['NrOperacion']~"' AND SALDO < 0) THEN 2 ELSE 3 END AS CodigoResultado;"))
+                 
+                    
+                IF Val(AA:5) = 2 
+                
+                ELSE 
+                    IF  DifDias(Val(CC:1)+&i,FBN['FechaVto'],no,no) = 0
+                    
+                    ELSE
+                        ACT(A:&FilaActual,FBN['TipoOp'])
+                        *Nr operacion
+                        ACT(B:&FilaActual,FBN['NrOperacion'])
+                        ACLO(B:&FilaActual,VAL(B:FAC))
+                        *Fecha operacion, Usar dialogo?
+                        ACD(C:&FilaActual,FBN['FechaOp'])
+                        ACD(D:&FilaActual,FBN['FechaVto'])
+                        ACN(E:&FilaActual,DifDias(Val(C:FAC),Val(D:FAC),no,no))
+                        ACT(F:&FilaActual,FBN['Especie'])
+                        ACD(G:&FilaActual,Val(CC:1)+&i)
+                        ACD(H:&FilaActual,Val(CC:1)+&i+1)
+                        ACN(I:&FilaActual,1) 
+                        *Tasa de la op
+                        ACN(K:&FilaActual,&TasaOP)
+                        *Tasa de transf 
+                        ACN(L:&FilaActual,&TasaTransf) 
+                        *Encaje
+                        ACN(M:&FilaActual,FBN['PorBonificacion'])
+                        *Spread
+                        ACN(N:&FilaActual,(Val(L:&FilaActual)- Val(K:&FilaActual)))
+                        *Tipo y nr Documento
+                        if EqStri(FBN['CategDepositante'], 'FON')
+                            ACT(P:&FilaActual,FBN['TipoDocum']~" "~FBN['NrDocum'])
+                        else
+                            ACT(P:&FilaActual,FBN['TipoInscripcion']~" "~FBN['CUIT'])
+                        endif
+                        *razón social o apellido y nombre
+                        ACT(Q:&FilaActual,FBN['RazonSocial'])
+                        *Cuenta
+                        ACT(R:&FilaActual,FBN['Cuenta1'])
+                        *Oficial, Es correcto
+                        ACT(S:&FilaActual,FBN['OficialCuenta']~" - "~SQL("SELECT Descripcion FROM "~DBO~".OFICIALESCUENTA WHERE Codigo ='"~FBN['OficialCuenta']~"'"))
+                        
+                        If  Val(AA:5) = 3
+                            If Dialogo.Radio4 =0
+                                ACN(J:&FilaActual,SQL("Select SALDO from "~DBO~".SALDOSREM WHERE Fecha = '"~IDxDate(Val(G:&FilaActual))~"' AND NrOperacion = '"~FBN['NrOperacion']~"'")* CotizacionC(FBN['Especie'],,,,Dialogo.Fecha2,1,,'ARP'))                
+                                ACN(T:&FilaActual,CotizacionC(FBN['Especie'],,,,Dialogo.Fecha2,1,,'ARP'))
+                            else 
+                                ACN(J:&FilaActual,SQL("Select SALDO from "~DBO~".SALDOSREM WHERE Fecha = '"~IDxDate(Val(G:&FilaActual))~"' AND NrOperacion = '"~FBN['NrOperacion']~"'")* CotizacionC(FBN['Especie'],,,,Dialogo.Fecha2,1,,'USD'))
+                                ACN(T:&FilaActual,CotizacionC('USD',,,,Dialogo.Fecha2,1,,FBN['Especie']))                                  
+                            endif
+                        else
+                            If Dialogo.Radio4 =0
+                                ACN(J:&FilaActual,FBN['Cantidad']* CotizacionC(FBN['Especie'],,,,Dialogo.Fecha2,1,,'ARP'))
+                                ACN(T:&FilaActual,CotizacionC(FBN['Especie'],,,,Dialogo.Fecha2,1,,'ARP'))
+                            else 
+                                ACN(J:&FilaActual,FBN['Cantidad']* CotizacionC(FBN['Especie'],,,,Dialogo.Fecha2,1,,'USD'))
+                                ACN(T:&FilaActual,CotizacionC('USD',,,,Dialogo.Fecha2,1,,FBN['Especie']))                                
+                            endif
+                        Endif
+                        *P&L -> ver docu
+                        ACN(O:&FilaActual,((((Val(N:&FilaActual)) / 365) *  Val(J:&FilaActual)) )/100)
+                        &FilaActual := 1 + &FilaActual
+                    Endif
+                ENDIF
+                    
+            Proximo
+            SetFilaActual(&FilaActual-1)
+        Else
+            *TASA 
+            ACT(A:FAC,FBN['TipoOp'])
+            *Nr operacion
+            ACT(B:FAC,FBN['NrOperacion'])
+            ACLO(B:FAC,VAL(B:FAC))
+            *Fecha operacion, Usar dialogo?
+            ACD(C:FAC,FBN['FechaOp'])
+            ACD(D:FAC,FBN['FechaVto'])
+            ACN(E:FAC,DifDias(Val(C:FAC),Val(D:FAC),no,no))
+            ACT(F:FAC,FBN['Especie'])
+            (.'FECHAP&L'.)
+            ACD(G:FAC,Val(CC:1))
+            ACD(H:FAC,Val(CC:2))
+            ACN(I:FAC,&DifDias2)
+            If Dialogo.Radio4 =0
+                ACN(J:FAC,(FBN['Cantidad'])* CotizacionC(FBN['Especie'],,,,Dialogo.Fecha2,1,,'ARP'))
+                ACN(T:FAC,CotizacionC(FBN['Especie'],,,,Dialogo.Fecha2,1,,'ARP'))                
+            else 
+                ACN(J:FAC,(FBN['Cantidad'])* CotizacionC(FBN['Especie'],,,,Dialogo.Fecha2,1,,'USD'))
+                ACN(T:FAC,CotizacionC('USD',,,,Dialogo.Fecha2,1,,FBN['Especie'])) 
+            endif
+            *Dias
+            ACN(K:FAC,&TasaOP)
+            *Tasa de transf 
+            ACN(L:FAC,&TasaTransf)
+            *Encaje
+            ACN(M:FAC,FBN['PorBonificacion'])
+            *Capital 
+            IF  Buscar(&TipoOp, Pipe2Comillas(Var('TIPOOPACTI')))
+                *ACTIVO
+                ACN(N:FAC,(Val(K:FAC)-Val(L:FAC)))
+                ACN(O:FAC,((((Val(N:FAC))/365)*Num(Val(I:FAC))) * Val(J:FAC))/100) 
+            Else 
+                *Pasivo
+                ACN(N:FAC,(Val(L:FAC)- Val(K:FAC)))
+                ACN(O:FAC,((((Val(N:FAC))/365)*Num(Val(I:FAC))) * Val(J:FAC))/100) 
+                
+            EndIf 
+            
+            ACT(P:FAC,FBN['TipoInscripcion']~" "~FBN['CUIT'])
+            *razón social o apellido y nombre
+            ACT(Q:FAC,FBN['RazonSocial'])
+            *Cuenta
+            ACT(R:FAC,FBN['Cuenta3'])
+            *Oficial, Es correcto
+            ACT(S:FAC,FBN['OficialCuenta']~" - "~SQL("SELECT Descripcion FROM "~DBO~".OFICIALESCUENTA WHERE Codigo ='"~FBN['OficialCuenta']~"'"))
+        EndIf
+    EndIf
+Proximo
+*A
+IFA
+IFA
+ACT(A:FAC,"Total")
+
+*J 
+ACN(J:FAC, Sum(J:Val(w3)+1..J:fac))
+*I
+ACN(O:FAC, Sum(O:Val(w3)+1..O:fac))
+SetFont(A:FAC..N:FAC,1)
+AgregarMarco(a:FAC..o:FAC,1,0,Exe('COLOR7'))
+FormatoCeldas(E:16..E:FAC,Exe('F0S'))
+FormatoCeldas(I:16..I:FAC,Exe('F0S'))
+FormatoCeldas(J:16..J:FAC,Exe('F2'))
+FormatoCeldas(K:16..K:FAC,Exe('F7'))
+FormatoCeldas(L:16..L:FAC,Exe('F7'))
+FormatoCeldas(N:16..N:FAC,Exe('F7'))
+FormatoCeldas(O:16..O:FAC,Exe('F2'))
+FormatoCeldas(T:16..T:FAC,Exe('F7'))
+
+AlinearCeldas(A:14..H:fac,'I')
+AlinearCeldas(I:14..O:fac,'D')
+AlinearCeldas(T:14..T:fac,'D')
+ACO(1,12)
+ACO(2,15)
+ACO(3,13)
+ACO(4,8)
+ACO(5,8)
+ACO(6,10)
+ACO(7,10)
+ACO(8,10)
+ACO(9,10)
+*CAPITAL
+ACO(10,16)
+
+ACO(11,12)
+ACO(12,12)
+ACO(13,8)
+*spread
+ACO(14,10)
+ACO(15,12)
+ACO(16,12)
+ACO(17,39)
+ACO(18,16)
+ACO(19,22)
+ACO(20,10)
+RangoTitulo(a:1..t:fac, Val(w1))
+SetPrintFit(3, 80)
+Impresion(1, 2)
+IFA
+IFA
+ACT(a:FAC,'FIN DEL INFORME')
+SetFont(a:FAC, 1)
+LimitesVision(U:FAC+1)

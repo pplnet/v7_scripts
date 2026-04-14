@@ -1,0 +1,117 @@
+creardialogo
+especie1:'Especie';;;;;;NoVacio(dialogo.especie);;;
+entero1:'Ruedas Min';;;;;;
+entero2:'Ruedas Max';;;;;;;;;
+fecha1:'Fecha';;;;;;dialogo.fecha1 <> 0;'Fecha Incorrecta';NO;FSys();
+check1:'Visible';;;;;;;;;
+
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+if (dialogo.check1 = 1)
+HojaVisible(SI)
+endif
+
+Act(ru:1, FStr(dialogo.entero2, 0, 0))
+
+Act(co:1, BuscarCampo('ESPECIES', 'Cotiza', 'Codigo', dialogo.especie1))
+
+Sqladd("  Select Count(*) as Total  From                                                          ")
+Sqladd("  (Select  Top  "~Val(ru:1)~" * from "~Dbo()~".COTIZACIONES where CallPut='CON' And Moneda='"~Val(co:1)~"'   and  Codigo='"~dialogo.especie1~"' and Fecha<='"~IdxDate(dialogo.fecha1)~"' order by Fecha desc) ")
+Sqladd("  as ORDENADA                                                             ")
+Sqladd("                                                            ")
+Sqladd("                                                            ")
+recorrer sql
+Acn(b:2, Fbn()['Total'] - 1)
+proximo
+
+if (Val(b:2) < dialogo.entero1)
+Cancelar('No se encontraron la cantidad minima de ruedas para el Calculo para la Especie '~dialogo.especie1)
+endif
+
+SetFilaActual(6)
+Act(a:fac, 'Fecha')
+Act(b:fac, 'Precio')
+Act(c:fac, 'Diferencial')
+Act(d:fac, 'Ruedas')
+Act(e:fac, 'Probabilidad (1/Ruedas)')
+Act(f:fac, 'Valor Esperado (Diferencial*Probalidad)')
+Act(g:fac, 'Desvio (Diferencial-SUM(ValorEsperado))')
+Act(h:fac, 'Desvio Cuadrado (Desvio al Cuadrado)')
+Act(i:fac, 'Varianza (Probabilidad*Desvio Cuadrado)')
+Sqladd("  Select * From                                                          ")
+Sqladd("  (Select  Top  "~Val(ru:1)~" C.*,T2.TipoTr2 from "~Dbo()~".COTIZACIONES C LEFT JOIN "~Dbo()~".TRANSACCIONES2 T2 ON T2.Especie = C.Codigo and  C.Fecha=T2.Fecha3 and T2.TipoTr2='ACUPON' where C.CallPut='CON'  and  C.Codigo='"~dialogo.especie1~"' and C.Fecha<='"~IdxDate(dialogo.fecha1)~"' and C.Moneda='"~Val(co:1)~"'  order by Fecha desc) ")
+Sqladd("  as ORDENADA order by Fecha                                                            ")
+Sqladd("                                                            ")
+Sqladd("                                                            ")
+recorrer sql
+Acd(a:fac, Fbn()['Fecha'])
+Acn(b:fac, Fbn()['Precio1'])
+if (Val(vr:1) = 1)
+if (Fbn()['Precio1'] = 0)
+Acn(c:fac, 0)
+else
+if (Val(b:fac - 1) = 0)
+Acn(c:fac, 0)
+else
+Acn(c:fac, LogN(Val(b:fac) / Val(b:fac - 1)))
+endif
+endif
+if (Eqstr(Fbn()['TipoTr2'], 'ACUPON'))
+Acn(c:fac, 0)
+endif
+Scn(dd:1, 1)
+Acn(d:fac, Val(dd:1))
+Acn(e:fac, 1 / Val(b:2))
+Acn(f:fac, Val(c:fac) * Val(e:fac))
+Scn(ff:1, Val(f:fac))
+endif
+Acn(vr:1, 1)
+proximo
+recorrer&i 1, Val(dd:1) + 1
+if (Val(vr:2) = 1)
+Acn(g:&i + 6, Val(c:&i + 6) - Val(ff:1))
+Acn(h:&i + 6, Val(g:&i + 6) ** 2)
+Acn(i:&i + 6, Val(h:&i + 6) * Val(e:&i + 6))
+Scn(ii:1, Val(i:&i + 6))
+
+endif
+Acn(vr:2, 1)
+proximo
+FormatoCeldas(ii:1, Exe('F10'))
+Acn(aa:1, Val(ii:1) ** 0.5)
+FormatoCeldas(aa:1, Exe('F10'))
+
+Act(a:1, 'Volatilidad:')
+Act(b:1, 'Ruedas:')
+Acn(a:2, Val(aa:1) * 100)
+
+Sqladd(" DELETE  "~Dbo()~".VOLATILIDADESPECIE ")
+Sqladd(" Where Especie='"~dialogo.especie1~"' and Fecha='"~IdxDate(dialogo.fecha1)~"' and Metodo='AUT' ")
+Sqlnew()
+Sqlexec()
+
+Sqladd(" Insert  "~Dbo()~".VOLATILIDADESPECIE ")
+Sqladd(" (Fecha,Especie,Tipo,Metodo,Modo,FechaActualizacion,Volatilidad,VolatilidadOriginal,RuedasMax,RuedasMin,EspecieRef,Zona,RuedasUtil) ")
+Sqladd("  Values  ")
+Sqladd("  ('"~IdxDate(dialogo.fecha1)~"','"~dialogo.especie1~"','STD','AUT','','"~IdxDate(SQLAhora())~' '~Hora(Ahora())~"',"~Val(a:2)~",0,"~FStr(dialogo.entero2, 0, 0)~","~FStr(dialogo.entero1, 0, 0)~",'',0,"~FStr(Val(b:2), 0, 0)~" ) ")
+Sqlnew()
+Sqlexec()
+
+FormatoCeldas(a:2, Exe('F10'))
+FormatoCeldas(b:4..i:fac, Exe('F10'))
+LimitesVision(i:fac + 2)
+
+
+ACO(1, 8)
+ACO(2, 8)
+ACO(3, 8)
+ACO(4, 8)
+ACO(5, 25)
+ACO(6, 25)
+ACO(7, 25)
+ACO(8, 25)
+ACO(9, 25)

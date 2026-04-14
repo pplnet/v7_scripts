@@ -1,0 +1,224 @@
+creardialogo
+radio1:'Filtra por|Fecha|Cuenta';;;;;;NoVacio(dialogo.radio1);'Debe seleccionar un filtro';NO;0;
+fecha1:'Fecha Desde';3;;;;dialogo.radio1 = 1;NoVacio(dialogo.fecha1) o dialogo.radio1 = 0;'Debe agregar una fecha desde';NO;FSys() - 365;
+fecha2:'Fecha Hasta';4;;;;dialogo.radio1 = 1;(NoVacio(dialogo.fecha2) o dialogo.radio1 = 0) y dialogo.fecha2 > dialogo.fecha1;'Debe agregar una fecha hasta, mayor a fecha desde';NO;FSys();
+fecha3:'Fecha';3;;;;dialogo.radio1 = 0;NoVacio(dialogo.fecha3) o dialogo.radio1 = 1;'Debe indicar una fecha';NO;FSys();
+vehiculo1:'Vehiculo';5;;;;;;;;;;;;;
+cuenta1:'Cuenta';6;;;;dialogo.radio1 = 1;;;;;;;;;iif (NoVacio(dialogo.vehiculo1), "Cliente='"~dialogo.vehiculo1~"' and Estado='HAB'", "Estado='HAB'")
+cliente1:'Banco';6;;;;dialogo.radio1 = 0;;;;;;
+especie1:'Moneda';;;;;dialogo.radio1 = 0;;;;;;;;;"Tipo='MON'"
+radio2:'Totales en|ARP|USD';;;;;dialogo.radio1 = 0;;;;0;;;;;
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+let(&monedalocal, Var('MONELOCA'))
+let(&monedaextr, Var('MONEEXTR'))
+if (dialogo.radio2 = 0)
+let(&monedainforme, &monedalocal)
+else
+let(&monedainforme, &monedaextr)
+endif
+
+
+
+Act(c:1, 'Consulta de Saldos Comitente')
+SetFont(c:1..c:1, 3)
+SetFilaActual(6)
+let(&header, Fac())
+if (dialogo.radio1 = 1)
+ACO(1, 10)
+ACO(2, 10)
+Act(a:fac, 'Fecha Desde:  '~dialogo.fecha1)
+Ifa()
+Act(a:fac, 'Fecha Hasta:  '~dialogo.fecha2)
+Ifa()
+Act(a:fac, 'Cuenta:  '~dialogo.cuenta1)
+Ifa()
+Act(a:fac, 'Vehiculo:  '~BuscarCampo('CUENTAS', 'Cliente', 'Codigo', dialogo.cuenta1))
+else
+ACO(1, 15)
+ACO(2, 15)
+ACO(4, 10)
+Act(a:fac, 'Fecha:  '~dialogo.fecha3)
+Ifa()
+if (NoVacio(dialogo.vehiculo1))
+let(&vh, dialogo.vehiculo1)
+else
+let(&vh, 'Todos')
+endif
+Act(a:fac, 'Vehiculo:  '~&vh)
+Ifa()
+if (NoVacio(dialogo.cliente1))
+let(&cli, dialogo.cliente1)
+else
+let(&cli, 'Todos')
+endif
+Act(a:fac, 'Banco:  '~&cli)
+Ifa()
+if (NoVacio(dialogo.especie1))
+let(&mon, dialogo.especie1)
+else
+let(&mon, 'Todas')
+endif
+Act(a:fac, 'Moneda:  '~&mon)
+Ifa()
+if (dialogo.radio2 = 0)
+let(&monedainforme, 'ARP')
+else
+let(&monedainforme, 'USD')
+endif
+Act(a:fac, 'Totales expresados en: '~&monedainforme)
+Ifa()
+endif
+SetFont(a:&header..a:fac, 2)
+Ifa()
+if (dialogo.radio1 = 0)
+Act(a:fac, 'Vehiculo')
+Act(b:fac, 'Cartera')
+Act(c:fac, 'Banco')
+Act(d:fac, 'Cuenta')
+Act(e:fac, 'Moneda')
+Act(f:fac, 'Saldo')
+SetFont(a:fac..f:fac, 2)
+AgregarMarco(a:fac..f:fac, 1, 0, Exe('COLOR'))
+endif
+Sqladd("Select Fecha,Saldo,Cliente,EnteCustodia Vehiculo,Especie")
+if (dialogo.radio1 = 0)
+Sqladd(",Cuenta")
+endif
+Sqladd("FROM "~Dbo()~".SALDOSDIA S Where")
+if (dialogo.radio1 = 1)
+Sqladd(" S.Cuenta = '"~dialogo.cuenta1~"'")
+Sqladd("and (S.Fecha>='"~IdxDate(dialogo.fecha1)~"' and S.Fecha<='"~IdxDate(dialogo.fecha2)~"'")
+if (Query("Select 1 from "~Dbo()~".SALDOSDIA where Cuenta = '"~dialogo.cuenta1~"' and Fecha>='"~IdxDate(dialogo.fecha1)~"' and Fecha<='"~IdxDate(dialogo.fecha2)~"'") <> 1)
+Sqladd("or Fecha IN (Select MAX(Fecha) FROM "~Dbo()~".SALDOSDIA ")
+Sqladd("                   WHERE  Cuenta  = S.Cuenta  ")
+Sqladd("                   AND Fecha  <= '"~IdxDate(dialogo.fecha2)~"') ")
+endif
+Sqladd(")")
+else
+Sqladd("  S.Fecha  <= '"~IdxDate(dialogo.fecha3)~"' ")
+Sqladd(" AND   S.Fecha IN (SELECT MAX(Fecha) FROM "~Dbo()~".SALDOSDIA ")
+Sqladd("                   WHERE  Cuenta  = S.Cuenta  ")
+Sqladd("                   AND Fecha  <= '"~IdxDate(dialogo.fecha3)~"') ")
+if (NoVacio(dialogo.especie1))
+Sqladd(" and Especie = '"~dialogo.especie1~"'")
+endif
+if (NoVacio(dialogo.cliente1))
+Sqladd(" and Cliente = '"~dialogo.cliente1~"'")
+endif
+if (NoVacio(dialogo.vehiculo1))
+Sqladd(" and EnteCustodia = '"~dialogo.vehiculo1~"'")
+endif
+endif
+Sqladd("and NrSaldo = '50'")
+if (dialogo.radio1 = 1)
+Sqladd("Order By Especie,Fecha")
+else
+Sqladd("Order By Vehiculo,Cliente,Especie")
+endif
+let(&especie, '')
+let(&comienzodatos, Fac())
+recorrer sql
+if (dialogo.radio1 = 1)
+if (not Eqstr(Fbn()['Especie'], &especie) o Vacio(&especie))
+Ifa()
+Act(a:fac, 'Fecha')
+Act(b:fac, 'Moneda')
+Act(c:fac, 'Saldo')
+SetFont(a:fac..c:fac, 2)
+AgregarMarco(a:fac..c:fac, 1, 0, Exe('COLOR'))
+Ifa()
+endif
+Acd(a:fac, Fbn()['Fecha'])
+Act(b:fac, Fbn()['Especie'])
+Acn(c:fac, Fbn()['Saldo'])
+let(&especie, Fbn()['Especie'])
+Acl(b:fac, 'DETSAC', 'fecha1', Val(a:fac), 'cuenta1', dialogo.cuenta1, 'vehiculo1', '', 'cliente1', '', 'especie1', '')
+else
+if (NoVacio(&especie) y (not Eqstr(&especie, Fbn()['Especie']) o (not Eqstr(Fbn()['Cliente'], &banco) y NoVacio(&banco)) o (not Eqstr(Fbn()['Vehiculo'], &vehiculo) y NoVacio(&vehiculo))))
+Act(a:fac, 'Total en '~&especie)
+Acn(f:fac, &totalespecie)
+SetFont(a:fac..f:fac, 2)
+AgregarMarco(a:fac..f:fac, 1, 0, null)
+Ifa()
+Ifa()
+let(&totalespecie, 0)
+endif
+if (not Eqstr(Fbn()['Vehiculo'], &vehiculo))
+if (NoVacio(&vehiculo))
+Act(a:fac, 'Total vehiculo '~&vehiculo~' Expresado en '~&monedainforme)
+Acn(f:fac, &totalvh)
+SetFont(a:fac..f:fac, 2)
+AgregarMarco(a:fac..f:fac, 1, 0, Exe('COLOR6'))
+let(&totalvh, 0)
+endif
+Act(a:fac, 'Vehiculo '~Fbn()['Vehiculo'])
+AgregarMarco(a:fac..f:fac, 1, 0, Exe('COLOR6'))
+SetFont(a:fac..a:fac, 2)
+Ifa()
+endif
+if (not Eqstr(Fbn('Cliente'), &banco) o not Eqstr(Fbn('Vehiculo'), &vehiculo))
+Act(c:fac, Fbn()['Cliente'])
+SetFont(c:fac..c:fac, 2)
+Ifa()
+endif
+Act(d:fac, Fbn()['Cuenta'])
+Act(e:fac, Fbn()['Especie'])
+Acn(f:fac, Fbn()['Saldo'])
+let(&vehiculo, Fbn()['Vehiculo'])
+let(&banco, Fbn()['Cliente'])
+let(&especie, Fbn()['Especie'])
+Acl(f:fac, 'DETSAC', 'fecha1', dialogo.fecha3, 'cuenta1', Val(d:fac), 'vehiculo1', &vehiculo, 'cliente1', &banco, 'especie1', &especie)
+let(&totalespecie, &totalespecie + Fbn()['Saldo'])
+if (not Eqstr(&monedainforme, Fbn()['Especie']))
+let(&saldo, Fbn()['Saldo'] * CotizacionC(Fbn()['Especie'], null, null, null, dialogo.fecha3, 1, SI, &monedainforme))
+else
+let(&saldo, Fbn()['Saldo'])
+endif
+let(&totalvh, &totalvh + &saldo)
+endif
+proximo
+
+if (NoVacio(&especie))
+Ifa()
+Act(a:fac, 'Total en '~&especie)
+Acn(f:fac, &totalespecie)
+SetFont(a:fac..f:fac, 2)
+AgregarMarco(a:fac..f:fac, 1, 0, null)
+Ifa()
+endif
+if (NoVacio(&vehiculo))
+Ifa()
+Act(a:fac, 'Total vehiculo '~&vehiculo~' Expresado en '~&monedainforme)
+Acn(f:fac, &totalvh)
+SetFont(a:fac..f:fac, 2)
+AgregarMarco(a:fac..f:fac, 1, 0, Exe('COLOR6'))
+endif
+
+let(&findatos, Fac())
+Ifa()
+Ifa()
+if (dialogo.radio1 = 0)
+let(&formatocol, 4)
+else
+let(&formatocol, 3)
+endif
+
+FormatoCeldas(&formatocol:&comienzodatos + 1..&formatocol:&findatos, Exe('F2'))
+
+
+Act(a:fac, 'Fin del Reporte')
+SetFont(a:fac..a:fac, 2)
+Ifa()
+LimitesVision(f:fac)
+
+

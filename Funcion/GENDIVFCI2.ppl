@@ -1,0 +1,101 @@
+﻿SetFilaActual(0)
+SQL.ADD(" Select P.CantidadFin, Book From "~DBO~".POSICIONES P ")
+SQL.ADD(" Where P.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD(" AND P.NrSaldo IN ('101') ")
+SQL.ADD(" AND P.Cliente = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND P.Fecha = (Select Max(D.Fecha) From "~DBO~".POSICIONES D ")
+SQL.ADD("                Where D.Cliente = P.Cliente ")
+SQL.ADD("                AND D.Especie = P.Especie ")
+SQL.ADD("                AND D.NrSaldo = P.NrSaldo ")
+SQL.ADD("                AND D.Book = P.Book ")
+SQL.ADD("                AND D.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+
+Recorrer SQL
+  IF fbn('CantidadFin') <> 0
+    ACT(A:fac, fbn('Book') )
+    ACN(B:fac, fbn('CantidadFin') )
+    If Dialogo.Radio1 = 1
+       ACN(C:fac, Dialogo.Cantidad2 )
+       ACN(D:fac, val(b:fac)*val(c:fac)/100 )
+    Else
+       ACN(D:fac, Dialogo.Cantidad1)
+    EndIf
+  ELSE
+    DFA
+  ENDIF
+Proximo
+
+ACN(FC:99,fac)
+If Val(FC:99) =0
+ Cancelar('No hay Posicion para el Fondo Solicitado')
+EndIf
+
+CrearListBox ; 'MS Sans Serif,8,'; 'Dividendos FCI'
+  'Book     '         ;A:1..A:Fac;NO;SI;'Error'; 90; STRING;12
+  'Posicion'          ;B:1..B:fac;NO;SI;'Error';120;NUMERO;'#,###,###,###.##'
+  '%'                 ;C:1..C:Fac;NO;SI;'Error';120;NUMERO;'#####.########'
+  'Monto a Cobrar '   ;D:1..D:fac;NO;SI;'Error';120;NUMERO;'#,###,###,###.##'
+FinListBox
+
+If Not Ok 
+   Cancelar
+Endif
+
+Recorrer&j 1,Fac
+  
+   ****INSERTAR OPERACION
+
+   ACT(ZO:99,UsuarioActivo)
+
+   ACN(ZC:66, BuscarCampo('VEHICULOS','Alias1','Codigo', Dialogo.Vehiculo1) )
+   ACT(Z3,GetNumerador(Val(ZC:66))) 
+   ACT(ZC:77, BuscarCampo('ESPECIES','Issuer','Codigo', Dialogo.Especie1) )
+
+   SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ( ")
+   SQL.ADD(" TipoOp,         CB7,            NrOperacion,   Especie, Book1, ")
+   SQL.ADD(" ContraEspecie,  Cliente1,       Cantidad,      ")
+   SQL.ADD(" TotalNetoCli1, Cuenta2, ")
+   SQL.ADD(" FechaOp,        FechaPago,  FechaCarga ,   FechaCargaSys, ")
+   SQL.ADD(" TipoCambio3, ")
+   SQL.ADD(" Numerador , ")
+   SQL.ADD(" MB3 , MB4, MB2, UsrInput, ")
+   SQL.ADD(" Vehiculo1 ")
+   SQL.ADD(" ) Values ( ")
+   SQL.ADD(" 'DIVIDE', '1', '"~Val(Z3)~"', '"~Dialogo.Especie1~"','"~ val(A:&j)~"' , ")
+   SQL.ADD(" '"~Dialogo.Especie2~"', '"~Val(ZC:77)~"', "~FStr(val(B:&j),0,2)~" , ")
+   SQL.ADD(" "~FStr(Val(D:&j),0,2)~", '"~Dialogo.Cuenta3~"', ")
+   SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', '"~IdxDate(Dialogo.Fecha2)~"', "~SQLAhora~" , '"~IdxDate(FSYS)~"', ")
+   SQL.ADD(" 101, ")
+   SQL.ADD(" "~FStr(Val(ZC:66),0,0)~", ")
+   SQL.ADD(" 0,-1 ,-1 , '"~VAL(ZO:99)~"', ")
+   SQL.ADD(" '"~Dialogo.Vehiculo1~"' ")
+   SQL.ADD(" ) ")
+   SQL.NEW
+   SQL.EXEC
+
+   ***---INSERTAR INSTANCIA 
+
+   SQL.ADD("SELECT * FROM "~DBO~".INSTANCIAS ")
+   SQL.ADD(" Where Tabla = 'OPERACIONES' ")
+   SQL.ADD(" ORDER BY NrInstancia ")
+
+   Recorrer SQL
+      ACN(II:99, FBN['NrInstancia'])
+      SQL.ADD("INSERT INTO "~DBO~".OPERACIONESBITS ( ")
+      SQL.ADD(" NrOperacion, NrBit, Valor ")
+      SQL.ADD(" ) Values ( ")
+      SQL.ADD(" '"~Val(z3)~"', ")
+      SQL.ADD(" "~Fstr(val(II:99),0,0)~", ")
+      SQL.ADD(" '"~IIF(val(II:99) = 9,'1','0')~"' ")
+      SQL.ADD(" ) ")
+      SQL.NEW
+      SQL.EXEC
+   Proximo
+
+   ***---ACTUALIZAR MOVIMIENTOS
+   SQL.ActualizarMovimientos2(Val(Z:3),SI,NO,NO,NO)
+   SQL.EXEC
+   ***---Calculo de Resultados Realizados
+   EjecutarEvento('DIVFON',Radio2=0,NrOperacion1=Val(Z:3),Radio1=0,Fecha1=Dialogo.Fecha2,Check1=1)
+Proximo
+  

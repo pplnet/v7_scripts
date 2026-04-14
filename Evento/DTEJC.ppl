@@ -1,0 +1,246 @@
+﻿*-- DTEJEO: Ejercico de Opciones de Caption
+CrearDialogo
+  Fecha1       : "F Real Ej."               ;1;1;;;;Dialogo.Fecha1>=BuscarCampo('Operaciones','FechaOp2','NrOperacion',Dialogo.NrOperacion1) y Dialogo.Fecha2<=BuscarCampo('Operaciones','FechaEj','NrOperacion',Dialogo.NrOperacion1);'FECHA EJERCICIO REAL TIENE QUE ESTAR EN EL PERIODO DEL CAPTION';NO;Fsys;
+  NrOperacion1 : "Operacion"                ;;;;;;EqStr(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'DTC');'DEBE INGRESAR UNA OPERACION DE TIPO DTC';NO;;;SQLSET("Select NrOperacion from "~DBO~".OPERACIONES where TipoOp = 'DTC' ")
+  Radio3       : "Operacion de|Compra|Venta" ;;;;NO;;;;;;BuscarCampo('Operaciones','MB3','NrOperacion',Dialogo.NrOperacion1)
+  Radio1       : "Opcion|Europea|Americana|Asiatica" ;;;;NO;;Dialogo.Radio1=1 O [Dialogo.Radio1<>1 Y Dialogo.Fecha1=BuscarCampo('Operaciones','FechaEj','NrOperacion',Dialogo.NrOperacion1)];'NO SE PUEDE EJERCER EN ESTA FECHA PARA UNA OPCION EUROPEA O ASIATICA';NO;;BuscarCampo('Operaciones','TipoOpcion','NrOperacion',Dialogo.NrOperacion1)
+  Fecha2       : "F Reset"                  ;;;;;;ESHABIL(Dialogo.Fecha2,BuscarCampo('Operaciones','TablaFeriados1','NrOperacion',Dialogo.NrOperacion1)) y ESHABIL(Dialogo.Fecha2,'ARG');'FECHA RESET NO HABIL EN TABLA SELECCIONADA O EN ARGENTINA';SI;;Dialogo.Fecha4
+  Fecha3       : "Fecha Inicio Caption"     ;2;2;;NO;;;;;;BuscarCampo('Operaciones','FechaOp2','NrOperacion',Dialogo.NrOperacion1)
+  Fecha4       : "Fecha Fin Caption"        ;3;2;;NO;;;;;;BuscarCampo('Operaciones','FechaEj','NrOperacion',Dialogo.NrOperacion1)
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+* Verifico que se encuentre en Back Office o Terminal
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+
+If VAL(X1)<>20 y VAL(X1)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+If Ok
+   * X1: Recupero la Operacion
+   acn(x1,0)
+
+   SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+   SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   SQL.ADD("and (CB8 is Null or CB8='0') ")  
+
+   Recorrer SQL
+
+     * Verifico que la TASA INGRESADA + SPREAD sea < que el strike
+
+
+
+*     IF (Dialogo.Precio2 + FBN['Spread']) >= Dialogo.Precio3
+*        MESSAGEBOX('NO SE PUEDE EJERCER EL CAPTION YA QUE SE SUPERA AL STRIKE')
+*        Break     
+*     ENDIF
+
+
+
+     acn(x1,1)
+
+     ACT (R1, FBN['NrOperacion'])
+     ACN (R2, FBN['Plazo2'])
+     ACT (R3, FBN['Vehiculo1'])
+     ACN (R4, FBN['Cuotas1'])
+
+     Message('Actualizando la Opcion .... ')                  
+
+     *** Marca la operacion como ejercida ***
+     SQL.ADD("Update "~DBO~".OPERACIONES ")
+     SQL.ADD("Set CB8 = '1', ")
+     SQL.ADD("FechaVto2 = '"~IdxDate(Dialogo.Fecha1)~"', ")
+     SQL.ADD("FechaPrecan = '"~IdxDate(Dialogo.Fecha2)~"' ")
+*     SQL.ADD("Precio2   = "~Fstr(Dialogo.Precio2,0,7)~"  ")
+     SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+     SQL.NEW
+     SQL.EXEC
+
+     * Actualizo la Instancia de la Operacion a Supervision
+     (.'MODIINSTAN'.)      
+
+   proximo
+
+   If Val(x1)=0
+      Cancelar('LA OPERACION N# '~Dialogo.NrOperacion1~' YA FUE EJERCIDA')
+   else
+     * caso en el que el caption generea una opcion unico vencimiento
+     if val(R4)=1
+       Message(' ---- Generando opcion ...')
+       SQL.ADD("Select * from "~DBO~".CUOTAS ")
+       SQL.ADD("where NrOperacion = '"~VAL(R1)~"' ")
+       SQL.ADD("and NrCuota = 1 ")  
+         
+       Recorrer SQL
+         ACD (G1, FBN['Fecha3'])
+         ACN (G2, FBN['Plazo1'])
+
+         ACN (G3, FBN['Precio1'])
+         ACN (G4, FBN['Precio3'])
+         ACD (G5, FBN['Fecha1'])
+         ACD (G6, FBN['Fecha2'])
+         ACD (G7, VAL(G5)+VAL(R2))
+         ACT (G8,'DTO')
+         ACD (G10, FBN['Fecha5'])
+         ACD (G11, FBN['Fecha6'])
+       Proximo
+
+       ACT (Z3,GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',val(R3))))
+
+
+       SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+       SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+
+       Recorrer SQL         
+         *** Graba la opcion ****
+         SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ")
+         SQL.ADD("(TipoOp, NrOperacion, ")
+         SQL.ADD(" Especie, Cliente1, Cantidad, ")
+         SQL.ADD(" Precio1, TotalNetoCli1, ContraEspecie, ")
+         SQL.ADD(" FechaOp, FechaVto, FechaPago, Plazo, ")
+         SQL.ADD(" Operador, Vehiculo1, TipoTasa, ")
+         SQL.ADD(" MB2, CB9, MB3, MB1, RB8, ")
+         SQL.ADD(" Observac2, TablaFeriados1, TipoOpcion, ")
+         SQL.ADD(" PrecioEj, PrecioRef, Spread, ")
+         SQL.ADD(" FechaEx1, FechaEx2, Plazo2, ")
+         SQL.ADD(" FechaOp2, FechaEj, ") 
+         SQL.ADD(" TCComCor1, ")
+         SQL.ADD(" TipoCambio2,CB7,RB3, CB8, ") 
+         SQL.ADD(" NrOperacion2) ") 
+         SQL.ADD("Values")
+         SQL.ADD("('DTO', '"~VAL(Z3)~"', ")
+         SQL.ADD(" '"~FBN['Especie']~"', '"~FBN['Cliente1']~"', "~Fstr(FBN['Cantidad'],0,4)~", ")
+         SQL.ADD(" "~Fstr(FBN['TotalAux3'], 2, 2)~", "~Fstr(FBN['TotalNetoCli2'],0,4)~", '"~FBN['ContraEspecie']~"', ")
+         SQL.ADD(" '"~IdxDate(FBN['FechaOp'])~"', '"~IdxDate(FBN['FechaVto'])~"', '"~IdxDate(VAL(G1))~"', "~Fstr(VAL(G2),2,0)~", ")
+         SQL.ADD(" '"~FBN['Operador']~"', '"~FBN['Vehiculo1']~"', '"~FBN['TipoTasa']~"', ")
+         SQL.ADD(" '"~FBN['MB2']~"', '"~FBN['CB9']~"', '"~FBN['MB3']~"', '"~FBN['MB1']~"', '"~FBN['RB8']~"',")
+         SQL.ADD(" '"~FBN['Observac2']~"', '"~FBN['TablaFeriados1']~"','"~FBN['RB7']~"', ")
+         SQL.ADD(" "~Fstr(VAL(G3),0,7)~", '"~FBN['PrecioRef']~"', "~Fstr(VAL(G4),0,7)~", ")
+         SQL.ADD(" '"~IdxDate(VAL(G10))~"', '"~IdxDate(VAL(G11))~"', "~Fstr(FBN['Plazo2'],2,0)~", ")
+         SQL.ADD(" '"~IdxDate(VAL(G5))~"', '"~IdxDate(VAL(G6))~"', ")
+         SQL.ADD(" "~FBN['TCComCor1']~", ")
+         SQL.ADD(" "~FBN['TipoCambio2']~",'"~FBN['CB7']~"','1', '0', ")
+         SQL.ADD(" '"~Dialogo.NrOperacion1~"') ")
+         SQL.NEW
+         SQL.EXEC
+
+         *** Actualiza al Caption respecto a la opcion relacionada ***
+         SQL.ADD("Update "~DBO~".OPERACIONES ")
+         SQL.ADD("Set NrOperacion2 = '"~val(Z3)~"' ")
+         SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+         SQL.NEW
+         SQL.EXEC
+
+**** actualiza movimientos por la nueva operacion
+SQL.ActualizarMovimientos(val(z3),SI)
+SQL.EXEC
+
+
+               * Alta de Instancias Z3: Nro.Operacion
+               (.'ALTAINSTAN'.)
+
+
+         MESSAGEBOX('LA NUEVA DTO SE ENCUENTRA EN SUPERVISION ESPECIAL MOF CON CODIGO '~VAL(Z3))
+
+       PROXIMO
+     else
+*****************************************************
+       ACT (Z3,GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',val(R3))))
+
+       SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+       SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+       Recorrer SQL
+
+       acn (G22, fbn['Cuotas1'])
+       acd (G20, SQL("Select Fecha1 from "~DBO~".CUOTAS WHERE NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota=1 "))
+       acd (G21, SQL("Select Fecha2 from "~DBO~".CUOTAS WHERE NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(val(g22),2,0)~" "))
+       acn (G22, val(g21)-val(g20)+1)
+
+
+         *** Graba la opcion ****
+         SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ")
+         SQL.ADD("(TipoOp, NrOperacion, ")
+         SQL.ADD(" FechaOp, MB2, CB9, Vehiculo1, ")
+         SQL.ADD(" Operador, MB3, MB1, TipoOpcion, ")
+         SQL.ADD(" RB8, Cliente1, Observac2, Especie, ")
+         SQL.ADD(" TipoTasa, PrecioRef, FechaOp2, Plazo, ")
+         SQL.ADD(" FechaEj, Cantidad, Plazo2, TablaFeriados1, ")
+         SQL.ADD(" Cuotas1, Precio1, ContraEspecie, TCComCor1, ")
+         SQL.ADD(" TotalNetoCli1, FechaVto, TipoCambio2, CB7,RB3, ")
+         SQL.ADD(" NrOperacion2 ) ")
+         SQL.ADD("Values")
+         SQL.ADD("('DTOM', '"~VAL(Z3)~"', ")
+         SQL.ADD(" '"~IdxDate(FBN['FechaOp'])~"','"~FBN['MB2']~"','"~FBN['CB9']~"','"~FBN['Vehiculo1']~"', ")
+         SQL.ADD(" '"~FBN['Operador']~"', '"~FBN['MB3']~"', '"~FBN['MB1']~"','"~FBN['RB7']~"', ")
+         SQL.ADD(" '"~FBN['RB8']~"','"~FBN['Cliente1']~"','"~FBN['Observac2']~"','"~FBN['Especie']~"', ")
+         SQL.ADD(" '"~FBN['TipoTasa']~"','"~FBN['PrecioRef']~"','"~IdxDate(val(g20))~"', "~Fstr(val(g22),2,0)~", ")
+         SQL.ADD(" '"~IdxDate(val(g21))~"',"~Fstr(FBN['Cantidad'],0,4)~","~Fstr(FBN['Plazo2'],2,0)~",'"~FBN['TablaFeriados1']~"', ")
+         SQL.ADD(" "~Fstr(FBN['Cuotas1'],2,0)~","~Fstr(FBN['TotalAux3'], 2, 2)~",'"~FBN['ContraEspecie']~"',"~FBN['TCComCor1']~", ")
+         SQL.ADD(" "~Fstr(FBN['TotalNetoCli2'],0,4)~",'"~IdxDate(FBN['FechaEx1'])~"',"~FBN['TipoCambio2']~",'"~FBN['CB7']~"','1', ")
+         SQL.ADD(" '"~Dialogo.NrOperacion1~"' ) ")
+         SQL.NEW
+         SQL.EXEC
+
+
+**** actualiza movimientos por la nueva operacion
+SQL.ActualizarMovimientos(val(z3),SI)
+SQL.EXEC
+
+               * Alta de Instancias Z3: Nro.Operacion
+               (.'ALTAINSTAN'.)
+
+
+         MESSAGEBOX('LA NUEVA DTOM SE ENCUENTRA EN SUPERVISION ESPECIAL MOF CON CODIGO '~VAL(Z3))
+
+       PROXIMO
+
+
+        SQL.ADD("INSERT INTO "~DBO~".CUOTAS ")
+        SQL.ADD(" ( NrOperacion,NrCuota,Cliente1,Cliente2,")
+        SQL.ADD(" Vehiculo1,Vehiculo2,Especie1,Especie2,Especie3,Especie4,Check1,Check2,Check3,")
+        SQL.ADD(" Check4,Check5,Check6,Check7,Check8,Check9,Check10,Radio1,Radio2,Radio3,Radio4,")
+        SQL.ADD(" Radio5,Radio6,Radio7,Radio8,Radio9,Radio10,Fecha1,Fecha2,Fecha3,Fecha4,Fecha5,")
+        SQL.ADD(" Fecha6,Fecha7,Fecha8,Fecha9,Fecha10,Mercado1,Mercado2,Plazo1,Plazo2,Plazo3,Plazo4,")
+        SQL.ADD(" Cantidad1,Cantidad2,Cantidad3,Cantidad4,Precio1,Precio2,Precio3,Precio4,Total1,Total2,")
+        SQL.ADD(" Total3,Total4,Total5,Total6,Total7,Total8,Tasa1,Tasa2,PrecioRef1,PrecioRef2,Cantidad5,")
+        SQL.ADD(" Cantidad6,Precio5,Precio6,Precio7,Precio8,Tasa3,Total9,Cotizacion1,Cotizacion2,Tasa4,Tasa5,Cantidad7,")
+        SQL.ADD(" Cantidad8,Coeficiente,Cantidad1Ori,Cantidad2Ori,Cantidad3Ori,ResultadoIndice) ")
+
+        SQL.ADD(" SELECT '"~VAL(z3)~"' As NrOperacion,NrCuota,Cliente1,Cliente2,")
+        SQL.ADD(" Vehiculo1,Vehiculo2,Especie1,Especie2,Especie3,Especie4,Check1,Check2,Check3,")
+        SQL.ADD(" Check4,Check5,Check6,Check7,Check8,Check9,Check10,Radio1,Radio2,Radio3,Radio4,")
+        SQL.ADD(" Radio5,Radio6,Radio7,Radio8,Radio9,Radio10,Fecha1,Fecha2,Fecha3,Fecha4,Fecha5,")
+        SQL.ADD(" Fecha6,Fecha7,Fecha8,Fecha9,Fecha10,Mercado1,Mercado2,Plazo1,Plazo2,Plazo3,Plazo4,")
+        SQL.ADD(" Cantidad1,Cantidad2,Cantidad3,Cantidad4,Precio1,0 As Precio2,Precio3,Precio4,Total1,Total2,")
+        SQL.ADD(" Total3,Total4,Total5,Total6,Total7,Total8,Tasa1,Tasa2,PrecioRef1,PrecioRef2,Cantidad5,")
+        SQL.ADD(" Cantidad6,Precio5,Precio6,Precio7,Precio8,Tasa3,Total9,Cotizacion1,Cotizacion2,Tasa4,Tasa5,Cantidad7,")
+        SQL.ADD(" Cantidad8,Coeficiente,Cantidad1Ori,Cantidad2Ori,Cantidad3Ori,ResultadoIndice  ")
+        SQL.ADD(" FROM "~DBO~".CUOTAS WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+        SQL.NEW
+        SQL.EXEC
+
+        *** Actualiza al Caption respecto a la opcion relacionada ***
+        SQL.ADD("Update "~DBO~".OPERACIONES ")
+        SQL.ADD("Set NrOperacion2 = '"~val(Z3)~"' ")
+        SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+        SQL.NEW
+        SQL.EXEC
+
+
+**********************************************
+     endif
+   endif
+endif

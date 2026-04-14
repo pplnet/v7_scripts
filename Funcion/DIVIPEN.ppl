@@ -1,0 +1,391 @@
+﻿SQL.ADD(" SELECT DISTINCT M.Cliente, M.Especie, M.Mercado, M.Cuenta, M.EnteCustodia, ")
+SQL.ADD("        M.NrSaldo, M.Cantidad, C.RazonSocial, E.ISIN, E.TamanioLote, M.CallPut, M.FechaEj, ")
+SQL.ADD("        M.PrecioEj, C.RecibePreaviso, C.CondicionGan, C.CondicionIVA, C.Res3125, ")
+SQL.ADD("        C.TipoCliente, E.InteresesC, E.Cotiza, E.TasaIntVigente, E.FechaCambioTasa, ")
+SQL.ADD("        E.Valor10, E.TasaIntAnterior, E.Valor9, E.DiasAnio, E.DiasMes ")
+SQL.ADD(" FROM   "~DBO~".MOVPENDIENTES M, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E, "~DBO~".TRANSACCIONES2 T")
+SQL.ADD(" WHERE  M.Cliente = C.Codigo ")
+SQL.ADD("        AND   M.Especie = E.Codigo ")
+SQL.ADD("        AND   M.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD("        AND   M.FechaMov<='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("        AND   M.NrOperacion <> '"~val(y1)~"' ")
+SQL.ADD("        AND   M.NrOperacion = T.NrTrans ")
+SQL.ADD("        AND   T.TipoTr2 <> '"~Val(dz7)~"' ")
+SQL.ADD("        AND   M.NrSaldo >= "~FStr(Val(sl1),0,0)~" ")
+if NoVacio(Dialogo.ListaTabla1) 
+   SQL.ADD("        AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+endif
+IF NOVACIO(Dialogo.Mercado1)
+   SQL.ADD("     AND   M.Mercado = '"~Dialogo.Mercado1~"'")
+ENDIF
+SQL.ADD(" ORDER BY M.Cliente, M.NrSaldo, M.Especie, M.CallPut, M.FechaEj, M.PrecioEj, M.EnteCustodia, M.Mercado, M.Cuenta")
+
+SetFilaActual(fac+10)
+
+ACN(z:1, 0)
+ACN(w2, fac)
+ACT(em1,IIF(EqStr(Dialogo.Especie2,Val(dz1)),Val(dz2),Val(dz1)))
+
+Recorrer SQL
+
+  Message(fbn('Cliente')~' '~Dialogo.Especie1~' '~fbn('CallPut')~' '~fbn('FechaEj')~' '~fbn('PrecioEj')~' '~FBN['Mercado']~' '~FBN['EnteCustodia']~' '~FBN['Cuenta']~' '~Fstr(fbn('NrSaldo'),0,2) )
+
+  ACN(z:2,fbn('Cantidad'))
+
+  If Not EqStr(fbn('Cliente'),val(cl1)) o Not EqStr(FBN['Mercado'],Val(me1))
+     *- Recupero las cuentas de custodia y de efectivo
+     ACT(cl1,fbn('Cliente'))
+     ACT(me1,FBN['Mercado'])
+     ACT(hl1,'') 
+     ACT(jl1,'') 
+
+     * Cuenta Custodia
+     SQL.ADD("SELECT Codigo, Especies FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(cl1)~"' AND TipoCuenta IN ('CUS') AND Estado='HAB' AND Mercado = '"~Val(me1)~"' ")
+     Recorrer SQL
+        dfa
+        If Vacio(val(jl1)) y [Dialogo.Check2=1 o Dialogo.Check3=1] y [Incluido(Dialogo.Especie4,FBN['Especies']) o Incluido('TITULO',FBN['Especies']) o Incluido('PRIVA',FBN['Especies']) ]
+           ACT(jl1,FBN['Codigo'])
+        EndIf       
+     Proximo
+
+     * Cuenta Moneda
+     SQL.ADD("SELECT Codigo, Especies FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(cl1)~"' AND TipoCuenta IN ('CC', 'CA') AND Estado='HAB' ")
+     Recorrer SQL
+        dfa
+        ***If Vacio(val(hl1)) y Dialogo.Check1=1 y [Incluido(Dialogo.Especie2,FBN['Especies']) o Incluido(val(em1),FBN['Especies'])] 
+        If Vacio(val(hl1)) y Dialogo.Check1=1 y Incluido(Dialogo.Especie2,FBN['Especies']) 
+           ACT(hl1,FBN['Codigo'])
+        EndIf
+     Proximo
+
+     If Vacio(val(hl1)) y Dialogo.Check1=1
+        ACT(hl1,Val(dz3))
+     EndIf
+  EndIf
+
+  IF Val(z:2)<>0
+     ACT(a:fac, fbn('Especie'))
+     ACT(b:fac, Dialogo.Especie4)
+     ACN(c:fac, fbn('NrSaldo'))
+     ACT(d:fac, fbn('EnteCustodia'))
+     ACT(e:fac, fbn('Mercado'))
+     ACT(f:fac, fbn('RazonSocial'))
+     ACT(g:fac, fbn('Cliente'))
+     ACT(m:fac, FBN['RecibePreaviso'])
+
+     ACT(bl:fac, FBN['TipoCliente'])
+     ACT(bm:fac, FBN['CondicionGan'])
+     ACT(bn:fac, FBN['CondicionIVA'])
+     ACT(bo:fac, FBN['Res3125'])
+     ACT(bp:fac, FBN['InteresesC'])
+     ACT(bq:fac, FBN['Cotiza'])
+     ACN(br:fac, FBN['TasaIntVigente'])
+     ACD(bs:fac, FBN['FechaCambioTasa'])
+     ACT(bt:fac, FBN['Valor10'])
+     ACN(bu:fac, FBN['TasaIntAnterior'])
+     ACT(bv:fac, FBN['Valor9'])
+     ACT(bw:fac, FBN['DiasAnio'])
+     ACT(bx:fac, FBN['DiasMes'])
+
+     IF Dialogo.Check2=1 o Dialogo.Check3=1 
+        *- Cuenta de Custodia
+        ACT(j:fac, FBN['Cuenta'])
+
+        If Vacio(val(j:fac)) 
+           ACT(j:fac,val(jl1))
+        EndIf
+     EndIf
+
+     ACT(h:fac,val(hl1))
+     ACN(i:fac, Val(z:2))
+
+     *- k: % Efectivo l: Monto Efectivo n: % Acciones s: Monto Acciones
+     If Dialogo.Check1 = 1  y val(c:fac)<>(val(sl1)+100)
+        *- Efectivo
+        ACN(k:fac, Dialogo.Precio1)
+        ACN(l:fac, Val(z:2)*Dialogo.Precio1/100)
+     EndIf
+
+     If Dialogo.Check2 = 1
+        *- Acciones 
+        ACN(n:fac, Dialogo.Precio2)        
+        acn(s:fac, Val(z:2)*(Dialogo.Precio2/100))
+     Endif
+
+     If Dialogo.Check3 = 1
+        *- Revaluo
+        acn(w:fac, Val(z:2)*(Dialogo.Precio9/100))
+     Endif
+
+     *-- Saldo + Dividendo en Acciones + Revaluo
+     acn(ba:fac, Val(z:2)+val(s:fac)+val(w:fac))
+
+     If Dialogo.Check4 = 1
+        *-- Canje 
+        acn(bb:fac, val(ba:fac)*(Dialogo.Precio10/100))
+        acn(ba:fac, val(bb:fac))
+     EndIf
+
+     *-- Calcula la fraccion 
+     acn(bc:fac, val(ba:fac)/Dialogo.Precio3)
+     acn(bd:fac, Trunc2(val(ba:fac)/Dialogo.Precio3))
+     acn(be:fac, (Val(bc:fac)-Val(bd:fac))*Dialogo.Precio3)
+     acn(bf:fac, val(be:fac))
+     acn(bg:fac, Round(val(bf:fac)*Dialogo.Precio4/0.01)*0.01)
+
+     *- Monto en Efectivo 
+     If Dialogo.Check1 = 1 y val(c:fac)<>(val(sl1)+100)
+        acn(l:fac, val(l:fac) + val(bg:fac) )
+     EndIf
+
+     *- Monto en Acciones
+     acn(s:fac, (val(s:fac)+val(w:fac)+val(bb:fac))-val(be:fac))
+ 
+     ACT(o:fac, fbn('CallPut'))
+     ACD(p:fac, fbn('FechaEj'))
+     ACN(q:fac, fbn('PrecioEj'))
+     ACN(r:fac, fbn('TamanioLote'))
+
+     IF Not Incluido(Val(o:fac), 'CAL|PUT')
+        ACN(r:fac, 1)
+     ENDIF
+
+     ACN(x:fac, 1)
+     SCN(z:1, 1)
+  ELSE
+     DFA
+  ENDIF
+
+Proximo
+
+IF Val(z:1)<=0
+   MessageBox('No hay MOVIMIENTOS PENDIENTES para Pagos de Dividendos para la Accion Solicitada.')
+Else
+   Message('Cantidad de Registros '~Fstr(val(z1),0,0) )
+
+   scn(w2,1)
+
+*   'Cta. Ef'       ;h:Val(w2)..h:Val(w1);SI;VACIO(Val(h:FLB)) o [CLIENTECUENTA(Val(g:FLB),Val(h:FLB)) y [ESPECIECUENTA(Dialogo.Especie2,Val(h:FLB)) y Dialogo.Check1=1]];'Cuenta Efectivo Invalida';100;TABLA;'Cuentas';'Codigo';'Codigo;Nombre;Numero;Especies';"Cliente = '"~Val(g:FLB)~"' AND Estado = 'HAB' AND TipoCuenta IN ("~Pipe2Comillas(Val(z:3))~") "
+*   'Cta. Cus'      ;j:Val(w2)..j:Val(w1);SI;VACIO(Val(j:FLB)) o [CLIENTECUENTA(Val(g:FLB),Val(j:FLB)) y [ESPECIECUENTA(Val(a:FLB),Val(j:FLB)) y Dialogo.Check2=1]];'Cuenta Custodia Invalida';100;TABLA;'Cuentas';'Codigo';'Codigo;Nombre;Numero;Especies';"Cliente = '"~Val(g:FLB)~"' AND Estado = 'HAB' AND TipoCuenta IN ("~Pipe2Comillas(Val(z:3))~") "
+
+   CrearListBox ; 'Arial,8,';'Dividendos De Movimientos Pendientes '
+      'Ok?'           ;x:Val(w2)..x:fac;SI;;;30;CHECK
+      'Especie'       ;a:Val(w2)..a:fac;NO;;;50;TABLA;'Especies';'Codigo';'Codigo;Nombre';
+      'EspDivAcc'     ;b:Val(w2)..b:fac;NO;;;50;TABLA;'Especies';'Codigo';'Codigo;Nombre';
+      'Nr.Saldo'      ;c:Val(w2)..c:fac;NO;;;40;NUMERO;'###'
+      'EnteCustodia'  ;d:Val(w2)..d:fac;NO;;;70;STRING
+      'Casa Cust.'       ;e:Val(w2)..e:fac;NO;;;50;STRING
+      'Cliente'       ;f:Val(w2)..f:fac;NO;;;90;STRING
+      'Saldo'         ;i:Val(w2)..i:fac;NO;;;80;NUMERO;'##,###,###.##'
+      'Cta. Ef'       ;h:Val(w2)..h:fac;NO;;;100;TABLA;'Cuentas';'Codigo';'Codigo;Nombre;Numero;Especies';"Cliente = '"~Val(g:FLB)~"' AND Estado = 'HAB' AND TipoCuenta IN ("~Pipe2Comillas(Val(z:3))~") "
+      '% Efec'        ;k:Val(w2)..k:fac;NO;;;40;NUMERO;'###.##'
+      'Monto Efec'    ;l:Val(w2)..l:fac;NO;;;90;NUMERO;'##,###,###.##'
+      'Cta. Cus'      ;j:Val(w2)..j:fac;NO;;;100;TABLA;'Cuentas';'Codigo';'Codigo;Nombre;Numero;Especies';"Cliente = '"~Val(g:FLB)~"' AND Estado = 'HAB' AND TipoCuenta IN ("~Pipe2Comillas(Val(z:3))~") "
+      '% Accion'      ;n:Val(w2)..n:fac;NO;;;40;NUMERO;'###.##'
+      'Cant.Acc.'     ;s:Val(w2)..s:fac;NO;;;90;NUMERO;'##,###,###.##'
+      'Lote'          ;r:Val(w2)..r:fac;NO;;;40;NUMERO;'###,###'
+      'CallPut'       ;o:Val(w2)..o:fac;NO;;;40;STRING
+      'FechaEj'       ;p:Val(w2)..p:fac;NO;;;50;FECHA
+      'PrecioEj'      ;q:Val(w2)..q:fac;NO;;;60;NUMERO;'###.########'
+   FinListBox
+
+   IF NOT OK
+      Cancelar
+   ENDIF
+
+   acn(fa1,fac)
+
+   SetFilaActual(fac+2)
+
+   If Vacio(val(y1))
+      ACT(y:1, GetNumerador(1))   
+
+      Message('Inserto una sola transaccion Nro. '~Val(y:1)~' .... ')       
+      (."GENDIVIDE".)
+   EndIf
+
+
+   Recorrer&i val(w2),val(fa1)
+
+     IF Val(x:&i)=1
+        *------------------Generar Transaccion--------------------*
+        IF Eqstr(Val(o:&i), 'CAL')
+           ACT(y:3,'0')
+        ELSE
+           IF Eqstr(Val(o:&i), 'PUT')
+              ACT(y:3,'1')
+           ELSE
+             ACT(y:3,'')
+           ENDIF
+        ENDIF
+        IF Dialogo.Check1=1
+           ACT(y:4,'0')
+        ELSE
+           ACT(y:4,'1')
+        ENDIF
+
+        acn(sa:3,0 )
+        acn(sa:4,0 )
+        acn(ci:2,0 )
+        acn(ci:1,0 )
+        act(ch:1,' ' )
+
+        *- Solamente para Saldo 101 
+        If val(c:&i) <> val(sl1)+100
+           *---Calculo de Comisiones por DIVIDENDOS
+           *- cl1: Cliente ce1: Especie Original del Saldo *- cv1: Vehiculo cy1: Mercado ct1: Tipo de Comision
+           *- da: CallPut db: FechaEj dc: PrecioEj de:Cuenta sa2: Ultimo nro. de cuota para insertar comisiones
+           *- sa3: Acumulador de Comisiones
+           act(cl1, Val(g:&i))
+           act(cv1, Val(d:&i))
+           act(cy1, Val(e:&i))
+           act(da1, Val(o:&i))
+           acd(db1, Val(p:&i))
+           acn(dc1, Val(q:&i))
+           act(de1, Val(h:&i))
+           act(ce1, Dialogo.Especie1)
+           acn(sa2,0)
+
+           IF Dialogo.Check1=1
+              act(ct1, Val(dz8))
+              acn(cj:1,ABS(Val(l:&i)))
+ 
+              * estas dos celdas son para la funcion CACOMISION hg:Saldo, hs:NrSaldo
+              ACN(hg:1, Val(i:&i))
+              ACN(hs:1, Val(c:&i))
+
+              *- Funcion que recupera los montos de comisiones
+              (.'CACOMISION'.)
+
+              acn(sa:4,val(ck:1))
+
+              *- Comision de efectivo
+              IF Dialogo.Check1=1
+                 ***ACN(ZA0, CotizacionC(VAR('MONELOCA'), , , , FSys, 1, SI,Dialogo.Especie2))
+                 ***acn(sa:4,val(ck:1)*Val(za0))
+                 ACT(ch1, Val(h:&i))
+              ENDIF
+
+              ****- sa4: Monto en Efectivo Separado del de Acciones
+              ***acn(sa:4,val(sa:3))
+           ENDIF
+ 
+           IF Dialogo.Check2=1
+              act(ct1, Val(dz9))
+  
+              *- ci:3 Cotizacion
+              acn(ci:3,Cotizacion(val(ce1),,,,Dialogo.Fecha2,1))
+   
+              *- Resolucion 1585
+              ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', Val(ce1)))
+
+              If Not EqStr(Val(bp:&i),'DIR' ) 
+                 *** calcula precio sucio ***
+                 act(ca:fac,val(ce1))
+                 acd(ck:fac,Dialogo.Fecha2)
+
+                 ACT(aa0, Val(bp:&i))
+                 ACN(ab0, Val(br:&i))
+                 ACD(ac0, Val(bs:&i))
+                 ACT(ad0, Val(bt:&i))
+                 ACN(ae0, Val(bu:&i))
+                 ACT(af0, Val(bv:&i))
+                 ACT(ag0, Val(bw:&i))
+                 ACT(ah0, Val(bx:&i))
+
+                 ***(."SUCIO".)
+                 (."SUCIO2".)
+        
+                 IF Incluido(Val(al4), '1585')
+                    acn(ci:3,(val(ci:3)+(val(cj:fac)*Val(ci:3)))*val(ci:fac) ) 
+                 Else
+                    acn(ci:3,(val(ci:3)+val(cj:fac))*val(ci:fac) ) 
+                 Endif                   
+              EndIf
+
+              *- cj:1 Monto
+              acn(cj:1,ABS(Val(s:&i)))
+
+              * estas dos celdas son para la funcion CACOMISION hg:Saldo, hs:NrSaldo
+              ACN(hg:1, Val(i:&i))
+              ACN(hs:1, Val(c:&i))
+
+              *- Funcion que recupera los montos de comisiones
+              (.'CACOMISION'.)
+
+              acn(sa:5,val(ck:1))
+
+              *- Comision de efectivo
+              IF Dialogo.Check1=1
+                 ***ACN(ZA0, CotizacionC(VAR('MONELOCA'), , , , FSys, 1, SI,Dialogo.Especie2))
+                 ***acn(sa:5,val(ck:1)*Val(za0))
+                 ACT(ch1, Val(h:&i))
+              ENDIF
+           EndIf
+
+           *- ci2: Calculo del % del Iva sobre comisiones
+           acn(ci:2, Num(Val(dz10))+IIF(EQSTR(Val(bn:&i),'NOI'),Num(Val(dz11)),IIF(EQSTR(Val(bo:&i),'SI'),Num(Val(dz12)),0)))
+
+           *- ci:1 Monto de Iva
+           *acn(ci:1,ROUND(Abs(val(sa:3))*Val(ci:2)/100,2)  )
+
+           *- iva para comision div efectivo
+           acn(iv:1,ROUND(Abs(val(sa:4))*Val(ci:2)/100,2)  )
+
+           *- iva para comision div acciones
+           acn(iv:2,ROUND(Abs(val(sa:5))*Val(ci:2)/100,2)  )
+
+           IF Dialogo.Check1 = 1
+              * Si el monto del div.efv. es menor que la comis+iva, no le cobro de 
+              * comision lo mismo que le pago, y de ahi discrimino el iva
+
+              IF ABS(Val(l:&i)) < Val(sa4)+Val(iv1)
+                 ACN(sa4, ROUND(val(l:&i)/(1+Val(ci2)/100),2))
+                 ACN(iv1, Val(l:&i)-Val(sa4))
+              ENDIF
+           ENDIF
+
+           IF Dialogo.Check1=1 y Dialogo.Check2=1
+              ***ACN(ww1, Val(l:&i)-Val(sa4)-Val(sa5)-Val(iv1)-Val(iv2))
+              ***If Val(ww1) < 0
+              ***   acn(sa3, Val(sa5)) 
+              ***   acn(ci1, Val(iv2))
+              ***Else
+              acn(sa3, Val(sa4)+Val(sa5))
+              acn(ci1, Val(iv1)+Val(iv2))
+              ***Endif
+           Else
+              IF Dialogo.Check1=1
+                 acn(sa3, Val(sa4)) 
+                 acn(ci1, Val(iv1))
+              else
+                 acn(sa3, Val(sa5)) 
+                 acn(ci1, Val(iv2))
+              Endif
+           Endif
+
+           **** si la comision es mayor que lo que pago
+           ***IF Val(sa3)>Val(l:&i)
+           ***   ACN(sa3, Val(l:&i))
+           ***ENDIF
+
+           ****- ci2: Calculo del % del Iva sobre comisiones
+           ***acn(ci:2, Num(Val(dz10))+IIF(EQSTR(Val(bn:&i),'NOI'),Num(Val(dz11)),IIF(EQSTR(Val(bo:&i),'SI'),Num(Val(dz12)),0)))
+
+           ****- ci:1 Monto de Iva
+           ***acn(ci:1,ROUND(Abs(val(sa:3))*Val(ci:2)/100,2)  )
+        EndIf
+
+        * Actualizo los Movimientos de Posicion fi1: Fila a Insertar
+        ACN(fi1,&i)
+
+        Message('Generando Movimientos Nro. '~Val(y:1)~' .... ')       
+        (.'DIVIINSMOV'.)
+  
+        IF EqStr(Val(m:&i),'SI')
+           LinkearHoja('EMICAR', 1, Especie1=Dialogo.Especie1, Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha2, Mercado1=Dialogo.Mercado1, Check1=Dialogo.Check1,Precio1=Dialogo.Precio1,Especie2=Dialogo.Especie2,Check2=Dialogo.Check2,Precio2=Dialogo.Precio2,Cliente1 = Val(g:&i), Check10 = 0)
+        ENDIF
+     ENDIF
+
+   Proximo
+EndIf

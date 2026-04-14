@@ -131,18 +131,158 @@
     }
 
     // ========================================================================
+    // Searchable Combo - Convierte <select> en combos filtrables
+    // ========================================================================
+    function initSearchableCombos() {
+        var exclude = [];
+        $('.tic-app select.form-control').each(function () {
+            var sel = $(this);
+            var id = sel.attr('id') || '';
+            if (exclude.indexOf(id) >= 0) return;
+            wrapSelectAsCombo(sel);
+        });
+    }
+
+    function wrapSelectAsCombo(sel) {
+        var id = sel.attr('id') || '';
+        sel.hide();
+        var wrapper = $('<div class="tic-combo"></div>');
+        var input = $('<input type="text" class="tic-combo-input" autocomplete="off" placeholder="Seleccione...">');
+        var arrow = $('<span class="tic-combo-arrow">&#9660;</span>');
+        var dropdown = $('<div class="tic-combo-dropdown"></div>');
+        if (id) input.attr('data-combo-for', id);
+        sel.after(wrapper);
+        wrapper.append(input).append(arrow).append(dropdown);
+
+        syncInputFromSelect(sel, input);
+        sel.on('change.combo', function () { syncInputFromSelect(sel, input); });
+        var observer = new MutationObserver(function () { syncInputFromSelect(sel, input); });
+        observer.observe(sel[0], { childList: true });
+
+        input.on('focus', function () {
+            buildDropdownOptions(sel, dropdown, input.val());
+            wrapper.addClass('open');
+            input.select();
+        });
+        input.on('input', function () {
+            buildDropdownOptions(sel, dropdown, input.val());
+            if (!wrapper.hasClass('open')) wrapper.addClass('open');
+        });
+        input.on('keydown', function (e) {
+            var items = dropdown.find('.tic-combo-option');
+            var highlighted = dropdown.find('.highlighted');
+            var idx = items.index(highlighted);
+            if (e.keyCode === 40) { e.preventDefault(); if (idx < items.length - 1) { items.removeClass('highlighted'); $(items[idx + 1]).addClass('highlighted'); scrollIntoViewIfNeeded(items[idx + 1], dropdown[0]); } }
+            else if (e.keyCode === 38) { e.preventDefault(); if (idx > 0) { items.removeClass('highlighted'); $(items[idx - 1]).addClass('highlighted'); scrollIntoViewIfNeeded(items[idx - 1], dropdown[0]); } }
+            else if (e.keyCode === 13) { e.preventDefault(); if (highlighted.length) { selectOption(sel, input, wrapper, highlighted.attr('data-value'), highlighted.text()); } }
+            else if (e.keyCode === 27) { closeCombo(sel, input, wrapper); }
+            else if (e.keyCode === 9) { closeCombo(sel, input, wrapper); }
+        });
+        dropdown.on('mousedown', '.tic-combo-option', function (e) {
+            e.preventDefault();
+            var opt = $(this);
+            selectOption(sel, input, wrapper, opt.attr('data-value'), opt.text());
+        });
+        input.on('blur', function () { setTimeout(function () { closeCombo(sel, input, wrapper); }, 150); });
+    }
+
+    function buildDropdownOptions(sel, dropdown, filter) {
+        dropdown.empty();
+        var q = (filter || '').toLowerCase();
+        var hasResults = false;
+        sel.find('option').each(function () {
+            var opt = $(this);
+            var val = opt.val();
+            var text = opt.text();
+            if (!val && text.indexOf('Seleccione') >= 0) return;
+            if (q && text.toLowerCase().indexOf(q) < 0 && val.toLowerCase().indexOf(q) < 0) return;
+            var div = $('<div class="tic-combo-option"></div>').attr('data-value', val).text(text);
+            if (val === sel.val()) div.addClass('selected');
+            if (!hasResults) div.addClass('highlighted');
+            dropdown.append(div);
+            hasResults = true;
+        });
+        if (!hasResults) dropdown.append('<div class="tic-combo-empty">Sin resultados</div>');
+    }
+
+    function selectOption(sel, input, wrapper, value, text) {
+        sel.val(value).trigger('change');
+        input.val(text);
+        wrapper.removeClass('open');
+    }
+
+    function closeCombo(sel, input, wrapper) {
+        wrapper.removeClass('open');
+        var currentVal = sel.val();
+        if (currentVal) { input.val(sel.find('option:selected').text()); }
+        else { input.val(''); }
+    }
+
+    function syncInputFromSelect(sel, input) {
+        var val = sel.val();
+        if (val) { input.val(sel.find('option:selected').text()); }
+        else { input.val(''); }
+    }
+
+    function scrollIntoViewIfNeeded(el, container) {
+        var elTop = el.offsetTop;
+        var elBottom = elTop + el.offsetHeight;
+        var cTop = container.scrollTop;
+        var cBottom = cTop + container.clientHeight;
+        if (elTop < cTop) container.scrollTop = elTop;
+        else if (elBottom > cBottom) container.scrollTop = elBottom - container.clientHeight;
+    }
+
+    // ========================================================================
+    // Formateo numérico con separador de miles (punto)
+    // ========================================================================
+    function formatNumericInput(input) {
+        input.on('input', function () {
+            var el = this;
+            var cursorPos = el.selectionStart;
+            var raw = el.value.replace(/\./g, '').replace(/,/g, '.');
+            raw = raw.replace(/[^0-9.\-]/g, '');
+            if (raw === '' || raw === '-') return;
+            var parts = raw.split('.');
+            var intPart = parts[0];
+            var decPart = parts.length > 1 ? parts[1] : null;
+            var sign = '';
+            if (intPart.charAt(0) === '-') { sign = '-'; intPart = intPart.substring(1); }
+            intPart = intPart.replace(/^0+(?=\d)/, '');
+            var formatted = sign + intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            if (decPart !== null) formatted += ',' + decPart;
+            var prevLen = el.value.length;
+            el.value = formatted;
+            var diff = el.value.length - prevLen;
+            el.setSelectionRange(cursorPos + diff, cursorPos + diff);
+        });
+    }
+
+    function parseNumericInput(selector) {
+        var val = $(selector).val() || '';
+        return parseFloat(val.replace(/\./g, '').replace(/,/g, '.')) || 0;
+    }
+
+    // ========================================================================
     // Init
     // ========================================================================
     function init() {
         console.log('TIC: Inicializando formulario completo...');
 
-        var today = new Date().toISOString().split('T')[0];
-        $('#fechaOp').val(today);
+        var defaultDate = '2026-04-08';
+        $('#fechaOp').val(defaultDate);
+
+        // Default Plazo: 24hs
+        $('input[name="rb5"][value="1"]').prop('checked', true);
 
         setupEventListeners();
         loadAllCombos();
         loadOperador();
+        setTimeout(initSearchableCombos, 500);
         setupWebSocketConnection();
+
+        // Calcular FechaLiq con plazo default 24hs
+        onPlazoChange();
     }
 
     function loadAllCombos() {
@@ -176,7 +316,7 @@
         bound.execPPL("GetEspecies()").then(function(result) {
             especies = transformData(result);
             var sel = $('#especie');
-            sel.find('option:not(:first)').remove();
+            sel.empty().append('<option value="">Seleccione...</option>');
             especies.forEach(function(e) {
                 sel.append('<option value="' + e.Codigo + '" data-tipo="' + (e.Tipo || '') + '" data-moneda="' + (e.MonedaEmision || e.Moneda || '') + '">' +
                     e.Codigo + ' - ' + (e.Nombre || '') + '</option>');
@@ -204,6 +344,8 @@
             vehiculos.forEach(function(v) {
                 sel.append('<option value="' + v.Codigo + '">' + v.Codigo + ' - ' + (v.Descripcion || '') + '</option>');
             });
+            // Default Vehiculo: STD
+            if (sel.find('option[value="STD"]').length > 0) sel.val('STD');
         }).catch(function(err) { console.error('Error cargando vehiculos:', err); });
     }
 
@@ -215,6 +357,8 @@
             mercadosNeg.forEach(function(m) {
                 sel.append('<option value="' + m.Codigo + '">' + m.Codigo + ' - ' + (m.Descripcion || '') + '</option>');
             });
+            // Default Merc. Negociacion: A3
+            if (sel.find('option[value="A3"]').length > 0) sel.val('A3');
         }).catch(function(err) { console.error('Error cargando mercados neg:', err); });
     }
 
@@ -228,6 +372,10 @@
                     sel.append('<option value="' + m.Codigo + '">' + m.Codigo + ' - ' + (m.Descripcion || '') + '</option>');
                 });
             });
+            // Default Merc. Liq. Esp.: MC
+            if ($('#mercado').find('option[value="MC"]').length > 0) $('#mercado').val('MC');
+            // Default Merc. Liq. Mon.: BCRA
+            if ($('#mercado2').find('option[value="BCRA"]').length > 0) $('#mercado2').val('BCRA');
         }).catch(function(err) { console.error('Error cargando mercados liq:', err); });
     }
 
@@ -239,6 +387,8 @@
             books.forEach(function(b) {
                 sel.append('<option value="' + b.Codigo + '">' + b.Codigo + '</option>');
             });
+            // Default Book: TITULOS
+            if (sel.find('option[value="TITULOS"]').length > 0) sel.val('TITULOS');
         }).catch(function(err) { console.error('Error cargando books:', err); });
     }
 
@@ -281,6 +431,10 @@
     // Event listeners
     // ========================================================================
     function setupEventListeners() {
+        // Formateo numérico con separador de miles
+        formatNumericInput($('#cantidad'));
+        formatNumericInput($('#precio1'));
+
         // Calculation triggers
         $('#cantidad, #precio1').on('input', recalcularMontos);
         $('input[name="rb5"]').on('change', onPlazoChange);
@@ -344,7 +498,6 @@
                 if (plazo === '0' || plazo === 0) rb5Val = '0';
                 else if (plazo === '24' || plazo === 24) rb5Val = '1';
                 else if (plazo === '48' || plazo === 48) rb5Val = '2';
-                else rb5Val = '3';
                 $('input[name="rb5"][value="' + rb5Val + '"]').prop('checked', true);
                 onPlazoChange();
             }
@@ -388,33 +541,63 @@
         onPlazoChange();
     }
 
+    function addCalendarDays(dateStr, days) {
+        var d = new Date(dateStr + 'T00:00:00');
+        d.setDate(d.getDate() + days);
+        return d.toISOString().split('T')[0];
+    }
+
+    /** Normaliza cualquier formato de fecha a yyyy-MM-dd para input[type=date] */
+    function toDateInputFormat(val) {
+        if (!val) return '';
+        var s = String(val).trim();
+        // Ya es yyyy-MM-dd
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        // dd/MM/yyyy o dd/MM/yyyy HH:mm:ss
+        var m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        if (m) return m[3] + '-' + m[2] + '-' + m[1];
+        // yyyy-MM-ddTHH:mm:ss (ISO con tiempo)
+        if (s.length > 10 && s.charAt(4) === '-') return s.substring(0, 10);
+        // Intentar parsear con Date
+        var d = new Date(s);
+        if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+        return '';
+    }
+
+    function setFechaLiq(fv) {
+        var normalized = toDateInputFormat(fv);
+        if (normalized) {
+            $('#fechaVto').val(normalized);
+            $('#fechaPago').val(normalized);
+        }
+    }
+
     function onPlazoChange() {
         var rb5 = parseInt($('input[name="rb5"]:checked').val()) || 0;
         var plazo = 0;
         if (rb5 === 0) plazo = 0;
         else if (rb5 === 1) plazo = 24;
         else if (rb5 === 2) plazo = 48;
-        else if (rb5 === 3) plazo = 72;
-        else plazo = rb5 * 24;
 
         $('#plazo').val(plazo);
 
-        // Calculate FechaVto via PPL
         var fechaOp = $('#fechaOp').val();
-        var feriados = $('#tablaFeriados1').val() || 'ARG';
-        if (fechaOp) {
-            bound.execPPL('CalcFechaVto("' + fechaOp + '", ' + (plazo / 24) + ', "' + feriados + '")').then(function(result) {
-                var fv = extractScalar(result);
-                if (fv) {
-                    // Convert from various date formats to YYYY-MM-DD
-                    if (fv.length === 10 && fv.indexOf('/') > -1) {
-                        var parts = fv.split('/');
-                        fv = parts[2] + '-' + parts[1] + '-' + parts[0];
-                    }
-                    $('#fechaVto').val(fv);
-                    $('#fechaPago').val(fv);
-                }
-            }).catch(function() {});
+        if (!fechaOp) return;
+
+        var diasHabiles = plazo / 24;
+
+        // Calcular inmediatamente con dias corridos
+        setFechaLiq(addCalendarDays(fechaOp, diasHabiles));
+
+        // Si el backend está disponible, recalcular con dias habiles + feriados
+        if (typeof bound !== 'undefined' && bound.execPPL) {
+            var feriados = $('#tablaFeriados1').val() || 'ARG';
+            try {
+                bound.execPPL('CalcFechaVto("' + fechaOp + '", ' + diasHabiles + ', "' + feriados + '")').then(function(result) {
+                    var fv = extractScalar(result);
+                    if (fv) setFechaLiq(fv);
+                }).catch(function() {});
+            } catch(e) {}
         }
     }
 
@@ -427,8 +610,8 @@
     // Recalculate computed fields
     // ========================================================================
     function recalcularMontos() {
-        var cantidad = parseFloat($('#cantidad').val()) || 0;
-        var precio = parseFloat($('#precio1').val()) || 0;
+        var cantidad = parseNumericInput('#cantidad');
+        var precio = parseNumericInput('#precio1');
         var bruto = cantidad * precio;
 
         $('#totalBrutoCli1').val(bruto > 0 ? formatMoney(bruto) : '');
@@ -440,12 +623,12 @@
     }
 
     function recalcularTodo() {
-        var especie = $('#especie').val();
+        var especie = $('#especie').val() || '';
         var contraespecie = $('#contraespecie').val();
         var cliente = $('#clienteId').val();
         var vehiculo = $('#vehiculo1').val();
-        var cantidad = parseFloat($('#cantidad').val()) || 0;
-        var precio = parseFloat($('#precio1').val()) || 0;
+        var cantidad = parseNumericInput('#cantidad');
+        var precio = parseNumericInput('#precio1');
         var fechaOp = $('#fechaOp').val();
         var fechaVto = $('#fechaVto').val();
         var mercado4 = $('#mercado4').val();
@@ -559,11 +742,7 @@
     // ========================================================================
     function limpiarFormulario() {
         $('#form-op')[0].reset();
-        var today = new Date().toISOString().split('T')[0];
-        $('#fechaOp').val(today);
-        $('#fechaVto').val('');
-        $('#fechaPago').val('');
-
+        $('#fechaOp').val('2026-04-08');
         // Reset calculated fields
         $('#totalBrutoCli1, #vcan33, #vcan22, #totalNetoCli1, #totalIntereses, #totalComisiones').val('');
         $('#tipoCambio, #totalAux8').val('');
@@ -574,7 +753,7 @@
         $('#parkMoneda, #parkTipoDol, #parkJuris, #parkAfecta, #ddjjCodigo, #ddjjRequiere').val('');
 
         // Reset radio buttons to defaults
-        $('input[name="rb5"][value="0"]').prop('checked', true);
+        $('input[name="rb5"][value="1"]').prop('checked', true);  // 24hs default
         $('input[name="formaLiquidacion1"][value="0"]').prop('checked', true);
         $('input[name="formaLiquidacion2"][value="1"]').prop('checked', true);
         $('input[name="rb6"][value="1"]').prop('checked', true);
@@ -596,6 +775,9 @@
         $('#tipoTicket').val('0');
 
         loadOperador();
+
+        // Recalcular Fecha Liq con plazo default
+        onPlazoChange();
     }
 
     // ========================================================================
@@ -614,8 +796,8 @@
         var especie = $('#especie').val() || '';
         var contraEspecie = $('#contraespecie').val() || '';
         var cliente1 = $('#clienteId').val() || '';
-        var cantidad = parseFloat($('#cantidad').val()) || 0;
-        var precio1 = parseFloat($('#precio1').val()) || 0;
+        var cantidad = parseNumericInput('#cantidad');
+        var precio1 = parseNumericInput('#precio1');
         var corredor = $('#corredor').val() || '';
         var mercado4 = $('#mercado4').val() || '';
         var plataforma = $('#plataforma').val() || '';

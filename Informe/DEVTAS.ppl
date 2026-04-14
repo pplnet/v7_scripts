@@ -1,0 +1,420 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+   Fecha1  : 'Desde'          ;1;1;;;;;;;;Fsys
+   Lista1  : 'Vehiculo'       ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))   
+   Radio1  : 'Orden|NrOp|FConc|TipoOp|TasaSwap' ;;;;;;;;;0;;
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+
+* Veo solamente los tipos seleccionados
+SetListaClaves(2)
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+   ACT(zz6,Dialogo.Lista1)
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+   EndIf
+EndIf
+
+CrearFont(1,"Arial,9,")
+CrearFont(2,"Arial,9,B")
+CrearFont(3,"Arial,8,")
+CrearFont(4,"Arial,8,B")
+CrearFont(5,"Arial,10,B")
+
+ACT(g:1,'Fecha : '~Var('FECHASYS'))
+SetFont(c:1..c:1,5)
+
+SetFilaActual(2)
+
+ACT(a:FAC, "Devengado de Operaciones de Cobertura de Tasa")
+SetFont(a:fac..a:fac,5)
+
+SetFilaActual(3)
+
+ACT(a:FAC+1, 'Fecha : '~Dialogo.Fecha1)
+
+if Vacio(val(zz6))
+   ACT(a:FAC+2, 'Empresa : Todas ')
+else
+   ACT(a:FAC+2, 'Empresa : '~val(zz6))
+endif
+
+If Dialogo.Radio1=0
+   ACT(a:FAC+3, 'Ordenado por Nro. Operacion ')
+EndIf
+If Dialogo.Radio1=1
+   ACT(a:FAC+3, 'Ordenado por Fecha de Concertacion ')
+EndIf
+If Dialogo.Radio1=2
+   ACT(a:FAC+3, 'Ordenado por Tipo de Operacion ')
+EndIf
+If Dialogo.Radio1=3
+   ACT(a:FAC+3, 'Ordenado por Tasa de Swap')
+EndIf
+
+
+SetFont(a:fac..n:FAC+4,4)
+SetFilaActual(6)
+
+*--- Selecciono los Movimientos de Opciones Unicos Vencimiento
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,O.FechaEx1 Fe1,")
+SQL.ADD("O.FechaEx2 Fe2,0 TasaV,0 SpreadV,0 TasaC,0 SpreadC, O.Cliente1,")
+SQL.ADD("O.MB3,M.Cantidad,M.Especie,M.Cliente,M.NrMov,M.Leyenda,O.Cantidad Notional,O.TotalNetoCli1 Prima,O.Cuotas1 ")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".MOVPENDIENTES M where ")
+SQL.ADD("O.FechaEx1<='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaEx2>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("M.NrSaldo=1 and ")
+SQL.ADD("M.NrOperacion=O.NrOperacion and O.TipoOp In ('DTO','DTOV') and ")
+SQL.ADD("M.Leyenda Not Like '%Exchange%' ") 
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+SQL.ADD("Union All ")
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,O.FechaEx1 Fe1,")
+SQL.ADD("O.FechaEx2 Fe2,0 TasaV,0 SpreadV, 0 TasaC,0 SpreadC, O.Cliente1,")
+SQL.ADD("O.MB3,M.Cantidad,M.Especie,M.Cliente,M.NrMov,M.Leyenda,O.Cantidad Notional,O.TotalNetoCli1 Prima,O.Cuotas1 ")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M where ")
+SQL.ADD("O.FechaEx1<='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaEx2>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("M.NrSaldo=1 and ")
+SQL.ADD("M.NrOperacion=O.NrOperacion and O.TipoOp In ('DTO','DTOV') and ")
+SQL.ADD("(M.Leyenda Like '%Opciones%' or (M.Leyenda Like '%Resultado%' and M.FechaEje>='"~IdxDate(Dialogo.Fecha1)~"')) ")
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+*- Ajustes
+SQL.ADD("Union All ")
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,O.FechaEx1 Fe1,")
+SQL.ADD("O.FechaEx2 Fe2,0 TasaV,0 SpreadV, 0 TasaC,0 SpreadC, O.Cliente1,")
+SQL.ADD("O.MB3,-M.Cantidad,M.Especie,O.Cliente1 ,0 NrMov,'' Leyenda,O.Cantidad Notional,O.TotalNetoCli1 Prima,O.Cuotas1 ") 
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONES M where M.NrOperacion2=O.NrOperacion and ")
+SQL.ADD("O.FechaEx1<='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaEx2>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("O.TipoOp In ('DTO','DTOV') and ")
+SQL.ADD("M.FechaOp='"~IdxDate(Dialogo.Fecha1)~"' and M.TipoOp In ('AJUDEV') ")
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+SQL.ADD("Union All ")
+*--- Selecciono los Movimientos de Opciones Swaps Unicos Vencimiento
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,O.FechaOp2 Fe1,")
+SQL.ADD("O.FechaEj Fe2,O.Precio3 TasaV, O.Spread SpreadV,O.TotalGanancias TasaC, O.TotalNetoCli2 SpreadC, ")
+SQL.ADD("O.Cliente1,O.MB3,M.Cantidad,M.Especie,M.Cliente,M.NrMov,M.Leyenda,O.Cantidad Notional,O.TotalNetoCli1 Prima,O.Cuotas1 ")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".MOVPENDIENTES M where ")
+SQL.ADD("O.FechaOp2<='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaEj>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("M.NrSaldo=1 and ")
+SQL.ADD("M.NrOperacion=O.NrOperacion and O.TipoOp In ('DTSFF','DTSFV','DTSVV','DTSFVV') and ")
+SQL.ADD("M.Leyenda Not Like '%Exchange%' and ") 
+SQL.ADD("M.Leyenda Not Like '%Contraparte%' ") 
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+*- Ajustes
+SQL.ADD("Union All ")
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,O.FechaOp2 Fe1,")
+SQL.ADD("O.FechaEj Fe2,O.Precio3 TasaV, O.Spread SpreadV,O.TotalGanancias TasaC, O.TotalNetoCli2 SpreadC, ")
+SQL.ADD("O.Cliente1,O.MB3,-M.Cantidad,M.Especie,O.Cliente1,0 NrMov,'' Leyenda,O.Cantidad Notional,O.TotalNetoCli1 Prima,O.Cuotas1 ")
+SQL.ADD("from "~DBO~".OPERACIONES O,"~DBO~".OPERACIONES M where ")
+SQL.ADD("O.FechaOp2<='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaEj>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("M.NrOperacion2=O.NrOperacion and O.TipoOp In ('DTSFF','DTSFV','DTSVV','DTSFVV') and ")
+SQL.ADD("M.FechaOp='"~IdxDate(Dialogo.Fecha1)~"' and M.TipoOp In ('AJUDEV')  ")
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+SQL.ADD("Union All ")
+*------ Multiples Vencimiento 
+*--- Selecciono los Movimientos de Opciones 
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,C.Fecha5 Fe1,")
+SQL.ADD("C.Fecha6 Fe2,0 TasaV,0 SpreadV, 0 TasaC, 0 SpreadC, O.Cliente1,O.MB3,M.Cantidad,M.Especie,M.Cliente,M.NrMov,M.Leyenda,C.Cantidad1 Notional,O.TotalNetoCli1 Prima,O.Cuotas1  ")
+SQL.ADD("from "~DBO~".OPERACIONES O,"~DBO~".MOVPENDIENTES M,"~DBO~".CUOTAS C  where ")
+SQL.ADD("C.Fecha5<='"~IdxDate(Dialogo.Fecha1)~"' and C.Fecha6>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("M.NrSaldo=1 and ")
+SQL.ADD("M.NrOperacion=O.NrOperacion and C.NrOperacion=O.NrOperacion and ")
+SQL.ADD("((M.FechaMov=O.FechaVto and M.Leyenda Like '%Opciones%') or C.Fecha3=M.FechaMov) and ")
+SQL.ADD("O.TipoOp In ('DTOM','DTOMV') and ")
+SQL.ADD("M.Leyenda Not Like '%Exchange%'  ") 
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+SQL.ADD("Union All ")
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,C.Fecha5 Fe1,")
+SQL.ADD("C.Fecha6 Fe2,0 TasaV,0 SpreadV, 0 TasaC,0 SpreadC, O.Cliente1,O.MB3,M.Cantidad,M.Especie,M.Cliente,M.NrMov,M.Leyenda,C.Cantidad1 Notional,O.TotalNetoCli1 Prima,O.Cuotas1  ")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M,"~DBO~".CUOTAS C   where ")
+SQL.ADD("C.Fecha5<='"~IdxDate(Dialogo.Fecha1)~"' and C.Fecha6>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("M.NrOperacion=O.NrOperacion and C.NrOperacion=O.NrOperacion and ")
+SQL.ADD("((M.FechaMov=O.FechaVto and M.Leyenda Like '%Opciones%') or C.Fecha3=M.FechaMov) and ")
+SQL.ADD("O.TipoOp In ('DTOM','DTOMV') and ")
+SQL.ADD("M.NrSaldo=1 and ")
+SQL.ADD("(M.Leyenda Like '%Opciones%' or (M.Leyenda Like '%Resultado%' and M.FechaEje>='"~IdxDate(Dialogo.Fecha1)~"')) ")
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+*--- Ajustes 
+SQL.ADD("Union All ")
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,C.Fecha5 Fe1,")
+SQL.ADD("C.Fecha6 Fe2,0 TasaV,0 SpreadV, 0 TasaC,0 SpreadC, O.Cliente1,O.MB3,-M.Cantidad,M.Especie,O.Cliente1,0 NrMov,'Ajuste' Leyenda,C.Cantidad1 Notional,O.TotalNetoCli1 Prima,O.Cuotas1  ")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONES M,"~DBO~".CUOTAS C where ")
+SQL.ADD("C.Fecha5<='"~IdxDate(Dialogo.Fecha1)~"' and C.Fecha6>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("M.NrOperacion2=O.NrOperacion and C.NrOperacion=O.NrOperacion and ")
+SQL.ADD("M.FechaOp='"~IdxDate(Dialogo.Fecha1)~"' and M.TipoOp In ('AJUDEV') and ")
+SQL.ADD("O.TipoOp In ('DTOM','DTOMV') ")
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+SQL.ADD("Union All ")
+*--- Selecciono los Movimientos Otras Multiples Vencimiento
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,C.Fecha1 Fe1,")
+SQL.ADD("C.Fecha2 Fe2,C.Precio1 TasaV,C.Total3 SpreadV,C.Precio2 TasaC,C.Total4 SpreadC, ")
+SQL.ADD("O.Cliente1,O.MB3,M.Cantidad,M.Especie,M.Cliente,M.NrMov,M.Leyenda,C.Cantidad1 Notional,O.TotalNetoCli1 Prima,O.Cuotas1  ")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".MOVPENDIENTES M,"~DBO~".CUOTAS C   where ")
+SQL.ADD("C.Fecha1<='"~IdxDate(Dialogo.Fecha1)~"' and C.Fecha2>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("M.NrOperacion=O.NrOperacion and C.NrOperacion=O.NrOperacion and ")
+SQL.ADD("((M.FechaMov=O.FechaVto and M.Leyenda Like '%Opciones%') or C.Fecha3=M.FechaMov) and ")
+SQL.ADD("O.TipoOp In ('DTK','DTKVI','DTSVVM','DTSFFM','DTSFVM','DTSFVX','DTSNFV') and ")
+SQL.ADD("M.NrSaldo=1 and ")
+SQL.ADD("M.Leyenda Not Like '%Exchange%' and ") 
+SQL.ADD("M.Leyenda Not Like '%Contraparte%' ") 
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+SQL.ADD("Union All ")
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,C.Fecha1 Fe1,")
+SQL.ADD("C.Fecha2 Fe2,C.Precio1 TasaV,C.Total3 SpreadV,C.Precio2 TasaC,C.Total4 SpreadC, ")
+SQL.ADD("O.Cliente1,O.MB3,M.Cantidad,M.Especie,M.Cliente,M.NrMov,M.Leyenda,C.Cantidad1 Notional,O.TotalNetoCli1 Prima,O.Cuotas1  ")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M,"~DBO~".CUOTAS C   where ")
+SQL.ADD("C.Fecha1<='"~IdxDate(Dialogo.Fecha1)~"' and C.Fecha2>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("M.NrOperacion=O.NrOperacion and C.NrOperacion=O.NrOperacion and ")
+SQL.ADD("((M.FechaMov=O.FechaVto and M.Leyenda Like '%Opciones%') or C.Fecha3=M.FechaMov) and ")
+SQL.ADD("O.TipoOp In ('DTK','DTKVI','DTSVVM','DTSFFM','DTSFVM','DTSFVX','DTSNFV') and ")
+SQL.ADD("M.NrSaldo=1 and ")
+SQL.ADD("M.Leyenda Not Like '%Exchange%' and ") 
+SQL.ADD("M.Leyenda Not Like '%Contraparte%' ") 
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+SQL.ADD("Union All ")
+*--- Ajustes 
+SQL.ADD("Select O.Vehiculo1,O.NrOperacion,O.FechaOp,O.TipoOp,C.Fecha1 Fe1,")
+SQL.ADD("C.Fecha2 Fe2,C.Precio1 TasaV,C.Total3 SpreadV,C.Precio2 TasaC,C.Total4 SpreadC, ")
+SQL.ADD("O.Cliente1,O.MB3,-M.Cantidad,M.Especie,O.Cliente1,0 NrMov,'' Leyenda,C.Cantidad1 Notional,O.TotalNetoCli1 Prima,O.Cuotas1  ")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONES M,"~DBO~".CUOTAS C where ")
+SQL.ADD("C.Fecha1<='"~IdxDate(Dialogo.Fecha1)~"' and C.Fecha2>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("M.NrOperacion2=O.NrOperacion and C.NrOperacion=O.NrOperacion and ")
+SQL.ADD("M.FechaOp='"~IdxDate(Dialogo.Fecha1)~"' and M.TipoOp In ('AJUDEV') and ")
+SQL.ADD("O.TipoOp In ('DTK','DTKVI','DTSVVM','DTSFFM','DTSFVM','DTSFVX','DTSNFV') ")
+if NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+*---------------
+SQL.ADD(" order by 1,2,12,5,6,11 DESC")
+
+*-- z1: Corte por Vehiculo 
+*-- z2: Sum Resultado Devengado z3: Sum Prima Devengada
+act(z1,'')
+acn(z2,0)
+
+Recorrer SQL
+
+   Message('Recuperando '~FBN['NrOperacion']~' '~FBN['TipoOp']~' '~FBN['Especie']~' '~FBN['Leyenda'] )
+
+   If Not EqStr(val(z1),FBN['Vehiculo1'])  
+      If NoVacio(val(z1))
+         *- Total Por Vehiculo        
+         
+         If Dialogo.Radio1=0 y fac>val(z13)+2
+            OrdenarFilas(Val(z13)+1,fac-1,1,'A')
+         EndIf
+         If Dialogo.Radio1=1 y fac>val(z13)+2
+            OrdenarFilas(Val(z13)+1,fac-1,2,'A')
+         EndIf
+         If Dialogo.Radio1=2 y fac>val(z13)+2
+            OrdenarFilas(Val(z13)+1,fac-1,5,'A')
+         EndIf
+         If Dialogo.Radio1=3 y fac>val(z13)+2
+            OrdenarFilas(Val(z13)+1,fac-1,8,'A')
+         EndIf
+
+         ACT(a:fac,'Total')          
+         ACN(m:fac,val(z2))
+         * ACN(n:fac,val(z3))
+         ACN(n:fac,Sum(n:Val(z13).. n:fac-1) )
+         ACN(z2,0)
+         ACN(z3,0)
+
+         SetFont(a:fac..p:fac,4)  
+         AgregarMarco(a:FAC..p:fac,2,0)
+         SetFont(a:val(z13)..p:fac-1,3)  
+         FormatoCeldas(h:val(z13)..h:fac-1,Exe('F2'))
+         FormatoCeldas(m:val(z13)..p:fac-1,Exe('F2'))
+         FormatoCeldas(i:val(z13)..j:fac-1,Exe('F7'))
+         ifa   
+         ifa   
+      EndIf
+
+      ACT(z1,FBN['Vehiculo1'])
+      *- 
+      ACT(a:fac,'Vehiculo: '~FBN['Vehiculo1']~' '~BuscarCampo('VEHICULOS','Codigo','Descripcion',val(z1)))
+      SetFont(a:fac..p:fac,4)  
+
+      ifa
+      ifa
+      ACT(a:fac,'Nr.Oper')
+      ACT(b:fac,'Fecha Op')
+      ACT(c:fac,'ContraParte')
+      ACT(d:fac,'Cpa/Vta')
+      ACT(e:fac,'Tipo Op')
+      ACT(f:fac,'Moneda')
+      ACT(g:fac,'Prima')
+      ACT(h:fac,'Res.Per')
+      ACT(i:fac,'Veh.Tasa')
+      ACT(j:fac,'Cont.Tasa')
+      ACT(k:fac,'Desde')
+      ACT(l:fac,'Hasta')
+      ACT(m:fac,'Dev.Acumulado')
+      ACT(n:fac,'Prima Dev.')
+      ACT(o:fac,'Notional')
+      ACT(p:fac,'Can.Per')
+
+      SetFont(a:fac..p:fac,3)  
+      AgregarMarco(a:FAC..p:fac,2,0,Exe('COLOR'))
+      ifa   
+      acn(z13,fac)
+   EndIf
+
+   *-- Corte Por NrOperacion
+   If Not EqStr(val(z10),FBN['NrOperacion']~' '~FBN['Fe1']~' '~FBN['Fe2'])  
+      ACT(z10,FBN['NrOperacion']~' '~FBN['Fe1']~' '~FBN['Fe2'])
+
+      *- Inicializo el Pago/Cobro 
+      ACT(z11,IIf(FBN['Cantidad']>=0,'PAGO','COBRO'))
+
+      *- 
+      ACT(a:fac,FBN['NrOperacion'])
+      ACLO(a:fac,FBN['NrOperacion'])
+      ACD(b:fac,FBN['FechaOp'])
+      ACT(c:fac,FBN['Cliente1'])
+
+      If NoVacio(FBN['MB3'])
+         ACT(d:fac,IIf(FBN['MB3']=0,'Compra','Venta') )
+      EndIf
+
+      ACT(e:fac,FBN['TipoOp'])
+      ACT(f:fac,FBN['Especie'])
+
+      *- Prima     
+      ACN(g:fac,IIf(FBN['MB3']=1,FBN['Prima'],-FBN['Prima']))
+
+      ACN(i:fac,FBN['TasaV']+FBN['SpreadV'])
+      ACN(j:fac,FBN['TasaC']+FBN['SpreadC'])
+
+      ACD(k:fac,FBN['Fe1'])
+      ACD(l:fac,FBN['Fe2'])
+
+      ACN(o:fac,FBN['Notional'])
+      ACN(p:fac,FBN['Cuotas1'])
+   Else 
+      *- Acumulo en el mismo renglon.
+      DFA    
+   EndIf
+
+   If Not Buscar('Opciones',FBN['Leyenda'])
+      ACT(z12,IIf(FBN['Cantidad']>=0,'PAGO','COBRO'))   
+      IF EqStr(VAL(Z11),VAL(Z12)) o [Not EqStr(VAL(Z11),VAL(Z12)) y EqStr(val(f:fac),FBN['Especie'])]
+         * Si no cambio de signo  Listo Los registros
+         SCN(h:fac,-FBN['Cantidad'])
+
+         *- Calculo del Devengado 
+         ACN(m:fac,(-FBN['Cantidad']*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')*(Dialogo.Fecha1-VAL(k:fac)+1))/(VAL(l:fac)-VAL(k:fac)))     
+
+         If Abs(val(m:fac))>Abs(-FBN['Cantidad']*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD'))
+            *- Para las Fechas desde el vto en adelante el devengado es 0
+            ACN(m:fac,0 )
+         EndIf
+
+         SCN(z2,VAL(m:fac))
+      ENDIF    
+   ENDIF    
+
+   *- Si la Operacion es Unico Vto.
+   If Not Incluido(val(e:fac),'DTOM|DTOMV|DTK|DTKVI|DTSVVM|DTSFFM|DTSFVM|DTSFVX|DTSNFV')
+      ACN(n:fac,(val(g:fac)*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')*(Dialogo.Fecha1-VAL(k:fac)+1))/(VAL(l:fac)-VAL(k:fac)))
+
+      If Abs(val(n:fac))>Abs(val(g:fac)*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD'))
+         *- Para las Fechas desde el vto en adelante el devengado es 0
+         acn(n:fac,0 )
+      EndIf
+
+      SCN(z3,VAL(n:fac))
+   Else 
+      *- Recupero ppio y fin de notional de la 1era y ultima cuota 
+      *- DTO Fecha5 y Fecha6, Resto de Operaciones Fecha1 y Fecha2
+      If Incluido(val(e:fac),'DTOM|DTOMV')
+         acd(fe1,SQL("Select C.Fecha5 from "~DBO~".CUOTAS C where C.NrOperacion='"~val(a:fac)~"' and C.NrCuota=1 ") )
+         acd(fe2,SQL("Select C.Fecha6 from "~DBO~".CUOTAS C where C.NrOperacion='"~val(a:fac)~"' and C.NrCuota="~Fstr(val(p:fac),0,0)~" ") )
+      Else 
+         acd(fe1,SQL("Select C.Fecha1 from "~DBO~".CUOTAS C where C.NrOperacion='"~val(a:fac)~"' and C.NrCuota=1 ") )
+         acd(fe2,SQL("Select C.Fecha2 from "~DBO~".CUOTAS C where C.NrOperacion='"~val(a:fac)~"' and C.NrCuota="~Fstr(val(p:fac),0,0)~" ") )
+      EndIf
+      ACN(n:fac,(val(g:fac)*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD')*(Dialogo.Fecha1-VAL(fe1)+1))/(VAL(fe2)-VAL(fe1)))
+
+      If Abs(val(n:fac))>Abs(val(g:fac)*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1,1,SI,'USD'))
+         *- Para las Fechas desde el vto en adelante el devengado es 0
+         acn(n:fac,0)
+      EndIf
+
+      SCN(z3,VAL(n:fac))
+   EndIf
+Proximo
+
+If NoVacio(val(z1))
+   Ifa
+   *- Total Por Vehiculo        
+   If Dialogo.Radio1=0 y fac>val(z13)+1
+      OrdenarFilas(Val(z13)+1,fac-1,1,'A')   
+   EndIf
+   If Dialogo.Radio1=1 y fac>val(z13)+1
+      OrdenarFilas(Val(z13)+1,fac-1,2,'A')
+   EndIf
+   If Dialogo.Radio1=2 y fac>val(z13)+1
+      OrdenarFilas(Val(z13)+1,fac-1,5,'A')
+   EndIf
+   If Dialogo.Radio1=3 y fac>val(z13)+1
+      OrdenarFilas(Val(z13)+1,fac-1,8,'A')
+   EndIf
+
+   ACT(a:fac,'Total')          
+   ACN(m:fac,val(z2))
+   * ACN(n:fac,val(z3))
+   ACN(n:fac,Sum(n:Val(z13).. n:fac-1) )
+   SetFont(a:fac..p:fac,4)  
+   AgregarMarco(a:FAC..p:fac,2,0)
+   SetFont(a:val(z13)..p:fac-1,3)  
+   FormatoCeldas(h:val(z13)..h:fac-1,Exe('F2'))
+   FormatoCeldas(m:val(z13)..p:fac-1,Exe('F2'))
+   FormatoCeldas(i:val(z13)..j:fac-1,Exe('F7'))
+   ifa   
+   ifa   
+EndIf
+
+ACT(a:fac,'FIN DE LISTADO')
+
+ACO(1,8)
+ACO(2,8)
+ACO(3,10)
+ACO(4,8)
+ACO(5,8)
+ACO(6,10)
+ACO(7,10)
+ACO(8,12)
+ACO(9,6)
+ACO(10,6)
+ACO(11,8)
+ACO(12,8)
+ACO(13,12)
+ACO(14,12)
+ACO(15,12)
+Impresion(1,2)
+LimitesVision(p:fac)
+RangoTitulo(a1..z:fac,9)

@@ -1,0 +1,204 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1     : "Fecha"                 ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys
+  Radio1     : "Tipo|Total|Vinculadas" ;;;;;;;;;0
+  Vehiculo1  : "Empresa"               ;;;;Dialogo.Radio1=1;Dialogo.Radio1=1;Dialogo.Radio1=0 o [NoVacio(Dialogo.Vehiculo1) y Not EqStr(Dialogo.String1,'DES')];'Empresa Invalida o Deshabilitada';NO;  
+  Check1     : "Graba"                 ;;;;;;;;;0
+  String1    : 'Veh.Status'            ;1;1;;NO;NO;;;;BUSCARCAMPO('VEHICULOS','Status','Codigo',Dialogo.Vehiculo1);BUSCARCAMPO('VEHICULOS','Status','Codigo',Dialogo.Vehiculo1)
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+if Dialogo.Radio1 = 0
+   If [SQL("Select Count(*) from "~DBO~".VEHICULOS ") <> SQL("Select Count(*) from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"' ")] y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con Todos los Vehiculos ')
+   endif
+endif
+if Dialogo.Radio1 = 1
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+  else
+endif
+
+CrearFont(1,"Arial,9,")
+CrearFont(2,"Arial,9,B")
+CrearFont(3,"Arial,8,")
+CrearFont(4,"Arial,8,B")
+
+SQL.ADD("Select Codigo, Jerarquia from "~DBO~".VEHICULOS ")
+SQL.ADD("where  TipoVehiculo = 'VIN' and ")
+SQL.ADD(" (Status='HAB' or Status Is Null or Status='') ")
+if Dialogo.Radio1 = 1
+   SQL.ADD("and Codigo = '"~Dialogo.Vehiculo1~"' ")
+endif
+SQL.ADD("order by Codigo ")
+
+SetFilaActual(1)
+acn(e:210,fac)
+
+Recorrer SQL
+ 
+  if JNivel('Vehiculos',fbn['Codigo']) = 1
+
+     Message('Vehiculo '~fbn['Codigo'])
+
+     act(ca:fac,fbn['Codigo'])
+     act(cb:fac,Descendientes('Vehiculos',val(ca:fac),NO))
+     acn(cc:fac,fac)
+
+     if Vacio(val(cb:fac))       
+        LinkearHoja('POSFI2',fac,Fecha1=Dialogo.Fecha1,Vehiculo1=val(ca:fac),Lista1=val(ca:fac)~'|',Check1=Dialogo.Check1)
+     endif
+
+     if NoVacio(val(cb:fac))
+        *** veo si los descendientes son hojas ***
+        SQL.ADD("Select Codigo from "~DBO~".VEHICULOS ")
+        SQL.ADD("where  Codigo In ("~Pipe2Comillas(val(cb:fac))~") and ")
+        SQL.ADD(" (Status='HAB' or Status Is Null or Status='') ")
+        SQL.ADD("order by Codigo ")
+
+        acn(cz1,0)
+        Recorrer SQL
+           dfa
+           if [Not EsTerminal(fbn['Codigo'],VEHICULOS)]
+              acn(cz1,1)
+           endif
+        Proximo
+
+        if val(cz1) = 0
+           LinkearHoja('POSFI2',fac,Fecha1=Dialogo.Fecha1,Vehiculo1=val(ca:fac),Lista1=val(cb:fac),Check1=Dialogo.Check1)
+        else
+           LinkearHoja('PFW22',fac,Fecha1=Dialogo.Fecha1,Vehiculo1=val(ca:fac),Check1=Dialogo.Check1)
+        endif
+     endif
+
+     act(d:210,fbn['Codigo']~'|'~val(d:210))
+     scn(e:210,1)
+  else
+     dfa
+  endif
+Proximo
+
+if Dialogo.Radio1 = 0
+   (.'MARCOPOSFI'.)
+
+   *** Escribo fila de vehiculos ***
+   SetFilaActual(2)
+
+   acn(b:200,2)
+   act(val(b:200):fac,'CONSOLIDADO')
+   ACO(val(b:200),11)
+
+   SQL.ADD("Select Codigo From "~DBO~".VEHICULOS ")
+   SQL.ADD("where  Codigo In ("~Pipe2Comillas(val(d:210))~") and ")
+   SQL.ADD(" (Status='HAB' or Status Is Null or Status='') ")
+   SQL.ADD("order by Codigo")
+
+   Recorrer SQL
+     dfa
+     scn(b:200,1)
+     act(val(b:200):fac,fbn['Codigo'])
+     ACO(val(b:200),10)
+   Proximo
+
+   SetFont(b:fac..val(b:200):FAC,2)
+   AlinearCeldas(b:fac..val(b:200):FAC,'D')
+   AgregarMarco(b:FAC..val(b:200):FAC,2,1,Exe('COLOR6'))
+
+   acn(e:200,3)
+   Recorrer&i 2, val(e:210)
+     Recorrer&j 6, 103
+       if LinkH(val(cc:&i),b:&j) <> 0
+          acn(val(e:200):&j,LinkH(val(cc:&i),b:&j))
+       endif
+     Proximo
+     scn(e:200,1)
+   Proximo
+
+   *** CONSOLIDA VINCULADAS ****
+   SetFont(c:6..val(b:200):100,3)
+
+   *** CONSOLIDA LOS PLAZOS ***
+   SQL.ADD("Select Codigo from "~DBO~".VEHICULOS ")
+   SQL.ADD("Where TipoVehiculo Not In ('OTR') and ")
+   SQL.ADD(" (Status='HAB' or Status Is Null or Status='') ")
+   SQL.ADD("order by Codigo ")
+
+   Recorrer SQL
+     if Vacio(Descendientes('Vehiculos',fbn['Codigo'],NO))
+        act(cz3,fbn['Codigo']~'|'~val(cz3))
+     endif
+     dfa
+   Proximo
+
+   (.'TOTALPOSF'.)
+
+   *** trae consolidado vinculadas ***
+   LinkearHoja('POSFI2',val(e:210)+1,Fecha1=Dialogo.Fecha1,Vehiculo1=Dialogo.Vehiculo1,Lista1=val(cz3),Check1=Dialogo.Check1)
+
+   Recorrer&j 6, 101
+     if LinkH(val(e:210)+1,b:&j) <> 0
+        acn(b:&j,LinkH(val(e:210)+1,b:&j))
+     endif
+   Proximo
+
+   if Sum(c:102..val(b:200):102) <> 0
+      acn(b:102,Sum(c:102..val(b:200):102))
+   endif
+   if Sum(c:103..val(b:200):103) <> 0
+      acn(b:103,Sum(c:103..val(b:200):103))
+   endif
+
+  SetFont(2:6..b:103,3)
+  SetFont(2:val(h:200)..b:val(h:200),4)
+  SetFont(2:val(i:200)..b:val(i:200),4)
+  SetFont(2:val(k:200)..b:val(k:200),4)
+  SetFont(2:val(l:200)..b:val(l:200),4)
+  SetFont(2:val(j:200)..b:val(j:200),4)
+  SetFont(2:val(m:200)..b:val(m:200),4)
+  SetFont(2:val(n:200)..b:val(n:200),4)
+  SetFont(2:val(o:200)..b:val(o:200),4)
+  SetFont(2:val(p:200)..b:val(p:200),4)
+  SetFont(2:val(q:200)..b:val(q:200),4)
+  SetFont(2:val(r:200)..b:val(r:200),4)
+  SetFont(2:val(s:200)..b:val(s:200),4)
+  SetFont(2:val(ax:200)..2:val(ax:200)+2,3)
+
+  *- Formato de celdas 
+  ACT(f2, Exe('F2')) 
+
+  FormatoCeldas(2:val(j:200)..b:val(j:200),val(f2))
+  FormatoCeldas(2:val(m:200)..b:val(m:200),val(f2))
+  FormatoCeldas(2:val(n:200)..b:val(n:200),val(f2))
+  FormatoCeldas(2:val(s:200)..b:val(s:200),val(f2))
+  
+* CerrarLink(val(e:210)+1)
+
+  (.'CONTROLPF'.)
+
+  if Dialogo.Check1=1
+     if Dialogo.Fecha1=FinDeMes(Dialogo.Fecha1, NO, 'ARG')
+        GrabarPMG('PFNEW', 'TODOS/'~Dialogo.Fecha1)
+     else
+        *- Elimina el AnteUltimo. Calculo el Dia a Eliminar
+        acd(e211,HABILES(Dialogo.Fecha1,-2,'ARG',SI))
+
+        SQL.ADD("Delete "~DBO~".OBJETOS Where ")
+        SQL.ADD("Codigo='POSFIN' and Extension LIKE '%"~val(e211)~"%' ")
+        SQL.NEW
+        SQL.EXEC
+
+        *- Graba el Ultimo 
+        GrabarPMG('POSFIN', 'TODOS/'~Dialogo.Fecha1)
+     endif
+  endif
+else
+   Cancelar('')
+endif
+
+LimitesVision(val(b:200)+2:130)
+Impresion(1,2)
+

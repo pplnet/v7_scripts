@@ -1,0 +1,852 @@
+﻿ModoReproceso(ConDialogo)
+HojaVisible(SI)
+CrearDialogo
+   Fecha1   : 'Desde'         ;;;;;;;;;;FSYS-1
+   Fecha2   : 'Hasta'         ;;;;;;Dialogo.Fecha1 <= Dialogo.Fecha2 y Dialogo.Fecha2 < Fsys;'Error de Fechas';NO;;FSYS-1
+   Vehiculo1: 'Vehiculo'      ;1;2;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='')"),SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+   Especie1 : 'Moneda'        ;2;2;;;;;;;Var('MONEEXTR');;;;;" Jerarquia Like '"~Var('JERMONEDA')~"%' and SubString(Jerarquia,1,6) <> '"~Var('JERMONEDA')~"000' "
+   Check4   : 'Imp.Detallado' ;3;2;;;;;;;;0;
+   Check1   : 'Por TipoOp?'   ;3;1;;;;;;;0
+   Radio3   : 'Origen:|Todas|Activas|Pasivas'                       ;5;1;;;Dialogo.Check1=0;;;;0;
+   Radio1   : 'Terc y Act|Todos|Dep.Pla|Cta.Cte'                    ;6;1;;[Dialogo.Radio3<=0 o Dialogo.Radio3=1] y [Dialogo.Radio6<=0 o Dialogo.Radio6=2];Dialogo.Check1=0;;;;0;IIf(Dialogo.Check1=0,IIF(Not [[Dialogo.Radio3<=0 o Dialogo.Radio3=1] y [Dialogo.Radio6<=0 o Dialogo.Radio6=2]],-1,Dialogo.Radio1),-1)
+   Radio4   : 'Terc y Pas|Todos|Ob.Neg|Com.Ext|Fin.Lo|Fin.Ex|C.C.'  ;7;1;;[Dialogo.Radio3<=0 o Dialogo.Radio3=2] y [Dialogo.Radio6<=0 o Dialogo.Radio6=2];Dialogo.Check1=0;;;;0;IIf(Dialogo.Check1=0,IIF(Not [[Dialogo.Radio3<=0 o Dialogo.Radio3=2] y [Dialogo.Radio6<=0 o Dialogo.Radio6=2]],-1,Dialogo.Radio4),-1)
+   Radio2   : 'Vinc y Act|Todos|C.C.Vinc|C.C.Div|Co.Vinc|Co.Div'    ;8;1;;[Dialogo.Radio3<=0 o Dialogo.Radio3=1] y [Dialogo.Radio6<=0 o Dialogo.Radio6=1];Dialogo.Check1=0;;;;0;IIf(Dialogo.Check1=0,IIF(Not [[Dialogo.Radio3<=0 o Dialogo.Radio3=1] y [Dialogo.Radio6<=0 o Dialogo.Radio6=1]],-1,Dialogo.Radio2),-1)
+   Radio5   : 'Vinc y Pas|Todos|C.C.Vinc|C.C.Div|Pr.Vinc|Pr.Div'    ;9;1;;[Dialogo.Radio3<=0 o Dialogo.Radio3=2] y [Dialogo.Radio6<=0 o Dialogo.Radio6=1];Dialogo.Check1=0;;;;0;IIf(Dialogo.Check1=0,IIF(Not [[Dialogo.Radio3<=0 o Dialogo.Radio3=2] y [Dialogo.Radio6<=0 o Dialogo.Radio6=1]],-1,Dialogo.Radio5),-1)
+   Lista1   : 'Tipos'                                               ;4;1;;;Dialogo.Check1=1;;;;;;SQLSet("Select Codigo from "~DBO~".TIPOSOPERACION Where Codigo In ('MMCDIA','MMCPM','MMFCMV','MMONM','MMPEM','MMPIM','MMPCLM','MMPOSM','MMSCMV','MMPCCM','MMSIMV','MMFIMV') ");
+   Radio7   : 'Especies:|Todas|Algunas'                             ;5;1;;;;;;;0;
+   Lista2   : 'Especies'                                            ;5;2;;Dialogo.Radio7=1;;;;;;;SQLSet("Select Codigo from "~DBO~".ESPECIES");
+   Radio6   : 'Clientes:|Todos|Vinculados|Terceros'                 ;6;1;;;;;;;0;
+   Lista3   : 'Clientes'                                            ;6;2;;Dialogo.Radio6<>0;;;;;;;IIF(Dialogo.Radio6=1,SQLSet("Select Codigo from "~DBO~".CLIENTES Where Jerarquia LIKE '"~VAR('JERVINCUL')~"%' and SubString(Jerarquia,1,6) <> '"~VAR('JERVINCUL')~"000' "),SQLSet("Select Codigo from "~DBO~".CLIENTES Where SubString(Jerarquia,1,3) <> '"~VAR('JERVINCUL')~"' "))
+FinDialogo
+IF NOT OK
+   Cancelar
+ENDIF
+
+*-- Veo solamente los tipos seleccionados
+SetListaClaves(2)
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Vehiculo1)
+   ACT(zz6,Dialogo.Vehiculo1~'|')
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+   Else 
+      *- zz6 Siempre contiene los Vehiculos Habilitados
+      ACT(zz6,SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') ") )
+   EndIf
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(4)
+
+*AgregarBMP(a1,Var('LOGO'),Var('ESCALOGO'))
+
+ACT(a:3, 'SISTEMA DE COSTOS Y RENDIMIENTOS - OPERACIONES DE VENCIMIENTO MULTIPLE')
+SetFont(a:3..a:3,3)
+
+ACT(a5, 'Desde: '~Fecha(Dialogo.Fecha1, 'dd/mm/yyyy'))
+ACT(a6, 'Hasta: '~Fecha(Dialogo.Fecha2, 'dd/mm/yyyy'))
+ACT(a7, 'Moneda Expresa: '~BuscarCampo('ESPECIES','Nombre','Codigo',Dialogo.Especie1) )
+
+If NoVacio(VAL(ZZ6))
+   ACT(h5, 'Vehiculo : '~VAL(ZZ6))
+Else
+   ACT(h5, 'Vehiculo : Todos')
+EndIf
+
+If Dialogo.Radio6 = 0 
+  ACT(h6,'Clientes: TODOS' )   
+Else
+  If NoVacio(Dialogo.Lista3)
+     ACT(h6,'Clientes: '~Pipe2coma(Dialogo.Lista3))   
+  Else
+     If Dialogo.Radio6 = 1
+         ACT(h6,'Clientes: VINCULADOS' )   
+     Else 
+         ACT(h6,'Clientes: TERCEROS' )   
+     Endif 
+  Endif   
+Endif
+
+If Dialogo.Radio7 = 1 y NoVacio(Dialogo.Lista2)
+  ACT(h7,'Especies: '~Pipe2coma(Dialogo.Lista2))   
+Else
+  ACT(h7,'Especies: TODAS' )   
+endif
+
+*--- Si eligio Operaciones, No Displaya Radio1 a RAdio5
+If Dialogo.Check1=1
+   If NoVacio(Dialogo.Lista1)
+      ACT(h8,'Operaciones: '~Pipe2coma(Dialogo.Lista1))     
+   Else
+      ACT(h8,'Operaciones: MMCDIA,MMCPM,MMFCMV,MMONM,MMPEM,MMPIM,MMPCLM,MMPOSM,MMSCMV,MMPCCM,MMSIMV,MMFIMV' )   
+   EndIf
+EndIf
+
+If Dialogo.Radio3 = 0
+   ACT(d6,'Origen: ACTIVAS y PASIVAS ')
+Else
+   If Dialogo.Radio3 = 1
+      ACT(d6,'Origen: ACTIVAS ')
+   Else
+      ACT(d6,'Origen: PASIVAS ')
+   Endif 
+Endif
+
+if Dialogo.Radio1=0
+  ACT(k4, 'Terc y Act: Todos')
+else
+  if Dialogo.Radio1=1
+    ACT(k4, 'Terc y Act: Dep.Plazo')
+  else
+    if Dialogo.Radio1=2
+      ACT(k4, 'Terc y Act: Cta.CTe.Terceros')
+    endif
+  endif
+endif
+
+if Dialogo.Radio4=0
+  ACT(k5, 'Terc y Pas: Todos')
+else
+  if Dialogo.Radio4=1
+    ACT(k5, 'Terc y Pas: Obligaciones Negociables')
+  else
+    if Dialogo.Radio4=2
+      ACT(k5, 'Terc y Pas: Comercio Exterior')
+    else
+      if Dialogo.Radio4=3
+        ACT(k5, 'Terc y Pas: Financiamiento Loc.')
+      else
+        if Dialogo.Radio4=4
+          ACT(k5, 'Terc y Pas: Financiamiento Ext.')
+        else
+          if Dialogo.Radio4=5
+            ACT(k5, 'Terc y Pas: Cta.Cte.Terceros')
+          endif
+        endif
+      endif
+    endif
+  endif
+endif
+
+if Dialogo.Radio2=0
+  ACT(k6, 'Vinc y Act: Todos')
+else
+  if Dialogo.Radio2=1
+    ACT(k6, 'Vinc y Act: Cta.Cte.Vinc.')
+  else
+    if Dialogo.Radio2=2
+      ACT(k6, 'Vinc y Act: Cta.Cte.Div.')
+    else
+      if Dialogo.Radio2=3
+        ACT(k6, 'Vinc y Act: Colocaciones Vinc.')
+      else
+        if Dialogo.Radio2=4
+          ACT(k6, 'Vinc y Act: Colocaciones Div.')
+        endif
+      endif
+    endif
+  endif
+endif
+
+if Dialogo.Radio5=0
+  ACT(k7, 'Vinc y Pas: Todos')
+else
+  if Dialogo.Radio5=1
+    ACT(k7, 'Vinc y Pas: Cta.Cte.Vinc.')
+  else
+    if Dialogo.Radio5=2
+      ACT(k7, 'Vinc y Pas: Cta.Cte.Div.')
+    else
+      if Dialogo.Radio5=3
+        ACT(k7, 'Vinc y Pas: Prestamos Vinc.')
+      else
+        if Dialogo.Radio5=4
+          ACT(k7, 'Vinc y Pas: Prestamos Div.')
+        endif
+      endif
+    endif
+  endif
+endif
+
+SetFont(a0..z7, 2)
+SetFilaActual(5)
+ACN(bh:1,FAC)
+
+
+SetFilaActual(FAC+4)
+
+ACT(a:fac,'Empresa')
+ACT(b:fac,'TipOp')
+ACT(c:fac,'NroOpe')
+ACT(d:fac,'Entidad')
+ACT(e:fac,'Moneda')
+ACT(f:fac,'Cant. Per.')
+ACT(g:fac,'F.Origen')
+ACT(h:fac,'F.Vto')
+ACT(i:fac,'Plazo Tot')
+ACT(j:fac,'Cr.')
+ACT(k:fac,'Cbio.Origen')
+ACT(l:fac,'Cbio.Vto')
+ACT(m:fac,'Capital')
+ACT(n:fac,'Cap.P.P.')
+ACT(o:fac,'Para clac.k.P.P.')
+ACT(p:fac,'Cap.Comput.')
+ACT(q:fac,'Plazo Tot')
+ACT(r:fac,'Tasa')
+ACT(s:fac,'Dias Transc')
+ACT(t:fac,'Intereses')
+ACT(u:fac,'Capital')
+ACT(v:fac,'Capital')
+ACT(w:fac,'Monto')
+ACT(x:fac,'Cap.P.P.')
+ACT(y:fac,'Para clac.K.P.P.')
+ACT(z:fac,'Cap x Cbio')
+ACT(aa:fac,'Monto x Cbio')
+ACT(ab:fac,'Interes')
+ACT(ac:fac,'Tasa Impl.')
+ACT(ad:fac,'C*DT*T')
+ACT(ae:fac,'C*DT')
+ACT(af:fac,'C*P')
+ACT(ag:fac,'Dias A END')
+ACT(ah:fac,'Plazo Total')
+ACT(ai:fac,'Cap.P.P.')
+ACT(aj:fac,'Para clac.K.P.P.')
+ACT(ak:fac,'Capital')
+ACT(al:fac,'Monto')
+ACT(am:fac,'Interes')
+ACT(an:fac,'Cap.P.P.')
+ACT(ao:fac,'Para clac.K.P.P.')
+ACT(ap:fac,'Cap.x Cbio.')
+ACT(aq:fac,'Monto x Cbio.')
+ACT(ar:fac,'Interes')
+ACT(as:fac,'Tasa impl')
+ACT(at:fac,'C*DT*T')
+ACT(au:fac,'C*DT')
+ACT(av:fac,'DT*T')
+
+AlinearCeldas(c:FAC..c:FAC,'D')
+AlinearCeldas(i:FAC..av:FAC,'D')
+
+SetFont(a:Val(bh:1)..av:FAC,2)
+AgregarMarco(a:FAC..av:FAC,2,0,Exe('COLOR'))
+
+SetFilaActual(FAC)
+
+*------ Armado de la consulta ---------------------------------------------------
+SQL.ADD("SELECT NrOperacion,TipoOp,Cliente1,Vehiculo1,FechaOp,FechaVto,Especie,Cuotas1,PrecioEj,Cantidad,Precio1 ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES ")
+If Dialogo.Radio6 > 0 
+   SQL.ADD("O ,"~DBO~".CLIENTES C ")
+Endif
+SQL.ADD(" WHERE ")
+if NoVacio(VAL(zz6))
+   SQL.ADD(" Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+Else 
+   SQL.ADD(" Vehiculo1=Vehiculo1 ")
+endif
+If Dialogo.Radio6 > 0 
+   If Dialogo.Radio6 = 1
+      SQL.ADD(" and C.Codigo = O.Cliente1 and SubString(C.Jerarquia,1,3) = '"~VAR('JERVINCUL')~"' ")
+   Else
+      SQL.ADD(" and C.Codigo = O.Cliente1 and SubString(C.Jerarquia,1,3) <> '"~VAR('JERVINCUL')~"' ")
+   Endif
+Endif
+If NoVacio(Dialogo.Lista3)
+   SQL.ADD("    and Cliente1 In ("~Pipe2Comillas(Dialogo.Lista3)~") ")   
+Endif
+SQL.ADD("       and FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and FechaOp < '"~IdxDate(Dialogo.Fecha2)~"'    ")
+If Dialogo.Radio7 = 1 y NoVacio(Dialogo.Lista2)
+   SQL.ADD("    and Especie In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+endif
+If Dialogo.Check1=1 
+   If NoVacio(Dialogo.Lista1)
+      SQL.ADD(" and TipoOp In ("~Pipe2Comillas(Dialogo.Lista1)~") ")   
+   Else
+      SQL.ADD(" and TipoOp In ('MMCDIA','MMCPM','MMFCMV','MMONM','MMPEM','MMPIM','MMPCLM','MMPOSM','MMSCMV','MMPCCM','MMSIMV','MMFIMV') ")
+   EndIf
+Endif
+If Dialogo.Radio7 = 1 y NoVacio(Dialogo.Lista2)
+   SQL.ADD("    and Especie In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+endif
+
+
+If Dialogo.Check1=0
+SQL.ADD(" and  ( ")
+ACT(cf:1," ")
+*--- Activas ---------
+If Dialogo.Radio3 = 0 o Dialogo.Radio3 = 1
+    *--- Para Terceros --- 
+    If Dialogo.Radio6=0 o Dialogo.Radio6=2
+       *-- Para Todo o Deposito a Plazo
+       if Dialogo.Radio1=0 o Dialogo.Radio1=1
+          SQL.ADD( Val(cf:1)~" (TipoOp In ('MMCDIA','MMCPM')) ")
+          ACT(cf:1," or ")
+       endif
+       *-- Para Todo o Cta.Cte.Terceros
+       if Dialogo.Radio1=0 o Dialogo.Radio1=2
+         SQL.ADD( Val(cf:1)~" (TipoOp = '') ")
+         ACT(cf:1," or ")
+       endif
+    Endif
+    *--- Para Vinculados--- 
+    If Dialogo.Radio6=0 o Dialogo.Radio6=1
+       *-- Para Todo o Cta.Cte.Vinculadas
+       if Dialogo.Radio2=0 o Dialogo.Radio2=1
+         SQL.ADD( Val(cf:1)~" (TipoOp = '') ")
+         ACT(cf:1," or ")
+       endif
+       *-- Para Todo o Cta.Cte.Divisiones
+       if Dialogo.Radio2=0 o Dialogo.Radio2=2
+         SQL.ADD( Val(cf:1)~" (TipoOp = '') ")
+         ACT(cf:1," or ")
+       endif
+       *-- Para Todo o Colocaciones Vinculadas
+       if Dialogo.Radio2=0 o Dialogo.Radio2=3
+        SQL.ADD( Val(cf:1)~" (TipoOp = 'MMPCCM' and MB3='1') ")
+        ACT(cf:1," or ")
+      endif
+       *-- Para Todo o Colocaciones Divisiones
+       if Dialogo.Radio2=0 o Dialogo.Radio2=4
+        SQL.ADD( Val(cf:1)~" (TipoOp = 'MMPCCM' and MB3='1') ")
+        ACT(cf:1," or ")
+      endif
+    Endif
+Endif
+
+*--- Pasivas ---------
+If Dialogo.Radio3 = 0 o Dialogo.Radio3 = 2
+   *--- Para Terceros --- 
+   If Dialogo.Radio6=0 o Dialogo.Radio6=2
+       *-- Para Todo o Obligaciones Negociables
+       if Dialogo.Radio4=0 o Dialogo.Radio4=1
+         SQL.ADD( Val(cf:1)~" (TipoOp In ('MMFCMV','MMONM')) ")
+         ACT(cf:1," or ")
+       endif
+       *-- Para Todo o Comercio Exterior
+       if Dialogo.Radio4=0 o Dialogo.Radio4=2
+         SQL.ADD( Val(cf:1)~" (TipoOp In ('MMPEM','MMPIM')) ")
+         ACT(cf:1," or ")
+       endif
+       *-- Para Todo o Financiamiento Loc
+       if Dialogo.Radio4=0 o Dialogo.Radio4=3
+         SQL.ADD( Val(cf:1)~" (TipoOp = 'MMPCLM') ")
+         ACT(cf:1," or ")
+       endif
+       *-- Para Todo o Financiamiento Ext
+       if Dialogo.Radio4=0 o Dialogo.Radio4=4
+         SQL.ADD( Val(cf:1)~" (TipoOp In ('MMPOSM','MMSCMV')) ")
+         ACT(cf:1," or ")
+       endif
+       *-- Para Todo o Cta.Cte.Terceros
+       if Dialogo.Radio4=0 o Dialogo.Radio4=5
+         SQL.ADD( Val(cf:1)~" (TipoOp ='') ")
+         ACT(cf:1," or ")
+       endif
+   Endif
+   *--- Para Vinculados--- 
+   If Dialogo.Radio6=0 o Dialogo.Radio6=1
+       *-- Para Todo o Cta.Cte.Vinculadas
+       if Dialogo.Radio5=0 o Dialogo.Radio5=1
+         SQL.ADD( Val(cf:1)~" (TipoOp = '') ")
+         ACT(cf:1," or ")
+       endif
+       *-- Para Todo o Cta.Cte.Divisiones
+       if Dialogo.Radio5=0 o Dialogo.Radio5=2
+         SQL.ADD( Val(cf:1)~" (TipoOp = '') ")
+         ACT(cf:1," or ")
+       endif
+       *-- Para Todo o Prestamos Vinculadas
+       if Dialogo.Radio5=0 o Dialogo.Radio5=3
+         SQL.ADD(Val(cf:1)~" (TipoOp = 'MMPCCM' and MB3='0') ")
+         ACT(cf:1," or ")
+       endif
+       *-- Para Todo o Prestamos Divisiones
+       if Dialogo.Radio5=0 o Dialogo.Radio5=4
+         SQL.ADD(Val(cf:1)~" (TipoOp = 'MMPCCM' and MB3='0') ")
+         ACT(cf:1," or ")
+       endif
+   Endif
+Endif
+SQL.ADD(" ) ")
+EndIf
+SQL.ADD(" ORDER BY NrOperacion ")
+*---------------------------------------------------------------------------
+
+*--posicion de la 1ra cuota de todas las Operaciones
+ACN(cd:1,fac+1) 
+ACN(ce:1,fac) 
+
+*--- en ba:bz estan los totalizadores ------
+Recorrer SQL 
+
+   * Discrimina Divisiones de Vinculadas -> Division solamente si son dos divisiones del Mismo Vehiculo
+   If [[Dialogo.Radio2=2 o Dialogo.Radio2=4 o Dialogo.Radio5=2 o Dialogo.Radio5=4] y [Incluido(Ascendientes('VEHICULOS',FBN['Vehiculo1']),Ascendientes('VEHICULOS',FBN['Cliente1']),1) y EqStr(BuscarCampo('VEHICULOS','TipoVehiculo','Codigo',FBN['Vehiculo1']),'DIV') y EqStr(BuscarCampo('VEHICULOS','TipoVehiculo','Codigo',FBN['Cliente1']),'DIV')] ] o [[Dialogo.Radio2=1 o Dialogo.Radio2=3 o Dialogo.Radio5=1 o Dialogo.Radio5=3] y Not [Incluido(Ascendientes('VEHICULOS',FBN['Vehiculo1']),Ascendientes('VEHICULOS',FBN['Cliente1']),1) y EqStr(BuscarCampo('VEHICULOS','TipoVehiculo','Codigo',FBN['Vehiculo1']),'DIV') y EqStr(BuscarCampo('VEHICULOS','TipoVehiculo','Codigo',FBN['Cliente1']),'DIV')]] o [ [Dialogo.Radio1>=0 o Dialogo.Radio4>=0] y Not Incluido(Fbn['TipoOp'],'MMPCCM')] o Dialogo.Radio2=0 o Dialogo.Radio5=0  o Dialogo.Check1=1
+ 
+      ACT(a:fac,FBN['Vehiculo1'])
+      ACT(b:fac,FBN['TipoOp'])
+      ACT(c:fac,FBN['NrOperacion'])
+      ACLO(c:fac,FBN['NrOperacion'])
+      ACT(d:fac,FBN['Cliente1']) 
+      ACT(e:fac,FBN['Especie'])
+      ACN(f:fac,FBN['Cuotas1']) 
+      ACN(i:fac,ABS( DifDias(FBN['FechaVto'],FBN['FechaOp'],'ARG',NO)))
+
+      If Incluido(FBN['TipoOp'],'MMCDIA')
+         *- El capital se amortiza al Vto. del deposito
+         ACN(m:fac, FBN['Cantidad']) 
+      EndIf
+
+      ACD(ay:fac,FBN['FechaVto'])
+      ACN(az:fac,FBN['PrecioEj'])
+ 
+      *----------Por cada cuota ------------
+      SQL.ADD("SELECT NrCuota,Fecha1,Fecha2,Cantidad2,Cantidad1,Precio2,Precio3,Precio4,Total3 ")
+      SQL.ADD("FROM "~DBO~".CUOTAS ")
+      SQL.ADD("WHERE NrOperacion = '"~FBN['NrOperacion']~"' ")
+      SQL.ADD("ORDER BY NrCuota ")
+
+      *--posicion de la 1ra cuota de cada operacion
+      ACN(ba:1,fac) 
+
+      *--posicion de la 1ra cuota incluida en el periodo seleccionado
+      ACN(bb:1, 0 )
+      DFA 
+
+      Recorrer SQL
+         ACN(ax:fac, FBN['Cantidad1']) 
+         ACD(g:fac, FBN['Fecha1'])
+         ACD(h:fac, FBN['Fecha2'])
+
+         *-- Campo CR ----
+         If Val(h:fac) < Dialogo.Fecha1  o Val(g:fac) >= Dialogo.Fecha2
+            ACN(j:fac, 0 ) 
+         Else   
+            ACN(j:fac, 1 ) 
+            If Val(bb:1) = 0
+               ACN(bb:1,fac)
+            Endif
+         Endif
+         If Eqstr(Val(e:Val(ba:1)),Dialogo.Especie1)
+            ACN(k:fac,1)
+            ACN(l:fac,1)
+            ACN(xk:fac,1)
+            ACN(xl:fac,1)
+         Else
+            ACN(xk:fac, CotizacionC(Val(e:Val(ba:1)),,,,FBN['Fecha1']-1, 1,SI,Dialogo.Especie1) ) 
+            ACN(xl:fac, CotizacionC(Val(e:Val(ba:1)),,,,FBN['Fecha2']-1, 1,SI,Dialogo.Especie1) ) 
+            if EqStr(SQL("Select Modo from "~DBO~".MODOESPECIES where Especie1='"~Val(e:Val(ba:1))~"' and Especie2='"~Dialogo.Especie1~"' "),'INV')
+               ACN(k:fac,1/Val(xk:fac))
+               ACN(l:fac,1/Val(xl:fac))
+            else
+               ACN(k:fac,Val(xk:fac))
+               ACN(l:fac,Val(xl:fac))
+            endif
+         Endif
+
+         If Incluido(val(b:val(ba1)),'MMCDIA')
+            If Val(m:fac) = 0
+               ACN(m:fac, Val(m:fac-1)) 
+            Endif
+         Else 
+            ACN(m:fac, FBN['Cantidad2']) 
+         EndIf
+
+         ACN(q:fac,ABS(val(g:fac)-Val(h:fac)) ) 
+ 
+         *-- Si faltan datos de fecha de cuotas repito la de la anterior
+         If Val(q:fac) = 0  
+            ACN(q:fac, Val(q:fac-1)) 
+         Endif
+ 
+         ACN(o:fac, Val(m:fac)*Val(q:fac)/Val(i:Val(ba:1)) ) 
+  
+         *-- Capital comput ---
+         If Val(j:fac) = 0
+            ACN(p:fac, 0 )
+         Else 
+            ACN(p:fac,Val(m:fac))
+         Endif
+  
+*        ACN(r:fac,FBN['Precio2']+FBN['Precio4'])  
+
+         *---Tasa----
+         If Incluido(Val(b:Val(ba:1)),'MMCPM|')
+            ACN(r:fac,FBN['Precio4'])
+         Endif
+         If Incluido(Val(b:Val(ba:1)),'MMCDIA|MMPEM|MMPIM|MMPOSM|MMPCLM|MMPCCM')
+            ACN(r:fac,FBN['Precio3'])
+         Endif
+         If Incluido(Val(b:Val(ba:1)),'MMSCMV|MMSIMV|MMFCMV|MMFIMV|MMONM|')
+            ACN(r:fac,FBN['Total3'])  
+         Endif 
+
+         *-- Si faltan datos de tasa y spread de las cuotas repito la de la anterior.
+         If Val(r:fac) = 0
+            ACN(r:fac, Val(r:fac-1)) 
+         Endif
+
+
+         *-- dias transcurridos ----
+         If Val(h:fac) < Dialogo.Fecha1
+            ACN(s:fac, 0 ) 
+         Else   
+            If Val(g:fac) >= Dialogo.Fecha2
+               ACN(s:fac, 0 ) 
+            Else
+               If Val(g:fac) <= Dialogo.Fecha1  
+                  If Val(h:fac) < Dialogo.Fecha2
+                     ACN(s:fac, ABS( DifDias(Val(h:fac),Dialogo.Fecha1,'ARG',NO) ) ) 
+                  Else
+                     ACN(s:fac, ABS( DifDias(Dialogo.Fecha2,Dialogo.Fecha1,'ARG',NO) ) ) 
+                  Endif    
+               Else
+                  If Val(h:fac) > Dialogo.Fecha2
+                     ACN(s:fac, ABS( DifDias(Dialogo.Fecha2,Val(g:fac),'ARG',NO) ) ) 
+                  Else
+                     ACN(s:fac, ABS( DifDias(Val(h:fac),Val(g:fac),'ARG',NO) ) ) 
+                  Endif    
+               Endif 
+            Endif 
+         Endif
+
+         ACN(t:fac, Val(m:fac)*Val(r:fac)*Val(s:fac)/36500  )             
+         ACN(u:fac, Val(m:fac)*Val(xk:fac) ) 
+         ACN(y:fac, Val(u:fac)*Val(q:fac)/Val(i:Val(ba:1))  ) 
+  
+         If Val(t:fac) = 0 
+            ACN(v:fac, 0 )
+         Else
+            ACN(v:fac, Val(m:fac) ) 
+         Endif
+
+         ACN(w:fac, Val(v:fac)+Val(t:fac) ) 
+         ACN(z:fac, Val(v:fac)*Val(xk:fac) ) 
+
+         ACN(aa:fac, Val(w:fac)*Val(xl:fac) ) 
+         ACN(ab:fac, Val(aa:fac)-Val(z:fac) ) 
+         If Val(ab:fac) = 0 
+            ACN(ac:fac, 0 )
+         Else
+            ACN(ac:fac, (Val(ab:fac)*36500) / (Val(z:fac)*Val(s:fac)) ) 
+         Endif 
+
+         ACN(ad:fac, Val(z:fac)*Val(ac:fac)*Val(s:fac) /100  )
+         ACN(ae:fac, Val(z:fac)*Val(s:fac) ) 
+         ACN(af:fac, Val(u:fac)*Val(q:fac) ) 
+
+         *--- solo para cuotas posteriores a la actual, incluida la actual
+         If Val(bb:1) <> 0 y fac >= Val(bb:1) 
+            *-- Dias a End ---
+            If Val(g:fac) > Dialogo.Fecha2
+               ACN(ag:fac, DifDias(Val(h:fac),Val(g:fac),'ARG',NO) )   
+            Else
+               If Val(h:fac) < Dialogo.Fecha2
+                 ACN(ag:fac, 0 )
+               Else
+                 ACN(ag:fac, DifDias(Val(h:fac),Dialogo.Fecha2,'ARG',NO) )   
+               Endif  
+            Endif 
+
+            If Val(ag:fac) = 0
+               ACN(ak:fac, 0 ) 
+               ACN(am:fac, 0 ) 
+            Else
+               ACN(ak:fac,Val(m:fac))
+               ACN(am:fac, Val(ak:fac)*Val(r:fac)*Val(ag:fac)/36500 ) 
+            Endif
+
+            ACN(al:fac,Val(ak:fac)+Val(am:fac))
+
+            If Val(g:fac) < Dialogo.Fecha2
+               ACN(ap:fac, Val(ak:fac)*Val(xl:fac) ) 
+            Else
+               ACN(ap:fac, Val(ak:fac)*Val(xk:fac) ) 
+            Endif
+ 
+            ACN(aq:fac, Val(al:fac)*Val(xl:fac) ) 
+            ACN(ar:fac, Val(aq:fac)-Val(ap:fac) ) 
+            If Val(ar:fac) = 0
+               ACN(as:fac, 0 ) 
+            Else
+               ACN(as:fac, (Val(ar:fac)*36500) / (Val(ap:fac)*Val(ag:fac)) ) 
+            Endif 
+            ACN(at:fac, Val(ap:fac)*Val(as:fac)*Val(ag:fac) /100 )
+            ACN(au:fac, Val(ap:fac)*Val(ag:fac) ) 
+            If Val(as:fac) <= 0
+               ACN(av:fac, 0 )
+            Else
+               ACN(av:fac, Val(as:fac)*Val(ag:fac)/100  )
+            Endif  
+         Endif
+         *-- Recorrer de Cuotas
+      Proximo
+
+      *****************************
+      *-- Si vto de ult.cta. es <> de Vto.Operac. agrego una cuota ficticia x la diferencia
+      If Not Eqstr( Val(h:fac) , Val(ay:val(ba:1))  )
+
+         ifa
+
+         ACD(g:fac, Val(h:fac-1) )
+         ACD(h:fac, Val(ay:val(ba:1)) )
+
+         *-- Campo CR ----
+         If Val(h:fac) < Dialogo.Fecha1  o Val(g:fac) >= Dialogo.Fecha2
+            ACN(j:fac, 0 ) 
+         Else   
+            ACN(j:fac, 1 ) 
+            If Val(bb:1) = 0
+               ACN(bb:1,fac)
+            Endif
+         Endif
+
+         If Eqstr(Val(e:Val(ba:1)),Dialogo.Especie1)
+            ACN(k:fac,1)
+            ACN(l:fac,1)
+            ACN(xk:fac,1)
+            ACN(xl:fac,1)
+         Else
+            ACN(xk:fac, CotizacionC(Val(e:Val(ba:1)),,,,Val(g:fac)-1, 1,SI,Dialogo.Especie1) ) 
+            ACN(xl:fac, CotizacionC(Val(e:Val(ba:1)),,,,Val(h:fac)-1, 1,SI,Dialogo.Especie1) ) 
+            if EqStr(SQL("Select Modo from "~DBO~".MODOESPECIES where Especie1='"~Val(e:Val(ba:1))~"' and Especie2='"~Dialogo.Especie1~"' "),'INV')
+               ACN(k:fac,1/Val(xk:fac))
+               ACN(l:fac,1/Val(xl:fac))
+            else 
+               ACN(k:fac,Val(xk:fac))
+               ACN(l:fac,Val(xl:fac))
+            endif
+         Endif
+
+         *-- para Cap amortizado --- 
+         If Val(m:fac-1) = Val(az:val(ba:1)) 
+            *--no amortiza capital durante vto de cuotas, repite anterior.
+            ACN(m:fac, Val(m:fac-1) )        
+         Else
+            ACN(m:fac,  Val(m:fac-1) - Val(ax:fac-1) )        
+         Endif
+
+         ACN(q:fac,ABS(val(g:fac)-Val(h:fac)) ) 
+         ACN(o:fac, Val(m:fac)*Val(q:fac)/Val(i:Val(ba:1)) ) 
+
+         *-- Capital comput ---
+         If Val(j:fac) = 0
+            ACN(p:fac, 0 )
+         Else 
+            ACN(p:fac,Val(m:fac))
+         Endif
+
+         ACN(r:fac,Val(r:fac-1))  
+  
+         *-- dias transcurridos ----
+         If Val(h:fac) < Dialogo.Fecha1
+            ACN(s:fac, 0 ) 
+         Else   
+            If Val(g:fac) >= Dialogo.Fecha2
+               ACN(s:fac, 0 ) 
+            Else
+               If Val(g:fac) <= Dialogo.Fecha1  
+                  If Val(h:fac) < Dialogo.Fecha2
+                     ACN(s:fac, ABS( DifDias(Val(h:fac),Dialogo.Fecha1,'ARG',NO) ) ) 
+                  Else
+                     ACN(s:fac, ABS( DifDias(Dialogo.Fecha2,Dialogo.Fecha1,'ARG',NO) ) ) 
+                  Endif    
+               Else
+                  If Val(h:fac) > Dialogo.Fecha2
+                     ACN(s:fac, ABS( DifDias(Dialogo.Fecha2,Val(g:fac),'ARG',NO) ) ) 
+                  Else
+                     ACN(s:fac, ABS( DifDias(Val(h:fac),Val(g:fac),'ARG',NO) ) ) 
+                  Endif    
+               Endif 
+            Endif 
+         Endif
+
+         ACN(t:fac, Val(m:fac)*Val(r:fac)*Val(s:fac)/36500  )             
+         ACN(u:fac, Val(m:fac)*Val(xk:fac) ) 
+         ACN(y:fac, Val(u:fac)*Val(q:fac)/Val(i:Val(ba:1))  ) 
+
+         If Val(t:fac) = 0 
+            ACN(v:fac, 0 )
+         Else
+            ACN(v:fac, Val(m:fac) ) 
+         Endif
+  
+         ACN(w:fac, Val(v:fac)+Val(t:fac) ) 
+         ACN(z:fac, Val(v:fac)*Val(xk:fac) ) 
+ 
+         ACN(aa:fac, Val(w:fac)*Val(xl:fac) ) 
+         ACN(ab:fac, Val(aa:fac)-Val(z:fac) ) 
+         If Val(ab:fac) = 0 
+            ACN(ac:fac, 0 )
+         Else
+            ACN(ac:fac, (Val(ab:fac)*36500) / (Val(z:fac)*Val(s:fac)) ) 
+         Endif 
+
+         ACN(ad:fac, Val(z:fac)*Val(ac:fac)*Val(s:fac) /100  )
+         ACN(ae:fac, Val(z:fac)*Val(s:fac) ) 
+         ACN(af:fac, Val(u:fac)*Val(q:fac) ) 
+
+         *--- solo para cuotas posteriores a la actual, incluida la actual
+         If Val(bb:1) <> 0 y fac >= Val(bb:1) 
+            *-- Dias a End ---
+            If Val(g:fac) > Dialogo.Fecha2
+               ACN(ag:fac, DifDias(Val(h:fac),Val(g:fac),'ARG',NO) )   
+            Else
+               If Val(h:fac) < Dialogo.Fecha2
+                 ACN(ag:fac, 0 )
+               Else
+                 ACN(ag:fac, DifDias(Val(h:fac),Dialogo.Fecha2,'ARG',NO) )   
+               Endif  
+            Endif 
+
+            If Val(ag:fac) = 0
+               ACN(ak:fac, 0 ) 
+               ACN(am:fac, 0 ) 
+            Else
+               ACN(ak:fac,Val(m:fac))
+               ACN(am:fac, Val(ak:fac)*Val(r:fac)*Val(ag:fac)/36500 ) 
+            Endif
+
+            ACN(al:fac,Val(ak:fac)+Val(am:fac))
+
+            If Val(g:fac) < Dialogo.Fecha2
+               ACN(ap:fac, Val(ak:fac)*Val(xl:fac) ) 
+            Else
+               ACN(ap:fac, Val(ak:fac)*Val(xk:fac) ) 
+            Endif
+ 
+            ACN(aq:fac, Val(al:fac)*Val(xl:fac) ) 
+            ACN(ar:fac, Val(aq:fac)-Val(ap:fac) ) 
+            If Val(ar:fac) = 0
+               ACN(as:fac, 0 ) 
+            Else
+               ACN(as:fac, (Val(ar:fac)*36500) / (Val(ap:fac)*Val(ag:fac)) ) 
+            Endif 
+            ACN(at:fac, Val(ap:fac)*Val(as:fac)*Val(ag:fac) /100 )
+            ACN(au:fac, Val(ap:fac)*Val(ag:fac) ) 
+            If Val(as:fac) <= 0
+               ACN(av:fac, 0 )
+            Else
+               ACN(av:fac, Val(as:fac)*Val(ag:fac)/100  )
+            Endif  
+         Endif
+      Endif
+      *****************************
+      *-- Ultima cuota consultada ---
+      ACN(bc:1,fac)
+
+      ACN(ah:Val(ba:1), SUM(ag:Val(ba:1)..ag:Val(bc:1)) )
+  
+      Recorrer&i Val(ba:1), Val(bc:1)
+         ACN(aj:&i, Val(m:&i) * Val(ag:&i) / Val(ah:Val(ba:1))  ) 
+         ACN(ao:&i, Val(ap:&i)* Val(ag:&i) / Val(ah:Val(ba:1))  )  
+      Proximo  
+      ACN(n:Val(ba:1) , SUM(o:Val(ba:1)..o:Val(bc:1)) )
+      ACN(x:Val(ba:1) , SUM(y:Val(ba:1)..y:Val(bc:1)) )
+
+      ACN(ai:Val(ba:1), SUM(aj:Val(ba:1)..aj:Val(bc:1)) )
+      ACN(an:Val(ba:1), SUM(ao:Val(ba:1)..ao:Val(bc:1)) )
+
+      SetFilaActual(Val(bc:1)) 
+   Else
+      dfa
+      * EndIf de Discrimina Divisiones 
+   EndIf 
+Proximo
+
+SetFont(a:10..av:fac,1)
+
+*--posicion de la ultima cuota barrida de todas las Operaciones
+ACN(ce:1, Fac )
+FormatoCeldas(k:Val(cd:1)..l:fac, EXE('F7'))
+FormatoCeldas(i:Val(cd:1)..i:fac, EXE('F0'))
+FormatoCeldas(q:Val(cd:1)..q:fac, EXE('F0'))
+FormatoCeldas(ah:Val(cd:1)..ah:fac, EXE('F0'))
+FormatoCeldas(r:Val(cd:1)..r:fac, EXE('F5'))
+FormatoCeldas(ac:Val(cd:1)..ac:fac, EXE('F5'))
+FormatoCeldas(as:Val(cd:1)..as:fac, EXE('F5'))
+
+SetFilaActual(fac+2)
+
+
+If Val(cd:1) <= Val(ce:1)
+    *--- Hago las sumatorias ---
+    ACN(j:fac , SUM(j:Val(cd:1)..j:Val(ce:1)) )
+    ACN(n:fac , SUM(n:Val(cd:1)..n:Val(ce:1)) )
+    ACN(q:fac , SUM(q:Val(cd:1)..q:Val(ce:1)) )
+    ACN(x:fac , SUM(x:Val(cd:1)..x:Val(ce:1)) )
+    ACN(ad:fac, SUM(ad:Val(cd:1)..ad:Val(ce:1)) )
+    ACN(ae:fac, SUM(ae:Val(cd:1)..ae:Val(ce:1)) )
+    ACN(af:fac, SUM(af:Val(cd:1)..af:Val(ce:1)) )
+    ACN(ah:fac, SUM(ah:Val(cd:1)..ah:Val(ce:1)) )
+    ACN(ai:fac, SUM(ai:Val(cd:1)..ai:Val(ce:1)) )
+    ACN(an:fac, SUM(an:Val(cd:1)..an:Val(ce:1)) )
+    ACN(ao:fac, SUM(ao:Val(cd:1)..ao:Val(ce:1)) )
+    ACN(ap:fac, SUM(ap:Val(cd:1)..ap:Val(ce:1)) )
+    ACN(ar:fac, SUM(ar:Val(cd:1)..ar:Val(ce:1)) )
+    ACN(at:fac, SUM(at:Val(cd:1)..at:Val(ce:1)) )
+    ACN(au:fac, SUM(au:Val(cd:1)..au:Val(ce:1)) )
+    ACN(av:fac, SUM(av:Val(cd:1)..av:Val(ce:1)) )
+
+
+    *--- Saco resultados definitivos ---
+    ACN(ag:fac,Val(at:fac)/Val(au:fac))
+
+    *--Tasa media anual
+    ACN(bu:1,  Val(ad:fac)/Val(ae:fac) * 100 )
+    *--Capital Promedio
+    ACN(bv:1,  Val(ae:fac) / (Dialogo.Fecha2 - Dialogo.Fecha1) )
+    *--Plazo Promedio
+    ACN(bw:1,  Val(af:fac)/Val(x:fac)  )
+
+    *--Tasa media anual Ahead
+    ACN(bx:1, Val(at:fac)/Val(au:fac) * 100 )
+    *--Capital promedio Ahead
+    ACN(by:1,  Val(an:fac)  )       
+    *--Duration  Ahead
+    ACN(bz:1,  Val(au:fac)/Val(an:fac)  )
+Else
+    ACN(bu:1,0)
+    ACN(bv:1,0)
+    ACN(bw:1,0)
+    ACN(bx:1,0)
+    ACN(by:1,0)
+    ACN(bz:1,0)
+Endif
+
+SetFont(a:fac..av:fac,2)
+
+SetFilaActual(fac+2)
+
+ACT(h:fac ,'Tasa media anual')
+ACT(h:fac+1,'Capital Promedio')
+ACT(h:fac+2,'Plazo Promedio')
+ACT(h:fac+4,'AHEAD:')
+ACT(h:fac+5,'    Tasa media anual')
+ACT(h:fac+6,'    Capital promedio')
+ACT(h:fac+7,'    Duration')
+
+ACN(j:fac  ,Val(bu1))
+ACN(j:fac+1,Val(bv1))
+ACN(j:fac+2,Val(bw1))
+ACN(j:fac+5,Val(bx1))
+ACN(j:fac+6,Val(by1))
+ACN(j:fac+7,Val(bz1))
+
+SetFont(h:fac..j:fac+7,2)
+
+SetFilaActual(fac+9)
+ACT(a:fac, 'Fin del Listado')
+SetFont(a:fac..a:fac,2)
+Impresion(1,2)
+LimitesVision(aw:fac+2)
+
+
+If Dialogo.Check4 = 1 
+  ImprimirHoja(NO)
+Endif 

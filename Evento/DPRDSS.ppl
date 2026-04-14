@@ -1,0 +1,99 @@
+﻿*-- DPRDSO: Resultado del Double Up Swap con Opciones
+CrearDialogo
+  NrOperacion1 : "Operacion"                   ;1;1;;;;NoVacio(Dialogo.NrOperacion1);'Debe Ingresar una Operacion';NO;
+  Entero1      : "Nro.Settlement"              ;;;;;;Dialogo.Entero1>0;'El Nro. de Settlement es Incorrecto';NO
+  Fecha1       : "F Real "                     ;;;;NO;;Dialogo.Fecha1>=Dialogo.Fecha4;'La Fecha de Ejercicio Real para esta Operacion es Invalida';NO;Fsys
+  Precio2      : "Floating Price"              ;;;;;;Dialogo.Precio2>=0;'Floating Price Incorrecto';NO;
+  Especie1     : "Commodity"                   ;1;2;;NO;;;;;;BuscarCampo('Operaciones','Especie','NrOperacion',Dialogo.NrOperacion1)
+  Fecha4       : "Fecha Settlement"            ;2;2;;NO;;;;;;SQL(" Select Fecha1 from "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(Dialogo.Entero1,2,0)~" ")
+  Precio3      : "Fixed Price"                 ;;;;NO;;;;;;BuscarCampo('Operaciones','PrecioEj','NrOperacion',Dialogo.NrOperacion1)
+  Radio2       : "Tipo|Consumer|Producer"      ;;;;NO;;;;;;BuscarCampo('Operaciones','MB1','NrOperacion',Dialogo.NrOperacion1)
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+If Not Incluido(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'DPDSS')
+   Cancelar('La operacion No '~Dialogo.NrOperacion1~' No es Double Up Swap con Swaption')
+endif
+
+* Verifico que se encuentre en Back Office o Terminal
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+
+If VAL(X1)<>20 y VAL(X1)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+* Verifico que no se haya pasado la fecha de liquidacion
+(.'DCFMODI'.)
+
+If Dialogo.Fecha1>VAL(D1)
+   Cancelar('La Operacion ya fue Liquidada, No se puede Modificar !!!')
+EndIf
+
+If Ok
+   * X1: Recupero la Operacion
+   acn(x1,0)
+
+   SQL.ADD("Select * from "~DBO~".CUOTAS ")
+   SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   SQL.ADD("and NrCuota = "~Fstr(Dialogo.Entero1,2,0)~" ")
+
+*    SQL.ADD("and (Precio1 is Null or Precio1=0) ")
+
+   Recorrer SQL
+
+     acn(x1,1)
+
+     *-- Calculo el Resultado por Unidad    
+     *-- Z4: Volumen del Settlement
+     IF Dialogo.Radio2=0 
+        ACN(Z3,(Dialogo.Precio2-Dialogo.Precio3))
+     ELSE 
+        ACN(Z3,(Dialogo.Precio3-Dialogo.Precio2))
+     ENDIF 
+
+     * Lo Ejerce
+     *** Calculo el Resultado TOTAL
+     ACN(Z2,VAL(Z3)*FBN['Cantidad1'])
+  
+     Message('Actualizando la Opcion  .... ')                  
+
+     *** Marca la operacion como ejercida ***
+     SQL.ADD("Update "~DBO~".CUOTAS ")
+     SQL.ADD("Set ")
+     SQL.ADD("Precio1   = "~Fstr(Dialogo.Precio2,0,7)~", ")
+     SQL.ADD("Precio2   = "~Fstr(VAL(Z3),0,7)~", ")
+     SQL.ADD("Total1    = "~Fstr(VAL(Z2),0,2)~" ")
+     SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+     SQL.ADD("and NrCuota = "~Fstr(Dialogo.Entero1,2,0)~" ")
+     SQL.NEW
+     SQL.EXEC
+
+     *-- Insert de Mov.Pendientes. El Resultado invierte el signo porque se ve desde el cliente
+     * EjecutarEvento('IMOVPE',NrOperacion1=Dialogo.NrOperacion1,Fecha1=FBN['Fecha2'],Cliente1=BuscarCampo('Operaciones','Cliente1','NrOperacion',Dialogo.NrOperacion1),Especie1=BuscarCampo('Operaciones','ContraEspecie','NrOperacion',Dialogo.NrOperacion1),Vehiculo1=BuscarCampo('Operaciones','Vehiculo1','NrOperacion',Dialogo.NrOperacion1),Entero1=1,Precio1=-VAL(Z2),String='Resultado Settlement',Entero2=9,Entero3=Dialogo.Entero1,String1='CUOTAS')
+
+     *** Actualiza movimientos y limites ****
+     SQL.ActualizarMovimientos(Dialogo.NrOperacion1,SI)
+     SQL.EXEC
+
+
+     * Actualizo la Instancia de la Operacion a Supervision
+     (.'MODIINSTAN'.)      
+   proximo
+
+   If Val(x1)=0
+      Cancelar('La operacion No '~Dialogo.NrOperacion1~' Cuota No '~FStr(Dialogo.Entero1,2,0)~' No puede ser Ejercida')
+   endif
+endif
+

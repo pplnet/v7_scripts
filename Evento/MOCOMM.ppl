@@ -1,0 +1,103 @@
+﻿CrearDialogo
+  NrOperacion1 : 'Operacion'        ;;;;;;;;;
+FinDialogo
+
+If Not Ok 
+   Cancelar
+Endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+
+SQL.ADD("Select O.NrOperacion, O.TipoOp, O.PrecioEj, O.FechaOp, O.FechaOp2, ")
+SQL.ADD("C.* ")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".COMISIONES2 C" )
+SQL.ADD("where O.NrOperacion=C.NrOperacion  and C.Importe1<>0 and")
+SQL.ADD("C.Tipo='4' and O.NrOperacion='"~Dialogo.NrOperacion1~"' ")
+SQL.ADD(" order by O.NrOperacion,C.Fecha1")
+
+Recorrer SQL
+
+  Message('Procesando Operaci¦n '~FBN['NrOperacion']~' ...')
+
+  ACT(a:fac, fbn('NrOperacion'))
+  ACT(b:fac, fbn('TipoOp'))
+  ACT(c:fac, fbn('Cliente1'))
+  ACN(d:fac, fbn('Tasa1'))
+  ACD(e:fac, fbn('Fecha1'))
+  ACN(f:fac, fbn('Importe1'))
+  ACN(g:fac, fbn('Importe2'))
+  ACN(h:fac, fbn('Importe3'))
+  ACN(i:fac, fbn('Importe4'))
+  ACN(j:fac, fbn('Importe5'))
+  ACN(k:fac, fbn('PrecioEj'))
+  ACN(l:fac, fbn('NrComision'))
+
+  ACN(m:fac, fbn('Tasa2'))
+  ACN(n:fac, fbn('Tasa3'))
+  ACN(o:fac, fbn('Precio1'))
+  ACN(p:fac, fbn('Precio2'))
+Proximo
+
+ACO(1,7)
+ACO(2,5)
+ACO(3,6)
+ACO(4,4)
+ACO(5,5)
+ACO(6,10)
+ACO(7,10)
+ACO(8,10)
+ACO(9,10)
+ACO(10,10)
+
+FormatoCeldas(g1..g:fac, Exe('F2'))
+FormatoCeldas(f1..j:fac, Exe('F2'))
+
+ListBox(a1..j:fac, '# Op     Tipo   Cliente  Tasa      Fecha        Importe        IVA           WH       A Pagar    No Utilizado')
+
+If Ok
+  RecorrerSel
+       * Verifico que se encuentre en Back Office o Terminal
+       ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~VAL(a:FilaCiclo)~"' AND Valor='1'") )
+
+       If VAL(X1)<>20 y VAL(X1)<>50
+          *-- Busco la instancia actual
+          Cancelar("La Operaci#n "~VAL(a:FilaCiclo)~" Debe estar en BackOffice o Terminal. Instancia Actual="~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+       EndIf
+ 
+
+       CrearDialogo
+          NrOperacion1 : 'Operaci¦n'           ;;;;NO;;;;;VAL(a:FilaCiclo)
+          TipoOp1      : 'TipoOp'              ;1;2;;NO;;;;;VAL(b:FilaCiclo)
+          Precio1      : 'VN Total'            ;;;;NO;NO;;;;VAL(k:FilaCiclo);;;;"###,###,###,###.##"
+          Cantidad4    : 'A Pagar'             ;;;;NO;;;;;;Dialogo.Cantidad1+Dialogo.Cantidad3+Dialogo.Cantidad6;;;"###,###,###,###.##"
+          Cantidad1    : 'Importe '            ;2;1;;;;;;;VAL(f:FilaCiclo);;;;"###,###,###,###.##"
+          Cantidad2    : 'IVA '                ;;;;;;;;;VAL(g:FilaCiclo);Dialogo.Cantidad1*VAL(m:FilaCiclo)/100;;;"###,###,###,###.##"
+          Cantidad3    : 'WH'                  ;;;;;;;;;VAL(h:FilaCiclo);Dialogo.Cantidad1*VAL(n:FilaCiclo)/100;;;"###,###,###,###.##"
+          Cantidad6    : "Impto.Imp.Int"       ;;;;;;;;;VAL(p:FilaCiclo);Dialogo.Cantidad1*VAL(o:FilaCiclo)/100;;;"###,###,###,###.##"
+          Cantidad5    : 'VN No Utilizado'     ;;;;NO;NO;Dialogo.Cantidad5<=VAL(k:FilaCiclo);'El Valor No Utilizado no puede Superar la VN Total de La Operacion';NO;VAL(j:FilaCiclo)
+       FinDialogo
+
+       IF Ok
+          Message('Actualizando Datos de la Comisi¦n ....')
+          SQL.ADD("Update "~DBO~".COMISIONES2 ")
+          SQL.ADD("Set")
+          SQL.ADD(" Importe1 = "~Fstr(Dialogo.Cantidad1,0,2)~", ")
+          SQL.ADD(" Importe2 = "~Fstr(Dialogo.Cantidad2,0,2)~", ")
+          SQL.ADD(" Importe3 = "~Fstr(Dialogo.Cantidad3,0,2)~", ")
+          SQL.ADD(" Importe4 = "~Fstr(Dialogo.Cantidad4,0,2)~", ")
+          SQL.ADD(" Precio2  = "~Fstr(Dialogo.Cantidad6,0,2)~", ")
+          SQL.ADD(" Importe5 = "~Fstr(Dialogo.Cantidad5,0,2)~"  ")
+          SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+          SQL.ADD("and NrComision = "~Fstr(VAL(l:FilaCiclo),2,0)~" ")
+          SQL.NEW
+          SQL.EXEC    
+       ENDIF
+  Proximo
+EndIf

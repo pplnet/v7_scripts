@@ -1,0 +1,95 @@
+creardialogo
+nrtrans1: 'Nro.Voucher';;;;;;Incluido(BuscarCampo('TRANSACCIONES2', 'TipoTr2', 'NrTrans', dialogo.nrtrans1), 'FXDEP|FXRET|FXCOMP');'Tipo de Comprobante incorrecto';NO;;;;;;" TipoTr2 IN ('FXDEP','FXRET','FXCOMP') AND Fecha3 = '"~IdxDate(FSys())~"' and CB9 = '1' ";
+findialogo
+if (not ok)
+Cancelar()
+endif
+
+Sqladd("Select * from "~Dbo()~".TRANSACCIONES2 ")
+Sqladd(" where NrTrans = '"~dialogo.nrtrans1~"' ")
+Sqladd(" order by NrTrans")
+
+recorrer sql
+if ((not Incluido(Fbn()['TipoTr2'], 'FXDEP|FXRET|FXCOMP')) y (not Eqstr(Fbn('CB10'), '1')))
+Cancelar('Tipo de Transaccion incorrecto.')
+endif
+
+Act(x1, Query("Select Valor from "~Dbo()~".OPERACIONESBITS where NrOperacion = '"~dialogo.nrtrans1~"' and NrBit = 2 "))
+if (celdavacia(x1) o not Eqstr(Val(x1), '1'))
+Cancelar('El Voucher No '~Copy(Fbn()['NrTrans'], 2, 7)~' no esta confirmado.')
+endif
+if (Fbn()['CB9'] = 0)
+Cancelar('El Voucher '~Copy(Fbn()['NrTrans'], 2, 7)~' esta Transportado.')
+endif
+
+if ((Fbn('Cantidad3') <> 0) y (NoVacio(Fbn('NrTransRef1'))))
+Sqladd("Delete from "~Dbo()~".MOVPENDIENTES ")
+Sqladd(" where NrOperacion = '"~Fbn('NrTransRef1')~"' ")
+Sqlnew()
+
+Sqladd("Delete from "~Dbo()~".MOVEJECUTADOS ")
+Sqladd(" where NrOperacion = '"~Fbn('NrTransRef1')~"' ")
+Sqlnew()
+
+Sqladd("Delete from "~Dbo()~".MOVCASHFLOW ")
+Sqladd(" where NrOperacion = '"~Fbn('NrTransRef1')~"' ")
+Sqlnew()
+
+Sqladd("Delete from "~Dbo()~".MOVLIMITES ")
+Sqladd(" where NrOperacion = '"~Fbn('NrTransRef1')~"' ")
+Sqlnew()
+
+Sqladd("Delete from "~Dbo()~".OPERACIONESBITS ")
+Sqladd(" where NrOperacion = '"~Fbn('NrTransRef1')~"' ")
+Sqlnew()
+
+Sqladd("Delete from "~Dbo()~".TRANSACCIONES2 ")
+Sqladd(" where NrTrans = '"~Fbn('NrTransRef1')~"' ")
+Sqlnew()
+endif
+
+
+Sqladd(" UPDATE "~Dbo()~".TRANSACCIONES2 ")
+Sqladd(" Set CB9     = '0', ")
+Sqladd(" Fecha3      = Null, ")
+Sqladd(" Cantidad3   = 0, ")
+Sqladd(" Cantidad4   = 0,  ")
+Sqladd(" NrTransRef1 = Null ")
+Sqladd(" where NrTrans='"~dialogo.nrtrans1~"' ")
+Sqlnew()
+
+if (Incluido(Fbn()['TipoTr2'], 'FXRET|'))
+Sqladd(" UPDATE "~Dbo()~".OPERACIONESBITS Set Valor='1' where NrOperacion='"~dialogo.nrtrans1~"' and NrBit = 6 ")
+else
+Sqladd(" UPDATE "~Dbo()~".OPERACIONESBITS Set Valor='1' where NrOperacion='"~dialogo.nrtrans1~"' and NrBit = 7 ")
+endif
+Sqlnew()
+
+Sqladd(" UPDATE "~Dbo()~".OPERACIONESBITS Set Valor = '0' where NrOperacion='"~dialogo.nrtrans1~"' and NrBit = 5 ")
+Sqlnew()
+Sqladd(" UPDATE "~Dbo()~".OPERACIONESBITS Set Valor = '0' where NrOperacion='"~dialogo.nrtrans1~"' and NrBit = 2 ")
+Sqlnew()
+Sqlexec()
+
+if (not Eqstr(Fbn('Mercado1'), 'OCT'))
+Sqladd("Select NrOperacion from "~Dbo()~".MOVEJECUTADOS ")
+Sqladd(" where NrTrans2 = '"~dialogo.nrtrans1~"' ")
+Sqladd("   and NrTrans2 <> NrOperacion ")
+
+recorrer sql
+Dfa()
+Act(a:fac, Fbn('NrOperacion'))
+proximo
+
+Sqladd("UPDATE "~Dbo()~".TRANSACCIONES2 ")
+Sqladd("   Set CB2     = '0', ")
+Sqladd("       Fecha3  = Null ")
+Sqladd(" Where NrTrans = '"~Val(a:fac)~"' ")
+Sqlnew()
+Sqlexec()
+
+modificaroperacion(Val(a:fac), 0, NO, NO, SI, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, SI, NO, SI, NO, NO, NO, 1)
+endif
+proximo
+
+

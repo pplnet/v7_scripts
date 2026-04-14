@@ -1,0 +1,609 @@
+﻿CrearDialogo
+  NrOperacion1 : 'Operacion';1;1;;  ;  ;NoVacio(Dialogo.NrOperacion1);'Debe Ingresar una Operacion valida';NO;;;;;;"TipoOp in ('TIPA','TIPP') "
+  Check1:        'Procesa'  ;1;2;;SI;SI;;;;0;
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+SQL.ADD("Select O.NrOperacion,    O.FechaCargaSys,      O.Especie,           O.ValorRB1,      ")
+SQL.ADD("       O.Precio1,        O.FechaVto,           O.FechaPago,     ")
+SQL.ADD("       O.CB5,            O.FechaOp,            O.Cliente1,          O.Cantidad,      ")
+SQL.ADD("       O.Corredor,       O.PorComision,        O.ContraEspecie, ")
+SQL.ADD("       O.Mercado,        O.FormaLiquidacion1,  O.FormaLiquidacion2, O.Operador,      ")
+SQL.ADD("       O.TablaFeriados1, O.TasaInteresesCupon, O.TotalComisiones,   O.EnteCus1,      O.EnteCus2,      ")
+SQL.ADD("       O.Vehiculo1,      O.OpSIOPEL,           O.CB7,               O.Cupon1,        ")
+SQL.ADD("       O.TipoCambio,     O.EsAforado,          O.PorAforo,          O.TipoCambio2,   ")
+SQL.ADD("       O.TipoOp,         O.Cuenta1,            O.Cuenta4,           O.Operador1,     ")
+SQL.ADD("       O.Precio3,        O.RB9,                O.RB10,              O.TotalCaucion,  O.TotalGastos, ")
+SQL.ADD("       O.MB2,            O.Precio4,            O.Book1,             O.OficialCuenta,  ")
+SQL.ADD("       O.UDN2,           O.UDN1,               O.Mercado2,          ")
+SQL.ADD("       O.ContraEspecie2, O.Cliente5,           O.ConceptoEmp,       ")
+SQL.ADD("       O.Mercado4,       O.TipoCambio3,        O.Precio2,           O.Cuenta2,       ")
+SQL.ADD("       O.Cuenta3,        O.MB6,                O.Cotizacion1,       O.Comision,      ")
+SQL.ADD("       O.FechaEnvioMAE,  O.FechaAltaMAE,       O.FechaBajaMAE,      ")
+SQL.ADD("       O.NroAltaMAE,     O.NroBajaMAE,         O.NrSisExterno,      ")
+SQL.ADD("       O.IntDevengados1, O.TotalAux2,          O.TotalGanancias,    O.Rojo,           ")
+** FJL 13/03/20 - Se agrega el campo de Fuenta Alta y Baja
+SQL.ADD("       O.RB5,                O.RB7,                ")
+** FJL 22/06/23 - Se agregan campos por calculo x tasa
+SQL.ADD("       O.TotalBrutoCli1, O.TotalBrutoCli2,     O.CB3, ")
+** FJL 15/11/23 - Se agrega NrOrden1
+SQL.ADD("       O.NrOrden1, ")
+** Campos Agregados para version STD (BBYMA)
+SQL.ADD("       MB1 ")
+SQL.ADD("  from "~DBO~".OPERACIONES O ")
+SQL.ADD(" where O.NrOperacion   = '"~Dialogo.NrOperacion1~"' ")
+SQL.ADD("   and O.TipoOp       in ('TIPA','TIPP') ")
+SQL.ADD("   and IsNull(O.NrOperacion3,'') = '' ")
+SQL.ADD("   and IsNull(O.NrOperacion4,'') = '' ")
+
+Recorrer SQL
+  ACT(a:FAC, fbn('NrOperacion'))
+  ACT(b:FAC, fbn('TipoOp'))
+  ACD(c:FAC, fbn('FechaOp'))
+  ACT(d:FAC, fbn('Especie'))
+  ACT(e:FAC, fbn('Cliente1'))
+  ACD(z:1, FSYS)
+  ACT(z:2, Hora(SQLAhora))
+
+** FJL 02/04/20 - Redondeaba a minutos
+  if fbn('CB5')=1
+    * FechaEnvioMAE
+    if NoVacio(fbn('FechaEnvioMAE'))
+      ACT(i:FAC, SQLFechaStr(Fecha(Trunc(fbn('FechaEnvioMAE'),0))~' '~Hora(fbn('FechaEnvioMAE')),Exe('FORFECHOR')))
+    endif
+    * FechaAltaMAE
+    if NoVacio(fbn('FechaAltaMAE'))
+      ACT(j:FAC, SQLFechaStr(Fecha(Trunc(fbn('FechaAltaMAE'),0))~' '~Hora(fbn('FechaAltaMAE')),Exe('FORFECHOR')))
+    endif
+    * FechaBajaMAE
+    if NoVacio(fbn('FechaBajaMAE'))
+      ACT(k:FAC, SQLFechaStr(Fecha(Trunc(fbn('FechaBajaMAE'),0))~' '~Hora(fbn('FechaBajaMAE')),Exe('FORFECHOR')))
+    endif
+  endif
+  **** Graba Spot ****
+  if EqStr(fbn('TipoOp'), 'TIPA')
+    ACT(z:3, 'TIC')
+  else
+    ACT(z:3, 'TIV')
+  endif
+  **** Graba Futuro ****
+  if EqStr(fbn('TipoOp'), 'TIPA')
+    ACT(y:3, 'TIFV')
+  else
+    ACT(y:3, 'TIFC')
+  endif
+  ACT(f:FAC, Val(z:3))
+  ACT(g:FAC, Val(y:3))
+  if Dialogo.Check1=1
+    ******************************************
+    ** NrOpercion SPOT
+    ******************************************
+    ACT(z:4, GetNumerador(1))
+
+    ******************************************
+    * generar operacion Spot (TIC/TIV)
+    ******************************************
+    SQL.ADD("Insert Into "~DBO~".OPERACIONES ( ")
+
+    SQL.ADD(" TipoOp,             ")
+    SQL.ADD(" NrOperacion,    ")
+    SQL.ADD(" FechaOp,         ")
+    SQL.ADD(" Especie, ")
+    SQL.ADD(" Cliente1,           ")
+
+    SQL.ADD(" Cantidad,       ")
+    SQL.ADD(" Precio1,        ")
+    SQL.ADD(" TipoCambio2,        ")    
+    SQL.ADD(" ContraEspecie,   ")
+    SQL.ADD(" Cupon1, ")
+
+** FJL 22/06/23 - Se agregan campos por calculo x tasa
+    SQL.ADD(" CB3,        ")    
+    SQL.ADD(" TotalBrutoCli1,        ")    
+
+* Se agrega RB5 Plazo
+    SQL.ADD(" RB5,       ")
+    SQL.ADD(" FechaVto,        ")
+    SQL.ADD(" Mercado, ")
+* FJL 08/11/21 - Cambio criterio FLiq de pases - Se usan ambas formas siempre
+    SQL.ADD(" FormaLiquidacion1, ")
+    SQL.ADD(" FormaLiquidacion2, ")
+
+    SQL.ADD(" TablaFeriados1, ")
+    SQL.ADD(" CB7, ")
+
+    SQL.ADD(" Corredor, ")
+    SQL.ADD(" RB9, ")
+    SQL.ADD(" TotalComisiones, ")
+    SQL.ADD(" Operador, ")
+    SQL.ADD(" OpSIOPEL, ")
+
+    SQL.ADD(" EnteCus1, ")
+    SQL.ADD(" EnteCus2, ")
+    SQL.ADD(" Book1, ")
+    SQL.ADD(" Vehiculo1,       ")
+    SQL.ADD(" Mercado2,           ")
+    SQL.ADD(" CB5,            ")
+
+    SQL.ADD(" UDN2,            ")
+    SQL.ADD(" Cuenta1,            ")
+    SQL.ADD(" Cuenta4,        ")
+    SQL.ADD(" Mercado4, ")
+    SQL.ADD(" FechaCarga,      ")
+
+    SQL.ADD(" FechaCargaSys,   ")
+    SQL.ADD(" EsAforado,       ")
+    SQL.ADD(" PorAforo,        ")
+    SQL.ADD(" TotalCaucion,    ")    
+    SQL.ADD(" PaseCB, ")
+    SQL.ADD(" OperacionRef, ")
+
+    * Fuente Alta
+    SQL.ADD(" RB6, ")
+    * Fuente Baja
+    SQL.ADD(" RB7, ")
+
+    if fbn('CB5')=1
+      SQL.ADD(" FechaEnvioMAE, ")
+      SQL.ADD(" NroAltaMAE,         ")
+      SQL.ADD(" FechaAltaMAE, ")
+      SQL.ADD(" AceptaMAE,     ")
+      SQL.ADD(" NrSisExterno,       ")
+    endif
+
+    SQL.ADD(" Cuenta2,         ")
+    SQL.ADD(" Cuenta3,            ")
+    SQL.ADD(" Cotizacion1,        ")
+** FJL 15/11/23 - Se agrega NrOrden1
+    SQL.ADD(" NrOrden1, ")
+    SQL.ADD(" Rojo,            ")
+
+    SQL.ADD(" Numerador ")
+
+***************************
+    SQL.ADD(" ) values ( ")
+***************************
+    
+    * TipoOp
+    SQL.ADD(" '"~val(z:3)~"', ")
+    SQL.ADD(" '"~val(z:4)~"', ")
+    SQL.ADD(" '"~IdxDate(fbn('FechaOp'))~"', ")
+    SQL.ADD(" '"~fbn('Especie')~"', ")
+    SQL.ADD(" '"~fbn('Cliente1')~"', ")
+
+    * Cantidad
+    SQL.ADD(" "~FStr(fbn('Cantidad'),1,2)~", ")
+    SQL.ADD(" "~FStr(fbn('Precio1'),1,8)~", ")
+    SQL.ADD(" "~FStr(fbn('TipoCambio'),1,8)~", ")    
+    SQL.ADD(" '"~fbn('ContraEspecie')~"', ")
+    SQL.ADD(" '"~fbn('Cupon1')~"', ")
+
+** FJL 22/06/23 - Se agregan campos por calculo x tasa
+    SQL.ADD(" '"~fbn('CB3')~"',        ")    
+    SQL.ADD(" "~FStr(fbn('TotalBrutoCli1'),1,2)~",        ")    
+
+    * Se Agrega RB5
+    SQL.ADD(" '"~fbn('MB1')~"', ")
+
+    * FechaVto
+    SQL.ADD(" '"~IdxDate(fbn('FechaPago'))~"', ")
+    SQL.ADD(" '"~fbn('Mercado')~"', ")
+* FJL 08/11/21 - Cambio criterio FLiq de pases - Se usan ambas formas siempre
+    SQL.ADD(" '"~fbn('FormaLiquidacion1')~"', ")
+    SQL.ADD(" '"~fbn('FormaLiquidacion2')~"', ")
+    SQL.ADD(" '"~fbn('TablaFeriados1')~"', ")
+    SQL.ADD(" '"~fbn('CB7')~"', ")
+
+    * Corredor
+    SQL.ADD(" '"~fbn('Corredor')~"', ")
+    SQL.ADD(" '"~fbn('RB9')~"', ")
+    SQL.ADD(" "~FStr(fbn('TotalComisiones'),1,2)~", ")
+    SQL.ADD(" '"~fbn('Operador')~"', ")
+    SQL.ADD(" '"~fbn('OpSIOPEL')~"', ")
+
+    * EnteCus1 - CodMAE Especie
+    SQL.ADD(" '"~fbn('EnteCus1')~"', ")
+    * EnteCus2 - CodMAE Contraparte
+    SQL.ADD(" '"~fbn('EnteCus2')~"', ")
+    SQL.ADD(" '"~fbn('Book1')~"', ")
+    SQL.ADD(" '"~fbn('Vehiculo1')~"', ")
+    SQL.ADD(" '"~fbn('Mercado2')~"', ")
+    SQL.ADD(" '"~fbn('CB5')~"', ")
+
+    * UDN2 (Rueda)
+    SQL.ADD(" '"~fbn('UDN2')~"', ")
+    SQL.ADD(" '"~fbn('Cuenta1')~"', ")
+    SQL.ADD(" '"~fbn('Cuenta4')~"', ")
+    SQL.ADD(" '"~fbn('Mercado4')~"', ")
+    * FechaCarga
+    SQL.ADD(" '"~IdxDate(Fsys)~" "~COPY(Val(z2),1,2)~":"~COPY(Val(z2),4,2)~":"~COPY(Val(z2),7,2)~"', ")
+
+    * FechaCargaSys
+    SQL.ADD(" '"~IdxDate(Fsys)~"',                  ")
+    SQL.ADD(" '"~fbn['EsAforado']~"', ")
+    SQL.ADD(" "~FStr(FBN['PorAforo'],0,8)~", ")
+    SQL.ADD(" "~FStr(FBN['TotalCaucion'],0,2)~", ")    
+    * PaseCB
+    SQL.ADD(" '1', ")
+    * OperacionRef
+    SQL.ADD(" '"~fbn('NrOperacion')~"', ")
+
+    * Fuente Alta
+    SQL.ADD(" '"~fbn('RB5')~"', ")
+    * Fuente Baja
+    SQL.ADD(" '"~fbn('RB7')~"', ")
+
+    if fbn('CB5')=1
+      * FechaEnvioMAE
+      if NoVacio(fbn('FechaEnvioMAE'))
+** FJL 02/04/20 - Redondeaba a minutos
+*        SQL.ADD(" Convert(smalldatetime,'"~Fecha(Trunc(fbn('FechaEnvioMAE'),0))~' '~Hora(fbn('FechaEnvioMAE'))~"',103),    ")
+        SQL.ADD(" "~Val(i:FAC)~", ")
+      else
+        SQL.ADD(" Null, ")
+      endif
+      * NroAltaMAE
+      SQL.ADD(" '"~fbn('NroAltaMAE')~"', ")
+      * FechaAltaMAE
+      if NoVacio(fbn('FechaAltaMAE'))
+** FJL 02/04/20 - Redondeaba a minutos
+*        SQL.ADD(" Convert(smalldatetime,'"~Fecha(Trunc(fbn('FechaAltaMAE'),0))~' '~Hora(fbn('FechaAltaMAE'))~"',103),    ")
+        SQL.ADD(" "~Val(j:FAC)~", ")
+      else
+        SQL.ADD(" Null, ")
+      endif
+      * AceptaMAE
+      SQL.ADD(" 'SI', ")
+      * NrSisExterno
+      SQL.ADD(" '"~fbn('NrSisExterno')~"', ")
+    endif
+
+    * Cuenta2
+    SQL.ADD(" '"~fbn('Cuenta2')~"', ")
+    SQL.ADD(" '"~fbn('Cuenta3')~"', ")
+    SQL.ADD(" "~FStr(fbn('Cotizacion1'),0,8)~", ")
+** FJL 15/11/23 - Se agrega NrOrden1
+    SQL.ADD(" '"~fbn('NrOrden1')~"', ")
+    SQL.ADD(" '"~fbn('Rojo')~"', ")
+
+    * Numerador
+    SQL.ADD(" 1 ")
+    
+    SQL.ADD(" ) ")
+    SQL.NEW
+
+    ******************************************
+    ** NrOpercion Futuro
+    ******************************************
+    ACT(y:4, GetNumerador(1))
+
+    ******************************************
+    * generar operacion futuro (TIFV/TIFC)
+    ******************************************
+    SQL.ADD("Insert Into "~DBO~".OPERACIONES ( ")
+
+    SQL.ADD(" TipoOp,          ")
+    SQL.ADD(" NrOperacion,        ")
+    SQL.ADD(" FechaOp,         ")
+    SQL.ADD(" Especie,            ")
+    SQL.ADD(" Cliente1, ")
+
+    SQL.ADD(" Cantidad,        ")
+    SQL.ADD(" Precio1,        ")
+    SQL.ADD(" TipoCambio2,        ")    
+    SQL.ADD(" ContraEspecie,      ")
+    SQL.ADD(" Cupon1,          ")
+
+** FJL 22/06/23 - Se agregan campos por calculo x tasa
+    SQL.ADD(" CB3,        ")    
+    SQL.ADD(" TotalBrutoCli1,        ")    
+
+    SQL.ADD(" FechaVto,        ")
+    SQL.ADD(" Mercado,         ")
+* FJL 08/11/21 - Cambio criterio FLiq de pases - Se usan ambas formas siempre
+    SQL.ADD(" FormaLiquidacion1, ")
+    SQL.ADD(" FormaLiquidacion2, ")
+    SQL.ADD(" TablaFeriados1,  ")
+    SQL.ADD(" CB7,                ")
+    SQL.ADD(" Corredor,        ")
+
+    SQL.ADD(" RB9,                ")
+    SQL.ADD(" TotalComisiones, ")
+    SQL.ADD(" Operador,        ")
+    SQL.ADD(" OpSIOPEL, ")
+    SQL.ADD(" EnteCus1,           ")
+    SQL.ADD(" EnteCus2,           ")
+
+    SQL.ADD(" Book1,           ")
+    SQL.ADD(" Vehiculo1,       ")
+    SQL.ADD(" Mercado2, ")
+    SQL.ADD(" CB5,             ")
+    SQL.ADD(" UDN2,               ")
+
+    SQL.ADD(" Cuenta1,         ")
+    SQL.ADD(" Cuenta4,            ")
+    SQL.ADD(" Mercado4,           ")
+    SQL.ADD(" FechaCarga,      ")
+    SQL.ADD(" FechaCargaSys,   ")
+
+    SQL.ADD(" EsAforado,       ")
+    SQL.ADD(" PorAforo,        ")
+    SQL.ADD(" TotalCaucion,    ")    
+    SQL.ADD(" PaseCB, ")
+    SQL.ADD(" OperacionRef, ")
+    * Fuente Alta
+    SQL.ADD(" RB6, ")
+
+    * Fuente Baja
+    SQL.ADD(" RB7, ")
+
+    if fbn('CB5')=1
+      SQL.ADD(" FechaEnvioMAE, ")
+      SQL.ADD(" NroAltaMAE,         ")
+      SQL.ADD(" FechaAltaMAE, ")
+      SQL.ADD(" AceptaMAE, ")
+      SQL.ADD(" NrSisExterno, ")
+    endif
+
+    SQL.ADD(" Cuenta2, ")
+    SQL.ADD(" Cuenta3, ")
+    SQL.ADD(" Cotizacion1, ")
+** FJL 15/11/23 - Se agrega NrOrden1
+    SQL.ADD(" NrOrden1, ")
+    SQL.ADD(" Rojo, ")
+
+    SQL.ADD(" Numerador ")
+
+***************************
+    SQL.ADD(" ) values ( ")
+***************************
+    * TipoOp
+    SQL.ADD(" '"~val(y3)~"', ")
+    SQL.ADD(" '"~val(y4)~"', ")
+    SQL.ADD(" '"~IdxDate(fbn('FechaOp'))~"', ")
+    SQL.ADD(" '"~fbn('Especie')~"', ")
+    SQL.ADD(" '"~fbn('Cliente1')~"', ")
+
+    * Cantidad
+    SQL.ADD(" "~FStr(fbn('Cantidad'),1,2)~", ")
+    SQL.ADD(" "~FStr(fbn('Precio2'),1,8)~", ")
+    SQL.ADD(" "~FStr(fbn('TipoCambio2'),1,8)~", ")    
+    SQL.ADD(" '"~fbn('ContraEspecie')~"', ")
+    SQL.ADD(" '"~fbn('Cupon1')~"', ")
+
+** FJL 22/06/23 - Se agregan campos por calculo x tasa
+    SQL.ADD(" '"~fbn('CB3')~"',        ")    
+    SQL.ADD(" "~FStr(fbn('TotalBrutoCli2'),1,2)~",        ")    
+    
+    SQL.ADD(" '"~IdxDate(fbn('FechaVto'))~"', ")
+    * Mercado
+    SQL.ADD(" '"~fbn('Mercado')~"', ")
+** FJL 05/04/20 - Ponia la forma de liquidacion Spot en la pata futuro
+*    SQL.ADD(" '"~fbn('FormaLiquidacion1')~"', ")
+* FJL 08/11/21 - Cambio criterio FLiq de pases - Se usan ambas formas siempre
+    SQL.ADD(" '"~fbn('FormaLiquidacion1')~"', ")
+    SQL.ADD(" '"~fbn('FormaLiquidacion2')~"', ")
+    SQL.ADD(" '"~fbn('TablaFeriados1')~"', ")
+    SQL.ADD(" '"~fbn('CB7')~"', ")
+    * Corredor
+    SQL.ADD(" Null, ")
+
+    * RB9
+    SQL.ADD(" '"~fbn('RB9')~"', ")
+    SQL.ADD(" Null, ")
+    SQL.ADD(" '"~fbn('Operador')~"', ")
+    SQL.ADD(" '"~fbn('OpSIOPEL')~"', ")
+    * EnteCus1 - CodMAE Especie
+    SQL.ADD(" '"~fbn('EnteCus1')~"', ")
+    * EnteCus2 - CodMAE Contraparte
+    SQL.ADD(" '"~fbn('EnteCus2')~"', ")
+
+    * Book1
+    SQL.ADD(" '"~fbn('Book1')~"', ")
+    SQL.ADD(" '"~fbn('Vehiculo1')~"', ")
+    SQL.ADD(" '"~fbn('Mercado2')~"', ")
+    SQL.ADD(" '"~fbn('CB5')~"', ")
+    SQL.ADD(" '"~fbn('UDN2')~"', ")
+
+    * Cuenta1
+    SQL.ADD(" '"~fbn('Cuenta1')~"', ")
+    SQL.ADD(" '"~fbn('Cuenta4')~"', ")
+    SQL.ADD(" '"~fbn('Mercado4')~"', ")
+    * FechaCarga
+    SQL.ADD(" '"~IdxDate(Fsys)~" "~COPY(Val(z2),1,2)~":"~COPY(Val(z2),4,2)~":"~COPY(Val(z2),7,2)~"', ")
+    * FechaCargaSys
+    SQL.ADD(" '"~IdxDate(Fsys)~"', ")
+
+    * EsAforado
+    SQL.ADD(" '"~fbn['EsAforado']~"', ")
+    SQL.ADD(" "~FStr(FBN['PorAforo'],0,8)~", ")
+    SQL.ADD(" "~FStr(FBN['TotalGastos'],0,2)~", ")        
+    * PaseCB
+    SQL.ADD(" '1', ")
+    * OperacionRef
+    SQL.ADD(" '"~fbn('NrOperacion')~"', ")
+    * RB6 - Fuente Alta
+    SQL.ADD(" '"~fbn('RB5')~"', ")
+
+    * RB7 - Fuente Baja
+    SQL.ADD(" '"~fbn('RB7')~"', ")
+    
+    if fbn('CB5')=1
+      * FechaEnvioMAE
+      if NoVacio(fbn('FechaEnvioMAE'))
+** FJL 02/04/20 - Redondeaba a minutos
+*        SQL.ADD(" Convert(smalldatetime,'"~Fecha(Trunc(fbn('FechaEnvioMAE'),0))~' '~Hora(fbn('FechaEnvioMAE'))~"',103),    ")
+        SQL.ADD(" "~Val(i:FAC)~", ")
+      else
+        SQL.ADD(" Null, ")
+      endif
+      * NroAltaMAE
+      SQL.ADD(" '"~fbn('NroBajaMAE')~"', ")
+      * FechaAltaMAE
+      if NoVacio(fbn('FechaBajaMAE'))
+** FJL 02/04/20 - Redondeaba a minutos
+*        SQL.ADD(" Convert(smalldatetime,'"~Fecha(Trunc(fbn('FechaBajaMAE'),0))~' '~Hora(fbn('FechaBajaMAE'))~"',103),    ")
+        SQL.ADD(" "~Val(k:FAC)~", ")
+      else
+        SQL.ADD(" Null, ")
+      endif
+      * AceptaMAE
+      SQL.ADD(" 'SI', ")
+      * NrSisExterno
+      SQL.ADD(" '"~fbn('NrSisExterno')~"', ")
+    endif
+    
+    * Cuenta2
+    SQL.ADD(" '"~fbn('Cuenta2')~"', ")
+    SQL.ADD(" '"~fbn('Cuenta3')~"', ")
+    SQL.ADD(" "~FStr(fbn('Cotizacion1'),0,8)~", ")
+** FJL 15/11/23 - Se agrega NrOrden1
+    SQL.ADD(" '"~fbn('NrOrden1')~"', ")
+    SQL.ADD(" '"~fbn('Rojo')~"', ")
+
+    * Numerador
+    SQL.ADD(" 1 ")
+    
+    SQL.ADD(" ) ")
+    SQL.NEW
+    SQL.EXEC
+
+
+*    ModificarOperacion(Val(z:4),0,SI,SI,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,SI,NO,SI,NO,NO,NO,0,NO)
+* Estees el de GENTIT
+    ModificarOperacion(Val(z:4),0,SI,SI,SI,NO,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO,SI,NO,SI,NO,0,NO,NO)
+
+    if Not Ok
+      *** se reversan las operaciones ***
+      SQL.ADD("DELETE FROM "~DBO~".EXCEPCIONES ")
+      SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+      SQL.NEW
+
+      SQL.ADD("DELETE FROM "~DBO~".OPERACIONESBITS ")
+      SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+      SQL.NEW
+
+      SQL.ADD("DELETE FROM "~DBO~".MOVLIMITES ")
+      SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+      SQL.NEW
+
+      SQL.ADD("DELETE FROM "~DBO~".MOVCASHFLOW ")
+      SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+      SQL.NEW
+
+      SQL.ADD("DELETE FROM "~DBO~".MOVPENDIENTES ")
+      SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+      SQL.NEW
+
+      SQL.ADD("DELETE FROM "~DBO~".OPERACIONES ")
+      SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+      SQL.NEW
+      SQL.EXEC
+    else
+*      ModificarOperacion(Val(y:4),0,SI,SI,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,SI,NO,SI,NO,NO,NO,0,NO)
+* Estees el de GENTIT
+      ModificarOperacion(Val(y:4),0,SI,SI,SI,NO,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO,SI,NO,SI,NO,0,NO,NO)
+
+      if Not Ok
+        *** se reversan las operaciones ***
+        SQL.ADD("DELETE FROM "~DBO~".EXCEPCIONES ")
+        SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+        SQL.NEW
+
+        SQL.ADD("DELETE FROM "~DBO~".OPERACIONESBITS ")
+        SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+        SQL.NEW
+
+        SQL.ADD("DELETE FROM "~DBO~".MOVLIMITES ")
+        SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+        SQL.NEW
+
+        SQL.ADD("DELETE FROM "~DBO~".MOVCASHFLOW ")
+        SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+        SQL.NEW
+
+        SQL.ADD("DELETE FROM "~DBO~".MOVPENDIENTES ")
+        SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+        SQL.NEW
+
+        SQL.ADD("DELETE FROM "~DBO~".OPERACIONES ")
+        SQL.ADD(" WHERE NrOperacion in ('"~Val(z:4)~"', '"~Val(y:4)~"') ")
+        SQL.NEW
+        SQL.EXEC
+      else
+        ** Muevo las patas a 50 o 71
+** FJL 18/03/21 - Por Workflow reducido ahora no siempre esta 
+        ACT(m:1, Val(z:3))
+        ACT(n:1, Val(z:4))
+        ** Busco Instancia activa de Spot
+        SQL.ADD("Select NrBit FROM "~DBO~".OPERACIONESBITS where NrOperacion = '"~Val(z:4)~"' and Valor = 1 ")
+        Recorrer SQL
+          DFA
+          SCN(o:1, 1)
+          ACN(p:1, fbn('NrBit'))
+        proximo
+        ACT(m:2, Val(y:3))
+        ACT(n:2, Val(y:4))
+        ** Busco Instancia activa de Futuro
+        SQL.ADD("Select NrBit FROM "~DBO~".OPERACIONESBITS where NrOperacion = '"~Val(y:4)~"' and Valor = 1 ")
+        Recorrer SQL
+          DFA
+          SCN(o:2, 1)
+          ACN(p:2, fbn('NrBit'))
+        proximo
+        
+        if EqStr(fbn('CB5'),'1')
+** FJL 18/03/21 - Por Workflow reducido ahora no siempre esta 
+*          EjecutarEvento('CBOINS', String1=Val(z:4), Radio1=0, Radio2=0, Entero1=1, Entero2=71)
+*          EjecutarEvento('CBOINS', String1=Val(y:4), Radio1=0, Radio2=0, Entero1=1, Entero2=71)
+          EjecutarEvento('CBOINS', String1=Val(z:4), Radio1=0, Radio2=0, Entero1=Val(p:1), Entero2=71)
+          EjecutarEvento('CBOINS', String1=Val(y:4), Radio1=0, Radio2=0, Entero1=Val(p:2), Entero2=71)
+          * asignar nro. de boleto automaticamente
+          EjecutarEvento('ASIBOL',Radio1=1,NrOperacion1=Val(z:4))
+          EjecutarEvento('ASIBOL',Radio1=1,NrOperacion1=Val(y:4))
+        else
+** FJL 18/03/21 - Por Workflow reducido ahora no siempre esta 
+*          EjecutarEvento('CBOINS', String1=Val(z:4), Radio1=0, Radio2=0, Entero1=1, Entero2=50)
+*          EjecutarEvento('CBOINS', String1=Val(y:4), Radio1=0, Radio2=0, Entero1=1, Entero2=50)
+          if Val(p:1)<>50
+            EjecutarEvento('CBOINS', String1=Val(z:4), Radio1=0, Radio2=0, Entero1=Val(p:1), Entero2=50)
+          endif
+          if Val(p:2)<>50
+            EjecutarEvento('CBOINS', String1=Val(y:4), Radio1=0, Radio2=0, Entero1=Val(p:2), Entero2=50)
+          endif
+        endif
+        *** marca el pase ***
+        SQL.ADD("update "~DBO~".OPERACIONES ")
+        SQL.ADD("   set NrOperacion3 = '"~Val(z:4)~"', ")
+        SQL.ADD("       NrOperacion4 = '"~Val(y:4)~"', ")
+        If EqStr(fbn('CB5'),'1')
+          SQL.ADD("     NroAltaMAE = 'OK  OK  ', ")
+          SQL.ADD("     NroBajaMAE = '' ")
+        Else
+          SQL.ADD("      NroAltaMAE = 'INI INI ' ")
+        Endif
+        SQL.ADD(" where NrOperacion = '"~fbn('NrOperacion')~"'")
+        SQL.NEW
+        SQL.EXEC
+        ** Muevo el pase a Auxiliar alta Pases (73)
+        EjecutarEvento('CBOINS', String1=fbn('NrOperacion'), Radio1=0, Radio2=0, Entero1=72, Entero2=73)
+      endif
+    endif
+  endif
+Proximo
+if FAC=0
+  if Dialogo.Check1=1
+    Message('GENPAT - Operacion no Encontrada')
+  else
+  MessageBox('GENPAT - Operacion no Encontrada')
+  endif
+endif
+
+ACO(9, 20)
+ACO(10, 20)
+ACO(11, 20)

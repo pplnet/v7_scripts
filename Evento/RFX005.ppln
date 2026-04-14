@@ -1,0 +1,147 @@
+HojaVisible(NO)
+MostrarCuadroDeMensajes()
+creardialogo
+fecha1: 'Fecha';;;;;;;;;FSys()
+findialogo
+
+if (not ok)
+Cancelar()
+endif
+
+Message('Recuperando OpRofex...')
+Sqladd("Select * from "~Dbo()~".OPROFEX")
+Sqladd(" where isnull(Procesado,'0')='0' ")
+Sqladd("   and TipoContrato='1' ")
+Sqladd(" Order by Fecha,Boleta ")
+
+recorrer sql
+
+Message('...'~Fbn('Boleta'))
+
+Act(wa:1, 'Falta la posicion '~Fbn('Posicion'))
+Acn(bd:1, 2)
+
+Sqladd(" Select Especie, Vencimiento, NombreExtendido ")
+Sqladd(" From "~Dbo()~".PLAZOSMERCADO ")
+Sqladd(" Where NombreExtendido = '"~Fbn('Posicion')~"' ")
+recorrer sql
+Acn(bd:1, 1)
+Act(e:2, Fbn('Especie'))
+Act(e:1, Query("SELECT ContraespecieCupon From "~Dbo()~".ESPECIES where Codigo='"~Fbn('Especie')~"' "))
+Act(e:3, Fbn('Especie'))
+Acd(vt:1, Fbn('FechaVto'))
+Acn(vt:2, Fbn('Vencimiento'))
+if (Vacio(Val(e:1)) o Vacio(Val(e:3)))
+Act(wa:1, 'Faltan datos en la posicion '~Fbn('Posicion'))
+Acn(bd:1, 2)
+endif
+proximo
+
+if (Query("Select 1 from "~Dbo()~".OPERACIONES where FechaOp="~IdxDate2(Fbn()['Fecha'])~" and TipoOp In ('FXROFC','FXROFV') and NrBoleto in ('"~Pad0(Fbn()['Boleta'], 8)~"','"~Fbn()['Boleta']~"') ") = 1)
+Acn(bd:1, 3)
+Act(wa:1, 'Ya existe operacion con NrBoleta '~Pad0(Fbn('Boleta'), 8)~'. ')
+endif
+
+if (Val(bd:1) = 1)
+Act( to :1, iif (Fbn('IdCpraVta') = 1, 'FXROFV', 'FXROFC'))
+Act(nr:1, getnumerador(92))
+Act(rz:1, Copy(BuscarCampo('CLIENTES', 'RazonSocial', 'Codigo', Var('CLIROFEX')), 1, 25))
+Acn(im:1, Fbn('Cantidad') * BuscarCampo('ESPECIES', 'Valor10', 'Codigo', Val(e:3)))
+Acd(fv:1, iif (Val(vt:2) = 0, Habiles(Fbn('Fecha'), 1000, Var('FERIDEF')), Val(vt:1)))
+Acn(a:1, Fbn('Precio') * Val(im:1))
+Acn(a:2, Val(fv:1) - Fbn('Fecha'))
+Acd(a:3, Habiles(Val(fv:1), 0, Var('FERIDEF')))
+Acn(a:6, CotizacionC(Val(e:2), null, null, null, Fbn('Fecha'), 1, SI, Var('MLOCAL')))
+Acn(a:7, CotizacionC(Val(e:3), 'FUT', Val(fv:1), null, Fbn('Fecha'), 1, SI, Var('MLOCAL')))
+Acn(a:8, BuscarCampo('CORREDORES', 'ComisionDefault1', 'Codigo', Var('CORRERFX')))
+Acn(a:9, BuscarCampo('CORREDORES', 'ComisionDefault2', 'Codigo', Var('CORRERFX')))
+Acn(a:10, iif (Vacio(Var('CORRERFX')), 0, Fbn('Cantidad') * (Val(a:8) + Val(a:9))))
+Acn(a:12, iif (Eqstr(Modo(Val(e:2), 'USD'), 'INV'), 1 / CotizacionC(Val(e:2), null, null, null, Fbn('Fecha'), 1, SI, 'USD'), CotizacionC(Val(e:2), null, null, null, Fbn('Fecha'), 1, SI, 'USD')))
+Act(a:13, iif (Eqstr(Modo(Val(e:2), CotizaEn(Val(e:2))), 'DIR'), '0', '1'))
+Acn(a:14, iif (Eqstr(Modo(Val(e:2), 'ARP'), 'INV'), 1 / Fbn('Precio'), Fbn('Precio')))
+Acn(lm:1, LimAsignado(Var('CLIROFEX'), 'PRESETTLEM', Val(e:2), Var('VEHICULODE')))
+Acn(lm:2, LimConsumido(Var('CLIROFEX'), 'PRESETTLEM', Val(e:2), 0, Var('VEHICULODE'), null, null, ''))
+if (NoVacio(Val(a:5)) y not (Val(a:17) < 0))
+endif
+Act(a:18, 'O'~Query(" Select EspecieOrigen From "~Dbo()~".EQUIVALENCIA_ESPECIES Where TipoNegociacion = 'O' AND EspecieDestino1 = '"~Val(e:2)~"' AND TipoCotizacion = 'O' ")~Query(" Select Variable From "~Dbo()~".PLAZOSOCT Where Fecha = '"~IdxDate(Val(fv:1))~"' AND Especie = '"~Val(e:2)~"' AND TipoNegociacion = 'O' "))
+Act(a:19, Copy(Fbn('Hora'), 1, 2)~':'~Copy(Fbn('Hora'), 3, 2)~':'~Copy(Fbn('Hora'), 5, 2))
+
+Sqladd(" Insert INTO "~Dbo()~".OPERACIONES ")
+Sqladd(" ( TipoOp,     NrOperacion,  ")
+Sqladd("   FechaOp,    Especie,        PosicionRofex, Cliente1, ")
+Sqladd("   Observac4,  TotalBrutoCli3, Cantidad,      Precio1, ")
+Sqladd("   PrecioMer,  TotalBrutoCli1, ContraEspecie, Plazo, ")
+Sqladd("   FechaVto,   FechaPago,      NrBoleto,      Ley6, ")
+Sqladd("   MB1,        MB2,            Mercado2,      TablaFeriados1, ")
+Sqladd("   Observac3,  CB5,            Cartera1,      CarteraBCRA1,  ")
+Sqladd("   Cartera,    Book1,          TipoCambio,    TipoCambio2, ")
+Sqladd("   Corredor,   RB5,            RB7,           Precio3, ")
+Sqladd("   Precio4,    Comision,       Operador,      TotalComisiones,  ")
+Sqladd("   Vehiculo1,  Sucursal,       UDN1,          PorImpuestoBolsa, ")
+Sqladd("   ModoCotiza, TotalAux1,      TotalAux3,     PorDerechoBolsa, ")
+Sqladd("   TotalAux4,  TotalAux6,      FechaUltCupon, PrecioEj, ")
+Sqladd("   FechaEj,    Precio2,        FechaVto2,     CB6,  ")
+Sqladd("   FechaOp2,   ContraEspecie2, EnteCus1,      FechaPrecan,  ")
+Sqladd("   Observac2,  FechaAltaMAE,   ObsErrorMAE,   NrSisExterno, ")
+Sqladd("   Cliente2,   RB3,            MB3,           PorCaucion, ")
+Sqladd("   TotalAux5,  SectorRB,       RB10,          MinDerechoBolsa, ")
+Sqladd("   RB6,        TotalAux7,      Observaciones, UsrInput, ")
+Sqladd("   FechaCarga, FechaCargaSys,  Direccion,     LInstancia, ")
+Sqladd("   Numerador,  Cotizacion1,    Ley2,          CB7 ")
+
+Sqladd(" ) Values ( ")
+
+Sqladd("   '"~Val( to :1)~"',             '"~Val(nr:1)~"',  ")
+Sqladd("   "~IdxDate2(Fbn('Fecha'))~",  '"~Val(e:2)~"',                '"~Fbn('Posicion')~"',         '"~Var('CLIROFEX')~"', ")
+Sqladd("   '"~Val(rz:1)~"',             "~FStr(Fbn('Cantidad'), 0, 2)~", "~FStr(Val(im:1), 0, 2)~",       "~FStr(Fbn('Precio'), 0, 8)~", ")
+Sqladd("   "~FStr(Fbn('Precio'), 0, 8)~", "~FStr(Val(a:1), 0, 2)~",        '"~Var('MLOCAL')~"',           "~FStr(Val(a:2), 0, 2)~", ")
+Sqladd("   "~IdxDate2(Val(fv:1))~",     "~IdxDate2(Val(a:3))~",        '"~Pad0(Fbn('Boleta'), 8)~"',   '"~Val(a:19)~"', ")
+Sqladd("   1,                           0,                             '"~Var('MERCRFX')~"',          '"~Var('FERIDEF')~"', ")
+Sqladd("   '',                          0,                             '"~Val(a:4)~"',                '"~Val(a:4)~"',  ")
+Sqladd("   '"~Val(a:4)~"',              '"~Val(a:5)~"',                "~FStr(Val(a:6), 0, 8)~",        "~FStr(Val(a:7), 0, 8)~", ")
+Sqladd("   '"~Var('CORRERFX')~"',       0,                             1,                             "~FStr(Val(a:8), 0, 8)~", ")
+Sqladd("   "~FStr(Val(a:9), 0, 8)~",    "~FStr(Val(a:8) + Val(a:9), 0, 8)~", '"~UsuarioActivo()~"',                       "~FStr(Val(a:10), 0, 2)~", ")
+Sqladd("   '"~Var('VEHICULODE')~"',     '"~Val(a:11)~"',               '"~Var('VEHICULODE')~"',       "~FStr(Val(a:12), 0, 8)~", ")
+Sqladd("   '"~Val(a:13)~"',             0,                             0,                             "~FStr(Val(a:14), 0, 8)~", ")
+Sqladd("   0,                           0,                             null,                          0, ")
+Sqladd("   null,                        0,                             null,                          0, ")
+Sqladd("   "~IdxDate2(FSys())~",          '"~Val(e:1)~"',                '"~Val(e:3)~"',                null, ")
+Sqladd("   null,                        "~IdxDate2(Fbn('Fecha'))~",    '"~Val(a:18)~"',               null, ")
+Sqladd("   '"~Var('CLIROFEX')~"',       0,                             0,                             "~FStr(Val(a:15), 0, 8)~", ")
+Sqladd("   "~FStr(Val(a:16), 0, 2)~",     0,                             0,                             "~FStr(Val(a:17), 0, 2)~", ")
+Sqladd("   0,                           0,                             'Generado Automatico',         '"~UsuarioActivo()~"', ")
+Sqladd("   "~SQLAhora()~",                 "~IdxDate2(FSys())~",           null,                          null, ")
+Sqladd("   92,                          null,                          null,                          1 )  ")
+Sqlnew()
+Sqlexec()
+
+Message('     Se genero '~Val(nr:1))
+Sqladd(" Update "~Dbo()~".OPROFEX ")
+Sqladd("    Set Procesado = '1', NrOperacion = '"~Val(nr:1)~"', Warning = null")
+Sqladd("  Where Boleta = '"~Fbn('Boleta')~"' ")
+Sqlnew()
+Sqlexec()
+
+Acn(i:1, 1)
+Sqladd("SELECT NrInstancia FROM "~Dbo()~".INSTANCIAS ")
+Sqladd("WHERE Tabla='OPERACIONES' ")
+Sqladd(" AND NrInstancia in (1,70,81,82,121,14) ")
+Sqladd("ORDER BY NrInstancia ")
+recorrer sql
+Sqladd("INSERT INTO "~Dbo()~".OPERACIONESBITS ( ")
+Sqladd(" NrOperacion, NrBit, Valor ) Values ( ")
+Sqladd(" '"~Val(nr:1)~"',"~FStr(Fbn()['NrInstancia'], 2, 0)~", '"~iif (Val(i1) = Fbn()['NrInstancia'], '1', '0')~"' ) ")
+Sqlnew()
+proximo
+Sqlexec()
+
+else
+
+Message('     No se genero la OP')
+Sqladd(" Update "~Dbo()~".OPROFEX ")
+Sqladd("    Set Procesado='0', Warning= '"~Trim(Copy(Val(wa:1), 1, 255))~"' ")
+Sqladd("  Where Boleta = '"~Fbn('Boleta')~"' ")
+Sqlnew()
+Sqlexec()
+endif
+proximo
