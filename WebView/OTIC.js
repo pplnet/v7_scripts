@@ -284,6 +284,40 @@
     }
 
     // ========================================================================
+    // Formateo numérico con separador de miles (punto)
+    // ========================================================================
+    function formatNumericInput(input) {
+        input.on('input', function () {
+            var el = this;
+            var cursorPos = el.selectionStart;
+            var raw = el.value.replace(/\./g, '').replace(/,/g, '.');
+            // Permitir solo digitos, un punto decimal y signo negativo
+            raw = raw.replace(/[^0-9.\-]/g, '');
+            if (raw === '' || raw === '-') return;
+            var parts = raw.split('.');
+            var intPart = parts[0];
+            var decPart = parts.length > 1 ? parts[1] : null;
+            // Formatear parte entera con puntos de miles
+            var sign = '';
+            if (intPart.charAt(0) === '-') { sign = '-'; intPart = intPart.substring(1); }
+            intPart = intPart.replace(/^0+(?=\d)/, '');
+            var formatted = sign + intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            if (decPart !== null) formatted += ',' + decPart;
+            var prevLen = el.value.length;
+            el.value = formatted;
+            // Ajustar cursor
+            var diff = el.value.length - prevLen;
+            el.setSelectionRange(cursorPos + diff, cursorPos + diff);
+        });
+    }
+
+    function parseNumericInput(selector) {
+        var val = $(selector).val() || '';
+        // Quitar puntos de miles, reemplazar coma decimal por punto
+        return parseFloat(val.replace(/\./g, '').replace(/,/g, '.')) || 0;
+    }
+
+    // ========================================================================
     // Init
     // ========================================================================
     function init() {
@@ -302,16 +336,16 @@
     // Defaults
     // ========================================================================
     function setDefaults() {
-        var today = new Date().toISOString().split('T')[0];
+        var defaultDate = '2026-04-08';
         var now = new Date();
         var hh = String(now.getHours()).padStart(2, '0');
         var mm = String(now.getMinutes()).padStart(2, '0');
         var ss = String(now.getSeconds()).padStart(2, '0');
 
         // Fechas
-        $('#fechaOrden').val(today);
-        $('#fechaVto').val(today);
-        $('#fechaLimite').val(today);
+        $('#fechaOrden').val(defaultDate);
+        $('#fechaVto').val(defaultDate);
+        $('#fechaLimite').val(defaultDate);
         $('#horaOrden').val(hh + ':' + mm + ':' + ss);
 
         // Contraespecie
@@ -563,12 +597,12 @@
         bound.execPPL('GetDefaults()').then(function (result) {
             var d = transformSingleResult(result);
             if (!d) return;
-            if (d.Vehiculo) $('#vehiculo').val(d.Vehiculo);
+            $('#vehiculo').val('STD').trigger('change.combo');
             if (d.Feriados) $('#tablaFeriados1').val(d.Feriados);
             if (d.Canal) $('#canal1').val(d.Canal);
             if (d.MercaNeg) $('#mercado3').val(d.MercaNeg);
         }).catch(function () {
-            // Defaults silenciosos - los valores por defecto ya están seteados en setDefaults()
+            $('#vehiculo').val('STD').trigger('change.combo');
         });
     }
 
@@ -669,6 +703,10 @@
             recalcular();
         });
 
+        // Formateo numérico con separador de miles
+        formatNumericInput($('#cantidadTotalOrden'));
+        formatNumericInput($('#precioLimite'));
+
         // Cantidad / Precio changes -> recalc
         $('#cantidadTotalOrden').on('change input', function () {
             recalcular();
@@ -760,8 +798,8 @@
     function recalcular() {
         var especie = $('#especie').val();
         var cliente = $('#cliente').val();
-        var cantVN = parseFloat($('#cantidadTotalOrden').val()) || 0;
-        var precio = parseFloat($('#precioLimite').val()) || 0;
+        var cantVN = parseNumericInput('#cantidadTotalOrden');
+        var precio = parseNumericInput('#precioLimite');
 
         if (!especie || !cliente || cantVN <= 0) return;
 
@@ -866,8 +904,8 @@
         var esp = $('#especie').val() || '-';
         var cli = $('#cliente option:selected').text() || '-';
         if (cli.length > 20) cli = cli.substring(0, 20) + '...';
-        var cant = parseFloat($('#cantidadTotalOrden').val()) || 0;
-        var precio = parseFloat($('#precioLimite').val()) || 0;
+        var cant = parseNumericInput('#cantidadTotalOrden');
+        var precio = parseNumericInput('#precioLimite');
 
         $('#sum-especie').text(esp);
         $('#sum-cliente').text(cli);
@@ -934,8 +972,8 @@
             especie: $('#especie').val() || '',
             contraEspecie: $('#contraEspecie').val() || '',
             cliente: $('#cliente').val() || '',
-            cantidadTotalOrden: parseFloat($('#cantidadTotalOrden').val()) || 0,
-            precioLimite: parseFloat($('#precioLimite').val()) || 0,
+            cantidadTotalOrden: parseNumericInput('#cantidadTotalOrden'),
+            precioLimite: parseNumericInput('#precioLimite'),
             fechaOrden: $('#fechaOrden').val() || '',
             mercado3: $('#mercado3').val() || '',
             mercadoLiq: $('#mercado').val() || '',

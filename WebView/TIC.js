@@ -234,13 +234,43 @@
     }
 
     // ========================================================================
+    // Formateo numérico con separador de miles (punto)
+    // ========================================================================
+    function formatNumericInput(input) {
+        input.on('input', function () {
+            var el = this;
+            var cursorPos = el.selectionStart;
+            var raw = el.value.replace(/\./g, '').replace(/,/g, '.');
+            raw = raw.replace(/[^0-9.\-]/g, '');
+            if (raw === '' || raw === '-') return;
+            var parts = raw.split('.');
+            var intPart = parts[0];
+            var decPart = parts.length > 1 ? parts[1] : null;
+            var sign = '';
+            if (intPart.charAt(0) === '-') { sign = '-'; intPart = intPart.substring(1); }
+            intPart = intPart.replace(/^0+(?=\d)/, '');
+            var formatted = sign + intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            if (decPart !== null) formatted += ',' + decPart;
+            var prevLen = el.value.length;
+            el.value = formatted;
+            var diff = el.value.length - prevLen;
+            el.setSelectionRange(cursorPos + diff, cursorPos + diff);
+        });
+    }
+
+    function parseNumericInput(selector) {
+        var val = $(selector).val() || '';
+        return parseFloat(val.replace(/\./g, '').replace(/,/g, '.')) || 0;
+    }
+
+    // ========================================================================
     // Init
     // ========================================================================
     function init() {
         console.log('TIC: Inicializando formulario completo...');
 
-        var today = new Date().toISOString().split('T')[0];
-        $('#fechaOp').val(today);
+        var defaultDate = '2026-04-08';
+        $('#fechaOp').val(defaultDate);
 
         // Default Plazo: 24hs
         $('input[name="rb5"][value="1"]').prop('checked', true);
@@ -314,6 +344,8 @@
             vehiculos.forEach(function(v) {
                 sel.append('<option value="' + v.Codigo + '">' + v.Codigo + ' - ' + (v.Descripcion || '') + '</option>');
             });
+            // Default Vehiculo: STD
+            if (sel.find('option[value="STD"]').length > 0) sel.val('STD');
         }).catch(function(err) { console.error('Error cargando vehiculos:', err); });
     }
 
@@ -325,6 +357,8 @@
             mercadosNeg.forEach(function(m) {
                 sel.append('<option value="' + m.Codigo + '">' + m.Codigo + ' - ' + (m.Descripcion || '') + '</option>');
             });
+            // Default Merc. Negociacion: A3
+            if (sel.find('option[value="A3"]').length > 0) sel.val('A3');
         }).catch(function(err) { console.error('Error cargando mercados neg:', err); });
     }
 
@@ -353,8 +387,8 @@
             books.forEach(function(b) {
                 sel.append('<option value="' + b.Codigo + '">' + b.Codigo + '</option>');
             });
-            // Default Book: TBOOK
-            if (sel.find('option[value="TBOOK"]').length > 0) sel.val('TBOOK');
+            // Default Book: TITULOS
+            if (sel.find('option[value="TITULOS"]').length > 0) sel.val('TITULOS');
         }).catch(function(err) { console.error('Error cargando books:', err); });
     }
 
@@ -397,6 +431,10 @@
     // Event listeners
     // ========================================================================
     function setupEventListeners() {
+        // Formateo numérico con separador de miles
+        formatNumericInput($('#cantidad'));
+        formatNumericInput($('#precio1'));
+
         // Calculation triggers
         $('#cantidad, #precio1').on('input', recalcularMontos);
         $('input[name="rb5"]').on('change', onPlazoChange);
@@ -572,8 +610,8 @@
     // Recalculate computed fields
     // ========================================================================
     function recalcularMontos() {
-        var cantidad = parseFloat($('#cantidad').val()) || 0;
-        var precio = parseFloat($('#precio1').val()) || 0;
+        var cantidad = parseNumericInput('#cantidad');
+        var precio = parseNumericInput('#precio1');
         var bruto = cantidad * precio;
 
         $('#totalBrutoCli1').val(bruto > 0 ? formatMoney(bruto) : '');
@@ -589,8 +627,8 @@
         var contraespecie = $('#contraespecie').val();
         var cliente = $('#clienteId').val();
         var vehiculo = $('#vehiculo1').val();
-        var cantidad = parseFloat($('#cantidad').val()) || 0;
-        var precio = parseFloat($('#precio1').val()) || 0;
+        var cantidad = parseNumericInput('#cantidad');
+        var precio = parseNumericInput('#precio1');
         var fechaOp = $('#fechaOp').val();
         var fechaVto = $('#fechaVto').val();
         var mercado4 = $('#mercado4').val();
@@ -704,8 +742,7 @@
     // ========================================================================
     function limpiarFormulario() {
         $('#form-op')[0].reset();
-        var today = new Date().toISOString().split('T')[0];
-        $('#fechaOp').val(today);
+        $('#fechaOp').val('2026-04-08');
         // Reset calculated fields
         $('#totalBrutoCli1, #vcan33, #vcan22, #totalNetoCli1, #totalIntereses, #totalComisiones').val('');
         $('#tipoCambio, #totalAux8').val('');
@@ -759,8 +796,8 @@
         var especie = $('#especie').val() || '';
         var contraEspecie = $('#contraespecie').val() || '';
         var cliente1 = $('#clienteId').val() || '';
-        var cantidad = parseFloat($('#cantidad').val()) || 0;
-        var precio1 = parseFloat($('#precio1').val()) || 0;
+        var cantidad = parseNumericInput('#cantidad');
+        var precio1 = parseNumericInput('#precio1');
         var corredor = $('#corredor').val() || '';
         var mercado4 = $('#mercado4').val() || '';
         var plataforma = $('#plataforma').val() || '';
