@@ -98,6 +98,7 @@
 
         switch ((data || '').toUpperCase()) {
             case 'COM': badge = 'estor2-badge-com'; text = 'Completada'; break;
+            case 'EJE': badge = 'estor2-badge-com'; text = 'Ejecutada'; break;
             case 'CAN': badge = 'estor2-badge-can'; text = 'Cancelada'; break;
             case 'PEN': badge = 'estor2-badge-pen'; text = 'Pendiente'; break;
             case 'PAR': badge = 'estor2-badge-par'; text = 'Parcial'; break;
