@@ -5,10 +5,11 @@ vehiculo1: 'Vehiculo';2;;;NO;;;;;Var('VEHICON')
 listatabla1: 'Operaciones';1;2;;;;;;;;;;;;;'NrOperacion';'NrOperacion;Cliente1;FechaOp;Especie;FechaVto';'OPERACIONES'
 check1: 'Contab.Procesada';3;1;;NO;NO;
 radio1: 'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos';4;1;;NO;NO;;;;4;
+
 findialogo
 
 if (not ok)
-raise('Evento Cancelado')
+Raise('Evento Cancelado')
 endif
 
 Act(vc:1, dialogo.vehiculo1)
@@ -16,6 +17,170 @@ Acn(na:1, Var('ASINUM'))
 
 Acd(fe:1, Habiles(dialogo.fecha1, -Var('FVALORCONT'), 'ARG'))
 if (dialogo.radio1 = 2 o dialogo.radio1 = 4)
+if (Isdefined("MLASA"))
+Message('--- Asientos MTM Diario No ROFEX ---')
+Act(ta:1, Var('TIPASIMTM'))
+Acn(xx:1, 0)
+Acn(xx:2, 0)
+Sqladd(" SELECT MO.MTM as Cantidad, O.NrOperacion, O.TipoOp, MO.Fecha Fecha, O.Vehiculo1, MA.Codigo CodAsi, C.Jerarquia, O.Mercado4, ")
+Sqladd("C.PaisDir, O.Cuenta4 as Cuenta1, 0 as Monto, O.ContraEspecie as ContraEspecie, O.Especie, O.FechaOp, ")
+Sqladd(" '#Op:' + O.NrOperacion + ',' + rtrim(O.TipoOp) + ',' + rtrim(O.Especie) Leyenda, O.Cliente1 Cliente, O.Book1   ")
+Sqladd(" FROM "~Dbo()~".OPERACIONES O, "~Dbo()~".MODELOSASIENTO MA, "~Dbo()~".CLIENTES C, "~Dbo()~".MTMDIARIO MO ")
+Sqladd(" WHERE  C.Codigo  = O.Cliente1 and MO.NrOperacion=O.NrOperacion and MO.TipoMTM = 'MTM' ")
+Sqladd(" AND O.TipoOp = MA.TipoOp AND MA.TipoAsiento = '"~Val(ta:1)~"' ")
+Sqladd(" AND O.TipoOp in ('FXCF','FXVF') ")
+Sqladd(" AND MO.Fecha = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND O.FechaVto <> '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND MO.Fecha >= '"~IdxDate(Val(fe:1))~"' ")
+Sqladd(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+Sqladd(" AND MA.Habilitado = 'SI' ")
+Sqladd(" AND O.Mercado4 <> '"~Var('MERROFEX')~"' ")
+Sqladd(" AND 0=(Select count(*) from OPERACIONESBITS B where B.NrOperacion=O.NrOperacion  AND ((B.NrBit = 1 and B.Valor = '1') or (B.NrBit = 31 and B.Valor = '1') or (B.NrBit = 30 and B.Valor = '1'))) ")
+Watch(Sqlbatch())
+recorrer sql
+Acd(fv:1, Fbn('Fecha'))
+Acd(fd:1, dialogo.fecha1)
+Act(vh:1, Fbn('Vehiculo1'))
+Act(to:1, Fbn('CodAsi'))
+Act(ti:1, Fbn('TipoOp'))
+Acn(re:1, Fbn('Cantidad'))
+Act(nr:1, Fbn('NrOperacion'))
+Act(nr:2, '')
+Act(ct:1, Query("Select Cuenta from "~Dbo()~".RELACIONCUENTA   where Book = '"~Fbn('Book1')~"' and CodigoRelacion = 'RDONDF' and TiposOperacion Like '%"~Fbn('TipoOp')~"%' "))
+Acn(ck:1, 0)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(Query(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrOperacion = '"~Fbn('NrOperacion')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Message(Fbn('NrOperacion')~' - Modelo: '~Fbn('CodAsi'))
+Sqlgenerarasientoop(Fbn('CodAsi'), Fbn('NrOperacion'), '', '', Val(na:1), Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoOp'), null, null, null, null, null, null, FSys(), dialogo.fecha1)
+Sqlexec()
+endif
+proximo
+
+Message('--- Asientos MTM Diario Consolidado ROFEX ---')
+Act(ta:1, Var('TIPASIMTM'))
+Sqladd(" Select Sum(MO.MTM) as Cantidad,Fecha,O.TipoOp, '"~Var('MERROFEX')~"' as Mercado4,MA.Codigo as CodAsi, O.Vehiculo1 , ")
+Sqladd(" '' as NrOperacion,O.Especie, 'MTM de ROFEX' as Leyenda ")
+Sqladd(" From "~Dbo()~".OPERACIONES O, "~Dbo()~".MODELOSASIENTO MA, "~Dbo()~".CLIENTES C, "~Dbo()~".MTMDIARIO MO ")
+Sqladd(" Where C.Codigo  = O.Cliente1 and MO.NrOperacion=O.NrOperacion and MO.TipoMTM = 'MTM' ")
+Sqladd(" AND O.TipoOp = MA.TipoOp AND MA.TipoAsiento = '"~Val(ta:1)~"' AND O.TipoOp in ('FXCF','FXVF') ")
+Sqladd(" AND MO.Fecha = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND O.FechaVto <> '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND MO.Fecha >= '"~IdxDate(Val(fe:1))~"' ")
+Sqladd(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+Sqladd(" AND MA.Habilitado = 'SI' ")
+Sqladd(" AND 0=(Select count(*) from OPERACIONESBITS B where B.NrOperacion=O.NrOperacion  AND ((B.NrBit = 1 and B.Valor = '1') or (B.NrBit = 31 and B.Valor = '1') or (B.NrBit = 30 and B.Valor = '1'))) ")
+Sqladd(" AND O.Mercado4 = '"~Var('MERROFEX')~"' ")
+Sqladd("Group by MO.Fecha, O.TipoOp, MA.Codigo, O.Vehiculo1, O.Especie ")
+Watch(Sqlbatch())
+recorrer sql
+Acd(fv:1, Fbn('Fecha'))
+Acd(fd:1, dialogo.fecha1)
+Act(vh:1, Fbn('Vehiculo1'))
+Act(to:1, Fbn('CodAsi'))
+Act(ti:1, Fbn('TipoOp'))
+Acn(re:1, Fbn('Cantidad'))
+Act(nr:1, Fbn('NrOperacion'))
+Act(nr:2, '')
+Acn(ck:1, 0)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(Query(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrOperacion = '"~Fbn('NrOperacion')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Message(Fbn('NrOperacion')~' - Modelo: '~Fbn('CodAsi'))
+Sqlgenerarasientoop(Fbn('CodAsi'), Fbn('NrOperacion'), '', '', Val(na:1), Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoOp'), null, null, null, null, null, null, FSys(), dialogo.fecha1)
+Sqlexec()
+endif
+proximo
+Message('--- Asientos Fixing NO ROFEX---')
+Act(ta:1, Var('TIPASIFIX'))
+Sqladd(" SELECT O.NrOperacion, O.TipoOp, MO.Fecha Fecha, O.Vehiculo1, MA.Codigo CodAsi, C.Jerarquia, O.Mercado4, ")
+Sqladd(" C.PaisDir, O.Cuenta4 as Cuenta1, O.Cliente1 Cliente, ")
+Sqladd(" Case When O.Mercado4 = '"~Var('MERROFEX')~"' Then MO.MTM Else MO.MTMEspecie End Cantidad,  ")
+Sqladd(" O.ContraEspecie, O.Especie, O.FechaOp, ")
+Sqladd(" '#Op:' + O.NrOperacion + ',' + rtrim(O.TipoOp) + ',' + rtrim(O.Especie) Leyenda, O.Book1,")
+Sqladd("  (Select sum(MTM) from "~Dbo()~".MTMDIARIO MD Where MD.NrOperacion = O.NrOperacion and MD.TipoMTM = 'MTM' ) as AcumMTM, ")
+Sqladd(" Case When O.Mercado4 = '"~Var('MERROFEX')~"' Then 0 Else (Select sum(MTMEspecie) from "~Dbo()~".MTMDIARIO MD1 Where MD1.NrOperacion = O.NrOperacion and MD1.TipoMTM = 'MTM') End AcumEspMTM ")
+Sqladd(" From "~Dbo()~".OPERACIONES O, "~Dbo()~".MODELOSASIENTO MA, "~Dbo()~".CLIENTES C, "~Dbo()~".MTMDIARIO MO ")
+Sqladd(" Where C.Codigo = O.Cliente1 and MO.NrOperacion=O.NrOperacion and MO.TipoMTM = 'FIX' ")
+Sqladd(" AND O.TipoOp = MA.TipoOp AND MA.TipoAsiento = '"~Var('TIPASIFIX')~"' AND O.TipoOp in ('FXCF','FXVF') ")
+Sqladd(" AND MO.Fecha = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND MO.Fecha >= '"~IdxDate(Val(fe:1))~"' ")
+Sqladd(" AND O.FechaVto = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND 0=(Select count(*) from OPERACIONESBITS B where B.NrOperacion=O.NrOperacion  AND ((B.NrBit = 1 and B.Valor = '1') or (B.NrBit = 31 and B.Valor = '1') or (B.NrBit = 30 and B.Valor = '1'))) ")
+Sqladd(" AND O.Mercado4 <> '"~Var('MERROFEX')~"' ")
+Sqladd(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+Sqladd(" AND MA.Habilitado = 'SI' ")
+Watch(Sqlbatch())
+recorrer sql
+Acd(fv:1, Fbn('Fecha'))
+Acd(fd:1, dialogo.fecha1)
+Act(vh:1, Fbn('Vehiculo1'))
+Act(to:1, Fbn('CodAsi'))
+Act(ti:1, Fbn('TipoOp'))
+Acn(co:1, iif (Eqstr(Fbn('Mercado4'), Var('MERROFEX')), 1, Query("SELECT PrecioContable FROM "~Dbo()~".COTIZACIONES WHERE Codigo='"~Fbn('Especie')~"' and Fecha="~IdxDate2(Fbn('Fecha'))~" and CallPut='CON' And Moneda='"~Var('MONELOCA')~"' ")))
+Acn(re:1, (Fbn('Cantidad') - Fbn('AcumEspMTM')) * Val(co:1))
+Acn(ck:1, 0)
+Act(ct:1, Query("Select Cuenta from "~Dbo()~".RELACIONCUENTA   where Book = '"~Fbn('Book1')~"' and CodigoRelacion = 'RDONDF' and TiposOperacion Like '%"~Fbn('TipoOp')~"%' "))
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(Query(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrOperacion = '"~Fbn('NrOperacion')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Message(Fbn('NrOperacion')~' - Modelo: '~Fbn('CodAsi'))
+Sqlgenerarasientoop(Fbn('CodAsi'), Fbn('NrOperacion'), '', '', Val(na:1), Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoOp'), null, null, null, null, null, null, FSys(), dialogo.fecha1)
+Sqlexec()
+endif
+proximo
+
+Message('--- Asientos Fixing Consolidado ROFEX ---')
+Act(ta:1, Var('TIPASIFIX'))
+Sqladd(" Select Sum(Cantidad) as Cantidad, TipoOp, Fecha, Vehiculo1, ")
+Sqladd(" CodAsi, Mercado4, Especie, '' as NrOperacion, 'FIX de ROFEX' as Leyenda from ( ")
+Sqladd(" SELECT O.NrOperacion, O.TipoOp, MO.Fecha Fecha, O.Vehiculo1, MA.Codigo CodAsi, C.Jerarquia, O.Mercado4, ")
+Sqladd(" C.PaisDir, O.Cuenta4 as Cuenta1, Case When O.Mercado4 = '"~Var('MERROFEX')~"' Then MO.MTM Else MO.MTMEspecie End Cantidad,  O.ContraEspecie as ContraEspecie, O.Especie, O.FechaOp ")
+Sqladd(" FROM "~Dbo()~".OPERACIONES O, "~Dbo()~".MODELOSASIENTO MA, "~Dbo()~".CLIENTES C, "~Dbo()~".MTMDIARIO MO ")
+Sqladd(" WHERE  C.Codigo  = O.Cliente1 and MO.NrOperacion=O.NrOperacion and MO.TipoMTM = 'FIX' ")
+Sqladd(" AND O.TipoOp = MA.TipoOp AND MA.TipoAsiento = '"~Val(ta:1)~"' AND O.TipoOp in ('FXCF','FXVF') ")
+Sqladd(" AND 0=(Select count(*) from OPERACIONESBITS B where B.NrOperacion=O.NrOperacion  AND ((B.NrBit = 1 and B.Valor = '1') or (B.NrBit = 31 and B.Valor = '1') or (B.NrBit = 30 and B.Valor = '1'))) ")
+Sqladd(" AND MO.Fecha = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND O.FechaVto = '"~IdxDate(dialogo.fecha1)~"' ")
+Sqladd(" AND MO.Fecha >= '"~IdxDate(Val(fe:1))~"' ")
+Sqladd(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~Val(vc:1)~"|%' ")
+Sqladd(" AND MA.Habilitado = 'SI' ")
+Sqladd(" AND O.Mercado4 = '"~Var('MERROFEX')~"') as Aux ")
+Sqladd("Group by TipoOp,Fecha,Vehiculo1,CodAsi, Mercado4, Especie ")
+Watch(Sqlbatch())
+recorrer sql
+Acd(fv:1, Fbn('Fecha'))
+Acd(fd:1, dialogo.fecha1)
+Act(vh:1, Fbn('Vehiculo1'))
+Act(to:1, Fbn('CodAsi'))
+Act(ti:1, Fbn('TipoOp'))
+Acn(re:1, Fbn('Cantidad'))
+Acn(ck:1, 0)
+if (dialogo.check1 = 1 o dialogo.fecha1 < FSys())
+Acn(ck:1, 1)
+if (Vacio(Query(" Select NrUnicoAsiento From "~Dbo()~".ASIENTOSCON Where NrOperacion = '"~Fbn('NrOperacion')~"' AND Modelo = '"~Fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(fv:1))~"' AND Vehiculo = '"~Fbn('Vehiculo1')~"' ")))
+Acn(ck:1, 0)
+endif
+endif
+if (Val(ck:1) = 0)
+Message(Fbn('NrOperacion')~' - Modelo: '~Fbn('CodAsi'))
+Sqlgenerarasientoop(Fbn('CodAsi'), Fbn('NrOperacion'), '', '', Val(na:1), Val(fv:1), Fbn('Vehiculo1'), null, null, null, null, null, Fbn('TipoOp'), null, null, null, null, null, null, FSys(), dialogo.fecha1)
+Sqlexec()
+endif
+proximo
+else 
 Message('--- Asientos MTM ---')
 Act(ta:1, Var('TIPASMTMDI')~'|'~Var('TIPASRFMD'))
 Sqladd(" Select Sum(MTM) as MTM, TipoOp, Fecha, Vehiculo1,TotalBrutoCli1, ")
@@ -39,13 +204,13 @@ Watch(Sqlbatch())
 recorrer sql
 if (EvalFormula('ESBACS'))
 let(&mercneg, '')
-else
+else 
 let(&mercneg, EvalFormula('MERCNEGO'))
 endif
 Acd(fv:1, Fbn('Fecha'))
 Acd(fd:1, dialogo.fecha1)
 Act(vh:1, Fbn('Vehiculo1'))
-Act( to :1, Fbn('CodAsi'))
+Act(to:1, Fbn('CodAsi'))
 Act(ti:1, Fbn('TipoOp'))
 Acn(re:1, Fbn('MTM'))
 Acn(ck:1, 0)
@@ -67,5 +232,6 @@ Sqlgenerarasientoop(&codasi, Fbn('NrOperacion'), '', '', Val(na:1), Val(fv:1), F
 Sqlexec()
 endif
 proximo
+endif
 endif
 
