@@ -160,6 +160,11 @@ Sqladd("  and  Not (PaseCB= 1 and  E.Issuer = '"~Var('CLIBCRA')~"')  ")
 if (not Vacio(dialogo.cliente1))
 Sqladd("  and Cliente1 = '"~dialogo.cliente1~"' ")
 endif
+if (Isdefined("BIND"))
+if (Vacio(dialogo.cliente1))
+Sqladd("  and Cliente1 <> '"~dialogo.vehiculo1~"' ")
+endif
+endif
 Sqladd("  group by Cliente1,persona ")
 
 recorrer sql
@@ -177,7 +182,11 @@ proximo
 
 endif
 
+if (Isdefined("BIND"))
+Sqladd(" Select *, case when ComitenteAux Is null then case when Nrcuenta = '' then ElCUIT else Nrcuenta end else ComitenteAux end Codcomitente from ")
+else 
 Sqladd(" Select *, ComitenteAux CodComitente from ")
+endif
 Sqladd(" (SELECT O.NrOperacion,Case When (PaseCB= 1 and (E.Jerarquia LIKE '"~Var('JERLEBACS')~"%' or E.Issuer = '"~Var('CLIBCRA')~"')) Then '99' When PaseCB= 1 Then '09' Else '01' End  Pase, ")
 Sqladd(" CASE WHEN (Cliente1 <> '"~dialogo.vehiculo1~"' and UDN2 not in ('CPC1','SDIB','SNBSTCGAR')) THEN Case when TipoOp in ('TIC','TIFC') then O.TotalNetoCli1*-1  else O.TotalNetoCli1 end ")
 Sqladd("      WHEN (Cliente1 <> '"~dialogo.vehiculo1~"' and UDN2 in ('CPC1','SDIB','SNBSTCGAR'))  THEN  Case when TipoOp in ('TIC','TIFC') then O.TotalNetoCli1  else O.TotalNetoCli1*-1 end  ELSE ")
@@ -190,14 +199,27 @@ Sqladd(" Case When E.Jerarquia LIKE '"~Var('JERONESP')~"%' Then '06' When E.Jera
 Sqladd(" CASE WHEN O.ContraEspecie in ('ARP') THEN '001'  When O.ContraEspecie in ('USD') then '004' When O.ContraEspecie in ('EUR') then '006' When O.ContraEspecie in ('BRL') then '040' else '000' END Moneda,TipoOp, ")
 Sqladd(" CASE WHEN (E.Indexado = 'NO' and E.MonedaEmision in ('"~Var('MONELOCA')~"')) THEN 1 WHEN (E.Indexado = 'SI' and E.MonedaEmision in ('"~Var('MONELOCA')~"')) THEN 2 ELSE 3 END Emision, C.Alias10 NIF, ")
 Sqladd("  1  Exencion, C.Calle, C.Altura, C.Piso, C.Depto, C.RazonSocial,IsNull(C.NrCuenta,'') Nrcuenta,O.Cuenta1,")
+if (Isdefined("MLASA"))
+Sqladd("  C.Direccion, C.Localidad,C.CategDepositante , P.AliasDGI Provincia, C.CodigoPostal, PI.Alias PaisInsc,C.FechaInsc, C.Codigo Cliente, ")
+Sqladd(" CASE WHEN C.Jerarquia LIKE '"~Var('JERFONCLI')~"%' THEN 'FONDO' ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN 'FONDO' ELSE 'OTROS' END END TipoCli, ")
+else 
 Sqladd("  C.Direccion, C.Localidad,C.CategDepositante , P.AliasAFIP Provincia, C.CodigoPostal, PI.Alias PaisInsc,C.FechaInsc, C.Codigo Cliente, ")
 Sqladd(" CASE WHEN C.Jerarquia LIKE '"~Var('JERFONDOS')~"%' THEN 'FONDO' ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN 'FONDO' ELSE 'OTROS' END END TipoCli, ")
+endif
 Sqladd(" C.Persona, C.TipoInscripcion, C.Pais Pais, C.TipoDocum, C.NrDocum,C.CodComitente as ComitenteCli, C.Alias9 Puerta, PA.Alias PaisAFIP,O.Cliente1, C.CUIT ElCUIT,")
+if (Isdefined("MLASA"))
+Sqladd(" C.CUIT, C.CodComitente ComitenteAux")
+else 
 Sqladd("  Case When C.Jerarquia LIKE '"~Var('JERFONDOS')~"%' THEN (Select IC.NrDocumento from INTEGRANTESCLI IC where IC.Codigo = O.Cliente1 and IC.TipoPoder = 'SDE') ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN (Select IC.NrDocumento from INTEGRANTESCLI IC where IC.Codigo = O.Cliente1 and IC.TipoPoder = 'SDE') ELSE C.CUIT END END CUIT, ")
+if (Isdefined("BACS"))
+Sqladd(" Case when (select IsNull(CT.Comitente,'') from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) <> '"~dialogo.vehiculo1~"' then (select CodComitente from CLIENTES where Codigo ='"~dialogo.vehiculo1~"') else (select CT.NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) end ComitenteAux ")
+else 
 
 Sqladd(" Case when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = Cliente1 and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = '"~dialogo.vehiculo1~"' ) Then (select NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1)  ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = Cliente1 and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) <> '"~dialogo.vehiculo1~"' ) then Nrcuenta ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = '"~dialogo.vehiculo1~"') then (select Top(1) CT.NrDepositante from dbo.CUENTAS CT Where CT.Cliente = O.Cliente1 and TipoCuenta = 'CUS' and NrDepositante is not Null) else Nrcuenta  end ComitenteAux ")
+endif
+endif
 Sqladd("FROM   "~Dbo()~".OPERACIONES O ")
 Sqladd("       Left JOIN "~Dbo()~".CLIENTES C WITH (NOLOCK) ON  O.Cliente1=C.Codigo ")
 Sqladd("       Left JOIN "~Dbo()~".PROVINCIAS P WITH (NOLOCK) ON C.Provincia=P.Codigo ")
@@ -217,13 +239,21 @@ if (Fecha(dialogo.fecha1, 'YYYYMMDD') > Var('SITERANT'))
 if (not Vacio(dialogo.cliente1))
 Sqladd("  where Cliente = '"~dialogo.cliente1~"' ")
 else 
-
+if (Isdefined("BIND"))
+Sqladd("  where Cliente in ("~Pipe2Comillas(Val(eb:1))~") and Cliente <> '"~dialogo.vehiculo1~"' ")
+else 
 Sqladd("  where Cliente in ("~Pipe2Comillas(Val(eb:1))~")  ")
+endif
 endif
 else 
 if (not Vacio(dialogo.cliente1))
 Sqladd("  where Cliente = '"~dialogo.cliente1~"' ")
 else 
+if (Isdefined("BIND"))
+if (Vacio(dialogo.cliente1))
+Sqladd("  where Cliente <> '"~dialogo.vehiculo1~"' ")
+endif
+endif
 endif
 endif
 Sqladd("  ORDER BY CodComitente, TipoOPX, Moneda, TipoCV, Emision, Exencion ")
@@ -300,11 +330,37 @@ Scn(po:2, Val(h:fac))
 Act(bl:fac, Fbn()['Pase'])
 Act(aa:fac, Fbn()['RazonSocial'])
 Act(ac:fac, ReemplazarSTR(Fbn('CUIT'), '-', '', SI))
+if (Isdefined("MLASA"))
+if (Eqstr(Fbn()['TipoInscripcion'], 'CDI'))
+Act(ab:fac, '87')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'CIL'))
+Act(ab:fac, '86')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'CIT'))
+Act(ab:fac, '80')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'CIE'))
+Act(ab:fac, '88')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'FCI'))
+Act(ab:fac, '91')
+else 
+Act(ab:fac, '00')
+endif
+endif
+endif
+endif
+endif
+Act(ad:fac, Copy(Fbn()['Direccion'], 1, 30))
+Act(ae:fac, Fbn()['Puerta'])
+Act(aj:fac, '')
+else 
 Act(ab:fac, iif (Eqstr(Fbn()['TipoCli'], 'FONDO'), '91', '80'))
 Act(ad:fac, Fbn()['Calle'])
 Act(ae:fac, Fbn()['Altura'])
 Act(aj:fac, Fbn()['Piso'])
-
+endif
 Act(af:fac, '')
 Act(ag:fac, '')
 Act(ah:fac, '')
@@ -365,6 +421,11 @@ Sqladd("  and (PaseCB= 1 and  E.Issuer = '"~Var('CLIBCRA')~"')  ")
 if (not Vacio(dialogo.cliente1))
 Sqladd("  and Cliente1 = '"~dialogo.cliente1~"' ")
 endif
+if (Isdefined("BIND"))
+if (Vacio(dialogo.cliente1))
+Sqladd("  and Cliente1 <> '"~dialogo.vehiculo1~"' ")
+endif
+endif
 Sqladd("UNION ")
 Sqladd(" SELECT O.TotalBrutoCli1 CPA, 0 VTA, C.Persona,Cliente1 FROM   "~Dbo()~".OPERACIONES O ")
 Sqladd("       Left JOIN "~Dbo()~".CLIENTES C WITH (NOLOCK) ON  O.Cliente1=C.Codigo ")
@@ -378,6 +439,11 @@ Sqladd("  and O.FechaVto between '"~IdxDate(dialogo.fecha1)~"' and '"~IdxDate(di
 Sqladd("  and O.TipoOp In ('CAUC')  ")
 if (not Vacio(dialogo.cliente1))
 Sqladd("  and Cliente1 = '"~dialogo.cliente1~"' ")
+endif
+if (Isdefined("BIND"))
+if (Vacio(dialogo.cliente1))
+Sqladd("  and Cliente1 <> '"~dialogo.vehiculo1~"' ")
+endif
 endif
 Sqladd("UNION ")
 Sqladd("SELECT 0 CPA, O.TotalNetoCli1 VTA, C.Persona,Cliente1 FROM   "~Dbo()~".OPERACIONES O ")
@@ -394,6 +460,11 @@ Sqladd("  and (E.Jerarquia LIKE '"~Var('JERTITULOS')~"%' or E.Jerarquia LIKE '"~
 Sqladd("  and (PaseCB= 1 and  E.Issuer = '"~Var('CLIBCRA')~"')  ")
 if (not Vacio(dialogo.cliente1))
 Sqladd("  and Cliente1 = '"~dialogo.cliente1~"' ")
+endif
+if (Isdefined("BIND"))
+if (Vacio(dialogo.cliente1))
+Sqladd("  and Cliente1 <> '"~dialogo.vehiculo1~"' ")
+endif
 endif
 
 Sqladd(" ) as Aux ")
@@ -428,8 +499,11 @@ Act(cl4, '')
 Act(cl5, '')
 Act(cl6, '')
 
+if (Isdefined("BIND"))
+Sqladd(" Select *, case when ComitenteAux Is null then case when Nrcuenta = '' then CUIT else Nrcuenta end else ComitenteAux end Codcomitente from ")
+else 
 Sqladd(" Select *, ComitenteAux CodComitente from ")
-
+endif
 Sqladd(" (SELECT O.NrOperacion,Case When (PaseCB= 1 and (E.Jerarquia LIKE '"~Var('JERLEBACS')~"%' or E.Issuer = '"~Var('CLIBCRA')~"')) Then '99' When PaseCB= 1 Then '09' Else '01' End  Pase, ")
 Sqladd(" O.TotalNetoCli1 Monto, ")
 Sqladd(" CASE WHEN (TipoOp in ('TIC','TIFV') and PaseCB=1) THEN '1' WHEN (TipoOp in ('TIV','TIFC') and PaseCB=1) THEN '0'  ELSE '9' END Posicion, ")
@@ -439,15 +513,27 @@ Sqladd(" Case When E.Jerarquia LIKE '"~Var('JERACCION')~"%' Then '02' When E.Jer
 Sqladd(" CASE WHEN O.ContraEspecie in ('ARP') THEN '001'  When O.ContraEspecie in ('USD') then '004' When O.ContraEspecie in ('EUR') then '006' When O.ContraEspecie in ('BRL') then '040' else '000' END Moneda,TipoOp, ")
 Sqladd(" CASE WHEN (E.Indexado = 'NO' and E.MonedaEmision in ('"~Var('MONELOCA')~"')) THEN 1 WHEN (E.Indexado = 'SI' and E.MonedaEmision in ('"~Var('MONELOCA')~"')) THEN 2 ELSE 3 END Emision, C.Alias10 NIF, ")
 Sqladd("  1  Exencion, C.Calle, C.Altura, C.Piso, C.Depto,  C.RazonSocial, ")
+if (Isdefined("MLASA"))
+Sqladd(" C.Direccion, C.Localidad, C.CategDepositante, P.AliasDGI Provincia, C.CodigoPostal, PI.Alias PaisInsc,C.FechaInsc, C.Codigo Cliente, ")
+Sqladd(" CASE WHEN C.Jerarquia LIKE '"~Var('JERFONCLI')~"%' THEN 'FONDO' ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN 'FONDO' ELSE 'OTROS' END END TipoCli, ")
+else 
 Sqladd(" C.Direccion, C.Localidad, C.CategDepositante, P.AliasAFIP Provincia, C.CodigoPostal, PI.Alias PaisInsc,C.FechaInsc, C.Codigo Cliente, ")
 Sqladd(" CASE WHEN C.Jerarquia LIKE '"~Var('JERFONDOS')~"%' THEN 'FONDO' ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN 'FONDO' ELSE 'OTROS' END END TipoCli, ")
+endif
 Sqladd(" C.Persona, C.TipoInscripcion, C.Pais Pais, C.TipoDocum, C.NrDocum,C.CodComitente as ComitenteCli, C.Alias9 Puerta, C.Nrcuenta, PA.Alias PaisAFIP, ")
 
+if (Isdefined("MLASA"))
+Sqladd(" C.CUIT, C.CodComitente ComitenteAux ")
+else 
 Sqladd("  Case When C.Jerarquia LIKE '"~Var('JERFONDOS')~"%' THEN (Select IC.NrDocumento from INTEGRANTESCLI IC where IC.Codigo = O.Cliente1 and IC.TipoPoder = 'SDE') ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN (Select IC.NrDocumento from INTEGRANTESCLI IC where IC.Codigo = O.Cliente1 and IC.TipoPoder = 'SDE') ELSE C.CUIT END END CUIT, ")
+if (Isdefined("BACS"))
+Sqladd(" Case when (select IsNull(CT.Comitente,'') from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) <> '"~dialogo.vehiculo1~"' then (select CodComitente from CLIENTES where Codigo ='"~dialogo.vehiculo1~"') else (select CT.NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) end ComitenteAux ")
+else 
 Sqladd(" Case when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = Cliente1 and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = '"~dialogo.vehiculo1~"' ) Then (select NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1)  ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = Cliente1 and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) <> '"~dialogo.vehiculo1~"' ) then Nrcuenta ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = '"~dialogo.vehiculo1~"') then (select Top(1) CT.NrDepositante from dbo.CUENTAS CT Where CT.Cliente = O.Cliente1 and TipoCuenta = 'CUS' and NrDepositante is not Null) else Nrcuenta  end ComitenteAux ")
-
+endif
+endif
 Sqladd("FROM   "~Dbo()~".OPERACIONES O ")
 Sqladd("       Left JOIN "~Dbo()~".CLIENTES C WITH (NOLOCK) ON  O.Cliente1=C.Codigo ")
 Sqladd("       Left JOIN "~Dbo()~".PROVINCIAS P WITH (NOLOCK) ON C.Provincia=P.Codigo ")
@@ -473,14 +559,26 @@ Sqladd(" '13' TipoOPX, PaseCB, E.Issuer, E.MonedaEmision,")
 Sqladd(" CASE WHEN O.ContraEspecie in ('ARP') THEN '001'  When O.ContraEspecie in ('USD') then '004' When O.ContraEspecie in ('EUR') then '006' When O.ContraEspecie in ('BRL') then '040' else '000' END Moneda,TipoOp, ")
 Sqladd(" CASE WHEN (E.Indexado = 'NO' and E.MonedaEmision in ('"~Var('MONELOCA')~"')) THEN 1  ELSE 2 END Emision, C.Alias10 NIF, ")
 Sqladd("  1  Exencion, C.Calle, C.Altura, C.Piso, C.Depto, C.RazonSocial, ")
+if (Isdefined("MLASA"))
+Sqladd(" C.Direccion, C.Localidad,C.CategDepositante, P.AliasDGI Provincia, C.CodigoPostal, PI.Alias PaisInsc,C.FechaInsc, C.Codigo Cliente, ")
+Sqladd(" CASE WHEN C.Jerarquia LIKE '"~Var('JERFONCLI')~"%' THEN 'FONDO' ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN 'FONDO' ELSE 'OTROS' END END TipoCli, ")
+else 
 Sqladd(" C.Direccion, C.Localidad,C.CategDepositante, P.AliasAFIP Provincia, C.CodigoPostal, PI.Alias PaisInsc,C.FechaInsc, C.Codigo Cliente, ")
 Sqladd(" CASE WHEN C.Jerarquia LIKE '"~Var('JERFONDOS')~"%' THEN 'FONDO' ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN 'FONDO' ELSE 'OTROS' END END TipoCli, ")
+endif
 Sqladd(" C.Persona, C.TipoInscripcion, C.Pais Pais, C.TipoDocum, C.NrDocum,C.CodComitente as ComitenteCli, C.Alias9 Puerta, C.Nrcuenta, PA.Alias PaisAFIP, ")
+if (Isdefined("MLASA"))
+Sqladd(" C.CUIT, C.CodComitente ComitenteAux ")
+else 
 Sqladd("  Case When C.Jerarquia LIKE '"~Var('JERFONDOS')~"%' THEN (Select IC.NrDocumento from INTEGRANTESCLI IC where IC.Codigo = O.Cliente1 and IC.TipoPoder = 'SDE') ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN (Select IC.NrDocumento from INTEGRANTESCLI IC where IC.Codigo = O.Cliente1 and IC.TipoPoder = 'SDE') ELSE C.CUIT END END CUIT, ")
+if (Isdefined("BACS"))
+Sqladd(" Case when (select IsNull(CT.Comitente,'') from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) <> '"~dialogo.vehiculo1~"' then (select CodComitente from CLIENTES where Codigo ='"~dialogo.vehiculo1~"') else (select CT.NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) end ComitenteAux ")
+else 
 Sqladd(" Case when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = Cliente1 and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = '"~dialogo.vehiculo1~"' ) Then (select NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1)  ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = Cliente1 and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) <> '"~dialogo.vehiculo1~"' ) then Nrcuenta ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = '"~dialogo.vehiculo1~"') then (select Top(1) CT.NrDepositante from dbo.CUENTAS CT Where CT.Cliente = O.Cliente1 and TipoCuenta = 'CUS' and NrDepositante is not Null) else Nrcuenta  end ComitenteAux ")
-
+endif
+endif
 Sqladd("FROM   "~Dbo()~".OPERACIONES O ")
 Sqladd("       Left JOIN "~Dbo()~".CLIENTES C WITH (NOLOCK) ON  O.Cliente1=C.Codigo ")
 Sqladd("       Left JOIN "~Dbo()~".PROVINCIAS P WITH (NOLOCK) ON C.Provincia=P.Codigo ")
@@ -498,13 +596,21 @@ if (Fecha(dialogo.fecha1, 'YYYYMMDD') > Var('SITERANT'))
 if (not Vacio(dialogo.cliente1))
 Sqladd("  where Cliente = '"~dialogo.cliente1~"' ")
 else 
-
+if (Isdefined("BIND"))
+Sqladd("  where Cliente in ("~Pipe2Comillas(Val(eb:2))~") and Cliente <> '"~dialogo.vehiculo1~"' ")
+else 
 Sqladd("  where Cliente in ("~Pipe2Comillas(Val(eb:2))~")  ")
+endif
 endif
 else 
 if (not Vacio(dialogo.cliente1))
 Sqladd("  where Cliente = '"~dialogo.cliente1~"' ")
 else 
+if (Isdefined("BIND"))
+if (Vacio(dialogo.cliente1))
+Sqladd("  where Cliente <> '"~dialogo.vehiculo1~"' ")
+endif
+endif
 endif
 endif
 
@@ -576,11 +682,37 @@ Scn(po:2, Val(h:fac))
 Act(bl:fac, Fbn()['Pase'])
 Act(aa:fac, Fbn()['RazonSocial'])
 Act(ac:fac, ReemplazarSTR(Fbn('CUIT'), '-', '', SI))
+if (Isdefined("MLASA"))
+if (Eqstr(Fbn()['TipoInscripcion'], 'CDI'))
+Act(ab:fac, '87')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'CIL'))
+Act(ab:fac, '86')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'CIT'))
+Act(ab:fac, '80')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'CIE'))
+Act(ab:fac, '88')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'FCI'))
+Act(ab:fac, '91')
+else 
+Act(ab:fac, '00')
+endif
+endif
+endif
+endif
+endif
+Act(ad:fac, Copy(Fbn()['Direccion'], 1, 30))
+Act(ae:fac, Fbn()['Puerta'])
+Act(aj:fac, '')
+else 
 Act(ab:fac, iif (Eqstr(Fbn()['TipoCli'], 'FONDO'), '91', '80'))
 Act(ad:fac, Fbn()['Calle'])
 Act(ae:fac, Fbn()['Altura'])
 Act(aj:fac, Fbn()['Piso'])
-
+endif
 Act(af:fac, '')
 Act(ag:fac, '')
 Act(ah:fac, '')
@@ -630,8 +762,11 @@ Act(rr1, Val(rr1)~Pad0(FStr(dialogo.entero3, 0, 0), 2))
 Act(rr1, Val(rr1)~'0103')
 Act(rr1, Val(rr1)~'913')
 Act(rr1, Val(rr1)~'0195')
-
+if (Isdefined("MLASA"))
+Act(rr1, Val(rr1)~Pad('', 215))
+else 
 Act(rr1, Val(rr1)~Pad0('0', 215))
+endif
 Act(rr1, Val(rr1)~'00500')
 if (Val(da1) > 0)
 Act(rr1, Val(rr1)~'0')
@@ -681,6 +816,9 @@ Act(rr6, Val(rr3))
 EscribirAscii(Val(rr6))
 endif
 proximo
+
+if (Isdefined("MLASA"))
+else 
 
 
 if (Fecha(dialogo.fecha1, 'YYYYMMDD') > Var('SITERANT'))
@@ -798,11 +936,19 @@ Act(cl4, '')
 Act(cl5, '')
 Act(cl6, '')
 Sqladd(" Select TipoMov,Codcomitente,Cliente,DeposDelComitente,Moneda,Especie,CodNumCajaValores,Nombre, SUM(cantidad) VN, SUM(Monto) Monto, SUM(MontoARP) MontoARP  from  ")
+if (Isdefined("BIND"))
+Sqladd(" (Select TipoMov,case when ComitenteAux Is null then case when Nrcuenta = '' then CUIT else Nrcuenta end else ComitenteAux end Codcomitente,Cliente,DeposDelComitente,Moneda,Especie,CodNumCajaValores,Nombre, cantidad, Monto, MontoARP  from  ")
+else 
 Sqladd(" (Select TipoMov,ComitenteAux CodComitente,Cliente,DeposDelComitente,Moneda,Especie,CodNumCajaValores,Nombre, cantidad, Monto,  MontoARP  from  ")
+endif
 Sqladd(" (SELECT CASE WHEN TipoOp in ('TIC','TIFC') THEN '0'  ELSE '1' END TipoMov,C.DeposDelComitente, ")
+if (Isdefined("BACS"))
+Sqladd(" Case when (select IsNull(CT.Comitente,'') from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) <> '"~dialogo.vehiculo1~"' then (select CodComitente from CLIENTES where Codigo ='"~dialogo.vehiculo1~"') else (select CT.NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) end ComitenteAux, ")
+else 
 Sqladd(" Case when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = Cliente1 and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = '"~dialogo.vehiculo1~"' ) Then (select NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1)  ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = Cliente1 and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) <> '"~dialogo.vehiculo1~"' ) then Nrcuenta ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = '"~dialogo.vehiculo1~"') then (select Top(1) CT.NrDepositante from dbo.CUENTAS CT Where CT.Cliente = O.Cliente1 and TipoCuenta = 'CUS' and NrDepositante is not Null) else Nrcuenta  end ComitenteAux, ")
+endif
 Sqladd("  CASE WHEN O.ContraEspecie in ('ARP') THEN '001'  When O.ContraEspecie in ('USD') then '004' When O.ContraEspecie in ('EUR') then '006' When O.ContraEspecie in ('BRL') then '040' else '000'END Moneda, ")
 Sqladd("  CASE WHEN O.ContraEspecie in ('ARP') THEN O.TotalNetoCli1 else (Select Top(1) PrecioContable*O.TotalNetoCli1 From "~Dbo()~".COTIZACIONES C Where Codigo = O.ContraEspecie and Moneda = '"~Var('MONELOCA')~"' AND Fecha <= '"~IdxDate(dialogo.fecha1)~"' Order By Fecha Desc) END MontoARP, ")
 Sqladd("Cantidad, O.TotalNetoCli1 Monto, Especie, E.CodNumCajaValores,E.Nombre, IsNull(C.Nrcuenta,'') Nrcuenta, O.Cliente1 Cliente ,C.CUIT")
@@ -820,9 +966,13 @@ Sqladd("  and (E.Jerarquia LIKE '"~Var('JERTITULOS')~"%' or E.Jerarquia LIKE '"~
 Sqladd("  and PaseCB <> 1  ")
 Sqladd("UNION")
 Sqladd(" SELECT  '2' TipoMov,C.DeposDelComitente, ")
+if (Isdefined("BACS"))
+Sqladd(" Case when (select IsNull(CT.Comitente,'') from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) <> '"~dialogo.vehiculo1~"' then (select CodComitente from CLIENTES where Codigo ='"~dialogo.vehiculo1~"') else (select CT.NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) end ComitenteAux, ")
+else 
 Sqladd(" Case when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = Cliente1 and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = '"~dialogo.vehiculo1~"' ) Then (select NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1)  ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = Cliente1 and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) <> '"~dialogo.vehiculo1~"' ) then Nrcuenta ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta1) = '"~dialogo.vehiculo1~"') then (select Top(1) CT.NrDepositante from dbo.CUENTAS CT Where CT.Cliente = O.Cliente1 and TipoCuenta = 'CUS' and NrDepositante is not Null) else Nrcuenta  end ComitenteAux, ")
+endif
 Sqladd("  CASE WHEN O.ContraEspecie in ('ARP') THEN '001'  When O.ContraEspecie in ('USD') then '004' When O.ContraEspecie in ('EUR') then '006' When O.ContraEspecie in ('BRL') then '040' else '000'END Moneda, ")
 Sqladd("  CASE WHEN O.ContraEspecie in ('ARP') THEN (Select Top(1) PrecioContable*O.TotalIntereses From "~Dbo()~".COTIZACIONES C Where Codigo = O.Especie and Moneda = '"~Var('MONELOCA')~"' AND Fecha <= '"~IdxDate(dialogo.fecha1)~"' Order By Fecha Desc) ")
 Sqladd("       else (Select Top(1) PrecioContable*O.TotalIntereses From "~Dbo()~".COTIZACIONES C Where Codigo = O.Especie and Moneda = O.ContraEspecie AND Fecha <= '"~IdxDate(dialogo.fecha1)~"' Order By Fecha Desc) END MontoARP, ")
@@ -845,9 +995,13 @@ Sqladd("UNION")
 Sqladd(" Select TipoMov,DeposDelComitente,ComitenteAux,Moneda, Case when Moneda = '001' then Monto Else Monto*Precio End  MontoARP, ")
 Sqladd("    Cantidad, Monto, Especie, CodNumCajaValores, Nombre, NrCuenta, Cliente, CUIT  from   ")
 Sqladd("(SELECT  '4' TipoMov,C.DeposDelComitente, ")
+if (Isdefined("BACS"))
+Sqladd(" Case when (select IsNull(CT.Comitente,'') from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) <> '"~dialogo.vehiculo1~"' then (select CodComitente from CLIENTES where Codigo ='"~dialogo.vehiculo1~"') else (select CT.NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) end ComitenteAux, ")
+else 
 Sqladd(" Case when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = O.Cliente and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = '"~dialogo.vehiculo1~"' ) Then (select NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta)  ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = O.Cliente and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) <> '"~dialogo.vehiculo1~"' ) then Nrcuenta ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = '"~dialogo.vehiculo1~"') then (select Top(1) CT.NrDepositante from dbo.CUENTAS CT Where CT.Cliente = O.Cliente and TipoCuenta = 'CUS' and NrDepositante is not Null) else Nrcuenta  end ComitenteAux, ")
+endif
 Sqladd("CASE WHEN T.Especie2 in ('ARP') THEN '001'  When T.Especie2 in ('USD') then '004' When T.Especie2 in ('EUR') then '006' When T.Especie2 in ('BRL') then '040' else '000' END  Moneda, ")
 Sqladd("CAse when T.Especie2 in ('ARP') THEN 1 else (Select Top(1) Precio1 From dbo.COTIZACIONES C Where Codigo = T.Especie AND Moneda ='"~Var('MONELOCA')~"' AND Fecha <= '"~IdxDate(dialogo.fecha1)~"' Order By Fecha Desc) END as Precio, ")
 Sqladd("Cantidad, O.Cantidad  as Monto,   ")
@@ -866,9 +1020,13 @@ Sqladd("  and E.Jerarquia LIKE '"~Var('JERMONEDA')~"%' ")
 Sqladd("  and Leyenda like '%Pago%'    ")
 Sqladd("UNION")
 Sqladd("SELECT  '2' TipoMov,C.DeposDelComitente, ")
+if (Isdefined("BACS"))
+Sqladd(" Case when (select IsNull(CT.Comitente,'') from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) <> '"~dialogo.vehiculo1~"' then (select CodComitente from CLIENTES where Codigo ='"~dialogo.vehiculo1~"') else (select CT.NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) end ComitenteAux, ")
+else 
 Sqladd(" Case when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = O.Cliente and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = '"~dialogo.vehiculo1~"' ) Then (select NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta)  ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = O.Cliente and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) <> '"~dialogo.vehiculo1~"' ) then Nrcuenta ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = '"~dialogo.vehiculo1~"') then (select Top(1) CT.NrDepositante from dbo.CUENTAS CT Where CT.Cliente = O.Cliente and TipoCuenta = 'CUS' and NrDepositante is not Null) else Nrcuenta  end ComitenteAux, ")
+endif
 Sqladd("CASE WHEN T.Especie1 in ('ARP') THEN '001'  When T.Especie1 in ('USD') then '004' When T.Especie1 in ('EUR') then '006' When T.Especie2 in ('BRL') then '040' else '000' END  Moneda, ")
 Sqladd("CAse when T.especie1 in ('ARP') THEN 1 else (Select Top(1) Precio1 From dbo.COTIZACIONES C Where Codigo = T.Especie1 AND Moneda ='"~Var('MONELOCA')~"' AND Fecha <= '"~IdxDate(dialogo.fecha1)~"' Order By Fecha Desc) END as Precio, ")
 Sqladd("Cantidad, O.Cantidad  as Monto,   ")
@@ -887,9 +1045,13 @@ Sqladd("  and E.Jerarquia LIKE '"~Var('JERMONEDA')~"%' ")
 Sqladd("  and Leyenda like 'liq. Renta%'    ")
 Sqladd("UNION")
 Sqladd("SELECT  '3' TipoMov,C.DeposDelComitente, ")
+if (Isdefined("BACS"))
+Sqladd(" Case when (select IsNull(CT.Comitente,'') from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) <> '"~dialogo.vehiculo1~"' then (select CodComitente from CLIENTES where Codigo ='"~dialogo.vehiculo1~"') else (select CT.NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) end ComitenteAux, ")
+else 
 Sqladd(" Case when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = O.Cliente and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = '"~dialogo.vehiculo1~"' ) Then (select NrDepositante from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta)  ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = O.Cliente and (select Comitente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) <> '"~dialogo.vehiculo1~"' ) then Nrcuenta ")
 Sqladd(" when ((select Cliente from dbo.CUENTAS CT Where CT.Codigo = O.Cuenta) = '"~dialogo.vehiculo1~"') then (select Top(1) CT.NrDepositante from dbo.CUENTAS CT Where CT.Cliente = O.Cliente and TipoCuenta = 'CUS' and NrDepositante is not Null) else Nrcuenta  end ComitenteAux, ")
+endif
 Sqladd("CASE WHEN T.Especie1 in ('ARP') THEN '001'  When T.Especie1 in ('USD') then '004' When T.Especie1 in ('EUR') then '006' When T.Especie2 in ('BRL') then '040' else '000' END  Moneda, ")
 Sqladd("CAse when T.especie1 in ('ARP') THEN 1 else (Select Top(1) Precio1 From dbo.COTIZACIONES C Where Codigo = T.Especie1 AND Moneda ='"~Var('MONELOCA')~"' AND Fecha <= '"~IdxDate(dialogo.fecha1)~"' Order By Fecha Desc) END as Precio, ")
 Sqladd("Cantidad, O.Cantidad  as Monto,   ")
@@ -913,13 +1075,21 @@ if (Fecha(dialogo.fecha1, 'YYYYMMDD') > Var('SITERANT'))
 if (not Vacio(dialogo.cliente1))
 Sqladd("  where Cliente = '"~dialogo.cliente1~"' ")
 else 
-
+if (Isdefined("BIND"))
+Sqladd("  where Cliente in ("~Pipe2Comillas(Val(eb:3))~") and Cliente <> '"~dialogo.vehiculo1~"' ")
+else 
 Sqladd("  where Cliente in ("~Pipe2Comillas(Val(eb:3))~")  ")
+endif
 endif
 else 
 if (not Vacio(dialogo.cliente1))
 Sqladd("  where Cliente = '"~dialogo.cliente1~"' ")
 else 
+if (Isdefined("BIND"))
+if (Vacio(dialogo.cliente1))
+Sqladd("  where Cliente <> '"~dialogo.vehiculo1~"' ")
+endif
+endif
 endif
 endif
 
@@ -983,9 +1153,15 @@ Scn(po:2, Fbn()['MontoARP'])
 
 Sqladd("  Select C.Calle, C.Altura, C.Piso, C.Depto, C.CategDepositante,")
 
+if (Isdefined("MLASA"))
+Sqladd("  C.Direccion, C.Localidad, P.AliasDGI Provincia, C.CodigoPostal, PI.Alias PaisInsc,C.FechaInsc, C.Codigo Cliente, ")
+Sqladd(" C.RazonSocial, Case When C.Jerarquia LIKE '"~Var('JERFONCLI')~"%' THEN (Select IC.NrDocumento from INTEGRANTESCLI IC where IC.Codigo = '"~Fbn()['Cliente']~"' and IC.TipoPoder = 'SDE') ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN (Select IC.NrDocumento from INTEGRANTESCLI IC where IC.Codigo = '"~Fbn()['Cliente']~"' and IC.TipoPoder = 'SDE') ELSE C.CUIT END END CUIT, ")
+Sqladd(" CASE WHEN C.Jerarquia LIKE '"~Var('JERFONCLI')~"%' THEN 'FONDO' ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN 'FONDO' ELSE 'OTROS' END END TipoCli, ")
+else 
 Sqladd("  C.Direccion, C.Localidad, P.AliasAFIP Provincia, C.CodigoPostal, PI.Alias PaisInsc,C.FechaInsc, C.Codigo Cliente, ")
 Sqladd(" C.RazonSocial, Case When C.Jerarquia LIKE '"~Var('JERFONDOS')~"%' THEN (Select IC.NrDocumento from INTEGRANTESCLI IC where IC.Codigo = '"~Fbn()['Cliente']~"' and IC.TipoPoder = 'SDE') ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN (Select IC.NrDocumento from INTEGRANTESCLI IC where IC.Codigo = '"~Fbn()['Cliente']~"' and IC.TipoPoder = 'SDE') ELSE C.CUIT END END CUIT, ")
 Sqladd(" CASE WHEN C.Jerarquia LIKE '"~Var('JERFONDOS')~"%' THEN 'FONDO' ELSE CASE WHEN C.TipoDocum LIKE 'FCI' THEN 'FONDO' ELSE 'OTROS' END END TipoCli, ")
+endif
 Sqladd(" C.Persona, C.TipoInscripcion, C.Pais Pais, C.TipoDocum, C.NrDocum, C.Alias9 Puerta, PA.Alias PaisAFIP,C.Alias10 NIF, C.TipoDocum ")
 Sqladd("FROM   "~Dbo()~".CLIENTES C ")
 Sqladd("       Left JOIN "~Dbo()~".PROVINCIAS P WITH (NOLOCK) ON C.Provincia=P.Codigo ")
@@ -997,11 +1173,37 @@ Dfa()
 Act(aa:fac, Fbn()['RazonSocial'])
 
 Act(ac:fac, ReemplazarSTR(Fbn('CUIT'), '-', '', SI))
+if (Isdefined("MLASA"))
+if (Eqstr(Fbn()['TipoInscripcion'], 'CDI'))
+Act(ab:fac, '87')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'CIL'))
+Act(ab:fac, '86')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'CIT'))
+Act(ab:fac, '80')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'CIE'))
+Act(ab:fac, '88')
+else 
+if (Eqstr(Fbn()['TipoInscripcion'], 'FCI'))
+Act(ab:fac, '91')
+else 
+Act(ab:fac, '00')
+endif
+endif
+endif
+endif
+endif
+Act(ad:fac, Copy(Fbn()['Direccion'], 1, 30))
+Act(ae:fac, Fbn()['Puerta'])
+Act(aj:fac, '')
+else 
 Act(ab:fac, iif (Eqstr(Fbn()['TipoCli'], 'FONDO'), '91', '80'))
 Act(ad:fac, Fbn()['Calle'])
 Act(ae:fac, Fbn()['Altura'])
 Act(aj:fac, Fbn()['Piso'])
-
+endif
 Act(af:fac, '')
 Act(ag:fac, '')
 Act(ah:fac, '')
@@ -1068,6 +1270,9 @@ proximo
 endif
 
 
+endif
+
+
 Ifa()
 SaltarHoja()
 Ifa()
@@ -1110,6 +1315,14 @@ Act(rr5, Val(rr5)~Pad(' ', 30))
 else 
 Act(rr5, Val(rr5)~Pad(Copy(Val(ad:&i), 1, 30), 30))
 endif
+if (Isdefined("MLASA"))
+Act(rr5, Val(rr5)~Pad(Copy(Val(ae:&i), 1, 6), 6))
+Act(rr5, Val(rr5)~Pad(Copy(Val(af:&i), 1, 5), 5))
+Act(rr5, Val(rr5)~Pad(Copy(Val(ag:&i), 1, 5), 5))
+Act(rr5, Val(rr5)~Pad(Copy(Val(ah:&i), 1, 5), 5))
+Act(rr5, Val(rr5)~Pad(Copy(Val(ai:&i), 1, 5), 5))
+Act(rr5, Val(rr5)~Pad(Copy(Val(aj:&i), 1, 5), 5))
+else 
 if (Eqstr(Val(ao:&i), '0'))
 Act(rr5, Val(rr5)~Pad0('0', 6))
 else 
@@ -1120,7 +1333,7 @@ Act(rr5, Val(rr5)~Pad(Copy(Val(ag:&i), 1, 5), 5, '0'))
 Act(rr5, Val(rr5)~Pad(Copy(Val(ah:&i), 1, 5), 5, '0'))
 Act(rr5, Val(rr5)~Pad(Copy(Val(ai:&i), 1, 5), 5, '0'))
 Act(rr5, Val(rr5)~Pad(Copy(Val(aj:&i), 1, 5), 5, '0'))
-
+endif
 if (Eqstr(Val(ao:&i), '0'))
 Act(rr5, Val(rr5)~Pad(' ', 60))
 else 
@@ -1166,12 +1379,15 @@ else
 if (Eqstr(Val(ab:&i), '91'))
 Act(rr5, Val(rr5)~'6')
 else 
+if (Isdefined("MLASA"))
+Act(rr5, Val(rr5)~'1')
+else 
 if (Eqstr(Val(bf:&i), 'BAN'))
 Act(rr5, Val(rr5)~'1')
 else 
 Act(rr5, Val(rr5)~'4')
 endif
-
+endif
 endif
 endif
 
@@ -1192,7 +1408,24 @@ Act(rr0, Pad(' ', 30))
 else 
 Act(rr0, Pad(Copy(Val(ad:&i), 1, 30), 30))
 endif
-
+if (Isdefined("MLASA"))
+Act(rr0, Val(rr0)~Pad(Copy(Val(ae:&i), 1, 6), 6))
+if (Eqstr(Val(ao:&i), '0'))
+Act(rr0, Val(rr0)~' '~Pad(' ', 60))
+else 
+Act(rr0, Val(rr0)~' '~Pad(Copy(Val(ak:&i), 1, 60), 60))
+endif
+if (Eqstr(Val(ao:&i), '0'))
+Act(rr0, Val(rr0)~' '~Pad(' ', 2))
+else 
+Act(rr0, Val(rr0)~' '~Pad(Val(al:&i), 2))
+endif
+if (Eqstr(Val(ao:&i), '0'))
+Act(rr0, Val(rr0)~' '~Pad(' ', 10))
+else 
+Act(rr0, Val(rr0)~' '~Pad(Copy(Val(am:&i), 1, 10), 10))
+endif
+else 
 if (Eqstr(Val(ao:&i), '0'))
 Act(rr0, Val(rr0)~' '~Pad0('0', 6))
 else 
@@ -1213,7 +1446,7 @@ Act(rr0, Val(rr0)~' '~Pad(' ', 10))
 else 
 Act(rr0, Val(rr0)~' '~Pad(Copy(Val(am:&i), 1, 10), 10))
 endif
-
+endif
 Act(h:Val(ho:1), Val(rr0))
 Scn(ho:1, 1)
 
@@ -1295,12 +1528,15 @@ else
 if (Eqstr(Val(ab:Val(xy99)), '91'))
 Act(rr5, Val(rr5)~'6')
 else 
+if (Isdefined("MLASA"))
+Act(rr5, Val(rr5)~'1')
+else 
 if (Eqstr(Val(bf:Val(xy99)), 'BAN'))
 Act(rr5, Val(rr5)~'1')
 else 
 Act(rr5, Val(rr5)~'4')
 endif
-
+endif
 endif
 endif
 
@@ -1336,4 +1572,4 @@ Act(a:fac, 'FIN DEL LISTADO')
 SetFont(a:fac, 2)
 SetPrintFit(3, 80)
 LimitesVision(n:fac)
-rangotitulo(a:1..n:fac + 1, Val(zz1) - 1)
+Rangotitulo(a:1..n:fac + 1, Val(zz1) - 1)
