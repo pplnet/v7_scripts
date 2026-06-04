@@ -1,0 +1,39 @@
+** COTRATES - Diagnostico de cotizaciones cruzadas ARP/USD que usa CotizacionDirecta
+**
+** Para que Precio4(ACIN, USD) = 14.72, V6 hace:
+**   CotizacionDirecta(ARP, USD, 2021-07-13) * 2.4 = ??? * 2.4 = 14.72
+**   → CotizacionDirecta(ARP, USD) deberia retornar 6.13
+**
+** V7 actualmente retorna 0.0222 → 0.0222 * 2.4 = 0.0533
+**
+** Necesito ver que rows tiene la BD para Codigo='ARP' Moneda='USD' en fechas relevantes
+
+** 1. Todas las rows ARP→USD (cualquier fecha, top 30 mas recientes)
+&arpUsd := Sqlset("SELECT TOP 30 CONVERT(VARCHAR(10),Fecha,120) + '/M=' + ISNULL(Mercado,'NULL') + '/Plazo=' + ISNULL(CONVERT(VARCHAR,PlazoLiq),'NULL') + '/P1=' + CONVERT(VARCHAR,Precio1) FROM " ~ DBO ~ ".COTIZACIONES WHERE Codigo='ARP' AND Moneda='USD' ORDER BY Fecha DESC, Mercado DESC, PlazoLiq DESC")
+Message("[1] ARP->USD (top 30 most recent) = [" ~ &arpUsd ~ "]")
+
+** 2. La row exacta que mi CotizacionDirecta(ARP, USD, 2021-07-13) deberia retornar
+**    (TOP 1 con mi ORDER BY actual: Fecha DESC, Mercado DESC, PlazoLiq DESC)
+&directARPtoUSD := Sql("SELECT TOP 1 CONVERT(VARCHAR(10),Fecha,120) + '|' + ISNULL(Mercado,'NULL') + '|' + ISNULL(CONVERT(VARCHAR,PlazoLiq),'NULL') + '|' + CONVERT(VARCHAR,Precio1) FROM " ~ DBO ~ ".COTIZACIONES WHERE Codigo='ARP' AND Moneda='USD' AND Fecha<='2021-07-13' ORDER BY Fecha DESC, Mercado DESC, PlazoLiq DESC")
+Message("[2] CotizacionDirecta(ARP->USD,2021-07-13) row = [" ~ &directARPtoUSD ~ "]")
+
+** 3. Rows USD->ARP (la inversa, por si V6 va por Modo Inverso)
+&usdArp := Sqlset("SELECT TOP 30 CONVERT(VARCHAR(10),Fecha,120) + '/M=' + ISNULL(Mercado,'NULL') + '/Plazo=' + ISNULL(CONVERT(VARCHAR,PlazoLiq),'NULL') + '/P1=' + CONVERT(VARCHAR,Precio1) FROM " ~ DBO ~ ".COTIZACIONES WHERE Codigo='USD' AND Moneda='ARP' ORDER BY Fecha DESC, Mercado DESC, PlazoLiq DESC")
+Message("[3] USD->ARP (top 30 most recent) = [" ~ &usdArp ~ "]")
+
+** 4. Row exacta USD->ARP que CotizacionDirecta retornaria a fecha 2021-07-13
+&directUSDtoARP := Sql("SELECT TOP 1 CONVERT(VARCHAR(10),Fecha,120) + '|' + ISNULL(Mercado,'NULL') + '|' + ISNULL(CONVERT(VARCHAR,PlazoLiq),'NULL') + '|' + CONVERT(VARCHAR,Precio1) FROM " ~ DBO ~ ".COTIZACIONES WHERE Codigo='USD' AND Moneda='ARP' AND Fecha<='2021-07-13' ORDER BY Fecha DESC, Mercado DESC, PlazoLiq DESC")
+Message("[4] CotizacionDirecta(USD->ARP,2021-07-13) row = [" ~ &directUSDtoARP ~ "]")
+
+** 5. CotizaEn de cada uno
+&cotEnARP := CotizaEn('ARP')
+&cotEnUSD := CotizaEn('USD')
+Message("[5] CotizaEn('ARP') = [" ~ &cotEnARP ~ "] | CotizaEn('USD') = [" ~ &cotEnUSD ~ "]")
+
+** 6. Cotizacion directa al estilo PMFunc (lo que mi V7 deberia ejecutar)
+&cotARPUSDdirecto := COTIZACIONC('ARP',,,,Fecha('2021-07-13'),1,SI,'USD')
+Message("[6] CotizacionC('ARP',,,,2021-07-13,1,SI,'USD') = [" ~ &cotARPUSDdirecto ~ "]")
+
+** 7. Tipo de columnas Mercado y PlazoLiq (para validar el ORDER BY)
+&colsType := Sql("SELECT COLUMN_NAME + ':' + DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='COTIZACIONES' AND COLUMN_NAME IN ('Mercado','PlazoLiq','Fecha') ORDER BY COLUMN_NAME")
+Message("[7] Cols type = [" ~ &colsType ~ "]")

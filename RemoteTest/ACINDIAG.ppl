@@ -1,0 +1,57 @@
+** ACINDIAG - Diagnostico de cotizaciones y CONDIC para ACIN
+**
+** El warning "Precio Fuera de Rango" usa PRECIO4 = COTIZACIONC(ESPECIE,,,,FECHAOP,1,SI,CONTRAESPECIE)
+** V7 muestra 2.4 (warning 2.16/2.64), V6 muestra 14.72 (warning 13.248/16.192)
+
+** 1. Todas las cotizaciones de ACIN en COTIZACIONES (cualquier fecha, cualquier moneda)
+&allCot := Sqlset("SELECT CONVERT(VARCHAR(10), Fecha, 120) + '/M=' + ISNULL(Moneda,'NULL') + '/P1=' + CONVERT(VARCHAR,Precio1) FROM " ~ DBO ~ ".COTIZACIONES WHERE Codigo='ACIN' ORDER BY Fecha DESC")
+Message("[1] ACIN cotizaciones (todas) = [" ~ &allCot ~ "]")
+
+** 2. Cuantas rows tiene ACIN por moneda
+&porMoneda := Sqlset("SELECT ISNULL(Moneda,'NULL')+'|'+CONVERT(VARCHAR,COUNT(*))+'rows|max='+CONVERT(VARCHAR,MAX(Precio1)) FROM " ~ DBO ~ ".COTIZACIONES WHERE Codigo='ACIN' GROUP BY Moneda")
+Message("[2] ACIN por moneda = [" ~ &porMoneda ~ "]")
+
+** 3. CotizaEn de ACIN
+&cotEnACIN := CotizaEn('ACIN')
+Message("[3] CotizaEn('ACIN') = [" ~ &cotEnACIN ~ "]")
+
+** 4. CotizacionC contra ARP (lo que V6 deberia hacer si CONTRAESPECIE=ARP)
+&fechaOp := Fecha('2026-05-27')
+&cotARP := COTIZACIONC('ACIN',,,,&fechaOp,1,SI,'ARP')
+Message("[4] CotizacionC('ACIN',,,,,1,SI,'ARP') = [" ~ &cotARP ~ "]")
+
+** 5. CotizacionC contra USD
+&cotUSD := COTIZACIONC('ACIN',,,,&fechaOp,1,SI,'USD')
+Message("[5] CotizacionC('ACIN',,,,,1,SI,'USD') = [" ~ &cotUSD ~ "]")
+
+** 6. CotizacionC contra MONELOCA (la moneda local del deploy)
+&moneLoca := Var('MONELOCA')
+&cotML := COTIZACIONC('ACIN',,,,&fechaOp,1,SI,&moneLoca)
+Message("[6] CotizacionC('ACIN',,,,,1,SI,MONELOCA=[" ~ &moneLoca ~ "]) = [" ~ &cotML ~ "]")
+
+** 7. SQL directo - row mas reciente sin filtro de moneda (lo que el chain viejo haria)
+&maxReciente := Sql("SELECT TOP 1 CONVERT(VARCHAR(10), Fecha, 120) + '|' + ISNULL(Moneda,'NULL') + '|' + CONVERT(VARCHAR, Precio1) FROM " ~ DBO ~ ".COTIZACIONES WHERE Codigo='ACIN' ORDER BY Fecha DESC")
+Message("[7] SQL max(Fecha) ACIN = [" ~ &maxReciente ~ "]")
+
+** 8. Cotizaciones de la moneda CotizaEn(ACIN) - relevante para el chain
+&monedaACIN := CotizaEn('ACIN')
+If NoVacio(&monedaACIN)
+    &cotMonedaACIN := Sqlset("SELECT CONVERT(VARCHAR(10),Fecha,120)+'/M='+ISNULL(Moneda,'NULL')+'/P1='+CONVERT(VARCHAR,Precio1) FROM " ~ DBO ~ ".COTIZACIONES WHERE Codigo='" ~ &monedaACIN ~ "' ORDER BY Fecha DESC")
+    Message("[8] Cotizaciones de [" ~ &monedaACIN ~ "] = [" ~ &cotMonedaACIN ~ "]")
+EndIf
+
+** 9. Jerarquia de ACIN (para verificar BookValido y otros)
+&ascACIN := Ascendientes('ESPECIES', 'ACIN')
+Message("[9] Ascendientes('ESPECIES','ACIN') = [" ~ &ascACIN ~ "]")
+
+** 10. AGENDACUPONES para ACIN
+&agendaACIN := Sql("SELECT COUNT(*) FROM " ~ DBO ~ ".AGENDACUPONES WHERE Especie='ACIN'")
+Message("[10] COUNT(*) AGENDACUPONES Especie='ACIN' = [" ~ &agendaACIN ~ "]")
+
+** 11. DesciendeDeEspecie('ACIN','PRIVA ') - para la condicion de Agenda
+&desACIN := DesciendeDeEspecie('ACIN','PRIVA ')
+Message("[11] DesciendeDeEspecie('ACIN','PRIVA ') = [" ~ &desACIN ~ "]")
+
+** 12. BuscarCampo agenda
+&busACIN := BuscarCampo('AGENDACUPONES','Especie','Especie','ACIN')
+Message("[12] BuscarCampo('AGENDACUPONES','Especie','Especie','ACIN') = [" ~ &busACIN ~ "]")

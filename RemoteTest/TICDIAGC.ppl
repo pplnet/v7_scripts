@@ -1,0 +1,46 @@
+** TICDIAGC - Diagnostico de cotizaciones para AA22 (V7 vs V6)
+**
+** Objetivo: entender por que Precio4 = 2.4 en V7 pero V6 reporta 14.72.
+** Ambas versiones consultan la misma BD, asi que la diferencia esta en el
+** algoritmo de seleccion de la row de COTIZACIONES.
+
+** 1. Todas las cotizaciones de AA22 (cualquier Moneda, ultimos 30 dias)
+&listaCot := Sqlset("SELECT CONVERT(VARCHAR(10), Fecha, 120) + '/Moneda=' + ISNULL(Moneda,'NULL') + '/Precio1=' + CONVERT(VARCHAR, Precio1) FROM " ~ DBO ~ ".COTIZACIONES WHERE Codigo='AA22' AND Fecha >= DATEADD(day, -30, GETDATE()) ORDER BY Fecha DESC, Moneda")
+Message("[1] Cotizaciones AA22 (ultimos 30d) = [" ~ &listaCot ~ "]")
+
+** 2. Cotizacion AA22 directa contra ARP (lo que V7 hace en Precio4)
+&fechaOp := Fecha('2026-05-27')
+&cotARP := COTIZACIONC('AA22',,,,&fechaOp,1,SI,'ARP')
+Message("[2] CotizacionC('AA22',,,,,1,SI,'ARP') = [" ~ &cotARP ~ "]")
+
+** 3. Cotizacion AA22 directa contra USD (alternativa)
+&cotUSD := COTIZACIONC('AA22',,,,&fechaOp,1,SI,'USD')
+Message("[3] CotizacionC('AA22',,,,,1,SI,'USD') = [" ~ &cotUSD ~ "]")
+
+** 4. Cotizacion AA22 directa contra ARS (intento V6-style)
+&cotARS := COTIZACIONC('AA22',,,,&fechaOp,1,SI,'ARS')
+Message("[4] CotizacionC('AA22',,,,,1,SI,'ARS') = [" ~ &cotARS ~ "]")
+
+** 5. CotizaEn de AA22 (la moneda donde AA22 cotiza primariamente)
+&cotEn := CotizaEn('AA22')
+Message("[5] CotizaEn('AA22') = [" ~ &cotEn ~ "]")
+
+** 6. Cotizacion ARP contra USD (para entender la cadena)
+&arpUsd := COTIZACIONC('ARP',,,,&fechaOp,1,SI,'USD')
+Message("[6] CotizacionC('ARP',,,,,1,SI,'USD') = [" ~ &arpUsd ~ "]")
+
+** 7. Cotizacion USD contra ARP (inversa)
+&usdArp := COTIZACIONC('USD',,,,&fechaOp,1,SI,'ARP')
+Message("[7] CotizacionC('USD',,,,,1,SI,'ARP') = [" ~ &usdArp ~ "]")
+
+** 8. MONELOCA (variable de la moneda local)
+&moneLoca := Var('MONELOCA')
+Message("[8] Var('MONELOCA') = [" ~ &moneLoca ~ "]")
+
+** 9. Cotizacion AA22 contra MONELOCA (lo que V6 hace tras chain)
+&cotMoneLoca := COTIZACIONC('AA22',,,,&fechaOp,1,SI,&moneLoca)
+Message("[9] CotizacionC('AA22',,,,,1,SI,MONELOCA=[" ~ &moneLoca ~ "]) = [" ~ &cotMoneLoca ~ "]")
+
+** 10. SQL directo: Precio1 mas reciente de AA22 en CUALQUIER moneda dentro de 2 dias
+&sqlDirecto := Sql("SELECT TOP 1 ISNULL(Moneda,'NULL') + '|' + CONVERT(VARCHAR,Precio1) FROM " ~ DBO ~ ".COTIZACIONES WHERE Codigo='AA22' AND Fecha >= DATEADD(day,-2,'2026-05-27') AND Fecha <= '2026-05-27' ORDER BY Fecha DESC")
+Message("[10] SQL directo ultima cot AA22 = [" ~ &sqlDirecto ~ "]")

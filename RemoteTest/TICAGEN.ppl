@@ -1,0 +1,39 @@
+** TICAGEN - Diagnostico de la advertencia "Falta Actualizar la Agenda"
+**
+** La condicion OPCONDIC3 linea 11 es:
+**   EV o DESCIENDEDEESPECIE(ESPECIE,'PRIVA ') o NoVacio(BuscarCampo('AGENDACUPONES','Especie','Especie',ESPECIE))
+**
+** Para AA22 (no es PRIVA) y la BD tiene cupones, esto deberia ser true.
+** En V7 dispara la advertencia, en V6 no.
+
+** 1. SQL directo: hay rows para AA22 en AGENDACUPONES?
+&countAA22 := Sql("SELECT COUNT(*) FROM " ~ DBO ~ ".AGENDACUPONES WHERE Especie='AA22'")
+Message("[1] COUNT(*) AGENDACUPONES WHERE Especie='AA22' = [" ~ &countAA22 ~ "]")
+
+** 2. BuscarCampo: lo que efectivamente devuelve la PMFunc en V7
+&buscado := BuscarCampo('AGENDACUPONES','Especie','Especie','AA22')
+Message("[2] BuscarCampo('AGENDACUPONES','Especie','Especie','AA22') = [" ~ &buscado ~ "]")
+
+** 3. NoVacio del BuscarCampo (lo que la condicion realmente evalua)
+&noVacioRes := NoVacio(&buscado)
+Message("[3] NoVacio(BuscarCampo...) = [" ~ &noVacioRes ~ "] (debe ser SI)")
+
+** 4. SQL directo con espacio/padding visualizado
+&primero := Sql("SELECT TOP 1 '[' + Especie + ']' FROM " ~ DBO ~ ".AGENDACUPONES WHERE Especie='AA22'")
+Message("[4] Primer row Especie con corchetes = [" ~ &primero ~ "] (para ver padding)")
+
+** 5. SQL: AGENDACUPONES.Especie - tipo de columna
+&colInfo := Sql("SELECT DATA_TYPE + '(' + ISNULL(CONVERT(VARCHAR,CHARACTER_MAXIMUM_LENGTH),'?') + ')' FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENDACUPONES' AND COLUMN_NAME='Especie'")
+Message("[5] AGENDACUPONES.Especie type = [" ~ &colInfo ~ "]")
+
+** 6. DesciendeDeEspecie test
+&desciende := DesciendeDeEspecie('AA22','PRIVA ')
+Message("[6] DesciendeDeEspecie('AA22','PRIVA ') = [" ~ &desciende ~ "] (debe ser NO)")
+
+** 7. La condicion completa simulada (sin EV ni la rama PRIVA, que sabemos son false/false)
+**    Reproduce exactamente lo que el script CONDIC haria con ESPECIE='AA22'
+If &noVacioRes
+    Message("[7] CONDICION pasa (no warning) - V6 correcto")
+Else
+    Message("[7] CONDICION falla (warning aparece) - V7 actual")
+EndIf
