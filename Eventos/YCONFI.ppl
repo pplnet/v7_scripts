@@ -1,0 +1,254 @@
+﻿**- Selecciona los movs. pendientes de transacciones de saldos 101, -**
+**- que se encuentren en la instancia de confirmacion, para la lista -**
+**- con las transacciones que desee elegir para matchear. -**
+***HojaVisible(SI)
+
+MostrarCuadroDeMensajes
+ACT(es1,SQLSet("SELECT Codigo FROM "~DBO~".ESPECIES WHERE Status='HAB' ORDER BY Codigo "))
+CrearDialogo
+   Vehiculo1  : 'Vehiculo'            ;;;;;;;;;VAR('VEHICULODE')
+   Fecha1     : 'FechaValor'          ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;Habiles(FSys,0,'ARG',SI)
+   Fecha2     : 'FechaConf'           ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar la Fecha de Confirmacion';NO;FSys
+   Lista1     : 'Casas Custodia'      ;;;;;;;;;;;SQLSet("SELECT Codigo FROM "~DBO~".MERCADOS WHERE Observaciones LIKE '%T|%' ORDER BY Codigo ");
+   Lista2     : "Especies"            ;;1;;;;;;;;;VAL(es1);SI
+   Lista3     : "Excluye Especies"    ;-1;2;;;;;;;;;VAL(es1);SI
+   NrTrans1   : 'Nro Custodia'        ;1;1;;;;;;;;;;;;"TipoTr2    IN ('DTP','RTP')"
+   Check1     : 'Batch'               ;1;;;NO;NO;;;;0;
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+**- Nro. de Saldo Libre Disponibilidad 
+ACN(a:1, BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALLIBRECU')) )
+
+SetFilaActual(3)
+
+ACN(qf:1, 0)
+
+**- Selecciono los Mov. de Transacciones de Saldos 101 que esten en Instancia de Confirmacion
+SQL.ADD("SELECT Distinct T.NrTrans, T.TipoTr2, T.Fecha1, T.Cliente1, T.Cliente2,                                      ")
+SQL.ADD("       T.Cuenta1, T.Cuenta2, T.Especie, T.Cantidad1, T.Precio1, T.Cambio1,                                   ")
+SQL.ADD("       T.Mercado1, T.CB6, T.NrOperacionRef1, T.CB1, T.CB2, M.NrOperacion,CT1.NrDepositante as NrDepositante1, T.Ley4 Rueda, T.NrOperacionRef1 ")
+SQL.ADD("FROM   "~DBO~".MOVPENDIENTES M WITH (NOLOCK index = INDMP1), "~DBO~".TRANSACCIONES2 T,                       ")
+SQL.ADD("       "~DBO~".CUENTAS CT1,"~DBO~".OPERACIONESBITS OB, "~DBO~".MERCADOS MER   ")
+SQL.ADD("    WHERE  M.NrOperacion = T.NrTrans                     ")
+SQL.ADD("       and M.FechaMov   <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and OB.NrOperacion=T.NrTrans                      ")
+SQL.ADD("       and T.Vehiculo1   = '"~Dialogo.Vehiculo1~"'       ")
+SQL.ADD("       and T.TipoTr2    IN ('DTP','RTP')                 ")
+*** para que tome solo los DTP/RTP por liquidacion ****
+*** SQL.ADD("       and T.CB1         = '1' ")
+* cambio cb1 x cb6 porque deja afuera las que no son trf. cb6 = automatica.
+SQL.ADD("       and T.CB6         = '1'                           ")
+SQL.ADD("       and CT1.Codigo=T.Cuenta1                          ")
+SQL.ADD("       AND T.Cliente3 =MER.Cliente1              ")
+SQL.ADD("       AND MER.Netea='SI'              ")
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD("       and T.Mercado1 In ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+Endif
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("    AND T.Especie IN ("~Pipe2Comillas(Dialogo.Lista2)~")      ")
+ENDIF
+IF NoVacio(Dialogo.Lista3)
+   SQL.ADD("    AND T.Especie Not IN ("~Pipe2Comillas(Dialogo.Lista3)~")  ")
+ENDIF
+SQL.ADD("  and OB.NrBit=1 and OB.Valor='1'                                ")
+SQL.ADD("  and M.NrSaldo  = "~Fstr(val(a1),0,0)~"                         ")
+
+If NoVacio(Dialogo.NrTrans1)
+   SQL.ADD("AND T.NrTrans = '"~Dialogo.NrTrans1~"'          ")
+Endif
+
+*-------
+SQL.ADD(" UNION ALL ")
+
+**- Selecciono los Mov. de Transacciones de Saldos 101 que esten en Instancia de Confirmacion
+SQL.ADD("SELECT Distinct T.NrTrans, T.TipoTr2, T.Fecha1, T.Cliente1, T.Cliente2,                                      ")
+SQL.ADD("       T.Cuenta1, T.Cuenta2, T.Especie, T.Cantidad1, T.Precio1, T.Cambio1,                                   ")
+SQL.ADD("       T.Mercado1, T.CB6, T.NrOperacionRef1, T.CB1, T.CB2, M.NrOperacion,CT1.NrDepositante as NrDepositante1, T.Ley4 Rueda, T.NrOperacionRef1 ")
+SQL.ADD("FROM   "~DBO~".MOVPENDIENTES M WITH (NOLOCK index = INDMP1), "~DBO~".TRANSACCIONES2 T,                       ")
+SQL.ADD("       "~DBO~".CUENTAS CT1,"~DBO~".OPERACIONESBITS OB   ")
+SQL.ADD("    WHERE  M.NrOperacion = T.NrTrans                     ")
+SQL.ADD("       and M.FechaMov   <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and OB.NrOperacion=T.NrTrans                      ")
+SQL.ADD("       and T.Vehiculo1   = '"~Dialogo.Vehiculo1~"'       ")
+SQL.ADD("       and T.TipoTr2    IN ('DTP','RTP')                 ")
+*** para que tome solo los DTP/RTP por liquidacion ****
+*** SQL.ADD("       and T.CB1         = '1' ")
+* cambio cb1 x cb6 porque deja afuera las que no son trf. cb6 = automatica.
+SQL.ADD("       and T.CB6         = '1'                           ")
+SQL.ADD("       and CT1.Codigo=T.Cuenta1                          ")
+SQL.ADD("       and T.Ley4 In ("~Pipe2Comillas(VAR('RUECPC1'))~")  ")
+
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD("       and T.Mercado1 In ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+Endif
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("    AND T.Especie IN ("~Pipe2Comillas(Dialogo.Lista2)~")      ")
+ENDIF
+IF NoVacio(Dialogo.Lista3)
+   SQL.ADD("    AND T.Especie Not IN ("~Pipe2Comillas(Dialogo.Lista3)~")  ")
+ENDIF
+SQL.ADD("  and OB.NrBit=1 and OB.Valor='1'                                ")
+SQL.ADD("  and M.NrSaldo  = "~Fstr(val(a1),0,0)~"                         ")
+
+If NoVacio(Dialogo.NrTrans1)
+   SQL.ADD("AND T.NrTrans = '"~Dialogo.NrTrans1~"'          ")
+Endif
+*-------
+SQL.ADD("  ORDER BY T.Fecha1,T.Especie,CT1.NrDepositante,T.Cuenta2        ")
+watch(SQL.BATCH())
+ACT(z1,'')
+ACT(z2,'')
+
+Message('Recuperando Informacion.')
+
+Recorrer SQL
+   If Not EqStr(FBN['Cuenta2'],val(z2))
+      ACT(z2,FBN['Cuenta2'])
+      ACT(aa2,'')
+      If NoVacio(val(z2))
+         ACT(aa2,BuscarCampo('CUENTAS','NrDepositante','Codigo',FBN['Cuenta2']))
+      EndIf
+   EndIf
+
+   ACT(a:FAC, FBN['NrTrans'])
+   ACT(b:FAC, FBN['TipoTr2'])
+   ACD(c:FAC, FBN['Fecha1'])
+   ACT(d:FAC, FBN['Cliente1'])
+   ACT(e:FAC, FBN['Cliente2'])
+   ACT(f:FAC, FBN['NrDepositante1'])
+   ACT(g:FAC, val(aa2))
+   ACT(h:FAC, FBN['Especie'])
+   *- Por cada cambio de especie recupero el cupon actual
+   If Not EqStr(FBN['Especie'],val(z1))
+      ACT(z1,FBN['Especie'])
+      ACT(r:fac,Fstr(NrCupon2(val(z1),Dialogo.Fecha1),0,0))
+   Else
+      ACT(r:fac,val(r:fac-1))
+   EndIf
+
+   ACN(i:FAC, FBN['Cantidad1'])
+   ACN(j:FAC, FBN['Precio1'])
+   ACN(k:FAC, FBN['Cambio1'])
+   ACT(l:FAC, FBN['Mercado1'])
+   ACT(m:FAC,'')
+
+   *- DEP/RET que dio origen al DTP/RTP Automatico 
+   If EqStr(FBN['CB6'],'1')
+      ACT(m:FAC,FBN['NrOperacionRef1'])
+
+      SQL.ADD("Select RB6 from "~DBO~".TRANSACCIONES2 ")
+      SQL.ADD(" where NrTrans = '"~val(m:fac)~"' ")
+
+      Recorrer SQL
+        dfa
+        acn(s:fac, fbn('RB6'))
+        If fbn('RB6')=1
+           ACT(t:fac,'Confirmada')
+        Else
+           If fbn('RB6')=2
+              ACT(t:fac,'Falla')
+           Else
+              ACT(t:fac,'Pendiente')
+           Endif
+        Endif
+      Proximo
+   EndIf
+
+   ACN(n:FAC, NUM(FStr(FBN['CB1'],0,0)))
+   ACN(o:FAC, NUM(FStr(FBN['CB2'],0,0)))
+   ACT(p:FAC, FBN['NrOperacion'])
+   ACT(y:FAC,FBN['Rueda'])
+   ACT(u:FAC,FBN['NrOperacionRef1'])
+   SCN(qf:1, 1)
+   if Incluido(val(y:FAC),VAR('RUECPC1'))
+      IF Eqstr(fbn('TipoTr2'), 'RTP')
+          ACT(SG:fac, 'Cobro')
+       ELSE
+          ACT(SG:fac, 'Pago')
+      endif
+   else
+      IF [Eqstr(fbn('TipoTr2'), 'DTP') Y Eqstr(fbn('Cliente1'), Dialogo.Vehiculo1)] O [Eqstr(fbn('TipoTr2'), 'RTP') Y Eqstr(fbn('Cliente2'), Dialogo.Vehiculo1)]
+         ACT(SG:fac, 'Cobro')
+      ELSE
+         ACT(SG:fac, 'Pago')
+      ENDIF
+   Endif
+ 
+*   IF [Eqstr(fbn('TipoTr2'), 'DTP') Y Eqstr(fbn('Cliente1'), Dialogo.Vehiculo1)] O [Eqstr(fbn('TipoTr2'), 'RTP') Y Eqstr(fbn('Cliente2'), Dialogo.Vehiculo1)]
+*      if Incluido(val(y:FAC),VAR('RUECPC1'))
+*         if [Eqstr(fbn('TipoTr2'), 'RTP') Y Eqstr(fbn('Cliente2'), Dialogo.Vehiculo1)]
+*            ACT(SG:fac, 'Cobro')
+*         else
+*            ACT(SG:fac, 'Pago')
+*         endif   
+*      else
+*         ACT(SG:fac, 'Cobro')
+*      endif   
+*   ELSE
+*      if Incluido(val(y:FAC),VAR('RUECPC1'))
+*         ACT(SG:fac, 'Cobro')
+*      else   
+*         ACT(SG:fac, 'Pago')
+*      endif   
+*   ENDIF
+*
+   If Dialogo.Check1=1
+      ACN(q:FAC, 1)
+   else
+      ACN(q:FAC, 0)
+   Endif
+Proximo
+
+If Val(qf:1)>0 
+   If Dialogo.Check1=0
+       **- Armo la lista de las transacciones que puede seleccionar
+       CrearListBox ; 'Arial,8,';'Seleccion de Transacciones para Matcheo '
+          'Matcheo'      ;q:4..q:FAC;  ;;;18;CHECK ;RGB(220,220,193);;NO;NO;;NO;NO;NO;SI
+          'Accion'       ;x:4..x:fac;SI;[Val(q:flb)=0 o Val(x:flb)=0 o Val(x:flb)=2] o [Val(x:flb)=1 y Val(c:flb)<Dialogo.Fecha2]; 'No se pueden Fallar Vouchers del Dia';80 ;COMBO;'Confirma|Falla|Pendiente';RGB(220,220,193)
+          'Estado'       ;t:4..t:fac;NO;SI; ;80 ;STRING;;RGB(180,180,193)
+          ''             ;SG:4..SG:FAC;NO;;;50;STRING;
+          'Especie'      ;h:4..h:FAC;NO;;;45;TABLA;'Especies';'Codigo';'Codigo;Nombre';
+          'CuponMatch'   ;r:4..r:FAC;NO;;;30;STRING;
+          'Cuenta1'      ;f:4..f:FAC;NO;;;75;TABLA;'Cuentas';
+          'Cliente1'     ;d:4..d:FAC;NO;;;80;TABLA;'Clientes';'Codigo';'Codigo;RazonSocial';
+          'Cantidad VN'  ;i:4..i:FAC;NO;;;90;NUMERO;'###,###,###';
+          'Fecha'        ;c:4..c:FAC;NO;;;60;FECHA;
+          'TipoTrans '   ;b:4..b:FAC;NO;;;45;STRING;
+          'NrCustodia'   ;a:4..a:FAC;NO;;;65;STRING;
+          'Transf'       ;n:4..n:FAC;NO;;;18;CHECK;
+          'Interna'      ;o:4..o:FAC;NO;;;18;CHECK;
+          'C.Cust'       ;l:4..l:FAC;NO;;;37;STRING;
+          'Cliente2'     ;e:4..e:FAC;NO;;;80;TABLA;'Clientes';'Codigo';'Codigo;RazonSocial';
+          'Cuenta2'      ;g:4..g:FAC;NO;;;75;TABLA;'Cuentas';
+          'Cotiz.Mercado';j:4..j:FAC;NO;;;78;NUMERO;'##,###,###.########';
+          'Monto'        ;k:4..k:FAC;NO;;;90;NUMERO;'###,###,###.##';
+          'Voucher'      ;u:4..u:FAC;NO;;;65;STRING;
+       FinListBox
+
+       If Not OK
+          Cancelar('No se seleccionaron transaciones para matchear')
+       Endif
+   endif
+   **- Recorro las filas para ver cual esta seleccionada
+   Recorrer&i 4, FAC
+     If Val(q:&i) = 1
+        EjecutarEvento2('YCONF2',Entero1 = Val(x:&i), Fecha1 = Dialogo.Fecha1, String1 = Val(r:&i), String2 = Val(a:&i), String3 = Val(m:&i), Fecha2 = Dialogo.Fecha2, Entero2 = Val(s:&i), String4 = Val(b:&i))
+     Endif
+   Proximo
+Endif
+
+IF Dialogo.Check1=1 Y val(qf:1)<>0
+   Message('Fin del Matcheo.')
+else
+   IF Dialogo.Check1=0 Y val(qf:1)<>0
+       Messagebox('Fin del Matcheo.')
+   endif
+   if val(qf:1)=0
+        Messagebox('No se encontraron Vouchers para Confirmar')
+   endif
+*   Messagebox('Fin del Matcheo.')
+Endif

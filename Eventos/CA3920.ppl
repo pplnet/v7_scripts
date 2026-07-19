@@ -1,0 +1,625 @@
+﻿*- Se Listan los titulos publicos de cartera propia y de terceros.
+*- El codigo de la Especie SISCEN se Guarda en el Alias7 de la 
+*- En el Alias1 se especifican si son Cuasimonedas = 'CUASIMON'
+*- En Clientes, Banco Opera guardo el grupo de clasificacion
+HojaVisible(SI)
+ModoReproceso(SinDialogo)
+CrearDialogo
+  Vehiculo1  : "Vehiculo"                          ; 1;1;;;;NoVacio(Dialogo.Vehiculo1);'Debe ingresar un vehiculo';NO;VAR('VEHICULODE')
+  Fecha1     : "Fecha"                             ;  ; ;;;;Dialogo.Fecha1<=Fsys y Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;FSys
+  Entero1    : "Cod.Diseno"                        ;  ; ;;;;NoVacio(Dialogo.Entero1);'Debe Codigo de Diseño';NO;3901
+  Radio2     : "Salida|Informe|Inf+TXT"            ;  ; ;;;;;;;0
+  String1    : 'Path'                              ;  ; ;;Dialogo.Radio2=1;Dialogo.Radio2=1;;;;VAR('PATH3920');
+* String2    : 'Archivo'                           ;  ; ;;Dialogo.Radio2=1;Dialogo.Radio2=1;;;;Fstr(Dialogo.Entero1,0,0)~'_'~FStr(Anio(Dialogo.Fecha1),4,0)~PAD0(FStr(Mes(Dialogo.Fecha1),0,0),2)~PAD0(FStr(Dia(Dialogo.Fecha1),0,0),2)~'.TXT';Fstr(Dialogo.Entero1,0,0)~'_'~FStr(Anio(Dialogo.Fecha1),4,0)~PAD0(FStr(Mes(Dialogo.Fecha1),0,0),2)~PAD0(FStr(Dia(Dialogo.Fecha1),0,0),2)~'.TXT'
+  String2    : 'Archivo'                           ;  ; ;;Dialogo.Radio2=1;Dialogo.Radio2=1;;;;'TFINTITU.UD';'TFINTITU.UD'
+  Radio1     : 'Sist.Oper.|W98|NT'                 ;  ; ;;Dialogo.Radio2=1;Dialogo.Radio2=1;;;;1; 
+  Radio3     : 'Rectificativa|NO|SI'               ;  ; ;;;;;;;0; 
+  Especie1   : 'Especie'                           ;  ; ;;;;;;;
+FinDialogo
+
+IF Not Ok
+  Cancelar
+ENDIF
+
+
+If Dialogo.Radio2=1 y Not ExisteDirectorio(Dialogo.String1)
+   Messagebox('No existe el path '~Dialogo.String1~'. Debera crearlo.')
+   Cancelar
+Endif
+
+IF Dialogo.Radio2=1 y ExisteArchivo(Dialogo.String1~Dialogo.String2) 
+   IF Dialogo.Radio1 = 0
+      WinExec('COMMAND.COM /C DEL '~Dialogo.String1~Dialogo.String2, 0)
+   ELSE
+      WinExec('CMD.EXE /C DEL '~Dialogo.String1~Dialogo.String2, 0)
+   ENDIF
+
+   ***---A veces ejecuta lo que sigue y el S.O. todavia no borro el archivo
+   Esperar(3)
+EndIf
+
+IF Dialogo.Radio2=1 
+   ACT(aa1, Dialogo.String1~Dialogo.String2)
+
+   Message('Creando Archivo '~Dialogo.String2)
+
+   AbrirASCII(val(aa1),0)
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+ACT(ml1, VAR('MONELOCA'))
+ACT(xz1, Hora(Ahora))
+
+
+SQL.ADD("SELECT Convert(Integer,E.Alias7) as CodigoSiscen,E.Codigo as Especie,'1' as Tipo,CASE S1.Cliente WHEN '"~Dialogo.Vehiculo1~"' THEN 'CPROPIA' ELSE 'TERCER' END as Propia,' ' as TipoOp,CASE C.PaisDir WHEN 80 THEN 'SI' ELSE 'NO' END as Reside,S1.Cupon,E.Alias1,C.SectorBCRA,C.Provincia,C.BancoOpera,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen as Nacionalidad, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon,S1.Cliente,SUM(S1.CantidadFin) Saldo,0 AS VR,' ' as Cuenta, CASE WHEN S1.NrSaldo=107 THEN 0 WHEN S1.NrSaldo=110 THEN 0 ELSE 1 END as Cartera, 0 as Interes, 0 as CtaRegul, 0 as AjusteCER ")
+SQL.ADD("FROM (("~DBO~".POSICIONES S1 WITH (NOLOCK) INNER JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON E.Codigo = S1.Especie) ")
+SQL.ADD("      INNER JOIN "~DBO~".CLIENTES C WITH (NOLOCK) ON  S1.Cliente=C.Codigo)  ")
+SQL.ADD("WHERE E.Tipo='PUB' AND ")
+SQL.ADD("      S1.Vehiculo = '"~Dialogo.Vehiculo1~"' AND ")
+SQL.ADD("      (S1.NrSaldo> 106 and S1.NrSaldo<111) AND ")
+SQL.ADD("      S1.CantidadFin <> 0 AND ")
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("      S1.Especie='"~Dialogo.Especie1~"' AND ")
+EndIf
+SQL.ADD("      S1.Fecha = (SELECT MAX(S2.Fecha) ")
+SQL.ADD("                  FROM "~DBO~".POSICIONES S2 WITH (NOLOCK) ")
+SQL.ADD("                  WHERE ")
+SQL.ADD("                        S2.Cliente = S1.Cliente                   AND ")
+SQL.ADD("                        S2.Especie = S1.Especie                   AND ")
+SQL.ADD("                        S2.Vehiculo = S1.Vehiculo         AND ")
+SQL.ADD("                        S2.Sector = S1.Sector                   AND ")
+SQL.ADD("                        S2.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+SQL.ADD("                        S2.Cupon  = S1.Cupon                      AND ")
+SQL.ADD("                        S2.NrSaldo = S1.NrSaldo)                      ")
+SQL.ADD("GROUP BY ")
+SQL.ADD(" E.Alias7,E.Codigo,S1.Cupon,E.Alias1,C.SectorBCRA,C.Provincia,C.BancoOpera,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon,S1.Cliente,C.PaisDir,S1.NrSaldo")
+*- Pases con BCRA Vigentes que no entran en saldo
+SQL.ADD("Union ALL")
+SQL.ADD("SELECT Convert(Integer,E.Alias7) as CodigoSiscen,E.Codigo as Especie,'2' as Tipo,'CPROPIA' as Propia,'' as TipoOp,CASE C.PaisDir WHEN 80 THEN 'SI' ELSE 'NO' END as Reside,E.Cupon,E.Alias1,C.SectorBCRA,C.Provincia,C.BancoOpera,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen as Nacionalidad, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon,'"~Dialogo.Vehiculo1~"' as Cliente,SUM(O.Cantidad) Saldo,0 AS VR,' ' as Cuenta, Cartera, 0 as Interes, 0 as CtaRegul, 0 as AjusteCER ")
+SQL.ADD("FROM (("~DBO~".OPERACIONES O WITH (NOLOCK)  INNER JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON  E.Codigo = O.Especie )")
+SQL.ADD("      INNER JOIN "~DBO~".CLIENTES C WITH (NOLOCK) ON O.Cliente1=C.Codigo) ")
+SQL.ADD("WHERE E.Tipo='PUB' AND ")
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("      O.Especie='"~Dialogo.Especie1~"' AND ")
+EndIf
+SQL.ADD("      O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' AND O.FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' AND O.FechaVto>'"~IdxDate(Dialogo.Fecha1)~"' and O.TipoOp='TIBCRA' ")
+SQL.ADD("GROUP BY ")
+SQL.ADD(" E.Alias7,E.Codigo,E.Cupon,E.Alias1,C.SectorBCRA,C.Provincia,C.BancoOpera,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon,C.PaisDir,Cartera ")
+*- Operaciones Futuras Por Pases
+SQL.ADD("Union ALL")
+SQL.ADD("SELECT Convert(Integer,E.Alias7) as CodigoSiscen,E.Codigo as Especie,CASE O.PaseCB WHEN '1' THEN '3' ELSE '5' END as Tipo,'CPROPIA' as Propia,O.TipoOp,CASE C.PaisDir WHEN 80 THEN 'SI' ELSE 'NO' END as Reside,E.Cupon,E.Alias1,C.SectorBCRA,C.Provincia,C.BancoOpera,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen as Nacionalidad, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon,'"~Dialogo.Vehiculo1~"' as Cliente,SUM(CASE O.TipoOp WHEN 'TIFC  ' THEN O.Cantidad ELSE -O.Cantidad END) Saldo,0 AS VR,' ' as Cuenta, Cartera, 0 as Interes, 0 as CtaRegul, 0 as AjusteCER ")
+SQL.ADD("FROM (("~DBO~".OPERACIONES O WITH (NOLOCK) INNER JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON E.Codigo = O.Especie ) ")
+SQL.ADD("      INNER JOIN "~DBO~".CLIENTES C WITH (NOLOCK) ON O.Cliente1=C.Codigo ) ")
+SQL.ADD("WHERE E.Tipo='PUB' AND ")
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("      O.Especie='"~Dialogo.Especie1~"' AND ")
+EndIf
+SQL.ADD("      O.Vehiculo1='"~Dialogo.Vehiculo1~"' AND O.FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' AND O.FechaVto>'"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD(" O.TipoOp IN ('TIFC','TIFV') ")
+SQL.ADD("GROUP BY ")
+SQL.ADD(" E.Alias7,E.Codigo,E.Cupon,E.Alias1,C.SectorBCRA,C.Provincia,C.BancoOpera,O.PaseCB,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon,O.Cliente1,O.TipoOp,C.PaisDir,Cartera ")
+*- Operaciones Contado a Liquidar Vigentes
+SQL.ADD("Union ALL")
+SQL.ADD("SELECT Convert(Integer,E.Alias7) as CodigoSiscen,E.Codigo as Especie,'4' as Tipo,'CPROPIA' as Propia,O.TipoOp,CASE C.PaisDir WHEN 80 THEN 'SI' ELSE 'NO' END as Reside,E.Cupon,E.Alias1,C.SectorBCRA,C.Provincia,C.BancoOpera,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen as Nacionalidad, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon,'"~Dialogo.Vehiculo1~"' as Cliente,SUM(CASE O.TipoOp WHEN 'TIC   ' THEN O.Cantidad ELSE -O.Cantidad END) Saldo,0 AS VR,' ' as Cuenta, Cartera, 0 as Interes, 0 as CtaRegul, 0 as AjusteCER ")
+SQL.ADD("FROM (("~DBO~".OPERACIONES O WITH (NOLOCK) INNER JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON E.Codigo = O.Especie)")
+SQL.ADD("      INNER JOIN "~DBO~".CLIENTES C WITH (NOLOCK) ON O.Cliente1=C.Codigo)")
+SQL.ADD("WHERE E.Tipo='PUB' AND ")
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("      O.Especie='"~Dialogo.Especie1~"' AND ")
+EndIf
+SQL.ADD("      O.Vehiculo1='"~Dialogo.Vehiculo1~"' AND O.FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' AND O.FechaVto>'"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD(" O.TipoOp IN ('TIC','TIV') and O.FechaVto>O.FechaOp ")
+SQL.ADD("GROUP BY ")
+SQL.ADD(" E.Alias7,E.Codigo,E.Cupon,E.Alias1,C.SectorBCRA,C.Provincia,C.BancoOpera,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon,O.Cliente1,O.TipoOp,C.PaisDir,Cartera")
+SQL.ADD("Union ALL")
+SQL.ADD("SELECT Convert(Integer,E.Alias7) as CodigoSiscen,E.Codigo as Especie,'7' as Tipo,'CPROPIA' as Propia,O.TipoOp,'SI' as Reside,E.Cupon,E.Alias1, '' SectorBCRA, '' Provincia,'' BancoOpera,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen as Nacionalidad, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon,'"~Dialogo.Vehiculo1~"' as Cliente, O.Cantidad Saldo, 0 AS VR,' ' as Cuenta, Cartera, C.Cantidad4 Interes, C.Total2 as CtaRegul, C.Cantidad2 AjusteCER  ")
+SQL.ADD("FROM (("~DBO~".OPERACIONES O WITH (NOLOCK) INNER JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON E.Codigo = O.Especie)")
+SQL.ADD("       INNER JOIN "~DBO~".CUOTAS C WITH (NOLOCK) ON O.NrOperacion = C.NrOperacion) ")
+SQL.ADD("WHERE ")
+SQL.ADD(" Month(C.Fecha1)=Month(O.FechaOp) AND YEAR(C.Fecha1)=YEAR(O.FechaOp) AND ")
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("      O.Especie='"~Dialogo.Especie1~"' AND ")
+EndIf
+SQL.ADD(" O.Vehiculo1='"~Dialogo.Vehiculo1~"' AND O.FechaOp='"~IdxDate(Dialogo.Fecha1)~"' AND ")
+SQL.ADD(" O.TipoOp='PGARAN' ")
+SQL.ADD("Union ALL")
+SQL.ADD("SELECT Convert(Integer,E.Alias7) as CodigoSiscen,E.Codigo as Especie,'6' as Tipo,'CPROPIA' as Propia,'' as TipoOp,'SI' as Reside,E.Cupon,E.Alias1, '0' as SectorBCRA,' ' as Provincia, ' ' as BancoOpera,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen as Nacionalidad, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon, '"~Dialogo.Vehiculo1~"'  as Cliente, SUM(T2.Cantidad1) as Saldo,SUM(T2.Cantidad2) as VR,RC.Cuenta, 0 as Cartera, 0 as Interes, 0 as CtaRegul, 0 as AjusteCER ")
+SQL.ADD("FROM "~DBO~".TRANSACCIONES2 T2 WITH (NOLOCK) INNER JOIN "~DBO~".RELACIONCUENTA RC WITH (NOLOCK) ON RC.Cuenta = T2.Ley1 ")
+SQL.ADD("      INNER JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ON E.Codigo = T2.Especie ")
+SQL.ADD("WHERE T2.TipoTr2='AJ3920' AND ")
+SQL.ADD("      E.Tipo='PUB' AND T2.Fecha1='"~IdxDate(Dialogo.Fecha1)~"'")
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD(" AND  T2.Especie='"~Dialogo.Especie1~"'")
+EndIf
+SQL.ADD("GROUP BY ")
+SQL.ADD(" E.Alias7,E.Codigo,E.Cupon,E.Alias1,E.Nombre, ")
+SQL.ADD(" E.CodNumCajaValores, E.PaisOrigen, E.Issuer, E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, ")
+SQL.ADD(" E.InteresesC,E.Cotiza,E.EsCupon,RC.Cuenta ")
+SQL.ADD("ORDER BY 1,2,3,4,5,6,7,8,9  ")
+
+*- az4: Codigo de BCRA de sudameris
+ACN(az4,BuscarCampo('CLIENTES','CodigoBCRA','Codigo',Dialogo.Vehiculo1))
+
+ACT(f1, "Titulos Valores del Sector Publico Comunicacion 'A' 3920 - Entidad: "~Fstr(val(az4),0,0)~" Expresado en Miles" )
+ACD(f2, Dialogo.Fecha1)
+
+SetFont(f1..f2,3)
+AlinearCeldas(f1..f2,'C')
+SetFont(a1..m2,2)
+
+SetFilaActual(4)
+
+ACT(a:fac, 'Especie')
+ACT(b:fac, 'CodigoSISCEN')
+ACT(c:fac, 'CodigoCV')
+ACT(d:fac, 'Cliente')
+ACT(e:fac, 'CanjeDeudaProv')
+ACT(f:fac, 'TipoCupon')
+ACT(g:fac, 'Cta Balance')
+ACT(h:fac, 'Sector')
+ACT(i:fac, 'Provincia')
+ACT(j:fac, 'Grupo Clasif')
+ACT(k:fac, 'Valor Cont Nivel 0')
+ACT(l:fac, 'VR Nivel 0')
+ACT(m:fac, 'Tipo')
+ACT(n:fac, 'Ajuste VC')
+ACT(o:fac, 'Ajuste VR')
+
+ACO(1, 6)
+ACO(2, 10)
+ACO(3, 10)
+ACO(4, 10)
+ACO(5, 10)
+ACO(6, 10)
+ACO(6, 10)
+ACO(7, 10)
+ACO(8,17)
+ACO(9,17)
+ACO(10, 10)
+ACO(11, 10)
+ACO(12, 10)
+
+SetFont(a:fac..o:fac,2)
+AgregarMarco(a:fac..o:fac,0,0,Exe('COLOR'))
+
+Message('Recuperando Datos ')
+
+*- az1: comienzo de datos
+ACN(az1,fac+1)
+
+Recorrer SQL
+
+   Message(FBN['Especie']~' '~FBN['Cliente'])
+
+   *If Not EqStr(val(az6),FBN['CodigoSiscen'])  y NoVacio(val(az6)) y val(az7)=1
+   *   *- Borro el codigo de Caja de Valores
+   *   *Recorrer&j val(az3),val(az3)
+   *   *    ACT(c:&j,'')
+   *   *Proximo
+   *EndIf
+
+   *If Not EqStr(val(az6),FBN['CodigoSiscen']) 
+   *   ACT(az6,FBN['CodigoSiscen'])
+   *   *- az3: Fila donde comienza el codigo siscen az7: Contador de codigos siscen iguales
+   *   ACN(az3,fac)
+   *   ACN(az7,0)
+   *EndIf
+
+   ACN(l:fac,0)
+   ACN(n:fac,0)
+   ACN(o:fac,0)
+
+   If Not EqStr(val(az2),FBN['Especie']) 
+      ACT(az2,FBN['Especie'])
+      ACN(cc:1, VALORTEORICO2(FBN['Especie'],Dialogo.Fecha1))
+
+      *- Intereses para una unidad de cantidad nominal
+      ACN(yt1, fac)
+      ACD(yu:fac, Dialogo.Fecha1)
+      ACT(yv:fac, FBN['Especie'])
+      ACN(yw:fac, 1)
+      ACD(yx:fac, FBN['FechaCambioTasa'])
+      ACN(yy:fac, FBN['TasaIntAnterior'])
+      ACN(yz:fac, FBN['TasaIntVigente'])
+      (.'INTERESCLE'.)
+      ACN(ca:fac, Val(zz:fac))
+
+      ACN(cd:fac, CotizacionC(FBN['Especie'],'CON',,,Dialogo.Fecha1,1,SI,val(ml1)))
+   EndIf
+
+   SCN(az7,1)
+
+   ACT(a:fac, FBN['Especie'] )
+   * ACT(b:fac, Pad0(Fstr(FBN['CodigoSiscen'],0,0),4) )
+   ACT(b:fac, Pad0(Copy(FBN['CodigoSiscen'],1,4),4) )
+ 
+   IF DESCIENDEDEESPECIE(FBN['Especie'],'LEBAC')
+      ACT(c:fac, Pad0(Fstr(FBN['CodNumCajaValores'],0,0),5) )
+   EndIf
+
+   ACT(d:fac, FBN['Cliente'] )
+
+   *- e: CanjeDeudaProv 1=SI 2=NO
+   ACT(e:fac, '2') 
+
+   *- f: TipoCupon => Especie =0, Cupones => 1=Amortizacion 2=Renta
+   ACT(f:fac, '0') 
+
+   ACN(cu1,FBN['Cupon'])
+
+   IF EqStr(FBN['EsCupon'],'SI') o DESCIENDEDEESPECIE(FBN['Especie'],'CUPON')
+      *- Busco la especie madre del cupon
+      SQL.ADD("SELECT Codigo FROM "~DBO~".ESPECIES WHERE Alias9='"~val(a:fac)~"' ")
+
+      Recorrer SQL
+          dfa 
+          SQL.ADD("SELECT TipoCupon FROM "~DBO~".AGENDACUPONES WHERE Especie='"~FBN['Codigo']~"' ")
+          SQL.ADD("and NrCupon='"~FStr(val(cu1),0,0)~"' ")
+          Recorrer SQL
+             dfa 
+             If EqStr(FBN['TipoCupon'],'REN')
+                ACT(f:fac, '2') 
+             EndIf
+             If EqStr(FBN['TipoCupon'],'AMO')
+                ACT(f:fac, '1') 
+             EndIf
+             If EqStr(FBN['TipoCupon'],'RYA')
+                ACT(f:fac, '3') 
+             EndIf
+          Proximo
+      Proximo
+   EndIf
+
+   *- Sector, Solo para las Cuasimonedas Especies 
+   *- 0=No Aplica 1=Sector Privado Personas Fisicas 2=Sector Privado Personas Juridicas
+   *- 3=Sector Publico Nacional 4=Sector Publico Provincial 5=Sector Publico Municipal
+   ACT(h:fac,'0')
+
+   IF EqStr(FBN['Alias1'],'CUASIMON')
+      ACT(h:fac,FBN['SectorBCRA'] )      
+   EndIf
+
+   *- Provincia: solamente para los sectores 4 y 5
+   If Incluido(val(h:fac),'4|5')
+      ACT(i:fac,FBN['Provincia'])      
+   EndIf
+
+   ACT(j:fac,'0')      
+   *- Grupo de Clasificacion: Para Terceros del Sector Publico no Financiero
+   If Not EqStr(FBN['Cliente'],Dialogo.Vehiculo1) y Incluido(val(h:fac),'3|4|5')
+      ACT(j:fac,FBN['BancoOpera'])      
+   EndIf
+
+   IF Not EqStr(FBN['Tipo'],'6') y NOT EqStr(FBN['Tipo'],'7')
+      *- Si es de Saldo => Tipo 1 se envia VR y VC, sino Solo Valor Contable.
+      *- h: Valor Residual
+      ACN(l:fac, FBN['Saldo']*val(cc:1))
+      ACN(l:fac, Round2(Val(l:fac)/1000,0))
+
+      *- k: Valor Contable
+      IF EqStr(FBN['InteresesC'],'CLE')
+         IF Incluido(Val(al4), '1585')
+            ACN(k:fac, FBN['Saldo']*(Val(cc:1)*Val(cd:val(yt1))+(Val(ca:val(yt1))*Val(cd:val(yt1)))))
+         ELSE
+            ACN(k:fac, FBN['Saldo']*(Val(cc:1)*Val(cd:val(yt1))+Val(ca:val(yt1))))
+         ENDIF
+      ELSE
+         ACN(k:fac, FBN['Saldo']*(Val(cd:val(yt1))+Val(ca:val(yt1))))
+      ENDIF
+
+      ACN(k:fac, Round2(Val(k:fac)/1000,0))
+
+      IF Not EqStr(FBN['Tipo'],'1')
+        BorrarCeldas(l:fac..l:fac)
+      EndIf
+   EndIf
+
+   ACT(li1,IIF(FBN['Cartera']=1 o FBN['Cartera']=2,'INVEST','TRADE'))
+
+   IF EqStr(FBN['Tipo'],'1')
+      ACT(m:fac,'SALDO')
+      IF EqStr(FBN['Propia'],'TERCER')
+         ACT(m:fac,'TERCER')
+      EndIf
+   EndIf
+
+   IF EqStr(FBN['Tipo'],'2')
+      ACT(m:fac,'TIBCRA')
+   EndIf
+   IF EqStr(FBN['Tipo'],'3')
+      ACT(m:fac,'PASES')
+   EndIf
+   IF EqStr(FBN['Tipo'],'4')
+      ACT(m:fac,'CONLIQ')
+   EndIf
+   IF EqStr(FBN['Tipo'],'5')
+      ACT(m:fac,'TERMIN')
+   EndIf
+   IF EqStr(FBN['Tipo'],'6')
+      ACT(m:fac,'AJUSTE')
+   EndIf
+   IF EqStr(FBN['Tipo'],'7')
+      ACT(m:fac,'PGARAN')
+   EndIf
+
+   IF Not EqStr(FBN['Tipo'],'6') y NOT EqStr(FBN['Tipo'],'7')
+      *- g: Cta Balance 
+      *- TipoImporte: CANPRE, COMPE, CONLIQ, PASES, PREVI, SALDO, TERMIN, TIBCRA
+      *- Libro: INVEST, TRADE
+      *- Tipo de Operacion se pase en caso de PASES, TERMIN Y CONLIQ
+      *- Para las Compras de Pases, se clasifican en residentes locales o del exterior
+      ACT(re1,'')
+
+      If NoVacio(FBN['TipoOp']) y EqStr(FBN['TipoOp'],'TIFC') y EqStr(val(m:fac),'PASES')
+         ACT(re1,FBN['Reside'])
+         If Vacio(val(re1))   
+            ACT(re1,'80')
+         EndIf
+      EndIf
+
+      If EqStr(FBN['Cotiza'],VAR('MONELOCA'))
+         ACT(ta1,FBN['Cotiza'])
+      Else 
+         ACT(ta1,VAR('MONEEXTR'))
+      EndIf
+
+      ACT(g:fac,RelacionCuenta(val(re1),'','',val(m:fac),FBN['TipoOp'],FBN['Especie'],,val(li1),'') )
+      If Vacio(val(g:fac))
+         *- Busco la relacion Sin Libro
+         ACT(g:fac,RelacionCuenta(val(re1),'','',val(m:fac),FBN['TipoOp'],FBN['Especie'],,'','') )
+      EndIf
+   Else 
+      ACT(g:fac,FBN['Cuenta'])
+   EndIf
+
+   *- Si es una PGARAN hago las cuatro lineas (Capital,Interes,Ajuste por CER y Cta Regularizadora)
+   If EqStr(FBN['Tipo'],'7')
+      *- Copio la fila de la PGARAN para las proximas tres lineas, que son casi iguales
+      Recorrer&i 1,3
+         ACT(a:fac+&i, Val(a:fac))       
+         ACT(b:fac+&i, Val(b:fac))
+         ACT(c:fac+&i, Val(c:fac))
+         ACT(d:fac+&i, Val(d:fac))
+         ACT(e:fac+&i, Val(e:fac))
+         ACT(f:fac+&i, Val(f:fac))
+         ACT(g:fac+&i, Val(g:fac))
+         ACT(h:fac+&i, Val(h:fac))
+         ACT(i:fac+&i, Val(i:fac))
+         ACT(j:fac+&i, Val(j:fac))
+         ACN(k:fac+&i, Val(k:fac))
+         ACN(l:fac+&i, Val(l:fac))
+         ACT(m:fac+&i, Val(m:fac))
+         ACN(n:fac+&i, Val(n:fac))
+         ACN(o:fac+&i, Val(o:fac))
+      Proximo
+      ACN(k:fac,FBN['Saldo'])      
+      ACN(k:fac+1,FBN['Interes'])      
+      ACN(k:fac+2,FBN['AjusteCER'])      
+      FormatoCeldas(k:fac+2, EXE('F7'))
+      ACN(k:fac+3,FBN['CtaRegul'])      
+      ACT(re1,'')
+      ACT(g:fac,RelacionCuenta(val(re1),'','','PGSALD',FBN['TipoOp'],FBN['Especie'],,'','') )
+      ACT(g:fac+1,RelacionCuenta(val(re1),'','','PGINT',FBN['TipoOp'],FBN['Especie'],,'','') )
+      ACT(g:fac+2,RelacionCuenta(val(re1),'','','PGCER',FBN['TipoOp'],FBN['Especie'],,'','') )
+      ACT(g:fac+3,RelacionCuenta(val(re1),'','','PGCR',FBN['TipoOp'],FBN['Especie'],,'','') )
+      SetFilaActual(FAC+3)
+   EndIf
+
+   IF EqStr(FBN['Tipo'],'6')
+      ACN(n:fac,FBN['Saldo'])
+      ACN(o:fac,FBN['VR'])
+   EndIf
+   SetFont(a:fac..o:fac,1)
+
+Proximo
+
+*- az2: Fila de Fin az3: Variable donde guarda la linea desde de la especie
+ACN(az2,fac)
+ACN(az3,val(az1))
+
+acn(pp1,val(az1))
+
+*- Ordeno las Lineas
+If val(az1)<val(az2) 
+   OrdenarFilas(val(az1),val(az2), 2,'A','3:A|5:A|6:A|7:A|8:A|9:A|10:A')
+EndIf
+
+ACT(cl1,val(b:val(az1))~val(c:val(az1))~val(e:val(az1))~val(f:val(az1))~val(g:val(az1))~val(h:val(az1))~val(i:val(az1))~val(j:val(az1)))
+
+Repetir  
+
+   *- Calculo Totales 
+   If val(pp1)>val(az2)
+      Break
+   EndIf
+
+   If Not EqStr(val(cl1),val(b:val(pp1))~val(c:val(pp1))~val(e:val(pp1))~val(f:val(pp1))~val(g:val(pp1))~val(h:val(pp1))~val(i:val(pp1))~val(j:val(pp1)))
+      ACT(cl1,val(b:val(pp1))~val(c:val(pp1))~val(e:val(pp1))~val(f:val(pp1))~val(g:val(pp1))~val(h:val(pp1))~val(i:val(pp1))~val(j:val(pp1)))
+      InsertarFila(val(pp1))
+      SCN(az2,1)
+
+      *- Linea de Total
+      ACT(a:val(pp1),'TOTAL')
+      ACT(b:val(pp1),val(b:val(pp1)-1))
+      ACT(c:val(pp1),val(c:val(pp1)-1))
+      ACT(e:val(pp1),val(e:val(pp1)-1))
+      ACT(f:val(pp1),val(f:val(pp1)-1))
+      ACT(g:val(pp1),val(g:val(pp1)-1))
+      ACT(h:val(pp1),val(h:val(pp1)-1))
+      ACT(i:val(pp1),val(i:val(pp1)-1))
+      ACT(j:val(pp1),val(j:val(pp1)-1))
+      ACN(k:val(pp1),Sum(k:val(az3)..k:val(pp1)-1))
+      ACN(l:val(pp1),Sum(l:val(az3)..l:val(pp1)-1))
+
+      *- Recupero los Ajustes para la Fecha del Informe del codigo siscen
+      *- ba1: Fecha ba2: Cod.Siscen ba3: Cuenta Contable  Retorna ba11: Valor Contable ba12: Valor Residual
+      ACD(ba1,Dialogo.Fecha1)
+      ACT(ba2,val(b:val(pp1)))
+      ACT(ba3,val(g:val(pp1)))
+
+      (.'AJUS3920'.)
+
+      ACN(n:val(pp1),val(ba11))
+      ACN(o:val(pp1),val(ba12))
+      SetFont(a:val(pp1)..o:val(pp1),2)
+      AgregarMarco(a:val(pp1)..o:val(pp1),0,0)
+      ACN(az3,val(pp1)+1)
+   EndIf
+
+   SCN(pp1,1)
+Proximo
+
+SetFilaActual(val(az2)+1)
+ACT(a:fac,'TOTAL')
+ACT(b:fac,val(b:fac-1))
+ACT(c:fac,val(c:fac-1))
+ACT(e:fac,val(e:fac-1))
+ACT(f:fac,val(f:fac-1))
+ACT(g:fac,val(g:fac-1))
+ACT(h:fac,val(h:fac-1))
+ACT(i:fac,val(i:fac-1))
+ACT(j:fac,val(j:fac-1))
+
+ACN(k:fac,Sum(k:val(az3)..k:fac-1))
+ACN(l:fac,Sum(l:val(az3)..l:fac-1))
+
+*- Recupero los Ajustes para la Fecha del Informe del codigo siscen
+*- ba1: Fecha ba2: Cod.Siscen ba3: Cuenta Contable  Retorna ba11: Valor Contable ba12: Valor Residual
+ACD(ba1,Dialogo.Fecha1)
+ACT(ba2,val(b:fac))
+ACT(ba3,val(g:fac))
+
+(.'AJUS3920'.)
+
+ACN(n:fac,val(ba11))
+ACN(o:fac,val(ba12))
+
+SetFont(a:fac..o:fac,2)
+AgregarMarco(a:fac..o:fac,0,0)
+
+*- az2:Fin de Datos
+ACN(az2,fac)
+
+If val(az2)>val(az1) y Dialogo.Radio2=1
+   *- Genero el TXT en columna aa
+
+   ACN(az5,0)
+
+   Recorrer&j val(az1),val(az2)
+
+        If EqStr(val(a:&j),'TOTAL')
+        *   ACT(aa:&j,val(aa:&j)~Pad0(Fstr(Dialogo.Entero1,0,0),4))
+        *   ACT(aa:&j,val(aa:&j)~Pad0(Fstr(val(az4),0,0),5))
+        *   ACT(aa:&j,val(aa:&j)~FStr(Anio(Dialogo.Fecha1),4,0)~PAD0(FStr(Mes(Dialogo.Fecha1),0,0),2))
+           *-- Codigo Siscen
+           ACT(aa:&j,val(aa:&j)~Pad0(val(b:&j),4))
+           *-- Codigo Reuter
+        *   ACT(aa:&j,val(aa:&j)~Pad(' ',10))
+           *-- Codigo ISIN
+        *   ACT(aa:&j,val(aa:&j)~Pad(' ',14))
+           ACT(aa:&j,val(aa:&j)~Pad(' ',12))
+           *-- Codigo MAE
+        *   ACT(aa:&j,val(aa:&j)~Pad(' ',7))
+           *-- Codigo Caja de Valores  
+        *   ACT(aa:&j,val(aa:&j)~Pad0(val(c:&j),5))
+           *-- Codigo Common Code
+        *   ACT(aa:&j,val(aa:&j)~Pad(' ',10))
+           *- Identificacion de Canje de Deuda Previsional
+           ACT(aa:&j,val(aa:&j)~val(e:&j))
+           *- Tipo de Cupon
+           ACT(aa:&j,val(aa:&j)~val(f:&j))
+           *- Cuenta de Balance de Saldos
+           ACT(aa:&j,val(aa:&j)~Pad0(val(g:&j),6))
+
+           *- VR Nivel consolidacion 0 
+           ACN(vr1,val(l:&j))
+           If val(o:&j)<>0
+              *- Hay ajuste de VR
+              ACN(vr1,val(o:&j))
+           EndIf
+
+           If val(vr1)>=0
+           *   ACT(aa:&j,val(aa:&j)~Pad0(Fstr(val(vr1),0,0),11))
+              ACT(aa:&j,val(aa:&j)~'+'~Pad0(Fstr(val(vr1),0,0),10))
+           Else
+              ACT(aa:&j,val(aa:&j)~'-'~Pad0(Fstr(val(vr1),0,0),10))
+           EndIf
+
+           *- VR Nivel consolidacion 1
+        *   ACT(aa:&j,val(aa:&j)~Pad0('0',11))
+           ACT(aa:&j,val(aa:&j)~'+'~Pad0('0',10))
+ 
+           *- VR Nivel consolidacion 2
+        *   ACT(aa:&j,val(aa:&j)~Pad0('0',11))
+           ACT(aa:&j,val(aa:&j)~'+'~Pad0('0',10))
+
+           *- Valor Contable Nivel consolidacion 0
+           ACN(vc1,val(k:&j))
+           If val(n:&j)<>0
+              *- Hay ajuste de VR
+              ACN(vc1,val(n:&j))
+           EndIf
+
+           If val(vc1)>=0
+           *   ACT(aa:&j,val(aa:&j)~Pad0(Fstr(val(vc1),0,0),11))
+              ACT(aa:&j,val(aa:&j)~'+'~Pad0(Fstr(val(vc1),0,0),10))
+           Else
+              ACT(aa:&j,val(aa:&j)~'-'~Pad0(Fstr(Abs(val(vc1)),0,0),10))
+           EndIf
+ 
+           *- Valor Contable Nivel consolidacion 1
+        *   ACT(aa:&j,val(aa:&j)~Pad0('0',11))
+           ACT(aa:&j,val(aa:&j)~'+'~Pad0('0',10))
+
+           *- Valor Contable Nivel consolidacion 2
+        *   ACT(aa:&j,val(aa:&j)~Pad0('0',11))
+           ACT(aa:&j,val(aa:&j)~'+'~Pad0('0',10))
+
+           *- Sector
+           ACT(aa:&j,val(aa:&j)~Pad0(val(h:&j),1))
+        
+           *- Provincia
+           ACT(aa:&j,val(aa:&j)~Pad0(val(i:&j),2))
+
+           *- Grupo de Clasificacion
+           ACT(aa:&j,val(aa:&j)~Pad0(val(j:&j),1))
+ 
+           *- 14 blancos
+        *   ACT(aa:&j,val(aa:&j)~Pad(' ',14))
+           ACT(aa:&j,val(aa:&j)~Pad(' ',106))
+
+           *- Rectificativa
+        *   ACT(aa:&j,val(aa:&j)~Pad(IIF(Dialogo.Radio3=0,'N','R'),1))
+           EscribirASCII(val(aa:&j))
+        EndIf
+   Proximo
+EndIf
+   
+Impresion(1,2)
+SetPrintFit(3,65)
+LimitesVision(o:fac+2)
+CerrarASCII
+

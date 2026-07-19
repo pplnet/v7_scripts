@@ -1,0 +1,290 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+    Radio1    : 'Filtra por|Fecha|Cuenta' ;;;;;;NoVacio(Dialogo.Radio1);'Debe seleccionar un filtro';NO;0;
+    Fecha1    : 'Fecha Desde'             ;3;;;;Dialogo.Radio1=1;NoVacio(Dialogo.Fecha1) o Dialogo.Radio1=0;'Debe agregar una fecha desde';NO;FSYS-365;
+    Fecha2    : 'Fecha Hasta'             ;4;;;;Dialogo.Radio1=1;[NoVacio(Dialogo.Fecha2) o Dialogo.Radio1=0] y Dialogo.Fecha2>=Dialogo.Fecha1;'Debe agregar una fecha hasta, mayor a fecha desde';NO;FSYS;
+    Fecha3    : 'Fecha'                   ;3;;;;Dialogo.Radio1=0;NoVacio(Dialogo.Fecha3) o Dialogo.Radio1=1;'Debe indicar una fecha';NO;FSYS;
+    Vehiculo1 : 'Vehiculo'                ;5;;;;;;;;;;;;;
+    Cuenta1   : 'Cuenta'                  ;6;;;;Dialogo.Radio1=1;NoVacio(Cuenta1) o Dialogo.Radio1<>1;'Debe ingresar una Cuenta';NO;;;;;;IIF(NoVacio(Dialogo.Vehiculo1),"Cliente='"~Dialogo.Vehiculo1~"' and Estado='HAB'","Estado='HAB'")
+    Cliente1  : 'Banco'                   ;6;;;;Dialogo.Radio1=0;;;;;;
+    Especie1  : 'Moneda'                  ;;;;;Dialogo.Radio1=0;;;;;;;;;"Tipo='MON'"
+FinDialogo
+
+IF Not OK
+  Cancelar
+ENDIF
+
+let &filaLogo 1
+@LOGO
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+ACT(C:1,'Consulta de Saldos Comitente')
+SetFont(C:1..C:1,3)
+SetFilaActual(6)
+let &Header fac
+**************************************************************HEADER*****************************************
+IF Dialogo.Radio1=1
+    ACO(1,10)
+    ACO(2,10)
+    ACT(A:fac,'Fecha Desde:  ' ~ Dialogo.Fecha1)
+    ifa
+    ACT(A:fac,'Fecha Hasta:  ' ~ Dialogo.Fecha2)
+    ifa
+    ACT(A:fac,'Cuenta:  ' ~ Dialogo.Cuenta1)
+    ifa
+    let &Cliente BuscarCampo('CUENTAS','Comitente','Codigo',Dialogo.Cuenta1)
+    let &Vehiculo BuscarCampo('CUENTAS','Cliente','Codigo',Dialogo.Cuenta1)
+    ACT(A:fac,'Vehiculo:  ' ~ &Vehiculo)
+    let &FechaFin Dialogo.Fecha2
+ELSE
+    ACO(1,15)
+    ACO(2,15)
+    ACO(4,10)
+    ACT(A:fac,'Fecha:  ' ~ Dialogo.Fecha3)
+    ifa
+    IF NoVacio(Dialogo.Vehiculo1)
+        let &Vh Dialogo.Vehiculo1
+    ELSE
+        let &Vh 'Todos'
+    ENDIF
+    ACT(A:fac,'Vehiculo:  ' ~ &Vh)
+    ifa
+    IF NoVacio(Dialogo.Cliente1)
+        let &Cli Dialogo.Cliente1
+    ELSE
+        let &Cli 'Todos'
+    ENDIF
+    ACT(A:fac,'Banco:  ' ~ &Cli)
+    ifa
+    IF NoVacio(Dialogo.Especie1)
+        let &Mon Dialogo.Especie1
+    ELSE
+        let &Mon 'Todas'
+    ENDIF
+    ACT(A:fac,'Moneda:  ' ~ &Mon)
+    ifa
+
+ENDIF
+SetFont(A:&Header..A:fac,2)
+ifa
+IF Dialogo.Radio1=0
+    ACT(A:fac,'Vehiculo')
+    ACT(B:fac,'Banco')
+    ACT(C:fac,'Cartera')
+    ACT(D:fac,'Cuenta')
+    ACT(E:fac,'Saldo')
+    SetFont(A:fac..E:fac,2)
+    AgregarMarco(A:fac..E:fac,1,0,EXE('COLOR'))
+
+ENDIF
+*****************************************************************SQL************************************
+SQL.ADD("Select S.Fecha,S.Saldo,C.Comitente as 'Cliente',S.EnteCustodia as 'Vehiculo',S.Especie")
+IF Dialogo.Radio1=0
+    SQL.ADD(",S.Cuenta,C.Alias1  as 'Cartera' ")
+ENDIF
+SQL.ADD("FROM "~DBO~".SALDOSDIA S,CUENTAS C Where S.Cuenta=C.Codigo and ")
+IF Dialogo.Radio1=1
+    SQL.ADD(" S.Cuenta = '"~Dialogo.Cuenta1~"' ")
+    SQL.ADD("AND ((S.Fecha IN (Select Max(Fecha)FROM "~DBO~".SALDOSDIA ") 
+    SQL.ADD("                   WHERE  Cuenta  = S.Cuenta  ")
+    SQL.ADD("                   AND Fecha  <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("                   AND Especie=S.Especie)")
+    SQL.ADD(" OR ")
+    SQL.ADD("(S.Fecha >='"~IdxDate(Dialogo.Fecha1)~"' AND Fecha <= '"~IdxDate(Dialogo.Fecha2)~"')))")
+ELSE
+    SQL.ADD("  S.Fecha  <= '"~IdxDate(Dialogo.Fecha3)~"' ")
+    SQL.ADD(" AND   S.Fecha IN (SELECT MAX(SD.Fecha) FROM "~DBO~".SALDOSDIA SD, "~DBO~".CUENTAS CU") 
+    SQL.ADD("                   WHERE  SD.Cuenta=CU.Codigo  ")
+    SQL.ADD("                   and SD.NrSaldo = S.NrSaldo ")
+    SQL.ADD("                   and SD.EnteCustodia = S.EnteCustodia ")
+     SQL.ADD("                   and CU.Comitente = C.Comitente ")
+     SQL.ADD("                   and SD.Especie = S.Especie ")
+    SQL.ADD("                   AND SD.Fecha  <= '"~IdxDate(Dialogo.Fecha3)~"') ")
+    IF NoVacio(Dialogo.Especie1)
+        SQL.ADD(" and S.Especie = '"~Dialogo.Especie1~"'")
+    ENDIF
+    IF NoVacio(Dialogo.Cliente1)
+        SQL.ADD(" and C.Comitente = '"~Dialogo.Cliente1~"'")
+    ENDIF
+    IF NoVacio(Dialogo.Vehiculo1)
+        SQL.ADD(" and S.EnteCustodia = '"~Dialogo.Vehiculo1~"'")
+    ENDIF
+ENDIF
+SQL.ADD("and NrSaldo = '50'")
+IF Dialogo.Radio1=1
+    SQL.ADD("Order By Especie,Fecha")
+ELSE
+    SQL.ADD("Order By Vehiculo,Especie,Cliente")
+ENDIF
+let &Especie ''
+let &comienzoDatos fac+1
+let &FilaActual fac+1
+let &Fecha Dialogo.Fecha1
+let &Flag 1
+Recorrer SQL
+    let &FlagDatos 1
+    IF Dialogo.Radio1=1
+         IF Not EqStr(FBN['Especie'],&Especie)
+            **Antes de cambiar de especie se fija si la especie anterior cargo saldos hasta Dialogo.Fecha2, sino repite el último recibido
+            If Val(A:&FilaActual-1)<>Dialogo.Fecha2 y NoVacio(&Especie)
+                   Recorrer&i &Fecha,Dialogo.Fecha2
+                       ACD(A:&FilaActual,&i)
+                       ACT(B:&FilaActual,&Especie)
+                       ACN(C:&FilaActual,&Saldo)
+                       IF &FlagSaldo=1
+                          ACL(C:&FilaActual,'DETSAC',Fecha1=Val(A:&FilaActual),Cuenta1=Dialogo.Cuenta1,Vehiculo1=&Vehiculo,Cliente1=&Cliente,Especie1=&Especie)
+                       Endif
+                       let &FilaActual &FilaActual+1
+                   Proximo
+            Endif
+            **Carga los encabezados de columna
+                ACT(A:&FilaActual,'Fecha')
+                ACT(B:&FilaActual,'Moneda')
+                ACT(C:&FilaActual,'Saldo')
+                SetFont(A:&FilaActual..C:&FilaActual,2)
+                AgregarMarco(A:&FilaActual..C:&FilaActual,1,0,EXE('COLOR'))
+                let &FilaActual &FilaActual+1
+                let &Fecha Dialogo.Fecha1
+                let &Saldo 0
+                let &FlagSaldo 0
+         Endif      
+         If FBN['Fecha']<>&Fecha
+             If FBN['Fecha']>&Fecha
+                 Recorrer&i &Fecha,Habiles(FBN['Fecha'],-1,'ARG',NO)
+                       ACD(A:&FilaActual,&i)
+                       ACT(B:&FilaActual,FBN['Especie'])
+                       ACN(C:&FilaActual,&Saldo)
+                       IF &FlagSaldo=1
+                          ACL(C:&FilaActual,'DETSAC',Fecha1=Val(A:&FilaActual),Cuenta1=Dialogo.Cuenta1,Vehiculo1=&Vehiculo,Cliente1=&Cliente,Especie1=FBN['Especie'])
+                       Endif
+                       let &FilaActual &FilaActual+1
+                   Proximo
+                   ACD(A:&FilaActual,FBN['Fecha'])
+                   ACT(B:&FilaActual,FBN['Especie'])
+                   ACN(C:&FilaActual,FBN['Saldo'])
+                   ACL(C:&FilaActual,'DETSAC',Fecha1=Val(A:&FilaActual),Cuenta1=Dialogo.Cuenta1,Vehiculo1=&Vehiculo,Cliente1=&Cliente,Especie1=FBN['Especie'])
+                   let &Saldo FBN['Saldo']
+                   let &FlagSaldo 1
+                   let &Especie FBN['Especie']
+                   let &FilaActual &FilaActual+1
+                   let &Fecha Habiles(FBN['Fecha'],1,'ARG',NO)
+
+             Else
+                   ACD(A:&FilaActual,&Fecha)
+                   ACT(B:&FilaActual,FBN['Especie'])
+                   ACN(C:&FilaActual,FBN['Saldo'])
+                   ACL(C:&FilaActual,'DETSAC',Fecha1=Val(A:&FilaActual),Cuenta1=Dialogo.Cuenta1,Vehiculo1=&Vehiculo,Cliente1=&Cliente,Especie1=FBN['Especie'])
+                   let &FilaActual &FilaActual+1
+                   let &Fecha Habiles(FBN['Fecha'],1,'ARG',NO)
+                   let &Saldo FBN['Saldo']
+                   let &FlagSaldo 1
+                   let &Especie FBN['Especie']
+             Endif
+
+         Else
+            **si la fecha es la correspondiente a la fila la carga e incrementa en 1 fecha y fila
+             ACD(A:&FilaActual,FBN['Fecha'])
+             ACT(B:&FilaActual,FBN['Especie'])
+             ACN(C:&FilaActual,FBN['Saldo'])
+             ACL(C:&FilaActual,'DETSAC',Fecha1=Val(A:&FilaActual),Cuenta1=Dialogo.Cuenta1,Vehiculo1=&Vehiculo,Cliente1=&Cliente,Especie1=FBN['Especie'])
+             let &Saldo FBN['Saldo']
+             let &FlagSaldo 1
+             let &Especie FBN['Especie']
+             let &Fecha Habiles(&Fecha,1,'ARG',NO)
+             let &FilaActual &FilaActual+1     
+         Endif
+    
+
+    ELSE
+        **Filtro por fecha
+        IF (NoVacio(&Especie) y (Not EqStr(&Especie,FBN['Especie'])) o (Not EqStr(FBN['Vehiculo'],&Vehiculo) y &Flag<>1))
+            ACT(A:&FilaActual,'Total '~&Vehiculo~' en '~&Especie)
+            ACN(E:&FilaActual,&TotalEspecie)
+            ACL(E:&FilaActual,'DETSAC',Fecha1=Dialogo.Fecha3,Cuenta1='',Vehiculo1=&Vehiculo,Cliente1='',Especie1=&Especie)
+            SetFont(A:&FilaActual..E:&FilaActual,2)
+            AgregarMarco(A:&FilaActual..E:&FilaActual,1,0,EXE('COLOR6'))
+            let &FilaActual &FilaActual+2
+            If EqStr(FBN['Vehiculo'],&Vehiculo) 
+                ACT(A:&FilaActual,'Vehiculo '~FBN['Vehiculo']~' en '~FBN['Especie'] )
+                AgregarMarco(A:&FilaActual..E:&FilaActual,1,0,EXE('COLOR6'))
+                SetFont(A:&FilaActual..E:&FilaActual,2)
+                let &FilaActual &FilaActual+1
+            endif
+            let &TotalEspecie 0
+        Endif
+        IF Not EqStr(FBN['Vehiculo'],&Vehiculo) o (Vacio(&Vehiculo) y &Flag=1)
+            ACT(A:&FilaActual,'Vehiculo '~FBN['Vehiculo']~' en '~FBN['Especie'] )
+            AgregarMarco(A:&FilaActual..E:&FilaActual,1,0,EXE('COLOR6'))
+            SetFont(A:&FilaActual..A:&FilaActual,2)
+            let &FilaActual &FilaActual+1
+        ENDIF
+        If  Not Eqstr(fbn('Cliente'), &Banco) o Not Eqstr(fbn('Vehiculo'), &Vehiculo) o (NoVacio(&Especie) y (Not EqStr(&Especie,FBN['Especie'])))
+            ACT(B:&FilaActual,FBN['Cliente'])
+            AgregarMarco(B:&FilaActual..E:&FilaActual,1,0,)
+            SetFont(B:&FilaActual..B:&FilaActual,2)
+            let &FilaActual &FilaActual+1
+        ENDIF
+        ACT(C:&FilaActual,FBN['Cartera'])
+        ACT(D:&FilaActual,FBN['Cuenta'])
+        ACN(E:&FilaActual,FBN['Saldo'])
+        let &Vehiculo FBN['Vehiculo']
+        let &Banco FBN['Cliente']
+        let &Especie FBN['Especie']
+        **Link a Detalle 
+        ACL(E:&FilaActual,'DETSAC',Fecha1=Dialogo.Fecha3,Cuenta1=Val(D:&FilaActual),Vehiculo1=&Vehiculo,Cliente1=&Banco,Especie1=&Especie)
+        let &TotalEspecie &TotalEspecie + FBN['Saldo']
+        let &FilaActual &FilaActual+1
+
+    ENDIF
+    If &Flag=1
+        let &Flag 0
+    Endif
+    
+Proximo
+
+If Dialogo.Radio1=0
+    IF NoVacio(&Especie)
+        let &FilaActual &FilaActual+1
+        ACT(A:&FilaActual,'Total '~&Vehiculo~' en '~&Especie)
+        ACN(E:&FilaActual,&TotalEspecie)
+        ACL(E:&FilaActual,'DETSAC',Fecha1=Dialogo.Fecha3,Cuenta1='',Vehiculo1=&Vehiculo,Cliente1='',Especie1=&Especie)
+        SetFont(A:&FilaActual..E:&FilaActual,2)
+        AgregarMarco(A:&FilaActual..E:&FilaActual,1,0,EXE('COLOR6'))
+        let &FilaActual &FilaActual+1
+    ENDIF
+ELSE
+    If &FlagDatos=1
+        If Val(A:&FilaActual-1)<>Dialogo.Fecha2
+           Recorrer&i &Fecha,Dialogo.Fecha2
+               ACD(A:&FilaActual,&i)
+               ACT(B:&FilaActual,&Especie)
+               ACN(C:&FilaActual,&Saldo)
+               ACL(C:&FilaActual,'DETSAC',Fecha1=Val(A:&FilaActual),Cuenta1=Dialogo.Cuenta1,Vehiculo1=&Vehiculo,Cliente1=&Cliente,Especie1=&Especie)
+               let &FilaActual &FilaActual+1
+           Proximo
+        Endif
+    Endif  
+ENDIF
+
+
+********************************************************************************************************************
+SetFilaActual(&FilaActual)
+ifa
+ifa
+If Dialogo.Radio1 = 0
+    let &FormatoCol 5
+Else
+    let &FormatoCol 3
+Endif
+
+FormatoCeldas(&FormatoCol:&comienzoDatos..&FormatoCol:fac, Exe('F2'))
+
+
+ACT(A:fac,'Fin del Reporte')
+SetFont(A:fac..A:fac,2)
+ifa
+LimitesVision(F:fac)
+

@@ -1,0 +1,135 @@
+﻿CrearDialogo
+        Fecha1      : 'Fecha desde'           ;1;1;;;;;;;FSYS
+        Fecha2      : 'Fecha hasta'           ;2;1;;;;Dialogo.Fecha2 >= Dialogo.Fecha1;"Fecha Hasta tiene tiene que ser mayor a Fecha Desde";;;FSYS
+FinDialogo
+
+if not ok
+    Cancelar("Evento Cancelado.")
+Endif
+*m: Check para cargar horas 1 si 0 no
+*&CantOperaciones variable que cuenta cuantos ciclos tiene que recorrer 
+*&TotalOp a cuantas operaciones se le cargaron horas
+SetFilaActual(0)
+&CantOperaciones := 0
+&TotalOp := 0
+&FechaHoraCarga := 0
+
+*Las operaciones comprendidas por este evento son operaciones de títulos contra clientes y que desciendan de clientes, no financieros en la jerarquía vinculados (BOFASEC), 
+
+SQL.ADD("SELECT O.NrOperacion,O.Cliente1,O.FechaOp,O.FechaVto,O.TipoOp,O.Especie,O.Cantidad,O.Precio1, O.TotalBrutoCli1, LIB.HoraOr, LIB.Estado")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O")
+SQL.ADD("INNER JOIN "~DBO~".OPERACIONESBITS OB ON O.NrOperacion = OB.NrOperacion AND Valor = 1")
+SQL.ADD("INNER JOIN "~DBO~".CLIENTES CL ON O.Cliente1 = CL.Codigo")
+SQL.ADD("OUTER APPLY (SELECT TOP 1 L.HoraOr, L.UsuarioCarga, L.Estado, L.UsuarioSup FROM "~DBO~".LIBORDENES L WHERE L.NrOperacionRef = O.NrOperacion ORDER BY L.FechaCarga DESC ) LIB")
+*Filtro Fechas OK
+SQL.ADD("WHERE O.FechaOp BETWEEN "~IdxDate2(Dialogo.Fecha1)~" AND "~IdxDate2(Dialogo.Fecha2))
+*Filtro TipoOp OK
+SQL.ADD("AND TipoOp IN ('TIC','TIV')")
+*Instancia Liquidacion 10 o Terminal 70 OK
+SQL.ADD("AND OB.NrBit IN ('10','70') ")
+*FILTRO PARA CLIENTES FALTA
+SQL.ADD("AND CL.Status = 'HAB' AND CL.NrMae IS NULL")
+*FILTRO PARA PENDIENTES, RECHAZADOS Y NULOS OK
+*CAPAZ SE CAMBIE
+SQL.ADD("AND LIB.Estado IN ('ING','SUP')")
+*SQL.ADD("AND HoraOp IS NOT NULL")
+
+Recorrer SQL
+    *Recuperar la operacion de titulos
+    ACT(a:fac,FBN['NrOperacion'])
+    ACT(b:fac,FBN['Cliente1'])
+    ACD(c:fac,FBN['FechaOp'])
+    ACD(d:fac,FBN['FechaVto'])
+    ACT(e:fac,FBN['TipoOp'])
+    ACT(f:fac,FBN['Especie'])
+    ACT(g:fac,FBN['Cantidad'])
+    ACT(h:fac,FBN['Precio1'])
+    ACT(i:fac,FBN['TotalBrutoCli1'])
+    ACN(m:fac,0)
+    ACT(o:fac,FBN['HoraOr'])
+    ACN(j:fac,Num(Copy(Val(o:fac),1,2)))
+    ACN(k:fac,Num(Copy(Val(o:fac),4,2)))
+    ACN(l:fac,Num(Copy(Val(o:fac),7,2)))
+    ACT(P:fac,FBN['Estado'])
+    if Eqstr(Val(p:fac),'ING')
+        ACT(q:fac,"Ingresado")
+        else if Eqstr(Val(p:fac),'REC')
+                ACT(q:fac,"Rechazado")
+            else
+                ACT(q:fac,"Supervisado")   
+        endif
+    endif
+    
+    &CantOperaciones := &CantOperaciones + 1
+Proximo
+
+IF &CantOperaciones > 0
+    CrearListBox ; 'Arial,8,'
+
+        'Check'             ; m1..m:fac   ;SI;;;50;CHECK;RGB(232,232,255); 
+        'Supervisa'         ; n1..n:fac   ;SI;IIF(Val(m:FLB) = 1, NO Vacio(Val(n:FLB)));'Debe seleccionar una opcion'70;COMBO;'Aprobado|Rechazado';RGB(180,180,193); 
+        'Estado'            ; q1..q:fac   ;NO;SI;;80;STRING;;RGB(232,232,255); 
+        'NrOperacion'       ; a1..a:fac   ;SI;;;80;STRING;;RGB(232,232,255); 
+        'Cliente'           ; b1..b:fac   ;NO;SI;;80;STRING;;RGB(232,232,255); 
+        'FechaOp'           ; c1..c:fac   ;NO;SI;;80;FECHA;RGB(232,232,255); 
+        'FechaVto'          ; d1..d:fac   ;NO;SI;;80;FECHA;RGB(232,232,255); 
+        'TipoOp'            ; e1..e:fac   ;NO;SI;;60;STRING;;RGB(232,232,255); 
+        'Especie'           ; f1..f:fac   ;NO;SI;;60;STRING;;RGB(232,232,255); 
+        'Cantidad'          ; g1..g:fac   ;NO;SI;;100;NUMERO;;RGB(232,232,255); 
+        'Precio'            ; h1..h:fac   ;NO;SI;;100;NUMERO;'.########';RGB(232,232,255);
+        *Total BrutoClien1
+        'Total'             ; i1..i:fac   ;NO;;;110;NUMERO;;RGB(232,232,255);
+        'Horas Orden'       ; j1..j:fac   ;NO;;;95;NUMERO;'##';RGB(232,232,255);
+        'Minutos Orden'     ; k1..k:fac   ;NO;;;95;NUMERO;'##';RGB(232,232,255);
+        'Segundos Orden'    ; l1..l:fac   ;NO;;;95;NUMERO;'##';RGB(232,232,255);
+
+
+        *0 = Aprobado| 1 = Rechazado
+    FinListBox
+
+else
+    Cancelar('No hay operaciones que cumplan las condiciones')
+endif
+    
+
+
+if not ok
+    Cancelar('Evento Cancelado.')
+Endif
+Recorrer&i  1 ,&CantOperaciones 
+    if Val(m:&i) = 1
+        if Val(n:&i) = 0 
+            if Eqstr(Val(p:&i),'ING')
+                *La supervision esta aprobada
+                SQL.ADD("UPDATE "~DBO~".LIBORDENES SET ")
+                SQL.ADD("FechaHoraSup = "~SQLAhora~", ")
+                SQL.ADD("UsuarioSup = '"~USUARIOACTIVO~"', ")
+                SQL.ADD("Estado = 'SUP' ")
+                SQL.ADD("WHERE NrOperacionRef='"~Val(a:&i)~"'")
+                SQL.NEW
+                &TotalOp := &TotalOp + 1
+            endif
+        else 
+            SQL.ADD("UPDATE "~DBO~".LIBORDENES SET ")
+            SQL.ADD("FechaHoraSup = "~SQLAhora~" ,")
+            SQL.ADD("UsuarioSup ='"~USUARIOACTIVO~"',")
+            SQL.ADD("Estado = 'REC',")
+            *SQL.ADD("FechaHoraCarga = NULL,")
+            *SQL.ADD("HoraOr = NULL,")
+            *SQL.ADD("UsuarioCarga = NULL")
+            SQL.ADD("WHERE NrOperacionRef='"~Val(a:&i)~"'")
+            SQL.NEW         
+            &TotalOp := &TotalOp + 1
+        endif
+        
+    endif
+PROXIMO
+SQL.EXEC
+If &TotalOp = 1 
+    MessageBox("Se superviso "~FStr(&TotalOp,1,0)~" operacion")
+Else
+    MessageBox("Se supervisaron "~FStr(&TotalOp,1,0)~" operaciones")
+Endif
+
+
+

@@ -1,0 +1,544 @@
+﻿MostrarCuadroDeMensajes
+*ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1     : 'Fecha'       ;;;;;;Dialogo.Fecha1>0;'Fecha Invalida';NO;fsys
+  ListaTabla1: 'Operaciones' ;;;;NO;NO;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES'
+  TipoOp1    : 'TipoOp'      ;;;;NO;NO;;
+  Lista1     : 'Vehiculos'       ;;;;SI;SI;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+  Check1     : 'Contab.Procesada';;;;NO;NO;
+FinDialogo
+If Not Ok
+   Cancelar
+Endif
+
+
+message('--- Asientos de Devengados MM ---')
+
+ACN(x1, SQL("Select 1 from "~DBO~".VARIABLES where Codigo = 'DIASCONT' "))
+if Val(x1)=1
+    ACN(x1, Trunc(Var('DIASCONT'),0))
+endif
+if Val(x1)<1
+    ACN(x1, 1)
+endif
+ACD(x2, Habiles(PriDeMes(Dialogo.Fecha1,SI)-1,Val(x1),'ARG'))
+
+* Fecha Proceso
+ACD(v:1, Dialogo.Fecha1)
+* Ultimo Dia Habil mes anterior
+***///ACD(v:2, Habiles(PriDeMes(Dialogo.Fecha1),-1,'ARG'))
+ACD(v:2, FinDeMes(PriDeMes(Dialogo.Fecha1,SI)-1, NO))
+* Primer Dia Mes Anterior
+ACD(v:3, PriDeMes(Val(v:2),SI))
+* Primer Dia del Mes
+ACD(v:4, PriDeMes(Val(v:1),SI))
+***---Ultimo Dia del Mes anterior
+ACD(v:5, Val(v:4)-1)
+***---Obtengo el sabado si hoy es lunes. Sino V:6 = Dialogo.Fecha1
+***///ACD(V:6, Habiles(Dialogo.Fecha1, -1, 'ARG') + 1)
+ACD(V:6, Habiles(Dialogo.Fecha1, -1) + 1)
+
+* Lista Vehiculos
+ACT(y:1, Dialogo.Lista1)
+
+ACD(FE:1, PriDeMes(Dialogo.Fecha1))
+
+***---Dialogo.Fecha1 = 07/08 => V2=31/07 => V3=01/07 => V4=01/08 => V5=31/07 => FE1=01/07
+
+ACT(ME:1, Var('MONEEXTR'))
+ACT(ML:1, Var('MONELOCA'))
+ACT(MU:1, Var('MONEURU'))
+
+**********************************
+*** Vencimientos del DIA (al Vto)
+**********************************
+
+**//MessageBox(Val(V:6))
+SetFilaActual(0)
+ACN(CK:99, 0)
+SQL.ADD(" Select O.TipoOp, O.Vehiculo1, MD.Especie, V.Valor1, V.Valor2, M.Codigo CodAsi, Sum(MD.Monto) Devengado, ")
+SQL.ADD(" MD.Especie Moneda, C.Fecha2 FechaVto, O.NrOperacion, O.Cliente1, MD.TipoDevengado, O.Observaciones, O.Precio1, ")
+SQL.ADD(" O.Plazo, O.Cantidad, O.MB3, '' Alias8, O.CB5, C.Cantidad2, C.Fecha1, V.Alias4 MonLLocalVeh, O.FechaEj, O.TotalNetoCli1, ")
+SQL.ADD(" O.FechaVto2, C.Cantidad2Ori CantOri, O.Indice, O.RB10, O.Indice, O.Precio5, O.TipoTasa, O.RB16, 'MV' Tipo, C.NrCuota,O.Book1 AS Book ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".MOVDEVENGADOS MD, "~DBO~".VEHICULOS V, "~DBO~".MODELOSASIENTO M, ")
+SQL.ADD(" "~DBO~".CUOTAS C ")
+SQL.ADD(" Where C.Fecha2 <= '"~IdxDate(Dialogo.Fecha1)~"' AND C.Fecha2 >= '"~IdxDate(Val(V:6))~"' ")
+SQL.ADD("   and ( (O.TipoOp  like  'MM%' AND O.TipoOp <> 'MMDPAC' ) OR O.TipoOp in ('DTSFVM','DTSFFM','SEPVMV','SEPTMV') ) ")
+SQL.ADD("   and O.NrOperacion =  MD.NrOperacion ")
+***---SQL.ADD(" and O.NrOperacion IN ('D2000391','G1000040','G5002348') ")
+***---SQL.ADD(" and O.NrOperacion IN ('G5002348') ")
+SQL.ADD("   and O.NrOperacion =  C.NrOperacion ")
+***///SQL.ADD("   and MD.Fecha      >= "~IdxDate2(Val(v:4))~" ")
+**// Si la cuota vence durante el fin de semana y se produce un fin de mes en el medio... 
+**// Entonces tomo los devengados a partir del 1er dia del mes en que vencio la cuota... Y no V:4 que contiene el primer dia del nuevo mes.
+SQL.ADD("   and MD.Fecha      >= DATEADD(mm, DATEDIFF(mm,0,C.Fecha2), 0) ")
+SQL.ADD("   and MD.Fecha      <=  C.Fecha2 ")
+***---Devengados del mes y de la cuota que vence
+***---SQL.ADD("   AND MD.Fecha > (Select Max(C1.Fecha2) From "~DBO~".CUOTAS C1 ")
+***---SQL.ADD("                   Where C.NrOperacion = C1.NrOperacion ")
+***---SQL.ADD("                   AND C1.Fecha2 < '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD("   AND (MD.Fecha > (Select Max(C1.Fecha2) From "~DBO~".CUOTAS C1 ")
+SQL.ADD("                   Where C.NrOperacion = C1.NrOperacion ")
+***---SQL.ADD("                   AND C1.Fecha2 < '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD("                   AND C1.Fecha2 < '"~IdxDate(Val(V:6))~"') ")
+SQL.ADD("        OR (Select Max(C1.Fecha2) From "~DBO~".CUOTAS C1 ")
+SQL.ADD("            Where C.NrOperacion = C1.NrOperacion ")
+***---SQL.ADD("            AND C1.Fecha2 < '"~IdxDate(Dialogo.Fecha1)~"') Is Null) ")
+SQL.ADD("            AND C1.Fecha2 < '"~IdxDate(Val(V:6))~"') Is Null) ")
+SQL.ADD("   and O.Vehiculo1 Not IN ("~Pipe2Comillas(Var('VLIQUIDAA'))~") ")
+SQL.ADD(" AND M.Habilitado = 'SI' ")
+SQL.ADD(" AND M.Entorno = '"~SIGLA~"' ")
+If NoVAcio(Dialogo.Lista1)
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND (( ")
+   Recorrer&i 1,Elementos(Dialogo.Lista1)
+        SQL.ADD(" '|'+rtrim(M.Vehiculo)+'|' like '%|"~ItemLista(Dialogo.Lista1,&i)~"|%' ")
+        If NOT Elementos(Dialogo.Lista1)=&i
+            SQL.ADD(" OR ")
+        EndIf
+   proximo
+   SQL.ADD(") OR M.Vehiculo is null OR M.Vehiculo = '' OR M.Vehiculo = ' ' )")    
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      SQL.ADD(" AND O.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+   Endif
+Endif
+SQL.ADD("   and O.Vehiculo1   =  V.Codigo ")
+SQL.ADD("   and M.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIDEVT'))~") ")
+SQL.ADD("   and M.TipoOp      = O.TipoOp ")
+SQL.ADD(" group by O.TipoOp, O.Vehiculo1, MD.Especie, V.Valor1, V.Valor2, M.Codigo, C.Fecha2, O.NrOperacion, ")
+SQL.ADD(" O.Cliente1, MD.TipoDevengado, O.Observaciones, O.Precio1, O.Plazo, O.Cantidad, O.MB3, O.CB5, C.Cantidad2, ")
+SQL.ADD(" C.Fecha1, V.Alias4 MonLLocalVeh, O.FechaEj, O.TotalNetoCli1, O.FechaVto2, C.Cantidad2Ori, O.Indice, O.RB10, O.Indice, O.Precio5, O.TipoTasa, O.RB16, C.NrCuota,O.Book1 ")
+
+SQL.ADD(" UNION ")
+
+SQL.ADD(" Select O.TipoOp, O.Vehiculo1, MD.Especie, V.Valor1, V.Valor2, MA.Codigo CodAsi, Sum(MD.Monto) Devengado, ")
+SQL.ADD(" MD.Especie Moneda, O.FechaVto, O.NrOperacion, O.Cliente1, MD.TipoDevengado, O.Observaciones, O.Precio1, ")
+SQL.ADD(" O.Plazo, O.Cantidad, O.MB3, '' Alias8, O.CB5, O.Cantidad Cantidad2, O.FechaOp Fecha1, V.Alias4 MonLLocalVeh, O.FechaEj, ")
+SQL.ADD(" O.TotalNetoCli1, O.FechaVto2, O.CantidadOri CantOri, O.Indice, O.RB10, O.Indice, O.Precio5, O.TipoTasa, O.RB16, 'UV' Tipo, 0 NrCuota,O.Book1 AS Book ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".MOVDEVENGADOS MD, "~DBO~".VEHICULOS V, "~DBO~".MODELOSASIENTO MA ")
+SQL.ADD(" Where  ( O.TipoOp IN  ('MMO','MMCAUA','MMCAUP','MMCCR','DTSFV','DTSFF','SERP','SERA','MMDC','SECAC','SECAT') OR    ")
+SQL.ADD("          (O.TipoOp = 'MMDPAC' AND O.RB10 =1 )   )  ")
+***---SQL.ADD(" and O.NrOperacion IN ('D2000391','G1000040','G5002348') ")
+***---SQL.ADD(" and O.NrOperacion IN ('G5002348') ")
+**// Para MM y Prest en Especies tomo FechaVto
+SQL.ADD(" AND (  (O.FechaVto  <= '"~IdxDate(Dialogo.Fecha1)~"' AND O.FechaVto  >= '"~IdxDate(Val(V:6))~"' AND  O.TipoOp IN ('MMO','MMCAUA','MMCAUP','MMCCR','MMDPAC','MMDC','SECAC','SECAT') )")
+**// Para REPO tomo FechaVto2
+SQL.ADD("     OR (O.FechaVto2 <= '"~IdxDate(Dialogo.Fecha1)~"' AND O.FechaVto2 >= '"~IdxDate(Val(V:6))~"' AND O.TipoOp IN ('SERP','SERA')  )")
+**// Para los SWAPS se toma FechaEj
+SQL.ADD("     OR (O.FechaEj   <= '"~IdxDate(Dialogo.Fecha1)~"' AND O.FechaEj   >= '"~IdxDate(Val(V:6))~"' AND O.TipoOp in ('DTSFV','DTSFF')  )")
+SQL.ADD("  )  ")
+SQL.ADD("   and O.NrOperacion =  MD.NrOperacion ")
+**//                                               SQL.ADD(" and O.NrOperacion = 'PI000245' ")
+SQL.ADD("   and MD.Fecha   >= "~IdxDate2(Val(v:4))~" ")
+**SQL.ADD("   and ( MD.Fecha      <=  O.FechaVto  ")
+**SQL.ADD("   OR    (MD.Fecha   <=  O.FechaEj  AND  O.TipoOp in ('DTSFV','DTSFVM','DTSFF','DTSFFM')) ")
+**SQL.ADD("   OR    (MD.Fecha   <=  O.FechaPago  AND  O.TipoOp in ('SERP','SERA')) )")
+SQL.ADD("   and O.Vehiculo1 Not IN ("~Pipe2Comillas(Var('VLIQUIDAA'))~") ")
+SQL.ADD(" AND MA.Habilitado = 'SI' ")
+SQL.ADD(" AND MA.Entorno = '"~SIGLA~"' ")
+If NoVAcio(Dialogo.Lista1)
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND (( ")
+   Recorrer&i 1,Elementos(Dialogo.Lista1)
+        SQL.ADD(" '|'+rtrim(MA.Vehiculo)+'|' like '%|"~ItemLista(Dialogo.Lista1,&i)~"|%' ")
+        If NOT Elementos(Dialogo.Lista1)=&i
+            SQL.ADD(" OR ")
+        EndIf
+   proximo
+   SQL.ADD(") OR MA.Vehiculo is null OR MA.Vehiculo = '' OR MA.Vehiculo = ' ' ) ")       
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      SQL.ADD(" AND O.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+   Endif
+Endif
+SQL.ADD("   and O.Vehiculo1   =  V.Codigo ")
+SQL.ADD("   and MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIDEVT'))~") ")
+SQL.ADD("   and MA.TipoOp      = O.TipoOp ")
+SQL.ADD(" AND ((O.Cuotas1 Is Null OR O.Cuotas1 = '' OR O.Cuotas1 = 0)  or (O.TipoOp='SECAT' and O.CB1=0)) ")
+SQL.ADD(" group by O.TipoOp, O.Vehiculo1, MD.Especie, V.Valor1, V.Valor2, MA.Codigo, O.FechaVto, O.NrOperacion, ")
+SQL.ADD(" O.Cliente1, MD.TipoDevengado, O.Observaciones, O.Precio1, O.Plazo, O.Cantidad, O.MB3, O.CB5, ")
+SQL.ADD(" O.Cantidad, O.FechaOp, V.Alias4 MonLLocalVeh, O.FechaEj, O.TotalNetoCli1, O.FechaVto2, O.CantidadOri, O.Indice, ")
+SQL.ADD(" O.RB10, O.Indice, O.Precio5, O.TipoTasa, O.RB16,O.Book1 ")
+
+SQL.ADD(" UNION ")
+
+***/// Select para las levantar las operaciones sin Interes (Para generar asientos con DC Capital)
+SQL.ADD(" Select O.TipoOp, O.Vehiculo1, O.Especie, V.Valor1, V.Valor2, M.Codigo CodAsi, 0 Devengado, ")
+SQL.ADD(" O.Especie Moneda, C.Fecha2 FechaVto, O.NrOperacion, O.Cliente1, 'INTLEN' TipoDevengado, O.Observaciones, O.Precio1, ")
+SQL.ADD(" O.Plazo, O.Cantidad, O.MB3, '' Alias8, O.CB5, C.Cantidad2, C.Fecha1, V.Alias4 MonLLocalVeh, O.FechaEj, O.TotalNetoCli1, ")
+SQL.ADD(" O.FechaVto2, C.Cantidad2Ori CantOri, O.Indice, O.RB10, O.Indice, O.Precio5, O.TipoTasa, O.RB16, 'UV' Tipo, C.NrCuota,O.Book1 AS Book ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".VEHICULOS V, "~DBO~".MODELOSASIENTO M, "~DBO~".CUOTAS C ")
+SQL.ADD(" Where C.Fecha2 <= '"~IdxDate(Dialogo.Fecha1)~"' AND C.Fecha2 >= '"~IdxDate(Val(V:6))~"' ")
+SQL.ADD("   and ( (O.TipoOp  like  'MM%' AND O.TipoOp <> 'MMDPAC' ) OR O.TipoOp in ('DTSFVM','DTSFFM','SEPVMV','SEPTMV') ) ")
+SQL.ADD("   and O.NrOperacion =  C.NrOperacion ")
+***---SQL.ADD(" and O.NrOperacion IN ('D2000391','G1000040','G5002348') ")
+***---SQL.ADD(" and O.NrOperacion IN ('G5002348') ")
+**// Que traiga las operaciones sin devengados de interes
+SQL.ADD(" AND (Select Distinct MD.NrOperacion from MOVDEVENGADOS MD Where MD.NrOperacion = O.NrOperacion and TipoDevengado = 'INTLEN') is NULL ")
+SQL.ADD("   and O.Vehiculo1 Not IN ("~Pipe2Comillas(Var('VLIQUIDAA'))~") ")
+SQL.ADD(" AND M.Habilitado = 'SI' ")
+SQL.ADD(" AND M.Entorno = '"~SIGLA~"' ")
+If NoVAcio(Dialogo.Lista1)
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND (( ")
+   Recorrer&i 1,Elementos(Dialogo.Lista1)
+        SQL.ADD(" '|'+rtrim(M.Vehiculo)+'|' like '%|"~ItemLista(Dialogo.Lista1,&i)~"|%' ")
+        If NOT Elementos(Dialogo.Lista1)=&i
+            SQL.ADD(" OR ")
+        EndIf
+   proximo
+   SQL.ADD(") OR M.Vehiculo is null OR M.Vehiculo = '' OR M.Vehiculo = ' ' )")   
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      SQL.ADD(" AND O.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+   Endif
+Endif
+SQL.ADD("   and O.Vehiculo1   =  V.Codigo ")
+SQL.ADD("   and M.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIDEVT'))~") ")
+SQL.ADD("   and M.TipoOp      = O.TipoOp ")
+SQL.ADD(" group by O.TipoOp, O.Vehiculo1, O.Especie, V.Valor1, V.Valor2, M.Codigo, C.Fecha2, O.NrOperacion, ")
+SQL.ADD(" O.Cliente1, O.Observaciones, O.Precio1, O.Plazo, O.Cantidad, O.MB3, O.CB5, C.Cantidad2, ")
+SQL.ADD(" C.Fecha1, V.Alias4 MonLLocalVeh, O.FechaEj, O.TotalNetoCli1, O.FechaVto2, C.Cantidad2Ori, O.Indice, O.RB10, O.Indice, O.Precio5, O.TipoTasa, O.RB16, C.NrCuota,O.Book1 ")
+Recorrer SQL
+    message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+    ACN(CK:1, 0)
+    **// Para los SWAPS unico vto. se toma FechaEj como Fecha de vencimiento
+    If Incluido(FBN('TipoOp'),'DTSFV|DTSFF|')
+       ACD(FV:1, fbn('FechaEj'))
+       ACD(FH:1, fbn('FechaEj'))
+    Else
+       **// Para los REPOS, se toma FechaVto2 como Fecha de vencimiento
+       If Incluido(FBN('TipoOp'),'SERA|SERP|')
+          ACD(FV:1, fbn('FechaVto2'))
+          ACD(FH:1, fbn('FechaVto2'))
+       Else
+          ACD(FV:1, fbn('FechaVto')) 
+          ACD(FH:1, fbn('FechaVto'))
+       Endif
+    Endif
+    (.'FECHAVALOR'.)
+    ACT(VH:1, fbn('Vehiculo1'))
+    ACN(CO:1, FBN('CantOri'))
+    **//(.'FECHAVALOR'.)
+    IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+        ACN(CK:1, 1)
+        IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrOperacion = '"~fbn('NrOperacion')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado = 'E' AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+            ACN(CK:1, 0)
+        ENDIF
+    ENDIF
+    IF Val(CK:1) = 0
+        ACT(aa:FAC, fbn('TipoOp'))
+        ACT(ab:FAC, fbn('Vehiculo1'))
+        ACN(ac:FAC, fbn('Valor1'))
+        ACN(ad:FAC, fbn('Valor2'))
+        ACT(ae:FAC, fbn('Especie'))
+        ACN(af:FAC, fbn('Devengado'))
+        ACT(ag:FAC, fbn('CodAsi'))
+        ACN(DV:1, fbn('Devengado'))
+        ACD(FC:99, PriDeMes(FBN('FechaVto'),SI)-1)
+        **// Calculos De Diferencia de Cambio
+        If Incluido(FBN('TipoOp'),'SERA|SERP|')
+           ACN(CP:1, FBN('TotalNetoCli1'))
+           ACD(FC:9, FBN('FechaVto'))
+           ACD(FD:1, FBN('FechaVto'))
+           ACD(FD:2, FBN('FechaVto'))
+        Else
+           ACN(CP:1, FBN('Cantidad2'))
+           ACD(FC:9, FBN('Fecha1'))
+           ACD(FD:1, FBN('Fecha1'))
+           ACD(FD:2, FBN('Fecha1'))
+           ACD(FC:10, fbn('Fecha1'))
+           IF Val(FC:10) < Val(V:5)
+               ***---ACD(FC:10, Val(V:5))
+           ENDIF
+        Endif 
+        ACD(FC:1, Val(FC:99))
+        ACD(FC:2, Val(FV:1))
+        **Messagebox('Fecha inicio: '~Fecha(Val(FC:9)))
+        **/IF Val(FD:1) < Val(V:4)
+        **/   ACD(FD:1, Val(V:4))
+        **/ENDIF
+        IF Val(FD:1) < Val(FC:99)
+           ACD(FD:1, Val(FC:99))
+        ENDIF
+        ***/// Inicializar
+        ACN(CP:2, 0)
+        ACN(DN:1, 0)
+        ACN(DN:2, 0)
+        ACN(DN:3, 0)
+        ACN(DI:1, 0)
+        ACN(DI:2, 0)
+        ACN(DI:3, 0)
+        ACN(DK:1, 0)
+        ACN(DK:2, 0)
+        ACN(DK:3, 0)
+        ACN(DP:1, 0)
+        ACN(DP:2, 0)
+        ACN(DP:3, 0)
+        ACN(CR:1, 0)
+        ACN(DV:2, 0)
+        ACN(VR:1, 0)
+        ACN(VR:2, 0)
+        ACN(IV:1, 0)
+        ACN(IV:2, 0)
+        ACN(IV:3, 0)
+        ***---IF #DEVINT Y #ESMONEXTR
+        let &dolContableVh IIF( Incluido(fbn('Vehiculo1'), Var('VEHDOLBI')), Var('DOLBILLETE'), Var('MONEEXTR'))
+        IF #DEVINT
+           (.'DC-CAPINT'.)
+        Endif
+        ***/// Para ON se calcula DC de Prima y Gastos
+        ***---IF [#DEVPRI O #DEVCOM] Y #ESMONEXTR Y #OBLIGNEG
+        IF [#DEVPRI O #DEVCOM] Y #OBLIGNEG
+           (.'DC-PRICOM'.)
+        Endif
+        ***/// Si es con tasa variable, calculo la diferencia que sufrio el interes respecto a los devengados anteriores.
+        If [Not Eqstr(FBN('TipoTasa'), 'FIJA') Y Eqstr(FBN('RB16'),'1')] Y #DEVINT
+            (.'DIFINTVAR'.)
+        Endif
+        let &modeloContable fbn('CodAsi')
+        SQL.GenerarAsientoOp(&modeloContable,fbn('NrOperacion'),'','',810,Val(FV:1),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+        SQL.EXEC
+        IF Eqstr(fbn('Tipo'), 'MV')
+            ***---Marco la Cuota como contabilizada para el modulo de abajo que contabiliza Fin de Mes
+            SQL.ADD(" Update "~DBO~".CUOTAS ")
+            SQL.ADD(" Set Check8 = 1 ")
+            SQL.ADD(" Where NrOperacion = '"~fbn('NrOperacion')~"' ")
+            SQL.ADD(" AND NrCuota = "~Fstr(fbn('NrCuota'), 0, 0)~" ")
+            SQL.NEW
+            SQL.EXEC
+        ENDIF
+
+    ENDIF
+Proximo
+
+
+ACN(CK:99, 1)
+
+**************************
+*** Devengados Fin de Mes
+**************************
+
+If Dialogo.Fecha1=Val(x2)
+   SetFilaActual(0)
+   SQL.ADD(" Select O.TipoOp, O.Vehiculo1, MD.Especie, V.Valor1, V.Valor2, M.Codigo CodAsi, Sum(MD.Monto) Devengado, ")
+   SQL.ADD(" MD.Especie Moneda, O.Cliente1, O.NrOperacion, MD.TipoDevengado, O.Observaciones, O.Precio1, O.Plazo, ")
+   SQL.ADD(" O.Cantidad, O.MB3, '' Alias8, O.CB5, V.Alias4 MonLLocalVeh, O.TotalNetoCli1, O.FechaVto, O.FechaVto2, O.Indice, O.FechaOp, ")
+   SQL.ADD(" O.RB10, O.Indice, O.Precio5, O.TipoTasa, O.RB16,O.Book1 AS Book ")
+   SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".MOVDEVENGADOS MD, "~DBO~".VEHICULOS V, "~DBO~".MODELOSASIENTO M ")
+   SQL.ADD("   Where O.FechaOp     <=  "~IdxDate2(Val(v:2))~" ")
+   SQL.ADD("   and ( (O.TipoOp  like  'MM%' AND O.TipoOp <> 'MMDPAC') OR O.TipoOp in ('DTSFV','DTSFVM','DTSFF','DTSFFM','SERP','SERA','SEPVMV','SEPTMV','SECAC','SECAT') ")
+   ***/// Solo levanta las MMDPAC por pactado
+   SQL.ADD("          OR (O.TipoOp = 'MMDPAC' AND O.RB10=1) )")
+   SQL.ADD("   and O.NrOperacion =  MD.NrOperacion ")
+***---   SQL.ADD(" and O.NrOperacion IN ('D2000391','G1000040','G5002348') ")
+   ***---    SQL.ADD("   and MD.Fecha      >= "~IdxDate2(Val(v:3))~" ")
+   SQL.ADD("   and MD.Fecha      >= "~IdxDate2(Val(v:3))~" ")
+   SQL.ADD("   and MD.Fecha      <= "~IdxDate2(Val(v:5))~" ")
+   SQL.ADD("   and O.Vehiculo1 Not IN ("~Pipe2Comillas(Var('VLIQUIDAA'))~") ")
+   SQL.ADD(" AND M.Habilitado = 'SI' ")
+   SQL.ADD(" AND M.Entorno = '"~SIGLA~"' ")   
+   If NoVAcio(Dialogo.Lista1)
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND (( ")
+       Recorrer&i 1,Elementos(Dialogo.Lista1)
+            SQL.ADD(" '|'+rtrim(M.Vehiculo)+'|' like '%|"~ItemLista(Dialogo.Lista1,&i)~"|%' ")
+            If NOT Elementos(Dialogo.Lista1)=&i
+                SQL.ADD(" OR ")
+            EndIf
+       proximo
+       SQL.ADD(") OR M.Vehiculo is null OR M.Vehiculo = '' OR M.Vehiculo = ' ' )")        
+   Else
+       If NoVacio(UsrVehiculos(UsuarioActivo))
+          SQL.ADD(" AND O.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+       Endif
+   Endif
+   SQL.ADD("   and O.Vehiculo1   =  V.Codigo ")
+   SQL.ADD("   and M.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIDEVF'))~") ")
+   SQL.ADD("   and M.TipoOp      = O.TipoOp ")
+   ***---Se toman los devengados desde el ultimo vto.
+   SQL.ADD("   and (MD.Fecha     > (Select Max(CU.Fecha2) From "~DBO~".CUOTAS CU ")
+   SQL.ADD("                        Where CU.NrOperacion = O.NrOperacion ")
+   SQL.ADD("                        AND CU.Check8 = 1 and CU.Fecha2 <= "~IdxDate2(Val(v:5))~"  ) ")
+   SQL.ADD("        OR (Select Max(CU.Fecha2) From "~DBO~".CUOTAS CU ")
+   SQL.ADD("            Where CU.NrOperacion = O.NrOperacion ")
+   IF Val(V:2) = Val(V:5)
+      SQL.ADD("            AND CU.Fecha2 < '"~IdxDate(Val(V:2))~"') Is Null) ")
+   ELSE
+      ***---SI V2 < V5 entonces tomo solo los movimientos posteriores al vto de la cuota. Caso cuando el vto es el 29/05
+      ***---=> debo tomar solo los movimientos del 30/05 y 31/05
+      SQL.ADD("            AND CU.Fecha2 <= '"~IdxDate(Val(V:2))~"') Is Null) ")
+   ENDIF
+   **// Si la cuota vencio en el dia, no levanto la operacion.
+   SQL.ADD(" AND ((Select Max(CU.Fecha2) From dbo.CUOTAS CU Where CU.NrOperacion = O.NrOperacion AND CU.Fecha2 = '"~IdxDate(Val(V:5))~"') Is Null AND O.TipoOp <> 'MMDPAC' ")
+   ***///Si es MMDPAC no se tiene en cuenta el inicio de la cuota
+   SQL.ADD("              OR O.TipoOp = 'MMDPAC') ")
+   **// Para MM y Prest. en Especies tomo FechaVto
+   SQL.ADD(" AND (    (O.FechaVto  > '"~IdxDate(Val(v:5))~"' AND (O.TipoOp like  'MM%' OR O.TipoOp in ('SEPVMV','SEPTMV','SECAC','SECAT')) ) ")
+   **// Para REPO tomo FechaVto2
+   SQL.ADD("       OR (O.FechaVto2 > '"~IdxDate(Val(v:5))~"' AND O.TipoOp in ('SERP','SERA'))  ")
+   **// Para los SWAPS se toma FechaEj
+   SQL.ADD("       OR (O.FechaEj   > '"~IdxDate(Val(v:5))~"' AND O.TipoOp in ('DTSFV','DTSFF')) ")
+   ***---Se toman las MMRPAC aunque estén vencidas, ya que deben contabilizarse a fin de mes y no al vto. NO LAS DEBE TOMAR el bloque de arriba, aunque as levante no tiene modelo
+   SQL.ADD("       OR (O.TipoOp IN ('MMRPAC')) ")
+   
+   **// Para los SWAPS MV se busca ultima FechaVto en cuotas
+   SQL.ADD("       OR (O.TipoOp in ('DTSFVM','DTSFFM') AND  ")
+   SQL.ADD("           (Select Max(CU.Fecha2) From dbo.CUOTAS CU Where CU.NrOperacion = O.NrOperacion ) > '"~IdxDate(Val(v:5))~"')  )   ")
+   ***---Las MMRPAC solo contabilizan si el mínimo no fué modificado
+   SQL.ADD(" AND (O.TipoOp <> 'MMRPAC' OR (O.CB2 Is Null OR O.CB2 = '' OR O.CB2 = ' ' OR O.CB2 = 0)) ")
+   SQL.ADD(" group by O.TipoOp, O.Vehiculo1, MD.Especie, V.Valor1, V.Valor2, M.Codigo, O.Cliente1, O.NrOperacion, ")
+   SQL.ADD(" MD.TipoDevengado, O.Observaciones, O.Precio1, O.Plazo, O.Cantidad, O.MB3, O.CB5, V.Alias4 MonLLocalVeh, O.TotalNetoCli1, ")
+   SQL.ADD(" O.FechaVto, O.FechaVto2, O.Indice, O.FechaOp, O.RB10, O.Indice, O.Precio5, O.TipoTasa, O.RB16, O.Book1 ")
+
+   SQL.ADD(" UNION ")
+   
+   ***/// Select para las levantar las operaciones sin Interes (Para generar asientos con DC Capital)
+   SQL.ADD(" Select O.TipoOp, O.Vehiculo1, O.Especie, V.Valor1, V.Valor2, M.Codigo CodAsi, 0 Devengado, ")
+   SQL.ADD(" O.Especie Moneda, O.Cliente1, O.NrOperacion, 'INTLEN' TipoDevengado, O.Observaciones, O.Precio1, O.Plazo, ")
+   SQL.ADD(" O.Cantidad, O.MB3, '' Alias8, O.CB5, V.Alias4 MonLLocalVeh, O.TotalNetoCli1, O.FechaVto, O.FechaVto2, O.Indice, O.FechaOp, ")
+   SQL.ADD(" O.RB10, O.Indice, O.Precio5, O.TipoTasa, O.RB16,O.Book1 AS Book ")
+   SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".VEHICULOS V, "~DBO~".MODELOSASIENTO M ")
+   SQL.ADD("   Where O.FechaOp     <=  "~IdxDate2(Val(v:2))~" ")
+***---   SQL.ADD(" and O.NrOperacion IN ('D2000391','G1000040','G5002348') ")
+   SQL.ADD("   and ((O.TipoOp  like  'MM%' AND O.TipoOp <> 'MMDPAC') OR O.TipoOp in ('DTSFV','DTSFVM','DTSFF','DTSFFM','SERP','SERA','SEPVMV','SEPTMV','SECAT','SECAC')) ")
+   SQL.ADD("   and O.Vehiculo1 Not IN ("~Pipe2Comillas(Var('VLIQUIDAA'))~") ")
+   SQL.ADD(" AND M.Habilitado = 'SI' ")
+   SQL.ADD(" AND M.Entorno = '"~SIGLA~"' ")
+   If NoVAcio(Dialogo.Lista1)
+       SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND (( ")
+       Recorrer&i 1,Elementos(Dialogo.Lista1)
+            SQL.ADD(" '|'+rtrim(M.Vehiculo)+'|' like '%|"~ItemLista(Dialogo.Lista1,&i)~"|%' ")
+            If NOT Elementos(Dialogo.Lista1)=&i
+                SQL.ADD(" OR ")
+            EndIf
+       proximo
+       SQL.ADD(") OR M.Vehiculo is null OR M.Vehiculo = '' OR M.Vehiculo = ' ' )")       
+   Else
+      If NoVacio(UsrVehiculos(UsuarioActivo))
+         SQL.ADD(" AND O.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+      Endif
+   Endif
+   **// Que traiga las operaciones sin devengados de interes
+   SQL.ADD(" AND (Select Distinct MD.NrOperacion from MOVDEVENGADOS MD Where MD.NrOperacion = O.NrOperacion and TipoDevengado = 'INTLEN') is NULL ")
+   SQL.ADD("   and O.Vehiculo1   =  V.Codigo ")
+   SQL.ADD("   and M.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIDEVF'))~") ")
+   SQL.ADD("   and M.TipoOp      = O.TipoOp ")
+   **// Para MM y Prest. en Especies tomo FechaVto
+   SQL.ADD(" AND (    (O.FechaVto  > '"~IdxDate(Val(v:5))~"' AND (O.TipoOp like  'MM%' OR O.TipoOp in ('SEPVMV','SEPTMV','SECAC','SECAT')) ) ")
+   **// Para REPO tomo FechaVto2
+   SQL.ADD("       OR (O.FechaVto2 > '"~IdxDate(Val(v:5))~"' AND O.TipoOp in ('SERP','SERA'))  ")
+   **// Para los SWAPS se toma FechaEj
+   SQL.ADD("       OR (O.FechaEj   > '"~IdxDate(Val(v:5))~"' AND O.TipoOp in ('DTSFV','DTSFF')) ")
+   **// Para los SWAPS MV se busca ultima FechaVto en cuotas
+   SQL.ADD("       OR (O.TipoOp in ('DTSFVM','DTSFFM') AND  ")
+   SQL.ADD("           (Select Max(CU.Fecha2) From dbo.CUOTAS CU Where CU.NrOperacion = O.NrOperacion ) > '"~IdxDate(Val(v:5))~"')  )   ")
+   SQL.ADD(" group by O.TipoOp, O.Vehiculo1, O.Especie, V.Valor1, V.Valor2, M.Codigo, O.Cliente1, O.NrOperacion, ")
+   SQL.ADD(" O.Observaciones, O.Precio1, O.Plazo, O.Cantidad, O.MB3, O.CB5, V.Alias4 MonLLocalVeh, O.TotalNetoCli1, ")
+   SQL.ADD(" O.FechaVto, O.FechaVto2, O.Indice, O.FechaOp, O.RB10, O.Indice, O.Precio5, O.TipoTasa, O.RB16, O.Book1 ")
+   Watch(sql.batch)
+   Recorrer SQL
+      ACN(CK:1, 0)
+      ACD(FV:1, Val(V:5))
+      ACT(VH:1, fbn('Vehiculo1'))
+      **//(.'FECHAVALOR'.)
+      IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+           ACN(CK:1, 1)
+           IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrOperacion = '"~fbn('NrOperacion')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado = 'E' AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+               ACN(CK:1, 0)
+           ENDIF
+      ENDIF
+      **MessageBox(Val(CK:1))
+      IF Val(CK:1) = 0
+        ACT(ba:FAC, fbn('TipoOp'))
+        ACT(bb:FAC, fbn('Vehiculo1'))
+        ACN(bc:FAC, fbn('Valor1'))
+        ACN(bd:FAC, fbn('Valor2'))
+        ACT(be:FAC, fbn('Especie'))
+        ACN(bf:FAC, fbn('Devengado'))
+        ACT(bg:FAC, fbn('CodAsi'))
+        ACN(DV:1, fbn('Devengado'))
+**/Martin
+**If EqStr(fbn('NrOperacion'),'G5002348')
+**   MessageBox(Val(DV:1))
+**EndIF
+*****
+        message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+        **// Calculos De Diferencia de Cambio
+        SQL.ADD(" Select Cantidad2, Fecha1, Fecha2, Cantidad2Ori  From "~DBO~".CUOTAS ")
+        SQL.ADD(" Where NrOperacion = '"~FBN('NrOperacion')~"' ")
+        SQL.ADD("   and Fecha1  <= "~IdxDate2(Val(v:5))~" ")
+        SQL.ADD("   and Fecha2  > "~IdxDate2(Val(v:5))~" ")
+        Recorrer SQL
+           ACN(CP:1, FBN('Cantidad2'))
+           ACD(FC:9, FBN('Fecha1'))
+           ACD(FD:1, FBN('Fecha1'))
+           ACD(FD:2, FBN('Fecha1'))
+           ACD(FH:1, FBN('Fecha2'))
+           ACN(CO:1, FBN('Cantidad2Ori'))
+           ACD(FC:10, fbn('Fecha1'))
+           IF Val(FC:10) < Val(V:3)
+               **ACD(FC:10, Val(V:3))
+           ENDIF
+        Proximo
+        If Incluido(FBN('TipoOp'),'SERA|SERP|')
+           ACN(CP:1, FBN('TotalNetoCli1'))
+           ACD(FC:9, FBN('FechaVto'))
+           ACD(FD:1, FBN('FechaVto'))
+           ACD(FD:2, FBN('FechaVto'))
+           ACD(FH:1, FBN('FechaVto2'))
+        Endif 
+        If Incluido(FBN('TipoOp'),'MMO|MMCCR|MMCAUA|MMCAUP|')
+           ACN(CP:1, FBN('Cantidad'))
+           ACD(FC:9, FBN('FechaOp'))
+           ACD(FD:1, FBN('FechaOp'))
+           ACD(FD:2, FBN('FechaOp'))
+           ACD(FH:1, FBN('FechaVto'))
+           ACD(FC:10, FBN('FechaOp'))
+        Endif 
+        ACD(FC:1, PriDeMes(Val(v:5),SI)-1)
+        ACD(FC:2, Val(v:5))
+        IF Val(FD:1) < Val(V:3)
+           ACD(FD:1, Val(V:3)-1)
+        ENDIF
+        IF Val(FH:1) > Val(V:5)
+           ACD(FH:1, Val(V:5))
+        ENDIF
+        ***/// Inicializar
+        ACN(CP:2, 0)
+        ACN(DN:1, 0)
+        ACN(DN:2, 0)
+        ACN(DN:3, 0)
+        ACN(DI:1, 0)
+        ACN(DI:2, 0)
+        ACN(DI:3, 0)
+        ACN(DK:1, 0)
+        ACN(DK:2, 0)
+        ACN(DK:3, 0)
+        ACN(DP:1, 0)
+        ACN(DP:2, 0)
+        ACN(DP:3, 0)
+        ACN(CR:1, 0)
+        ACN(DV:2, 0)
+        ACN(VR:1, 0)
+        ACN(VR:2, 0)
+        ACN(IV:1, 0)
+        ACN(IV:2, 0)
+        ACN(IV:3, 0)
+        ***---IF #DEVINT Y #ESMONEXTR
+        let &dolContableVh IIF( Incluido(fbn('Vehiculo1'), Var('VEHDOLBI')), Var('DOLBILLETE'), Var('MONEEXTR'))
+        IF #DEVINT
+           (.'DC-CAPINT'.)
+        Endif
+        ***/// Para ON se calcula DC de Prima y Gastos
+        ***---IF [#DEVPRI O #DEVCOM] Y #ESMONEXTR Y #OBLIGNEG
+        IF [#DEVPRI O #DEVCOM] Y #OBLIGNEG
+           (.'DC-PRICOM'.)
+        Endif
+        ***/// Si es con tasa variable, calculo la diferencia que sufrio el interes respecto a los devengados anteriores.
+        If [Not Eqstr(FBN('TipoTasa'), 'FIJA') Y Eqstr(FBN('RB16'),'1')] Y #DEVINT
+           (.'DIFINTVAR'.)
+        Endif
+        let &modeloContable fbn('CodAsi')
+        SQL.GenerarAsientoOp(&modeloContable,fbn('NrOperacion'),'','',810,Val(FV:1),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+        SQL.EXEC
+      ENDIF
+   Proximo
+Endif

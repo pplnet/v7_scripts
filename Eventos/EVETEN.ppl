@@ -1,0 +1,1038 @@
+﻿MostrarCuadrodeMensajes
+** AA 17/06/21 - Corregir saldo LIMCONSUMIDOS 
+CrearDialogo
+  Check1 : 'Procesa'                ;;;;;;;;;0
+FinDialogo
+if not OK
+  Cancelar
+endif   
+
+  IF Dialogo.Check1=0
+    HOJAVISIBLE(SI) 
+  Endif   
+
+  SetFilaActual(1)
+  ACT(a:FAC, 'Limites consumidos')
+  IFA
+  ACT(a:FAC, 'Cliente')
+  ACT(b:FAC, 'Limite')
+  ACT(c:FAC, 'Monto')
+  SQL.ADD("Select LC.Cliente , LC.limite , LC.Monto from "~DBO~".LIMCONSUMIDOS LC  where Cliente = 'BAT' and LC.Limite = 'VOLOPE' ")
+  Recorrer SQL
+     ACT(a:FAC, fbn('Cliente'))
+     ACT(b:FAC, fbn('Limite'))
+     messagebox (fbn('Monto'))
+     IF Dialogo.Check1=1
+        SQL.ADD("UPDATE "~DBO~".LIMCONSUMIDOS  ")
+        SQL.ADD("   SET Monto = 0 ")
+        SQL.ADD("WHERE Cliente = 'BAT' and Limite = 'VOLOPE'  ")
+        SQL.NEW
+        SQL.EXEC
+     Endif
+  proximo
+
+
+IF NO
+
+
+** FJL 08/02/2021 - Ajustes varios PosPor (Issues 4769 - 4802)
+CrearDialogo
+ Radio1 : 'Ajuste|DICP|CPBA25|TX21P|TX22P|TC21P|TO21P' ;;;;  ;  ;;;;0
+ Check1 : 'Procesa'      ;;;;SI;SI;;;;0
+FinDialogo
+if not OK
+ Cancelar
+endif   
+
+HojaVisible(SI) 
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+
+SetFilaActual(1)   
+if Dialogo.Radio1=0
+  ************************
+  * DICP
+  ************************
+  ACT(a:1, 'NrOperacion')
+  ACT(b:1, 'T0437358')
+  ACT(a:2, 'Especie')
+  ACT(a:3, 'Cupon Actual')
+  ACT(a:4, 'Cupon Nuevo')
+  ACT(a:5, '# MovPosEje')
+  SetFont(a:1..a:5, 2)
+
+  SetFilaActual(8)
+  ACT(a:FAC, '# Oper')
+  ACT(b:FAC, 'FechaMov')
+  ACT(c:FAC, 'Especie')
+  ACT(d:FAC, 'NrSaldo')
+  ACT(e:FAC, 'Sector')
+  ACT(f:FAC, 'Estrategia')
+  ACT(g:FAC, 'Cantidad')
+  ACT(h:FAC, 'Cup.Actual')
+  ACT(i:FAC, 'Cup.Nuevo')
+  SetFont(a:FAC..i:FAC, 2)
+  ACN(w:1, FAC)
+ 
+  SQL.ADD("Select * from "~DBO~".OPERACIONES WHERE NrOperacion='"~Val(b:1)~"' ")
+  recorrer SQL
+    DFA
+    ACN(x:1, 1)
+    ACT(b:2, fbn('Especie'))
+    ACN(b:3, fbn('Cupon1'))
+  proximo
+  if Val(x:1)=0
+    ACN(y:1, 1)
+    ACT(c:1, 'Operacion No Encontrada')
+    MessageBox('Operacion '~Val(b:1)~' No Encontrada.')
+  endif
+ 
+  if Val(y:1)=0
+    if Val(b:3)<>33
+      ACN(y:1, 1)
+      ACT(c:3, 'Cupon invalido')
+      MessageBox('Por los datos encontrados el ajuste de '~Val(b:2)~' ya fue ejecutado.')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion= '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie    = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(b:5, 1)
+      ACT(a:FAC, fbn('NrOperacion'))
+      ACD(b:FAC, fbn('FechaMov'))
+      ACT(c:FAC, fbn('Especie'))
+      ACN(d:FAC, fbn('NrSaldo'))
+      ACT(e:FAC, fbn('Sector'))
+      ACT(f:FAC, fbn('Estrategia'))
+      ACN(g:FAC, fbn('Cantidad'))
+      ACN(h:FAC, fbn('Cupon'))
+    proximo
+    if Val(b:5)=0
+      ACN(y:1, 1)
+      ACT(c:5, 'No existen MovPosEje')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    if Dialogo.Check1=1
+      SQL.ADD("UPDATE "~DBO~".OPERACIONES  ")
+      SQL.ADD("   SET Cupon1 = 34 ")
+      SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.NEW
+
+      SQL.ADD("INSERT INTO "~DBO~".MOVPOSEJE ( ")
+      SQL.ADD("FechaMov,    Cliente, ")
+      SQL.ADD("Vehiculo,    Sector, ")
+      SQL.ADD("NrSaldo,     Especie, ")
+      SQL.ADD("PrecioEj,    FechaEj, ")
+      SQL.ADD("Cantidad,    Precio, ")
+      SQL.ADD("Estrategia,  Book, ")
+      SQL.ADD("TipoNegocio, NrOperacion, ")
+      SQL.ADD("Cupon,       Tipo ) ")
+      SQL.ADD("SELECT FechaMov, Cliente, ")
+      SQL.ADD("       Vehiculo, Sector, ")
+      SQL.ADD("       NrSaldo, Especie, ")
+      SQL.ADD("       PrecioEj, FechaEj, ")
+      SQL.ADD("       Cantidad, Precio, ")
+      SQL.ADD("       Estrategia, Book, ")
+      SQL.ADD("       TipoNegocio, NrOperacion, ")
+      SQL.ADD("       34, Tipo ") 
+      SQL.ADD("  from "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.ADD("   AND Cupon       = 33 ")
+      SQL.NEW
+
+      SQL.ADD("Delete "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.ADD("   AND Cupon       = 33 ")
+      SQL.NEW
+
+      SQL.EXEC
+
+    else
+      ACT(b:6, 'NO PROCESA')
+      SetFont(b:6,2)
+    endif 
+    
+    SQL.ADD("Select * from "~DBO~".OPERACIONES WHERE NrOperacion='"~Val(b:1)~"' ")
+    recorrer SQL
+      DFA
+      ACN(b:4, fbn('Cupon1'))
+    proximo
+
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie     = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(c:5, 1)
+      ACT(aa:FAC, fbn('NrOperacion'))
+      ACD(ab:FAC, fbn('FechaMov'))
+      ACT(ac:FAC, fbn('Especie'))
+      ACN(ad:FAC, fbn('NrSaldo'))
+      ACT(ae:FAC, fbn('Sector'))
+      ACT(af:FAC, fbn('Estrategia'))
+      ACN(ag:FAC, fbn('Cantidad'))
+      ACN(i:FAC, fbn('Cupon'))
+    proximo
+  endif
+ 
+  SetFont(b:1..c:5,1)
+  FormatoCeldas(b:3..c:5,Exe('F0'))
+  if FAC>Val(w:1)
+    SetFont(a:Val(w:1)+1..ag:FAC,1)
+    FormatoCeldas(d:Val(w:1)+1..d:FAC,Exe('F0'))
+    FormatoCeldas(g:Val(w:1)+1..g:FAC,Exe('F2'))
+    FormatoCeldas(h:Val(w:1)+1..i:FAC,Exe('F0'))
+  endif
+  IFA
+  LimitesVision(i:FAC)
+endif
+**********************************
+
+if Dialogo.Radio1=1
+  ************************
+  * CPBA25
+  ************************
+  ACT(a:1, 'Nr Transaccion')
+  ACT(b:1, 'C0000566')
+  ACT(a:2, 'Especie')
+  ACT(a:3, 'TipoTr')
+  ACT(a:4, 'Cupon')
+  ACT(a:5, '# MovPosEje')
+  SetFont(a:1..a:5, 2)
+
+  SetFilaActual(8)
+  ACT(a:FAC, '# Oper')
+  ACT(b:FAC, 'FechaMov')
+  ACT(c:FAC, 'Especie')
+  ACT(d:FAC, 'NrSaldo')
+  ACT(e:FAC, 'Sector')
+  ACT(f:FAC, 'Estrategia')
+  ACT(g:FAC, 'Cantidad')
+  ACT(h:FAC, 'Cup.Actual')
+  ACT(i:FAC, 'Cup.Nuevo')
+  SetFont(a:FAC..i:FAC, 2)
+  ACN(w:1, FAC)
+ 
+  SQL.ADD("Select * from "~DBO~".BTRANSACCIONES2 WHERE NrTrans='"~Val(b:1)~"' ")
+  recorrer SQL
+    DFA
+    ACN(x:1, 1)
+    ACT(b:2, fbn('Especie2'))
+    ACT(b:3, fbn('TipoTr2'))
+    ACN(b:4, fbn('Cupon1'))
+  proximo
+  if Val(x:1)=0
+    ACN(y:1, 1)
+    ACT(c:1, 'Transaccion No Encontrada')
+    MessageBox('Transaccion '~Val(b:1)~' No Encontrada.')
+  endif
+ 
+  if Val(y:1)=0
+    if Val(b:4)<>11
+      ACN(y:1, 1)
+      ACT(c:4, 'Cupon invalido')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie     = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(b:5, 1)
+      ACT(a:FAC, fbn('NrOperacion'))
+      ACD(b:FAC, fbn('FechaMov'))
+      ACT(c:FAC, fbn('Especie'))
+      ACN(d:FAC, fbn('NrSaldo'))
+      ACT(e:FAC, fbn('Sector'))
+      ACT(f:FAC, fbn('Estrategia'))
+      ACN(g:FAC, fbn('Cantidad'))
+      ACN(h:FAC, fbn('Cupon'))
+    proximo
+    if Val(b:5)=0
+      ACN(y:1, 1)
+      ACT(c:5, 'No existen MovPosEje')
+      MessageBox('Por los datos encontrados el ajuste de '~Val(b:2)~' ya fue ejecutado.')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    if Dialogo.Check1=1
+
+      SQL.ADD("Delete "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.NEW
+      SQL.EXEC
+    else
+      ACT(b:6, 'NO PROCESA')
+      SetFont(b:6,2)
+    endif 
+    
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie     = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(c:5, 1)
+      ACT(aa:FAC, fbn('NrOperacion'))
+      ACD(ab:FAC, fbn('FechaMov'))
+      ACT(ac:FAC, fbn('Especie'))
+      ACN(ad:FAC, fbn('NrSaldo'))
+      ACT(ae:FAC, fbn('Sector'))
+      ACT(af:FAC, fbn('Estrategia'))
+      ACN(ag:FAC, fbn('Cantidad'))
+      ACN(i:FAC, fbn('Cupon'))
+    proximo
+  endif
+ 
+  SetFont(b:1..c:5,1)
+  FormatoCeldas(b:3..c:5,Exe('F0'))
+  if FAC>Val(w:1)
+    SetFont(a:Val(w:1)+1..ag:FAC,1)
+    FormatoCeldas(d:Val(w:1)+1..d:FAC,Exe('F0'))
+    FormatoCeldas(g:Val(w:1)+1..g:FAC,Exe('F2'))
+    FormatoCeldas(h:Val(w:1)+1..i:FAC,Exe('F0'))
+  endif
+  IFA
+  LimitesVision(i:FAC)
+endif
+**********************************
+
+if Dialogo.Radio1=2
+  ************************
+  * TX21P
+  ************************
+  ACT(a:1, 'NrOperacion')
+  ACT(b:1, 'T0437751')
+  ACT(a:2, 'Especie')
+  ACT(a:3, 'Cupon Actual')
+  ACT(a:4, 'Cupon Nuevo')
+  ACT(a:5, '# MovPosEje')
+  SetFont(a:1..a:5, 2)
+
+  SetFilaActual(8)
+  ACT(a:FAC, '# Oper')
+  ACT(b:FAC, 'FechaMov')
+  ACT(c:FAC, 'Especie')
+  ACT(d:FAC, 'NrSaldo')
+  ACT(e:FAC, 'Sector')
+  ACT(f:FAC, 'Estrategia')
+  ACT(g:FAC, 'Cantidad')
+  ACT(h:FAC, 'Cup.Actual')
+  ACT(i:FAC, 'Cup.Nuevo')
+  SetFont(a:FAC..i:FAC, 2)
+  ACN(w:1, FAC)
+ 
+  SQL.ADD("Select * from "~DBO~".OPERACIONES WHERE NrOperacion='"~Val(b:1)~"' ")
+  recorrer SQL
+    DFA
+    ACN(x:1, 1)
+    ACT(b:2, fbn('Especie'))
+    ACN(b:3, fbn('Cupon1'))
+  proximo
+  if Val(x:1)=0
+    ACN(y:1, 1)
+    ACT(c:1, 'Operacion No Encontrada')
+    MessageBox('Operacion '~Val(b:1)~' No Encontrada.')
+  endif
+ 
+  if Val(y:1)=0
+    if Val(b:3)<>1
+      ACN(y:1, 1)
+      ACT(c:3, 'Cupon invalido')
+      MessageBox('Por los datos encontrados el ajuste de '~Val(b:2)~' ya fue ejecutado.')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion= '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie    = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(b:5, 1)
+      ACT(a:FAC, fbn('NrOperacion'))
+      ACD(b:FAC, fbn('FechaMov'))
+      ACT(c:FAC, fbn('Especie'))
+      ACN(d:FAC, fbn('NrSaldo'))
+      ACT(e:FAC, fbn('Sector'))
+      ACT(f:FAC, fbn('Estrategia'))
+      ACN(g:FAC, fbn('Cantidad'))
+      ACN(h:FAC, fbn('Cupon'))
+    proximo
+    if Val(b:5)=0
+      ACN(y:1, 1)
+      ACT(c:5, 'No existen MovPosEje')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    if Dialogo.Check1=1
+      SQL.ADD("UPDATE "~DBO~".OPERACIONES  ")
+      SQL.ADD("   SET Cupon1 = 2 ")
+      SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.NEW
+
+      SQL.ADD("INSERT INTO "~DBO~".MOVPOSEJE ( ")
+      SQL.ADD("FechaMov,    Cliente, ")
+      SQL.ADD("Vehiculo,    Sector, ")
+      SQL.ADD("NrSaldo,     Especie, ")
+      SQL.ADD("PrecioEj,    FechaEj, ")
+      SQL.ADD("Cantidad,    Precio, ")
+      SQL.ADD("Estrategia,  Book, ")
+      SQL.ADD("TipoNegocio, NrOperacion, ")
+      SQL.ADD("Cupon,       Tipo ) ")
+      SQL.ADD("SELECT FechaMov, Cliente, ")
+      SQL.ADD("       Vehiculo, Sector, ")
+      SQL.ADD("       NrSaldo, Especie, ")
+      SQL.ADD("       PrecioEj, FechaEj, ")
+      SQL.ADD("       Cantidad, Precio, ")
+      SQL.ADD("       Estrategia, Book, ")
+      SQL.ADD("       TipoNegocio, NrOperacion, ")
+      SQL.ADD("       2, Tipo ") 
+      SQL.ADD("  from "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.ADD("   AND Cupon       = 1 ")
+      SQL.NEW
+
+      SQL.ADD("Delete "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.ADD("   AND Cupon       = 1 ")
+      SQL.NEW
+
+      SQL.EXEC
+    else
+      ACT(b:6, 'NO PROCESA')
+      SetFont(b:6,2)
+    endif 
+    
+    SQL.ADD("Select * from "~DBO~".OPERACIONES WHERE NrOperacion='"~Val(b:1)~"' ")
+    recorrer SQL
+      DFA
+      ACN(b:4, fbn('Cupon1'))
+    proximo
+
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie     = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(c:5, 1)
+      ACT(aa:FAC, fbn('NrOperacion'))
+      ACD(ab:FAC, fbn('FechaMov'))
+      ACT(ac:FAC, fbn('Especie'))
+      ACN(ad:FAC, fbn('NrSaldo'))
+      ACT(ae:FAC, fbn('Sector'))
+      ACT(af:FAC, fbn('Estrategia'))
+      ACN(ag:FAC, fbn('Cantidad'))
+      ACN(i:FAC, fbn('Cupon'))
+    proximo
+  endif
+ 
+  SetFont(b:1..c:5,1)
+  FormatoCeldas(b:3..c:5,Exe('F0'))
+  if FAC>Val(w:1)
+    SetFont(a:Val(w:1)+1..ag:FAC,1)
+    FormatoCeldas(d:Val(w:1)+1..d:FAC,Exe('F0'))
+    FormatoCeldas(g:Val(w:1)+1..g:FAC,Exe('F2'))
+    FormatoCeldas(h:Val(w:1)+1..i:FAC,Exe('F0'))
+  endif
+  IFA
+  LimitesVision(i:FAC)
+endif
+**********************************
+
+if Dialogo.Radio1=3
+  ************************
+  * TX22P
+  ************************
+  ACT(a:1, 'NrOperacion')
+  ACT(b:1, 'T0437804')
+  ACT(d:1, 'T0437806')
+  ACT(a:2, 'Especie')
+  ACT(a:3, 'Cupon Actual')
+  ACT(a:4, 'Cupon Nuevo')
+  ACT(a:5, '# MovPosEje')
+  SetFont(a:1..a:5, 2)
+
+  SetFilaActual(8)
+  ACT(a:FAC, '# Oper')
+  ACT(b:FAC, 'FechaMov')
+  ACT(c:FAC, 'Especie')
+  ACT(d:FAC, 'NrSaldo')
+  ACT(e:FAC, 'Sector')
+  ACT(f:FAC, 'Estrategia')
+  ACT(g:FAC, 'Cantidad')
+  ACT(h:FAC, 'Cup.Actual')
+  ACT(i:FAC, 'Cup.Nuevo')
+  SetFont(a:FAC..i:FAC, 2)
+  ACN(w:1, FAC)
+ 
+  SQL.ADD("Select * from "~DBO~".OPERACIONES WHERE NrOperacion='"~Val(b:1)~"' ")
+  recorrer SQL
+    DFA
+    ACN(x:1, 1)
+    ACT(b:2, fbn('Especie'))
+    ACN(b:3, fbn('Cupon1'))
+  proximo
+  if Val(x:1)=0
+    ACN(y:1, 1)
+    ACT(c:1, 'Op. No Encontrada')
+    MessageBox('Op. '~Val(b:1)~' No Encontrada.')
+  endif
+ 
+  SQL.ADD("Select * from "~DBO~".OPERACIONES WHERE NrOperacion='"~Val(d:1)~"' ")
+  recorrer SQL
+    DFA
+    ACN(x:2, 1)
+    ACT(d:2, fbn('Especie'))
+    ACN(d:3, fbn('Cupon1'))
+  proximo
+  if Val(x:2)=0
+    ACN(y:1, 1)
+    ACT(e:1, 'Op. No Encontrada')
+    MessageBox('Op. '~Val(d:1)~' No Encontrada.')
+  endif
+ 
+  if Val(y:1)=0
+    if Val(b:3)<>1
+      ACN(y:1, 1)
+      ACT(c:3, 'Cupon invalido')
+      MessageBox('Por los datos encontrados el ajuste de '~Val(b:2)~' ya fue ejecutado.')
+    endif
+  endif
+
+  if Val(y:1)=0
+    if Val(d:3)<>1
+      ACN(y:1, 1)
+      ACT(e:3, 'Cupon invalido')
+      MessageBox('Por los datos encontrados el ajuste de '~Val(d:2)~' ya fue ejecutado.')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion= '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie    = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(b:5, 1)
+      ACT(a:FAC, fbn('NrOperacion'))
+      ACD(b:FAC, fbn('FechaMov'))
+      ACT(c:FAC, fbn('Especie'))
+      ACN(d:FAC, fbn('NrSaldo'))
+      ACT(e:FAC, fbn('Sector'))
+      ACT(f:FAC, fbn('Estrategia'))
+      ACN(g:FAC, fbn('Cantidad'))
+      ACN(h:FAC, fbn('Cupon'))
+    proximo
+    if Val(b:5)=0
+      ACN(y:1, 1)
+      ACT(c:5, 'No existen MovPosEje '~Val(b:1))
+    endif
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion= '"~Val(d:1)~"' ")
+    SQL.ADD("  and Especie    = '"~Val(d:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(d:5, 1)
+      ACT(a:FAC, fbn('NrOperacion'))
+      ACD(b:FAC, fbn('FechaMov'))
+      ACT(c:FAC, fbn('Especie'))
+      ACN(d:FAC, fbn('NrSaldo'))
+      ACT(e:FAC, fbn('Sector'))
+      ACT(f:FAC, fbn('Estrategia'))
+      ACN(g:FAC, fbn('Cantidad'))
+      ACN(h:FAC, fbn('Cupon'))
+    proximo
+    if Val(d:5)=0
+      ACN(y:1, 1)
+      ACT(c:5, 'No existen MovPosEje op '~Val(d:1))
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    if Dialogo.Check1=1
+      SQL.ADD("UPDATE "~DBO~".OPERACIONES  ")
+      SQL.ADD("   SET Cupon1 = 2 ")
+      SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.NEW
+      SQL.ADD("UPDATE "~DBO~".OPERACIONES  ")
+      SQL.ADD("   SET Cupon1 = 2 ")
+      SQL.ADD("WHERE NrOperacion = '"~Val(d:1)~"' ")
+      SQL.NEW
+
+      SQL.ADD("INSERT INTO "~DBO~".MOVPOSEJE ( ")
+      SQL.ADD("FechaMov,    Cliente, ")
+      SQL.ADD("Vehiculo,    Sector, ")
+      SQL.ADD("NrSaldo,     Especie, ")
+      SQL.ADD("PrecioEj,    FechaEj, ")
+      SQL.ADD("Cantidad,    Precio, ")
+      SQL.ADD("Estrategia,  Book, ")
+      SQL.ADD("TipoNegocio, NrOperacion, ")
+      SQL.ADD("Cupon,       Tipo ) ")
+      SQL.ADD("SELECT FechaMov, Cliente, ")
+      SQL.ADD("       Vehiculo, Sector, ")
+      SQL.ADD("       NrSaldo, Especie, ")
+      SQL.ADD("       PrecioEj, FechaEj, ")
+      SQL.ADD("       Cantidad, Precio, ")
+      SQL.ADD("       Estrategia, Book, ")
+      SQL.ADD("       TipoNegocio, NrOperacion, ")
+      SQL.ADD("       2, Tipo ") 
+      SQL.ADD("  from "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.ADD("   AND Cupon       = 1 ")
+      SQL.NEW
+
+      SQL.ADD("INSERT INTO "~DBO~".MOVPOSEJE ( ")
+      SQL.ADD("FechaMov,    Cliente, ")
+      SQL.ADD("Vehiculo,    Sector, ")
+      SQL.ADD("NrSaldo,     Especie, ")
+      SQL.ADD("PrecioEj,    FechaEj, ")
+      SQL.ADD("Cantidad,    Precio, ")
+      SQL.ADD("Estrategia,  Book, ")
+      SQL.ADD("TipoNegocio, NrOperacion, ")
+      SQL.ADD("Cupon,       Tipo ) ")
+      SQL.ADD("SELECT FechaMov, Cliente, ")
+      SQL.ADD("       Vehiculo, Sector, ")
+      SQL.ADD("       NrSaldo, Especie, ")
+      SQL.ADD("       PrecioEj, FechaEj, ")
+      SQL.ADD("       Cantidad, Precio, ")
+      SQL.ADD("       Estrategia, Book, ")
+      SQL.ADD("       TipoNegocio, NrOperacion, ")
+      SQL.ADD("       2, Tipo ") 
+      SQL.ADD("  from "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(d:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(d:2)~"' ")
+      SQL.ADD("   AND Cupon       = 1 ")
+      SQL.NEW
+
+      SQL.ADD("Delete "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.ADD("   AND Cupon       = 1 ")
+      SQL.NEW
+
+      SQL.ADD("Delete "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(d:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(d:2)~"' ")
+      SQL.ADD("   AND Cupon       = 1 ")
+      SQL.NEW
+
+      ** FJL 20/04/21 - Se agrega por posiciones CTX22P generadas con CUPON c0000576 el 18/03/21 
+      SQL.ADD("Delete "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = 'C0000576' ")
+      SQL.NEW
+
+      SQL.ADD("Delete "~DBO~".TRANSACCIONES2 ")
+      SQL.ADD(" WHERE NrTrans = 'C0000576' ")
+      SQL.NEW
+     
+      SQL.EXEC
+
+    else
+      ACT(b:6, 'NO PROCESA')
+      SetFont(b:6,2)
+    endif 
+    
+    SQL.ADD("Select * from "~DBO~".OPERACIONES WHERE NrOperacion='"~Val(b:1)~"' ")
+    recorrer SQL
+      DFA
+      ACN(b:4, fbn('Cupon1'))
+    proximo
+
+    SQL.ADD("Select * from "~DBO~".OPERACIONES WHERE NrOperacion='"~Val(d:1)~"' ")
+    recorrer SQL
+      DFA
+      ACN(d:4, fbn('Cupon1'))
+    proximo
+
+   SetFilaActual(Val(w:1))
+   SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+   SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+   SQL.ADD("  and Especie     = '"~Val(b:2)~"' ")
+   SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+   recorrer SQL
+     SCN(c:5, 1)
+     ACT(aa:FAC, fbn('NrOperacion'))
+     ACD(ab:FAC, fbn('FechaMov'))
+     ACT(ac:FAC, fbn('Especie'))
+     ACN(ad:FAC, fbn('NrSaldo'))
+     ACT(ae:FAC, fbn('Sector'))
+     ACT(af:FAC, fbn('Estrategia'))
+     ACN(ag:FAC, fbn('Cantidad'))
+     ACN(i:FAC, fbn('Cupon'))
+   proximo
+   SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+   SQL.ADD("WHERE NrOperacion = '"~Val(d:1)~"' ")
+   SQL.ADD("  and Especie     = '"~Val(d:2)~"' ")
+   SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+   recorrer SQL
+     SCN(e:5, 1)
+     ACT(aa:FAC, fbn('NrOperacion'))
+     ACD(ab:FAC, fbn('FechaMov'))
+     ACT(ac:FAC, fbn('Especie'))
+     ACN(ad:FAC, fbn('NrSaldo'))
+     ACT(ae:FAC, fbn('Sector'))
+     ACT(af:FAC, fbn('Estrategia'))
+     ACN(ag:FAC, fbn('Cantidad'))
+     ACN(i:FAC, fbn('Cupon'))
+   proximo
+  endif
+ 
+  SetFont(b:1..e:5,1)
+  FormatoCeldas(b:3..e:5,Exe('F0'))
+  if FAC>Val(w:1)
+    SetFont(a:Val(w:1)+1..ag:FAC,1)
+    FormatoCeldas(d:Val(w:1)+1..d:FAC,Exe('F0'))
+    FormatoCeldas(g:Val(w:1)+1..g:FAC,Exe('F2'))
+    FormatoCeldas(h:Val(w:1)+1..i:FAC,Exe('F0'))
+  endif
+  IFA
+  LimitesVision(i:FAC)
+endif
+
+if Dialogo.Radio1=4
+  ************************
+  * TC21P
+  ************************
+  ACT(a:1, 'Nr Transaccion')
+  ACT(b:1, 'C0000568')
+  ACT(a:2, 'Especie')
+  ACT(a:3, 'TipoTr')
+  ACT(a:4, 'Cupon')
+  ACT(a:5, '# MovPosEje')
+  ACT(a:6, '# A modi')
+  SetFont(a:1..a:6, 2)
+
+  SetFilaActual(8)
+  ACT(a:FAC, '# Oper')
+  ACT(b:FAC, 'FechaMov')
+  ACT(c:FAC, 'Especie')
+  ACT(d:FAC, 'NrSaldo')
+  ACT(e:FAC, 'Sector')
+  ACT(f:FAC, 'Estrategia')
+  ACT(g:FAC, 'Cantidad')
+  ACT(h:FAC, 'Cup.Actual')
+  ACT(i:FAC, 'Cup.Nuevo')
+  SetFont(a:FAC..i:FAC, 2)
+  ACN(w:1, FAC)
+ 
+  SQL.ADD("Select * from "~DBO~".TRANSACCIONES2 WHERE NrTrans='"~Val(b:1)~"' ")
+  recorrer SQL
+    DFA
+    ACN(x:1, 1)
+    ACT(b:2, fbn('Especie'))
+    ACT(b:3, fbn('TipoTr2'))
+    ACN(b:4, fbn('Cupon1'))
+  proximo
+  if Val(x:1)=0
+    ACN(y:1, 1)
+    ACT(c:1, 'Transaccion No Encontrada')
+    MessageBox('Transaccion '~Val(b:1)~' No Encontrada.')
+  endif
+ 
+  if Val(y:1)=0
+    if Val(b:4)<>9
+      ACN(y:1, 1)
+      ACT(c:4, 'Cupon invalido')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie     = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(b:5, 1)
+      ACT(a:FAC, fbn('NrOperacion'))
+      ACD(b:FAC, fbn('FechaMov'))
+      ACT(c:FAC, fbn('Especie'))
+      ACN(d:FAC, fbn('NrSaldo'))
+      ACT(e:FAC, fbn('Sector'))
+      ACT(f:FAC, fbn('Estrategia'))
+      ACN(g:FAC, fbn('Cantidad'))
+      ACN(h:FAC, fbn('Cupon'))
+      if fbn('Cupon')=10
+        SCN(b:6, 1)
+        ACT(j:FAC, 'Modi')
+      endif
+    proximo
+    if Val(b:5)=0
+      ACN(y:1, 1)
+      ACT(c:5, 'No existen MovPosEje')
+      MessageBox('No existen MOVPOSEJE parala transaccion '~Val(b:1)~' ya fue ejecutado.')
+    endif
+    if Val(b:6)=0
+      ACN(y:1, 1)
+      ACT(c:6, 'No existen MovPosEje a modificar')
+      MessageBox('Por los datos encontrados el ajuste de '~Val(b:2)~' ya fue ejecutado.')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    if Dialogo.Check1=1
+
+      SQL.ADD("INSERT INTO "~DBO~".MOVPOSEJE ( ")
+      SQL.ADD("FechaMov,    Cliente, ")
+      SQL.ADD("Vehiculo,    Sector, ")
+      SQL.ADD("NrSaldo,     Especie, ")
+      SQL.ADD("PrecioEj,    FechaEj, ")
+      SQL.ADD("Cantidad,    Precio, ")
+      SQL.ADD("Estrategia,  Book, ")
+      SQL.ADD("TipoNegocio, NrOperacion, ")
+      SQL.ADD("Cupon,       Tipo ) ")
+      SQL.ADD("SELECT FechaMov, Cliente, ")
+      SQL.ADD("       Vehiculo, Sector, ")
+      SQL.ADD("       NrSaldo, Especie, ")
+      SQL.ADD("       PrecioEj, FechaEj, ")
+      SQL.ADD("       Cantidad, Precio, ")
+      SQL.ADD("       Estrategia, Book, ")
+      SQL.ADD("       TipoNegocio, NrOperacion, ")
+      SQL.ADD("       8, Tipo ") 
+      SQL.ADD("  from "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.ADD("   AND Cupon       = 10 ")
+      SQL.NEW
+
+      SQL.ADD("Delete "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.ADD("   AND Cupon       = 10 ")
+      SQL.NEW
+
+      SQL.EXEC
+
+    else
+      ACT(b:6, 'NO PROCESA')
+      SetFont(b:6,2)
+    endif 
+    
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie     = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(c:5, 1)
+      ACT(aa:FAC, fbn('NrOperacion'))
+      ACD(ab:FAC, fbn('FechaMov'))
+      ACT(ac:FAC, fbn('Especie'))
+      ACN(ad:FAC, fbn('NrSaldo'))
+      ACT(ae:FAC, fbn('Sector'))
+      ACT(af:FAC, fbn('Estrategia'))
+      ACN(ag:FAC, fbn('Cantidad'))
+      ACN(i:FAC, fbn('Cupon'))
+    proximo
+  endif
+ 
+  SetFont(b:1..c:5,1)
+  FormatoCeldas(b:3..c:5,Exe('F0'))
+  if FAC>Val(w:1)
+    SetFont(a:Val(w:1)+1..ag:FAC,1)
+    FormatoCeldas(d:Val(w:1)+1..d:FAC,Exe('F0'))
+    FormatoCeldas(g:Val(w:1)+1..g:FAC,Exe('F2'))
+    FormatoCeldas(h:Val(w:1)+1..i:FAC,Exe('F0'))
+  endif
+  IFA
+  LimitesVision(j:FAC)
+endif
+
+if Dialogo.Radio1=5
+  ************************
+  * TO21P
+  ************************
+  ACT(a:1, 'Nr Transaccion')
+  ACT(b:1, 'C0000522')
+  ACT(a:2, 'Especie')
+  ACT(a:3, 'TipoTr')
+  ACT(a:4, 'Cupon')
+  ACT(a:5, '# MovPosEje')
+  ACT(a:6, '# A modi')
+  SetFont(a:1..a:6, 2)
+
+  SetFilaActual(8)
+  ACT(a:FAC, '# Oper')
+  ACT(b:FAC, 'FechaMov')
+  ACT(c:FAC, 'Especie')
+  ACT(d:FAC, 'NrSaldo')
+  ACT(e:FAC, 'Sector')
+  ACT(f:FAC, 'Estrategia')
+  ACT(g:FAC, 'Cantidad')
+  ACT(h:FAC, 'Cup.Actual')
+  ACT(i:FAC, 'Cup.Nuevo')
+  SetFont(a:FAC..i:FAC, 2)
+  ACN(w:1, FAC)
+ 
+  SQL.ADD("Select * from "~DBO~".TRANSACCIONES2 WHERE NrTrans='"~Val(b:1)~"' ")
+  recorrer SQL
+    DFA
+    ACN(x:1, 1)
+    ACT(b:2, fbn('Especie'))
+    ACT(b:3, fbn('TipoTr2'))
+    ACN(b:4, fbn('Cupon1'))
+  proximo
+  if Val(x:1)=0
+    ACN(y:1, 1)
+    ACT(c:1, 'Transaccion No Encontrada')
+    MessageBox('Transaccion '~Val(b:1)~' No Encontrada.')
+  endif
+ 
+  if Val(y:1)=0
+    if Val(b:4)<>8
+      ACN(y:1, 1)
+      ACT(c:4, 'Cupon invalido')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie     = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(b:5, 1)
+      ACT(a:FAC, fbn('NrOperacion'))
+      ACD(b:FAC, fbn('FechaMov'))
+      ACT(c:FAC, fbn('Especie'))
+      ACN(d:FAC, fbn('NrSaldo'))
+      ACT(e:FAC, fbn('Sector'))
+      ACT(f:FAC, fbn('Estrategia'))
+      ACN(g:FAC, fbn('Cantidad'))
+      ACN(h:FAC, fbn('Cupon'))
+      if fbn('Cupon')=9
+        SCN(b:6, 1)
+        ACT(j:FAC, 'Modi')
+      endif
+    proximo
+    if Val(b:5)=0
+      ACN(y:1, 1)
+      ACT(c:5, 'No existen MovPosEje')
+      MessageBox('No existen MOVPOSEJE parala transaccion '~Val(b:1)~' ya fue ejecutado.')
+    endif
+    if Val(b:6)=0
+      ACN(y:1, 1)
+      ACT(c:6, 'No existen MovPosEje a modificar')
+      MessageBox('Por los datos encontrados el ajuste de '~Val(b:2)~' ya fue ejecutado.')
+    endif
+  endif
+
+  if Val(y:1)=0
+    * No hubo errores
+    if Dialogo.Check1=1
+
+      SQL.ADD("INSERT INTO "~DBO~".MOVPOSEJE ( ")
+      SQL.ADD("FechaMov,    Cliente, ")
+      SQL.ADD("Vehiculo,    Sector, ")
+      SQL.ADD("NrSaldo,     Especie, ")
+      SQL.ADD("PrecioEj,    FechaEj, ")
+      SQL.ADD("Cantidad,    Precio, ")
+      SQL.ADD("Estrategia,  Book, ")
+      SQL.ADD("TipoNegocio, NrOperacion, ")
+      SQL.ADD("Cupon,       Tipo ) ")
+      SQL.ADD("SELECT FechaMov, Cliente, ")
+      SQL.ADD("       Vehiculo, Sector, ")
+      SQL.ADD("       NrSaldo, Especie, ")
+      SQL.ADD("       PrecioEj, FechaEj, ")
+      SQL.ADD("       Cantidad, Precio, ")
+      SQL.ADD("       Estrategia, Book, ")
+      SQL.ADD("       TipoNegocio, NrOperacion, ")
+      SQL.ADD("       7, Tipo ") 
+      SQL.ADD("  from "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.ADD("   AND Cupon       = 9 ")
+      SQL.NEW
+
+      SQL.ADD("Delete "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:1)~"' ")
+      SQL.ADD("   AND Especie     = '"~Val(b:2)~"' ")
+      SQL.ADD("   AND Cupon       = 9 ")
+      SQL.NEW
+
+      SQL.EXEC
+
+    else
+      ACT(b:6, 'NO PROCESA')
+      SetFont(b:6,2)
+    endif 
+    
+    SetFilaActual(Val(w:1))
+    SQL.ADD("Select * from "~DBO~".MOVPOSEJE ")
+    SQL.ADD("WHERE NrOperacion = '"~Val(b:1)~"' ")
+    SQL.ADD("  and Especie     = '"~Val(b:2)~"' ")
+    SQL.ADD(" order by Especie,NrSaldo,Sector,Estrategia,Cupon ")
+    recorrer SQL
+      SCN(c:5, 1)
+      ACT(aa:FAC, fbn('NrOperacion'))
+      ACD(ab:FAC, fbn('FechaMov'))
+      ACT(ac:FAC, fbn('Especie'))
+      ACN(ad:FAC, fbn('NrSaldo'))
+      ACT(ae:FAC, fbn('Sector'))
+      ACT(af:FAC, fbn('Estrategia'))
+      ACN(ag:FAC, fbn('Cantidad'))
+      ACN(i:FAC, fbn('Cupon'))
+    proximo
+  endif
+ 
+  SetFont(b:1..c:5,1)
+  FormatoCeldas(b:3..c:5,Exe('F0'))
+  if FAC>Val(w:1)
+    SetFont(a:Val(w:1)+1..ag:FAC,1)
+    FormatoCeldas(d:Val(w:1)+1..d:FAC,Exe('F0'))
+    FormatoCeldas(g:Val(w:1)+1..g:FAC,Exe('F2'))
+    FormatoCeldas(h:Val(w:1)+1..i:FAC,Exe('F0'))
+  endif
+  IFA
+  LimitesVision(j:FAC)
+endif
+
+ACO(1,10)
+ACO(3,10)
+ACO(5,10)
+
+******************************************************
+******************************************************
+
+** La version anterior esta en F:\BofA\V6 Standard\Issues\Errores varios PosPor\Ev EVETEN Anterior.txt
+
+******************************************************
+ENDIF

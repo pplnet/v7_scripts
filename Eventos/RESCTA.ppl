@@ -1,0 +1,41 @@
+﻿HOJAVISIBLE(NO)
+CrearDialogo
+  Fecha1      :'Fecha Desde'       ;2;1;;;;Dialogo.Fecha1<>0 y Dialogo.Fecha1 <= Fsys;'Debe Ingresar una Fecha Desde';NO;PriDeMes(Fsys-30,SI)
+  Fecha2      :'Fecha Hasta'     ;;;;;;Dialogo.Fecha2<>0 y Dialogo.Fecha2 >= Dialogo.Fecha1 y Dialogo.Fecha2 <= Fsys;'Debe Ingresar una Fecha Hasta valida';NO;FinDeMes(Dialogo.fecha1,SI);FinDeMes(Dialogo.fecha1,SI)
+  Radio1      :"|Pantalla|PDF|Mail"   ;;;;;;;;;1;;;;;
+  Radio2      :"|Cliente|Lista"  ;;;;;;;;;0;;;;;
+  Cliente1    : "Cliente"        ;;;;;Dialogo.Radio2=0;(Dialogo.Radio2=0 y NoVacio(Dialogo.Cliente1)) o Dialogo.Radio2=1;'Ingresar Cliente';NO;
+  String1     :'Path Destino'    ;;;;NO;;;;;VAR('PATHRESCT2')
+  Lista1      : 'Clientes'       ;1;2;;;Dialogo.Radio2=1;;;;;;SQLSet("select Codigo from "~DBO~".CLientes  where Status='HAB'  order by Jerarquia")   
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+** AA 09-05-2022
+** verificar si solo hay que tomar los clientes que tengan como depositante al Vehiculo
+
+SQL.ADD("Select Codigo ")
+SQL.ADD("FROM "~DBO~".CLIENTES C ")
+if Dialogo.Radio2=0
+   SQL.ADD("   Where Codigo = '"~(Dialogo.Cliente1)~"' ")
+else
+   If NoVacio(Dialogo.Lista1)
+      SQL.ADD("   Where Codigo In ("~Pipe2Comillas(Dialogo.Lista1)~")")
+   Else
+      SQL.ADD("Where Status='HAB' ")
+   #ifdef MLASA
+      SQL.ADD("and Jerarquia like '"~VAR('JERCLIENTE')~"%' or  Jerarquia like '"~VAR('JERVINCULA')~"%' order by Jerarquia   ")
+   #else 
+   SQL.ADD("and (select Top(1) 1  from "~DBO~".CUENTAS CT Where CT.Cliente = C.Codigo and CT.Comitente = '"~VAR('VEHICULODE')~"' and CT.TipoCuenta = 'CUS' and CT.Mercado in ('"~VAR('RESCTACUS')~"') and CT.NrDepositante is not Null)=1 ")  
+      SQL.ADD("and Jerarquia not like '011%' and  Jerarquia not like '007%' and  Jerarquia not like '008001%' order by Jerarquia   ")
+   #endif   
+   Endif
+endif
+watch(sql.batch)
+Recorrer SQL
+  
+   LinkearHoja('RESCTA',1,Cliente1=FBN['Codigo'],Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,Radio1=Dialogo.Radio1,String1=Dialogo.String1)
+
+Proximo

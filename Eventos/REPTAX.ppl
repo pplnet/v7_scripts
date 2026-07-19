@@ -1,0 +1,270 @@
+﻿*- Este evento toma tasas estimadas o reales de la
+*- tabla de cotizaciones, las impacta en las operaciones y recalcula
+*- intereses e impuestos
+HojaVisible(SI)
+
+MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1       : "Fecha Vigencia"    ;;;;;;Dialogo.Fecha1<>0 y Dialogo.Fecha1<=Fsys;'Fecha Vigencia Invalida';NO;Fsys;
+  NrOperacion1 : "Operacion"         ;;;;;;
+  Radio1       : 'Tipo|Reales|Simuladas' ;;;;;NO;;;;0;;;
+  Radio2       : 'Recalcula|NO|SI'       ;;;;;NO;;;;0;;;
+  Radio3       : 'Actualiza|NO|SI'       ;;;;;;;;;1;;;
+  Lista2       : 'Tipo Op.'              ; ;1;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo In ('SEPTMV','SEPVMV') ");
+  Lista1       : "Vehiculo"              ;2;2;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")); 
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,6,")
+CrearFont(5,"Arial,12,BI")
+
+ACT(ls:1000, IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet("Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSet(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo='"~UsuarioActivo~"' AND U.Vehiculo=V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")))
+ACT(ls:1100, SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo In ('SEPTMV','SEPVMV')"))
+
+SetFilaActual(1)
+
+****---(.'REPTAS1'.)   Muestra un CrearListBox si es que encontro datos, sino da un msg de error y cancela
+
+ACT(d:FAC  ,"Informe de Reseto de Tasas del "~Dialogo.Fecha1)
+ACT(e:FAC+1," T A S A S     E S T I M A D A S")
+ACT(e:FAC+1," T A S A S     D E F I N I T I V A S")
+ACT(d:FAC+2," Recalcula : "~IIF(Dialogo.Radio2=0,'NO','SI') )
+ACT(d:FAC+3," Actualiza : "~IIF(Dialogo.Radio3=0,'NO','SI') )
+
+SetFont(a:fac..e:fac+5,3)
+
+SetFilaActual(fac+6)
+if NoVacio(Dialogo.NrOperacion1)
+   ACT(a:fac, 'Operacion: '~Dialogo.NrOperacion1)
+else
+   ACT(a:fac, 'Operacion: Todas')
+endif
+if NoVacio(Dialogo.Lista2)
+   ACT(a:fac+1, 'Tipo Op.: '~Dialogo.Lista2)
+else
+   ACT(a:fac+1, 'Tipo Op.: Todas')
+endif
+if NoVacio(Dialogo.Lista1)
+   ACT(a:fac+2, 'Vehiculos : '~Dialogo.Lista1)
+else
+   ACT(a:fac+2, 'Vehiculos : '~IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")))
+endif
+SetFont(a:fac..a:fac+2,2)
+SetFilaActual(fac+2)
+
+ACT(a:FAC, 'Tasa Tipo')
+ACT(b:FAC, 'TipoOp')
+ACT(c:FAC, 'NrOperacion')
+ACT(d:FAC, 'Vehiculo')
+ACT(e:FAC, 'Entidad')
+ACT(f:FAC, 'FInicio')
+ACT(g:FAC, 'FFin')
+ACT(h:FAC, 'Plazo')
+ACT(i:FAC, 'Especie')
+ACT(j:FAC, 'V.Nominal')
+ACT(k:FAC, 'Imp.Amort.')
+ACT(l:FAC, '% Tasa')
+ACT(m:FAC, 'Spread')
+ACT(n:FAC, 'Tasa Total')
+ACT(o:FAC, 'Interes')
+ACT(p:FAC, 'WHT')
+ACT(q:FAC, 'IVA')
+ACT(r:FAC, 'CEC Total')
+ACT(s:FAC, 'CEC Var')
+ACT(t:FAC, 'CEN Total')
+ACT(u:FAC, 'CEN Var')
+ACT(v:FAC, 'Imp.Interes')
+
+ACT(x:FAC, 'IVA.CEN')
+ACT(y:FAC, 'Cs_Fin_CEC')
+ACT(z:FAC, 'Monto')
+ACT(aa:FAC, 'Monto Total')
+ACT(ab:fac, 'Interes Total')
+ACT(ac:fac, 'Impuesto Extr.')
+ACT(ad:fac, 'CEN Equiv')
+ACT(ae:fac, 'Resultado')
+ACT(af:fac, 'Cuota')
+
+*- av: Ut IVA aw: UT WH
+ACT(av:fac, 'Tasa Int IVA')
+ACT(aw:fac, 'Tasa Int WH')
+
+SetFont(a:fac..ah:fac,2)
+AgregarMarco(a:FAC..ah:FAC,2,0,Exe('COLOR'))
+ifa
+
+*- re1: 0 Real 1 Simulado
+ACN(re1,Dialogo.Radio1)
+
+
+*- Operaciones Multiple Vto
+SQL.ADD("SELECT O.TipoTasa,O.TipoOp,O.NrOperacion,C.NrCuota,O.MB1,O.Precio3 OPrecio3,O.Precio2 OPrecio2,")
+SQL.ADD("O.MB3,O.ImpGastos2,O.RB8,O.TotalAux1,O.RB9,O.PlazoGracia,O.Vehiculo1,")
+SQL.ADD("O.RB6,O.CB10,O.MB1,O.Precio3,O.RB7,O.RB5,O.TasaPrecan,O.Spread,O.Cliente1,")
+SQL.ADD("O.TotalAux2,O.Especie,O.ImpGastos1,O.TasaImp1,O.IntDevengados1,O.DeltaTasa,O.FechaOp,O.FechaVto,O.Plazo,O.Cantidad,")
+SQL.ADD("O.PrecioEj,O.ImpComCor1,O.ImpComCor2,O.FechaVto2,O.TotalBrutoCli2,O.TotalComisiones,O.TotalIntereses,O.InteresesCorr,O.ContraEspecie,")
+SQL.ADD("O.TCComCor1,C.Total7 Cantidad1,C.Total8 Cantidad2,C.Total5,C.Plazo1,C.Cantidad5,C.Cantidad2,C.Plazo3,")
+SQL.ADD("C.Tasa2, C.Precio4,C.Fecha1,C.Fecha2,C.Total6,C.Precio3,C.Cantidad7,C.Check1,C.Cantidad4,C.Tasa3, ")
+SQL.ADD("C.Total3,C.Total4,C.Fecha5,C.Fecha6,' ' as Pata,C.Cantidad3,C.Cantidad4,O.OperacionRef,O.TotalAux4 ")
+SQL.ADD(" from  "~DBO~".CUOTAS C, "~DBO~".OPERACIONES  O ")
+SQL.ADD(" where O.NrOperacion = C.NrOperacion ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("       AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+   SQL.ADD("       AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("       AND O.TipoOp IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+ELSE
+   SQL.ADD("       AND O.TipoOp IN ("~Pipe2Comillas(Val(LS:1100))~") ")
+ENDIF
+IF NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+ENDIF
+IF Dialogo.Radio1=1 y Dialogo.Radio2=0
+   * Tasas Simuladas -> Que no se haya ingresado ya la tasa simulada
+   SQL.ADD(" and ((C.Check10 Is Null or C.Check10='' or C.Check10='0') and (((C.Precio1=0  or C.Precio1 Is Null or  C.Precio1='') and O.TipoOp Not In ('MMPCCM','MMFIMV','MMSIMV')) or ((C.Precio2=0  or C.Precio2 Is Null or  C.Precio2='') and O.TipoOp In ('MMPCCM','MMFIMV','MMSIMV')) )) ")
+ENDIF
+SQL.ADD("       and O.TipoOp In ('SEPTMV','SEPVMV') ")
+SQL.ADD("       and O.FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and C.Fecha4 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and O.TipoTasa<>'FIJA' ")
+SQL.ADD(" Order By 1,2,3,4 ")
+
+act(ct1,'')
+acn(ct2,0)
+act(ct3,'')
+
+Recorrer SQL
+  *- Por cada cambio de tipo de tasa Selecciono de la tabla de cotizaciones la cotizacion
+  If Not EqStr(val(ct1),FBN['TipoTasa']) y val(ct2)<>0
+     Ifa
+     ACT(a:fac,'Totales '~val(ct1))
+  EndIf
+
+  If Not EqStr(val(ct1),FBN['TipoTasa']) 
+     * Recupero la Tasa 
+     ACN(TS:1, 0)
+     ***---acn(ts1,Cotizacion(FBN['TipoTasa'],,,,Dialogo.Fecha1,1) )
+     SQL.ADD(" Select T.Valor1 From "~DBO~".TASASDIA T ")
+     SQL.ADD(" Where TipoTasa = '"~fbn('TipoTasa')~"' ")
+     SQL.ADD(" AND Fecha = (Select Max(Fecha) From "~DBO~".TASASDIA T1 ")
+     SQL.ADD("              Where T.TipoTasa = T1.TipoTasa ")
+     SQL.ADD("              AND T1.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+     Recorrer SQL
+         DFA
+         ACN(TS:1, fbn('Valor1'))
+     Proximo
+     acn(ct1,FBN['TipoTasa'])
+  EndIf
+  
+  Message('Recorriendo '~FBN['TipoTasa']~' '~FBN['TipoOp']~' '~FBN['NrOperacion'])
+  ACT(a:fac, FBN['TipoTasa'])
+  ACT(b:fac, FBN['TipoOp'])
+  ACT(c:fac, FBN['NrOperacion'])
+  ACLO(c:fac, FBN['NrOperacion'])
+  ACT(d:fac, FBN['Vehiculo1'])
+  ACT(e:fac, FBN['Cliente1'])
+  ACT(i:fac, FBN['Especie'])
+
+   ACD(f:fac, FBN['Fecha1'])
+   ACD(g:fac, FBN['Fecha2'])
+   ACN(h:fac, FBN['Plazo1'])
+
+   *- j: VN k: Amor
+   ACN(j:fac, FBN['Cantidad2'])
+   ACN(k:fac, FBN['Cantidad1'])
+   ACN(l:fac, VAL(ts1))
+   ACN(af:fac,FBN['NrCuota'] )
+
+   * q:fac=iva, p:fac=wh, o:fac=interes, ab:fac=interes total, z:fac=monto, aa:fac=monto total, r:fac=cec total
+   * t:fac=cen total, s:fac=cec imp var, u:fac=cen variable, ac:fac=impuesto extr
+   * v:fac: Impto.Interes x:fac: Imp.IVA.CEN y:fac: Imp_Cs_Fin_CEC
+
+   ACT(i3,val(c:fac))
+
+   If EQSTR(FBN['TipoOp'], 'SEPTMV')
+      ACN(av:fac, Val(TS:1))
+      (.'RTSEPTMV'.)
+      If Dialogo.Radio3=1
+         (.'RTUPSEPTMV'.)
+      EndIF
+   ELSE
+      If EQSTR(FBN['TipoOp'], 'SEPVMV')
+         ACN(av:fac, Val(TS:1))
+         (.'RTSEPVMV'.)
+         If Dialogo.Radio3=1
+            (.'RTUPSEPVMV'.)
+         EndIF
+      ENDIF
+   EndIf
+
+   If Dialogo.Radio3=1
+      *- Actualiza
+      *-- Calculo de TTN para la Operacion y Display  
+      EjecutarEvento('TTNOP',NrOperacion1=val(c:fac),Entero1=val(af:fac),NrOperacion2='',Lista1='')
+ 
+      If NoVacio(val(ta1))
+         If val(af:fac)=0 
+            SQL.ADD("SELECT "~val(ta1)~" as TTN FROM "~DBO~".OPERACIONES Where ")
+            SQL.ADD("NrOperacion = '"~val(c:fac)~"' ")
+         Else
+            SQL.ADD("SELECT "~val(ta1)~" as TTN FROM "~DBO~".CUOTAS Where ")
+            SQL.ADD("NrOperacion = '"~val(c:fac)~"'  and NrCuota="~Fstr(val(af:fac),0,0)~"  ")
+         EndIf
+   
+         Recorrer SQL
+            dfa
+            ACN(n:fac,FBN['TTN'])
+         Proximo
+      EndIf
+
+      ACT(i3,val(c:fac))
+      (.'MODIINSTAN'.)      
+      ***---SQL.ActualizarMovimientos(val(c:fac),SI)
+      ***---Movimientos y Devengados
+      SQL.ActualizarMovimientos3(Val(c:fac),SI,NO,NO,NO,SI)
+      SQL.EXEC
+   EndIf
+
+   SetFont(a:fac..ae:fac,1)
+   FormatoCeldas(h:fac,EXE('F0'))
+Proximo
+
+If NoVacio(val(ct1))
+
+   FijarFila(10)
+   FijarCol(4)
+
+   Recorrer&i 1,9
+      ACO(&i,7)
+   Proximo
+
+   Recorrer&i 10,30
+     ACO(&i,9)
+   Proximo
+   ACO(23,0)
+   SetFilaActual(fac+2)
+
+   ACT(a:fac, 'FIN DEL INFORME')
+ 
+   ACT(xx:3,VAR('PATHREPTAS')~'REPTAS'~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".XLS")
+
+   ExportarXLS(a:1..ah:fac, a1..ah:fac, val(xx3))
+
+   SetFont(a:fac, 2)
+   SetMargins(0, 0, 0, 0)
+   SetPrintFit(3, 80)
+   LimitesVision(ae:fac)
+   Impresion(1,2)
+
+***---   GrabarPMG('REPTAS', Dialogo.Radio1~Dialogo.Entero1~Dialogo.Fecha1~Dialogo.NrOperacion1~Dialogo.Radio2~Dialogo.Radio3~Dialogo.Lista2~Dialogo.Lista1)
+Else
+   HojaVisible(NO)
+EndIf

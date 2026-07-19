@@ -1,0 +1,317 @@
+﻿*ModoReproceso(ConDialogo)
+CrearDialogo
+  Vehiculo2  : 'Grupo'                   ; 1;1;;Vacio(Dialogo.Lista1);;;;;;;;;;"TipoVehiculo <> 'DIV'";
+  Lista1     : 'Vehiculos'               ; 2;1;;Vacio(Dialogo.Vehiculo2);;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where TipoVehiculo = 'DIV'"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"'"));;;;;
+  Lista2     : 'Tipos Book'              ; 3;1;;;;;;;;;SQLSET("Select Codigo From "~DBO~".TIPOSBOOK");
+  Lista3     : 'Books'                   ;-3;2;;;;;;;;;iif(Vacio(Dialogo.Lista2),SQLSET("Select Codigo From "~DBO~".BOOKS"),SQLSET("Select Codigo From "~DBO~".BOOKS where TipoBook in ("~Pipe2Comillas(Dialogo.Lista2)~") "));
+  Lista4     : 'Especies'                ;-2;1;
+  Fecha1     : 'Fecha'                   ;-1;1;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha Desde';NO;FSys
+  Entero1    : 'NrSaldo'                 ; 0;1;;;;;;;
+  Radio1     : 'Expresado|Pesos|Dolares' ; 1;1;;;;;;;0
+  Radio2     : 'Por|Tit|Fon|FX'          ; 2;1;;;;;;;0;
+  Check1     : 'Resumido'                ; 3;1;;;;;;;0;
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+*-- Veo solamente los tipos seleccionados
+SetListaClaves(2)
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+  ACT(r:1,Dialogo.Lista1)
+Else
+  If NoVacio(UsrVehiculos(UsuarioActivo))
+    ACT(r:1, SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  EndIf
+EndIf
+
+if Dialogo.Radio1=0
+  ACT(r:2, 'ARP')
+else
+  ACT(r:2, 'USD')
+endif
+
+If NoVacio(Dialogo.Lista2)
+  If NoVacio(Dialogo.Lista3)
+    ACT(r:3, SQLSET("Select Codigo From "~DBO~".BOOKS Where TipoBook in ("~Pipe2Comillas(Dialogo.Lista2)~") and Codigo in ("~Pipe2Comillas(Dialogo.Lista3)~") "))
+  else
+    ACT(r:3, SQLSET("Select Codigo From "~DBO~".BOOKS Where TipoBook in ("~Pipe2Comillas(Dialogo.Lista2)~") "))
+  endif
+Else
+  If NoVacio(Dialogo.Lista3)
+    ACT(r:3, SQLSET("Select Codigo From "~DBO~".BOOKS Where Codigo in ("~Pipe2Comillas(Dialogo.Lista3)~") "))
+  EndIf
+EndIf
+
+ACN(r:4, 0)
+ACN(r:4, SQL("Select 1 from "~DBO~".VARIABLES where Codigo='MESINIEJE' "))
+if Val(r:4)=0
+  ACN(r:5, 1)
+else
+  ACN(r:5, VAR('MESINIEJE'))
+endif
+if Val(r:5)<1 or Val(r:5)>12
+  ACN(r:5, 1)
+endif
+if Mes(Dialogo.Fecha1)>=Val(r:5)
+  ACT(r:6, '01/'~Pad0(FStr(Val(r:5),1,0),2)~'/'~FStr(Anio(Dialogo.Fecha1),4,0))
+else
+  ACT(r:6, '01/'~Pad0(FStr(Val(r:5),1,0),2)~'/'~FStr(Anio(Dialogo.Fecha1)-1,4,0))
+endif
+ACD(r:7, Fecha(Val(r:6)))
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+SetFilaActual(FAC+3)
+
+ACT(i:2,'Fecha : '~Var('FECHASYS'))
+SetFont(i:2..i:2,1)
+
+ACT(a:FAC, "Calculo TIR Reporte de Cartera")
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(FAC+2)
+
+if NoVacio(Dialogo.Vehiculo2)
+  ACT(a:FAC, 'Grupo :')
+  ACT(b:FAC, Pipe2Comillas(Dialogo.Vehiculo2))
+else
+  if NoVacio(Dialogo.Lista1)
+    ACT(a:FAC, 'Vehiculo/s :') 
+    ACT(b:FAC, Dialogo.Lista1) 
+  else 
+    ACT(a:FAC, 'Vehiculos :')
+    ACT(b:FAC, 'Todos')
+  endif
+endif
+
+ACT(a:FAC+1, 'Especies :')
+ACT(b:FAC+1, Dialogo.Lista4)
+
+*ACT(a:FAC+2, 'Book :')
+*if NoVacio(Val(r:3))
+*  ACT(b:FAC+2, Val(r:3))
+*else
+*  ACT(b:FAC+2, 'Todos')
+*endif
+ACT(a:FAC+2, 'Tipos Book :')
+If NoVacio(Dialogo.Lista2)
+  ACT(b:FAC+2, Dialogo.Lista2)
+else
+  ACT(b:FAC+2, 'Todos')
+endif
+ACT(a:FAC+3, 'Books:')
+if NoVacio(Dialogo.Lista3)
+  ACT(b:FAC+3, Dialogo.Lista3)
+else
+  ACT(b:FAC+3, 'Todos')
+endif
+
+ACT(a:FAC+4, 'Expresado en :')
+ACT(b:FAC+4, IIF(Dialogo.Radio1=0,'Pesos','Dolares'))
+
+ACT(a:FAC+5, 'Fecha :')
+ACT(b:FAC+5, Dialogo.Fecha1)
+
+ACT(a:FAC+6, 'Producto :')
+ACT(b:FAC+6, iif(Dialogo.Radio2=0,'Titulos',iif(Dialogo.Radio2=1,'Fondos',iif(Dialogo.Radio2=2,'Monedas','Otro'))))
+
+if Dialogo.Check1=0
+  ACT(a:FAC+7, 'Detallado')
+else
+  ACT(a:FAC+7, 'Resumido')
+endif
+
+SetFont(a:fac..N:FAC+8,2)
+
+SetFilaActual(FAC+10)
+
+ACT(a:FAC, 'Fecha')
+ACT(b:FAC, 'Vehiculo')
+ACT(c:FAC, 'Book')
+ACT(d:FAC, 'Especie')
+ACT(e:FAC, 'Cupon')
+ACT(f:FAC, 'Concepto')
+ACT(g:FAC, 'Cantidad')
+ACT(h:FAC, 'Precio')
+ACT(i:FAC, 'Importe')
+ACT(k:FAC, 'Fecha Num')
+ACT(l:FAC, '# Oper.')
+ACT(m:FAC, 'Tipo Op.')
+ACT(n:FAC, '# Saldo')
+ACT(o:FAC, 'Fecha Real')
+ACT(p:FAC, 'Cot.Merc.')
+ACT(q:FAC, 'Signo')
+ACT(r:FAC, 'Moneda')
+ACT(s:FAC, 'TC')
+ACT(t:FAC, 'CB7')
+ACT(u:FAC, 'Reg.fecha')
+
+SetFont(a:FAC..u:FAC,2)
+AgregarMarco(a:FAC..i:FAC,1,2,Exe('COLOR'))
+
+ACN(w1, FAC)
+
+* Lista Especies
+ACT(x:1, Dialogo.Lista4)
+* Numero Saldo
+ACN(x:2, Dialogo.Entero1)
+(.'RCARTIRQ'.)
+if DIalogo.Check1=0
+  * Detallada
+  recorrer SQL
+    ACD(a:FAC, fbn('FechaOrd'))
+    ACT(b:FAC, fbn('Vehic'))
+    ACT(c:FAC, fbn('Book'))
+    ACT(d:FAC, fbn('Especie'))
+    if NoVacio(fbn('Cupon'))
+      ACN(e:FAC, fbn('Cupon'))
+    endif
+    ACN(q:FAC, fbn('Signo'))
+
+    if EqStr(fbn('Tipo'),'1')
+      ACT(f:FAC, 'Saldo Inicial')
+      ACN(g:FAC, fbn('Cantidad'))
+      ACN(h:FAC, fbn('Precio'))
+    endif
+    if EqStr(fbn('Tipo'),'2')
+      if Dialogo.Radio2=0
+        if fbn('Cantidad')>0
+          ACT(f:FAC, 'Compra')
+        else
+          ACT(f:FAC, 'Venta')
+        endif
+      else
+        if Dialogo.Radio2=1
+          if fbn('Cantidad')>0
+            ACT(f:FAC, 'Suscripcion')
+          else
+            ACT(f:FAC, 'Rescate')
+          endif
+        else
+          if fbn('Cantidad')>0
+            ACT(f:FAC, 'Compra')
+          else
+            ACT(f:FAC, 'Venta')
+          endif
+        endif
+      endif
+      ACN(g:FAC, fbn('Cantidad'))
+      ACN(h:FAC, fbn('Precio'))
+    endif
+    if Incluido(fbn('Tipo'),'3|4')
+      if EqStr(fbn('Tipo'),'3')
+        ACT(f:FAC, 'Amortizacion')
+      endif
+      if EqStr(fbn('Tipo'),'4')
+        ACT(f:FAC, 'Intereses')
+      endif
+      ACT(r:FAC, fbn('Moneda'))
+      ACN(s:FAC, CotizacionC(fbn('Moneda'),,,,fbn('FechaOrd')-1,1,SI,Val(r:2)))
+    endif
+    if Incluido(fbn('Tipo'),'5')
+      ACT(f:FAC, 'Dividendos en Efvo')
+    endif
+    if EqStr(fbn('Tipo'),'9')
+      ACT(f:FAC, 'Saldo Actual')
+      ACN(g:FAC, fbn('Cantidad'))
+      ACN(h:FAC, CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1-1,1,SI,Val(r:2)))
+      ACN(p:FAC, Val(h:FAC))
+    endif
+    if Incluido(fbn('Tipo'),'3|4')
+      ACN(i:FAC, fbn('Cantidad')*Val(s:FAC)*Val(q:FAC))
+    else
+      if Incluido(fbn('Tipo'),'5')
+        ACN(i:FAC, fbn('Cantidad')*Val(q:FAC))
+      else
+        ACN(i:FAC, fbn('Cantidad')*Val(h:FAC)*Val(q:FAC))
+      endif
+    endif
+    ACN(k:FAC, fbn('FechaOrd'))
+    if Incluido(fbn('Tipo'),'2|3|4|5')
+      ACT(l:FAC, fbn('NrOperacion'))
+      ACT(m:FAC, BuscarCampo('OPERACIONES','TipoOp','NrOperacion',fbn('NrOperacion')))
+      if Incluido(fbn('Tipo'),'2|3|4')
+        ACT(t:FAC, BuscarCampo('OPERACIONES','CB7','NrOperacion',fbn('NrOperacion')))
+      endif
+      if Vacio(Val(m:FAC))
+        ACT(m:FAC, BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',fbn('NrOperacion')))
+      endif
+    endif
+    ACN(n:FAC, fbn('NrSaldo'))
+    ACD(o:FAC, fbn('FechaReal'))
+  proximo
+else
+  * Resumida
+  recorrer SQL
+    if fbn('FechaOrd')=Val(v:1)
+      DFA
+    else
+      ACD(a:FAC, fbn('FechaOrd'))
+      ACN(k:FAC, fbn('FechaOrd'))
+      ACN(v:1, fbn('FechaOrd'))
+    endif
+    SCN(u:FAC, 1)
+    if Incluido(fbn('Tipo'),'1|2')
+      SCN(i:FAC, fbn('Cantidad')*fbn('Precio')*fbn('Signo'))
+    endif
+    if Incluido(fbn('Tipo'),'3|4')
+      SCN(i:FAC, fbn('Cantidad')*CotizacionC(fbn('Moneda'),,,,fbn('FechaOrd')-1,1,SI,Val(r:2))*fbn('Signo'))
+    endif
+    if Incluido(fbn('Tipo'),'5')
+      SCN(i:FAC, fbn('Cantidad')*fbn('Signo'))
+    endif
+    if EqStr(fbn('Tipo'),'9')
+      SCN(i:FAC, fbn('Cantidad')*CotizacionC(fbn('Especie'),,,,Dialogo.Fecha1-1,1,SI,Val(r:2))*fbn('Signo'))
+    endif
+  proximo
+endif
+
+ACT(h:FAC+2, 'T.I.R.')
+if FAC>Val(w1)
+  SetFont(a:Val(w1)+1..s:FAC, 1)
+  FormatoCeldas(e:Val(w1)+1..e:FAC, Exe('F0'))
+  FormatoCeldas(g:Val(w1)+1..g:FAC, Exe('F2'))
+  FormatoCeldas(h:Val(w1)+1..h:FAC, Exe('F7'))
+  FormatoCeldas(i:Val(w1)+1..i:FAC, Exe('F2'))
+  FormatoCeldas(q:Val(w1)+1..q:FAC, Exe('F0'))
+  FormatoCeldas(s:Val(w1)+1..s:FAC, Exe('F7'))
+  ACN(i:FAC+2, Tir2(k:Val(w1)+1..k:FAC,i:Val(w1)+1..i:FAC)*100)
+  if Val(i:FAC+2)>1000 o Val(i:FAC+2)<-1000
+    ACT(h:FAC+3, 'T.I.R. Real')
+    ACN(i:FAC+3, Val(i:FAC+2))
+    ACN(i:FAC+2, 0)
+  endif
+else
+  ACN(i:FAC+2, 0)
+endif
+SetFont(h:FAC+2..i:FAC+3, 2)
+FormatoCeldas(i:FAC+2..i:FAC+3, Exe('F7'))
+ACN(z1, Val(i:FAC+2))
+
+SetFilaActual(FAC+5)
+ACT(a:FAC, 'Fin del listado')
+SetFont(a:FAC,2)
+
+SetFont(r:1..z:7, 1)
+
+ACO(1,9)
+ACO(2,8)
+ACO(3,8)
+ACO(4,8)
+ACO(5,8)
+ACO(6,12)
+ACO(7,9)
+ACO(8,8)
+ACO(9,10)
+
+LimitesVision(i:FAC)
+Impresion(1,1)
+SetMargins(1,1,0.5,1)

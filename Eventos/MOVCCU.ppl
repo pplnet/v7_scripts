@@ -1,0 +1,307 @@
+﻿CrearDialogo
+  NrTrans1: 'Nr.Trans.:';1;1;;  ;  ;NoVacio(Dialogo.NrTrans1) y Incluido(BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Dialogo.NrTrans1),'CCUPON|PCUPON');'Debe ingresar una Transaccion Tipo CCUPON o PCUPON';NO;
+  Fecha1:   'Fecha'     ;2;1;;NO;SI;Dialogo.Fecha1>0 y Dialogo.Fecha1<=FSys;'Debe ingresar una Fecha Valida';NO;;BuscarCampo('TRANSACCIONES2','Fecha1','NrTrans',Dialogo.NrTrans1);
+  Especie1: 'Especie'   ;3;1;;NO;SI;NoVacio(Dialogo.Especie1);'Debe ingresar una especie';NO;;BuscarCampo('TRANSACCIONES2','Especie','NrTrans',Dialogo.NrTrans1);
+  Entero1:  'Cupon'     ;4;1;;NO;SI;Dialogo.Entero1>0;'Cupon incorrecto';NO;;BuscarCampo('TRANSACCIONES2','Cupon1','NrTrans',Dialogo.NrTrans1);
+  Vehiculo1:'Vehiculo'  ;5;1;;NO;SI;NoVacio(Dialogo.Vehiculo1);'Debe ingresar un Vehiculo';NO;;BuscarCampo('TRANSACCIONES2','Vehiculo1','NrTrans',Dialogo.NrTrans1);
+  Check1:   'Procesa'   ;6;1;;SI;SI;;;;0
+  Check2:   'Borra'     ;7;1;;NO;NO;;;;1
+  Check3:   'Genera'    ;8;1;;NO;NO;;;;1
+FinDialogo
+If Not OK
+  Cancelar
+EndIf
+
+if Dialogo.Check1=0 o SI
+  HojaVisible(SI)
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+
+SQL.ADD(" Select * from "~DBO~".TRANSACCIONES2 ")
+SQL.ADD(" Where NrTrans = '"~Dialogo.NrTrans1~"' ")
+SQL.ADD(" Order By NrTrans")
+Recorrer SQL
+  ACT(a:FAC, fbn('NrTrans'))
+  ACT(b:FAC, fbn('TipoTr2'))
+  ACT(c:FAC, fbn('Especie'))
+  ACT(d:FAC, fbn('Especie1'))
+  ACT(e:FAC, fbn('Especie2'))
+  ACN(f:FAC, fbn('Cupon1'))
+  ACD(g:FAC, fbn('Fecha1'))
+  ACT(h:FAC, fbn('Cliente1'))
+  ACT(i:FAC, fbn('Vehiculo1'))
+  ACT(l:FAC, fbn('Cliente1'))
+  ACN(n:FAC, fbn('Cantidad1'))
+  ACN(o:FAC, fbn('Cantidad2'))
+  ACN(p:FAC, fbn('Cantidad3'))
+  ACN(q:FAC, fbn('Cantidad4'))
+  ACN(r:FAC, fbn('Cantidad5'))
+  ACT(y:1, fbn('NrTrans'))
+  ACN(z:2, FAC)
+  SQL.ADD(" Select * from "~DBO~".MOVPOSEJE ")
+  SQL.ADD(" Where NrOperacion = '"~Dialogo.NrTrans1~"' ")
+  SQL.ADD(" Order By NrOperacion,NrSaldo")
+  Recorrer SQL
+    ACT(c:FAC, fbn('NrOperacion'))
+    ACT(d:FAC, fbn('Especie'))
+    ACN(e:FAC, fbn('Cupon'))
+    ACN(f:FAC, fbn('NrSaldo'))
+    ACT(g:FAC, fbn('FechaMov'))
+    ACT(h:FAC, fbn('Cliente'))
+    ACT(i:FAC, fbn('Vehiculo'))
+    ACT(j:FAC, fbn('Book'))
+    ACT(k:FAC, fbn('TipoNegocio'))
+    ACT(l:FAC, fbn('FechaMov'))
+    ACN(m:FAC, fbn('Cantidad'))
+    ACN(n:FAC, fbn('Precio'))
+    ACT(o:FAC, fbn('Tipo'))
+  Proximo
+  ACN(z:3, FAC)
+  if Dialogo.Check2=1
+    ** Borrar
+    if Val(z:3)>Val(z:2)
+      recorrer&i Val(z:2)+1,Val(z:3)
+        if Val(f:&i)<150
+           ACT(p:&i, 'A Borrar')
+        endif
+      proximo
+    endif
+    if Dialogo.Check1=1
+      SQL.ADD(" Delete "~DBO~".MOVPOSEJE ")
+      SQL.ADD(" Where NrOperacion = '"~Dialogo.NrTrans1~"' ")
+      SQL.ADD("   and NrSaldo < 150 ")
+      SQL.NEW
+      SQL.EXEC
+      if Val(z:3)>Val(z:2)
+        recorrer&i Val(z:2)+1,Val(z:3)
+          if Val(f:&i)<150
+            ACT(q:&i, 'Borrado')
+          endif
+        proximo
+      endif
+    endif
+  endif
+  if Dialogo.Check3=1
+    ** Generar
+    recorrer&i Val(z:2),Val(z:2)
+*          (*.*'CCUPAGOPOS'.)
+
+****************************************
+****************************************
+          SQL.ADD(" SELECT * FROM "~DBO~".POSICIONES  ")
+          SQL.ADD(" WHERE Especie =  '"~Dialogo.Especie1~"' ")
+          SQL.ADD(" AND   Cliente =  '"~Val(l:&i)~"' ")
+          SQL.ADD(" and   Fecha   <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+          SQL.ADD(" and   NrSaldo IN (1,2) ")
+          SQL.ADD(" and   Cupon   =  '"~FStr(Dialogo.Entero1,1,0)~"'")
+          SQL.ADD(" AND   Fecha   =  (SELECT MAX(P.Fecha) FROM "~DBO~".POSICIONES P ")
+          SQL.ADD("                    WHERE Especie = P.Especie ")
+          SQL.ADD("                      AND    Cliente = P.Cliente ")
+          SQL.ADD("                      AND    NrSaldo = P.NrSaldo ")
+          SQL.ADD("                      AND    Cupon   = P.Cupon ")
+          SQL.ADD("                      AND    Fecha  <='"~IdxDate(Dialogo.Fecha1)~"') ")
+
+          Recorrer SQL
+            *---- Actualizar movimientos de posicion para el cupon
+
+      if FAC=Val(z:3)+1
+        ACT(d:FAC, 'Posiscion')
+        ACT(e:FAC, 'Especie')
+        ACT(f:FAC, 'Cupon')
+        ACT(g:FAC, 'Vehiculo')
+        ACT(h:FAC, 'Book')
+        ACT(i:FAC, 'NrSaldo')
+        ACT(j:FAC, 'Fecha')
+        ACT(k:FAC, 'CantidadIni')
+        ACT(l:FAC, 'PrecioFin')
+        ACT(m:FAC, 'CantidadFin')
+        ACT(n:FAC, 'PrecioFin')
+
+        ACT(o:FAC, 'M.Especie')
+        ACT(p:FAC, 'M.Cantidad')
+        ACT(q:FAC, 'M.NrOperacion')
+        ACT(r:FAC, 'M.FechaMov')
+        ACT(s:FAC, 'M.Cliente')
+        ACT(t:FAC, 'M.Vehiculo')
+        ACT(u:FAC, 'M.NrSaldo')
+        ACT(v:FAC, 'M.Precio')
+        ACT(w:FAC, 'M.Cupon')
+        ACT(x:FAC, 'M.Book')
+        SetFont(d:FAC..x:FAC,2)
+        IFA
+      endif
+      ACT(d:FAC, 'Pos.Viejas')          
+      ACT(e:FAC, fbn('Especie'))          
+      ACN(f:FAC, fbn('Cupon'))
+      ACT(g:FAC, fbn('Vehiculo'))
+      ACT(h:FAC, fbn('Book'))
+      ACN(i:FAC, fbn('NrSaldo'))
+      ACT(j:FAC, fbn('Fecha'))
+      ACN(k:FAC, fbn('CantidadIni'))
+      ACN(l:FAC, fbn('PrecioIni'))
+      ACN(m:FAC, fbn('CantidadFin'))
+      ACN(n:FAC, fbn('PrecioFin'))
+
+      ACT(o:FAC, Dialogo.Especie1)
+      ACN(p:FAC, fbn('CantidadFin')*(-1))
+      ACT(q:FAC, Val(y:1))
+      ACT(r:FAC, Dialogo.Fecha1)
+      ACT(s:FAC, fbn('Cliente'))
+      ACN(t:FAC, Dialogo.Vehiculo1)
+      ACN(u:FAC, fbn('NrSaldo'))
+      ACN(v:FAC, fbn('PrecioFin'))
+      ACN(w:FAC, Dialogo.Entero1)
+
+      if Val(p:FAC)>0.01 o Val(p:FAC)<-0.01
+        ACT(y:FAC, 'Genera')
+      else
+        ACT(y:FAC, 'No Genera')
+      endif
+      if Dialogo.Check2=1 y Dialogo.Check1=1 y [Val(p:FAC)>0.01 o Val(p:FAC)<-0.01]
+     
+            SQL.ADD(" Insert Into "~DBO~".MOVPOSEJE ")
+            SQL.ADD(" ( Especie, Cantidad, NrOperacion, ")
+            SQL.ADD(" FechaMov, Cliente, Vehiculo,  ")
+            SQL.ADD(" NrSaldo, Precio, Cupon, ")
+            SQL.ADD(" Tipo, TipoNegocio, Trader ")
+            SQL.ADD(" ) Values ( ")
+            SQL.ADD(" '"~Dialogo.Especie1~"', "~Fstr(FBN['CantidadFin']*(-1),1,2)~", '"~Val(y:1)~"', ")
+            SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', '"~fbn('Cliente')~"', '"~Dialogo.Vehiculo1~"', ")
+            SQL.ADD(" "~FSTR(fbn('NrSaldo'),1,0)~", "~FStr(fbn['PrecioFin'],1,8)~",  ")
+*            SQL.ADD(" "~FSTR(fbn('NrSaldo'),1,0)~", "~FStr(fbn['PrecioFin'],1,8)~",  ")
+            SQL.ADD(" '"~FStr(Dialogo.Entero1,1,0)~"', '1', '"~FBN['TipoNegocio']~"', '"~FBN['Trader']~"' ) ")
+            SQL.NEW
+            SQL.EXEC
+
+      endif
+
+          Proximo
+
+          ** Nuevas Posiciones para Valuacion ***
+          ** Agregado 26/05/08 FJL            ***
+          ** Modificado 18/11/08 FJL          ***
+          SQL.ADD("SELECT * FROM "~DBO~".POSICIONES  ")
+          SQL.ADD(" WHERE Especie   =  '"~Dialogo.Especie1~"' ")
+          SQL.ADD("   AND Vehiculo  =  '"~Dialogo.Vehiculo1~"' ")
+          SQL.ADD("   and Fecha     <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+          SQL.ADD("   AND NrSaldo   >= 120 and NrSaldo < 140 ")
+          SQL.ADD("   and Cupon     =  '"~FStr(Dialogo.Entero1,1,0)~"'")
+*          SQL.ADD("   AND Fecha     =  (SELECT MAX(P.Fecha) FROM "~DBO~".POSICIONES P ")
+*          SQL.ADD("                      WHERE Especie         =  P.Especie ")
+*          SQL.ADD("                        AND Vehiculo        =  P.Vehiculo ")
+*          SQL.ADD("                        AND IsNull(Book,'') =  IsNull(P.Book,'') ")
+*          SQL.ADD("                        AND NrSaldo         =  P.NrSaldo ")
+*          SQL.ADD("                        AND Cupon           =  P.Cupon ")
+*          SQL.ADD("                        AND Fecha           <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+
+          Recorrer SQL
+
+
+      if FAC=Val(z:3)+1
+        ACT(d:FAC, 'Posiscion')
+        ACT(e:FAC, 'Especie')
+        ACT(f:FAC, 'Cupon')
+        ACT(g:FAC, 'Vehiculo')
+        ACT(h:FAC, 'Book')
+        ACT(i:FAC, 'NrSaldo')
+        ACT(j:FAC, 'Fecha')
+        ACT(k:FAC, 'CantidadIni')
+        ACT(l:FAC, 'PrecioFin')
+        ACT(m:FAC, 'CantidadFin')
+        ACT(n:FAC, 'PrecioFin')
+
+        ACT(o:FAC, 'M.Especie')
+        ACT(p:FAC, 'M.Cantidad')
+        ACT(q:FAC, 'M.NrOperacion')
+        ACT(r:FAC, 'M.FechaMov')
+        ACT(s:FAC, 'M.Cliente')
+        ACT(t:FAC, 'M.Vehiculo')
+        ACT(u:FAC, 'M.NrSaldo')
+        ACT(v:FAC, 'M.Precio')
+        ACT(w:FAC, 'M.Cupon')
+        ACT(x:FAC, 'M.Book')
+        SetFont(d:FAC..x:FAC,2)
+        IFA
+      endif
+      ACT(d:FAC, 'Pos.Nueva')
+      ACT(e:FAC, fbn('Especie'))
+      ACN(f:FAC, fbn('Cupon'))
+      ACT(g:FAC, fbn('Vehiculo'))
+      ACT(h:FAC, fbn('Book'))
+      ACN(i:FAC, fbn('NrSaldo'))
+      ACT(j:FAC, fbn('Fecha'))
+      ACN(k:FAC, fbn('CantidadIni'))
+      ACN(l:FAC, fbn('PrecioIni'))
+      ACN(m:FAC, fbn('CantidadFin'))
+      ACN(n:FAC, fbn('PrecioFin'))
+
+      ACT(o:FAC, Dialogo.Especie1)
+      ACN(p:FAC, fbn('CantidadFin')*(-1))
+      ACT(q:FAC, Val(y:1))
+      ACD(r:FAC, Dialogo.Fecha1)
+      ACT(s:FAC, Dialogo.Vehiculo1)
+      ACT(t:FAC, Dialogo.Vehiculo1)
+      ACN(u:FAC, fbn('NrSaldo'))
+      ACN(v:FAC, fbn('PrecioFin'))
+      ACN(w:FAC, Dialogo.Entero1)
+      ACT(x:FAC, fbn('Book'))
+
+      if Val(p:FAC)>0.01 o Val(p:FAC)<-0.01
+        ACT(y:FAC, 'Genera')
+      else
+        ACT(y:FAC, 'No Genera')
+      endif
+
+      if Dialogo.Check2=1 y Dialogo.Check1=1 y [Val(p:FAC)>0.01 o Val(p:FAC)<-0.01]
+            *---- Actualizar movimientos de posicion para el cupon
+             SQL.ADD(" Insert Into "~DBO~".MOVPOSEJE ( ")
+             SQL.ADD("   Especie, Cantidad, NrOperacion, ")
+             SQL.ADD("   FechaMov, Cliente, Vehiculo, ")
+             SQL.ADD("   NrSaldo, Precio, Cupon, ")
+             SQL.ADD("   Tipo, TipoNegocio, Trader, ")
+             SQL.ADD("   Book, Unidad, Centro, ")
+             SQL.ADD("   Sector, Sucursal, CallPut, ")
+             SQL.ADD("   Estrategia, Cartera ")
+             SQL.ADD(" ) Values ( ")
+             SQL.ADD("   '"~Dialogo.Especie1~"', ")
+             SQL.ADD("   "~Fstr(FBN['CantidadFin']*(-1),1,2)~", ")
+             SQL.ADD("   '"~Val(y:1)~"', ")
+
+             SQL.ADD("   '"~IdxDate(Dialogo.Fecha1)~"', ")
+             SQL.ADD("   '"~Dialogo.Vehiculo1~"', ")
+             SQL.ADD("   '"~Dialogo.Vehiculo1~"', ")
+
+             SQL.ADD("   "~FSTR(fbn('NrSaldo'),1,0)~", ")
+             SQL.ADD("   "~FStr(fbn['PrecioFin'],1,8)~",  ")
+             SQL.ADD("   '"~FStr(Dialogo.Entero1,1,0)~"', ")
+
+             SQL.ADD("   '1', ")
+             SQL.ADD("   '"~FBN['TipoNegocio']~"', ")
+             SQL.ADD("   '"~FBN['Trader']~"', ")
+
+             SQL.ADD("   '"~FBN['Book']~"', ")
+             SQL.ADD("   '"~FBN['Unidad']~"', ")
+             SQL.ADD("   '"~FBN['Centro']~"', ")
+
+             SQL.ADD("   '"~FBN['Sector']~"', ")
+             SQL.ADD("   '"~FBN['Sucursal']~"', ")
+             SQL.ADD("   '"~FBN['CallPut']~"', ")
+
+             SQL.ADD("   '"~FBN['Estrategia']~"', ")
+             SQL.ADD("   '"~FBN['Cartera']~"' ")
+             SQL.ADD(" ) ")
+             SQL.NEW
+             SQL.EXEC
+
+      endif
+
+          Proximo
+
+****************************************
+****************************************
+
+    Proximo
+  endif
+Proximo

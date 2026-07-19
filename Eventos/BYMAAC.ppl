@@ -1,0 +1,73 @@
+﻿CrearDialogo
+    Vehiculo1:  'Vehiculo'      ;;;;NO;;NoVacio(Vehiculo1);'No puede ser vacio';NO;VAR('VEHICULO')
+    String1:    'NroComitente'  ;;;;NO;;NoVacio(String1)  ;'No puede ser vacio';NO;;SQL("SELECT NrBYMA FROM "~DBO~".CLIENTES WHERE Codigo = (SELECT TRIM(Cliente) FROM "~DBO~".VEHICULOS WHERE Codigo = '"~Vehiculo1~"')")
+    Cliente1:   'Cliente'       ;;;;;;NoVacio(Cliente1) ;'No puede ser vacio';NO;
+    String2:    'CUIT'          ;;;;NO;;NoVacio(String2)  ;'No puede ser vacio';NO;;SQL("SELECT CUIT FROM "~DBO~".CLIENTES WHERE Codigo = '"~Dialogo.Cliente1~"' ")
+    Cuenta1:    'Cuenta'        ;;;;;;NoVacio(Cuenta1) y Query("SELECT 1 FROM "~DBO~".CUENTAS WHERE Cliente = '"~Dialogo.Cliente1~"'") = 1;IIF(Vacio(Cuenta1),'No puede ser vacio','La cuenta debe corresponder al cliente seleccionado');NO;;;;;;"Cliente = '"~Dialogo.Cliente1~"' AND TipoCuenta = 'CUS' "
+    String3:    'NroCuenta'     ;;;;NO;;NoVacio(String3)  ;'No puede ser vacio';NO;;SQL("SELECT Numero FROM "~DBO~".CUENTAS WHERE Codigo = '"~Dialogo.Cuenta1~"' ")
+FinDialogo
+
+If Not Ok
+    Cancelar
+EndIf
+
+&operatorId := Fstr(Dialogo.String1,1,0)
+&taxPayerId := Dialogo.String2
+&accountId := Dialogo.String3
+
+MostrarCuadroDeMensajes
+
+
+Try
+    *Importar la DLL y crear la clase para comunicarse con la API BYMA Clearing Reference Data.
+    Require '..\Lib\FPA.BYMA.Clearing.RD.dll'
+    Import BYMAClearing, 'FPA.BYMA.Clearing.RD.BYMAClearing'
+    let &Solicitar new BYMAClearing()
+Catch   
+    LogWrite("Ocurrio un error."~Chr(13)~Chr(10)~ GetError())
+    MessageBox("Ocurrio un error."~Chr(13)~Chr(10)~ GetError())
+    Cancelar
+End
+
+&Json := ''
+
+Try
+    LogWrite("Iniciando comunicacion con API BYMA Clearing Reference Data")
+    Message("Iniciando comunicacion con API BYMA Clearing Reference Data")
+    *Llamar al metodo para dar de alta una cuenta, pasandole los parametros operatorIdentifier, taxPayerIdentifier y accountIdentifier.
+    let &Json &Solicitar.CrearCuenta(Copy(&operatorId,1,Longitud(&operatorId)), Copy(&taxPayerId ,1,Longitud(&taxPayerId )), Copy(&accountId,1,Longitud(&accountId))) 
+    &result := JsonToObj(&Json)
+Catch
+    LogWrite("Ocurrio un error."~Chr(13)~Chr(10)~ GetError())
+    MessageBox("Ocurrio un error."~Chr(13)~Chr(10)~ GetError())
+    Cancelar
+End
+
+OcultarCuadroDeMensajes
+
+&result := JsonToObj(&Json)
+&status := &result.get("status")
+&message := &result.get("message")
+
+If Eqstri(&status, 'Ok')
+    &id := &result.get("id") 
+    &datos := "Cliente: " ~ Dialogo.Cliente1 ~Chr(13)~Chr(10)~ "NrCuenta: " ~ Dialogo.String3
+    LogWrite("La cuenta fue creada exitosamente."~Chr(13)~Chr(10)~ &datos ~ Chr(13)~Chr(10)~ "Id asignado a la cuenta en BYMA: "~ &id)
+    MessageBox("La cuenta fue creada exitosamente."~Chr(13)~Chr(10)~ &datos ~ Chr(13)~Chr(10)~"Id asignado a la cuenta en BYMA: "~ &id)
+    
+    Try
+        SQL.ADD("UPDATE "~DBO~".CUENTAS SET Chips = '"~&id~"' WHERE Codigo = '"~Dialogo.Cuenta1~"'")
+        SQL.NEW
+        SQL.EXEC
+    Catch
+        LogWrite("Ocurrio un error al intentar persistir el Id de alta en BYMA de la cuenta con codigo: "~ Dialogo.Cuenta1~". Error: "~GetError())
+        MessageBox("Ocurrio un error al intentar persistir el Id de alta en BYMA de la cuenta con codigo: "~ Dialogo.Cuenta1~". Error: "~GetError())
+    End
+Else
+    &httpStatus := &result.get("httpStatus")
+    &errorCode := &result.get(" errorCode")
+    &error := &message ~Chr(13)~Chr(10)~ &httpStatus ~Chr(13)~Chr(10)~ &errorCode
+    LogWrite("Ocurrio un error."~Chr(13)~Chr(10)~ &error)
+    MessageBox("Ocurrio un error."~Chr(13)~Chr(10)~ &error)
+EndIf
+

@@ -1,0 +1,66 @@
+﻿*FO 26/10/005 Desafectacion de limites para las operaciones NATIVA
+*HojaVisible(SI)
+CrearDialogo
+  NrTrans1: 'NrVoucher';
+  Fecha1  : 'Fecha'    ;;;;;;;;;FSys
+  Fecha2  : 'FechaLIQ'
+FinDialogo
+ 
+if Not OK
+   Cancelar
+endif
+
+ACT(x1, BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Dialogo.NrTrans1))
+*FO27/10/2005if Not Incluido(Val(x1),'DEP|RET|MATCH')
+*   Cancelar
+*endif
+
+SQL.ADD("Select M.NrOperacion, M.Concepto, M.Especie from "~DBO~".MOVEJECUTADOS M   ")
+SQL.ADD("Where M.NrTrans2    = '"~Dialogo.NrTrans1~"'  ")
+SQL.ADD("  and M.NrOperacion <> '"~Dialogo.NrTrans1~"' ")
+*FO27/10/2005SQL.ADD("  and Cantidad < 0 ")
+If Not Eqstr(Val(x:1),'COMP')
+   SQL.ADD("  and Cantidad<0  ")
+Endif
+
+Recorrer SQL
+  ACT(a:FAC, FBN('NrOperacion'))
+  If Incluido(fbn('Concepto'),'TI|FX') y Incluido(Val(x:1),'DEP|MATCH|COMP')
+      SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+      SQL.ADD("  SET RB10        = '1',  ")
+      SQL.ADD("      FechaPrecan = '"~IdxDate(Dialogo.Fecha2)~"' ")  
+      SQL.ADD("Where NrOperacion = '"~fbn['NrOperacion']~"' ")
+      SQL.ADD("  and TipoOp     In ('TIC','TIV','TIFC','TIFV','TICO','TIPO','TCOPRI','EQC','EQV') ")
+      SQL.NEW
+      SQL.EXEC
+      *** Actualiza movimientos y limites ****
+      SQL.ActualizarMovimientos2(fbn['NrOperacion'],NO,SI,NO,NO)
+      SQL.EXEC
+  Endif  
+  If Incluido(Copy(Val(a:FAC),1,2),'VT')
+    ACT(b:FAC, BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Val(a:FAC)))
+    ACT(c:FAC, BuscarCampo('TRANSACCIONES2','NrTransRef1','NrTrans',Val(a:FAC)))
+    ACT(d:FAC, BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Val(c:FAC)))
+    If Incluido(Val(d:FAC),'MATCH|DEP')
+      ACT(e:FAC, 'Ejecuta')
+*      EjecutarEvento('DESPRE',NrTrans1=Val(c:FAC),Fecha1=Dialogo.Fecha1)
+      EjecutarEvento('DESPRF',NrTrans1=Val(c:FAC),Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2)
+    Endif
+  Endif
+  ***---Desafecto Limite Settlement de Fallas que dio de alta la fc. GENFALLAS2
+  SQL.ADD(" Delete "~DBO~".MOVLIMITES ")
+  SQL.ADD(" Where NrOperacion = '"~fbn('NrOperacion')~"' ")
+  SQL.ADD(" AND Limite = 'SETTLEMENT' ")
+  SQL.ADD(" AND Especie = '"~fbn('Especie')~"' ")
+  SQL.ADD(" AND Descripcion = 'Falla' ")
+  SQL.NEW
+  SQL.EXEC
+Proximo
+
+
+*******************************************************
+* Evento que desafecta Presettlement de FX Forwards NDF
+*******************************************************
+if Incluido(Val(x1),'DEP|RET')
+  EjecutarEvento('DESPRN',NrTrans1=Dialogo.NrTrans1,Fecha1=Dialogo.Fecha1)
+endif

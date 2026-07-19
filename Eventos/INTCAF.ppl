@@ -1,0 +1,53 @@
+﻿CrearDialogo
+  Fecha1   : 'F.Desde'     ;;;;;;;;;PriDeMes(FSys,SI)
+  Fecha2   : 'F.Hasta'     ;;;;;;;;;FinDeMes(FSys,SI)
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+
+ACN(x1, SQL("Select count(*) from "~DBO~".CASHFLOW where Cashflow_Monto <> 0 and Cashflow_Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' and Cashflow_Fecha <= '"~IdxDate(Dialogo.Fecha2)~"' "))
+if Val(x1)>0
+  * Borrar Ajustes anteriores de ese periodo
+  SQL.ADD("Delete from "~DBO~".OPERACIONES where ")
+  SQL.ADD("TipoOp = 'AJUSCF' ")
+  SQL.ADd("and FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+  SQL.NEW
+  SQL.EXEC
+  * Generar Ajustes nuevos de ese periodo
+  SQL.ADD("Select * from "~DBO~".CASHFLOW where ")
+  SQL.ADD("Cashflow_Monto <> 0 ")
+  SQL.ADD("and Cashflow_Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' and Cashflow_Fecha <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+  SQL.ADD("order by Compania_Codigo_FPA, Periodo_Codigo, Cashflow_Fecha ")
+  Recorrer SQL
+    if NoVacio(BuscarCampo('VEHICULOS','Codigo','Codigo',fbn('Compania_Codigo_FPA')))
+      SQL.ADD("Insert into "~DBO~".OPERACIONES (")      
+      SQL.ADD("Vehiculo1, Operador, Especie, ")
+      SQL.ADD("FechaOp, FechaOp2, Cantidad,")
+      SQL.ADD("TipoOp, NrOperacion, Cliente1 ")
+      SQL.ADD(") Values (")
+      SQL.ADD(" '"~fbn('Compania_Codigo_FPA')~"', '"~Usuarioactivo~"', '"~VAR('MONELOCA')~"', ")
+      SQL.ADD(" '"~IdxDate(fbn('Cashflow_Fecha'))~"', '"~IdxDate(FSys)~"', "~FStr(fbn('Cashflow_Monto'),1,2)~", ")
+      ACT(y1, GetNumerador(2))
+      SQL.ADD(" 'AJUSCF', '"~Val(y1)~"', '"~fbn('Compania_Codigo_FPA')~"' ")
+      SQL.ADD(")")
+      SQL.NEW
+      * Generar Bits y poner en Terminal
+      Recorrer&I 1,50
+        ACT(a1,FStr(&I,1,0))
+        if Incluido(Val(a1),'1|5|6|10|11|20|50')
+          SQL.ADD(" Insert into "~DBO~".OPERACIONESBITS (NrOperacion, NrBit, Valor) ")
+          SQL.ADD(" Values ('"~Val(y1)~"',"~Val(a1)~",'0') ")
+          SQL.NEW
+        endif
+      Proximo
+      SQL.ADD(" update "~DBO~".OPERACIONESBITS SET Valor = '1' ")
+      SQL.ADD(" Where  NrBit=50 and NrOperacion= '"~Val(y1)~"' ")
+      SQL.NEW
+      SQL.EXEC
+    else
+      Messagebox('----- No Existe Vehiculo: '~fbn('Compania_Codigo_FPA'))
+    endif
+  Proximo
+endif

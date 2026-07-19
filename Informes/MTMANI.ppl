@@ -1,0 +1,183 @@
+﻿ModoReproceso(SINDIALOGO)
+CrearDialogo
+ Fecha1        :'F.Op.Desde'  ; ;1;;;;Dialogo.Fecha1<>0;'Debe Ingresar una F.Op. Desde' ;NO;FSys-30;
+ Fecha2        :'F.Op.Hasta'  ; ; ;;;;Dialogo.Fecha2<>0;'Debe Ingresar una F.Op. Hasta' ;NO;FSys;
+ NrOperacion1  :'Emision'     ;4; ;;;;;;;;;;;;" TipoOp in ('TCPCEM')";
+FinDialogo
+
+if Not Ok
+   Cancelar
+endif
+
+AgregarBMP(a1,Exe('LOGO'),60)
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+********cabecera
+SetFilaActual(3)
+ACT(a:fac,' Matcheo de Emision y Manifestaciones')
+ACT(a:fac+2 , 'Emision : '~iif(NoVacio(Dialogo.NrOperacion1),Dialogo.NrOperacion1,'Todas'))
+
+ACT(a:fac+3, 'Fecha desde : '~Dialogo.Fecha1)
+ACT(a:fac+4, 'Fecha hasta : '~Dialogo.Fecha2)
+CrearFont(1,"Arial,8,B")
+SetFont(a:fac,3)
+SetFont(a:fac+2..a:fac+4,2)
+
+ 
+SetFilaActual(fac+2)
+
+*****************************
+*RECUPERA OPERACIONES TCPCEM*
+*****************************
+SQL.ADD("SELECT op.Cliente1,op.RB5,op.rb8 as estado,op.Especie ,op.Cantidad,op.precio2 ,op.Precio4, op.NrOperacion, ")
+SQL.ADD("op.TotalNetoCli3,op.Precio1 , op.FechaOp AS FECHAMANIF , ")
+SQL.ADD(" op.TotalNetoCli1 CantDisp,")
+SQL.ADD("C.RazonSocial,op.TotalBrutoCli1,op.UDN1")
+SQL.ADD("FROM   dbo.OPERACIONES op  ")
+SQL.ADD("inner join "~DBO~".clientes c on op.Cliente1 = c.Codigo ")  
+SQL.ADD("WHERE  TipoOp='TCPCEM'")
+IF NoVacio(Dialogo.NrOperacion1)
+    SQL.ADD("and op.NrOperacion  = '"~Dialogo.NrOperacion1~"' ")
+ENDIF
+SQL.ADD(" and OP.FechaOp  Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"'  ")
+Recorrer sql
+****
+    SetFilaActual(fac+2)
+    ACT(a:fac,'Especie')
+    ACT(b:fac,'Tipo')
+    ACT(c:fac,'Nro Emision')
+    ACT(d:fac,'Estado')
+    ACT(e:fac,'Cantidad Adjudicada')
+    ACT(f:fac,'Pr/Tasa/Marg.Dif')
+    ACT(g:fac,'Emisor')
+    ACT(h:fac,'Rueda')
+    AlinearCeldas(a:fac..d:fac+1,'I')
+    AlinearCeldas(e:fac..f:fac+1,'D')
+    AlinearCeldas(g:fac,'I')
+    SetFont(a:fac..x:fac+1,2)
+    AgregarMarco(a:fac..h:fac,1,0,Exe('COLOR6'))
+    ifa
+    ACT(a:fac,FBN['Especie']~' - ' ~BuscarCampo('ESPECIES','Nombre','Codigo',FBN['Especie']))
+    ACT(b:fac,iif(fbn('RB5')=0,'Precio',iif(fbn('RB5')=1,'Tasa','Margen Diferencial')) )
+    ACT(c:fac,fbn['NrOperacion'])
+    ACLO(c:fac,fbn['NrOperacion'])
+    ACT(d:fac,IIF(FBN['estado']=0,'Pendiente',IIF(FBN['estado']=1,'Cerrada','Desierta')) )
+    ACN(e:fac,FBN['Cantidad'])
+    
+    * Aca se podria poner suma de la cantidad completada de la ordenes cuando está
+    ACN(e:fac,SQL("SELECT Sum(TCO.Cantidad) FROM "~DBO~".OPERACIONES TCO,"~DBO~".ORDENES TM, "~DBO~".OPERACIONES TCE WHERE TM.NrOperacion2=TCO.NrOperacion and TM.NrOperacion1=TCE.NrOperacion and TCO.TipoOp='TCOPRI' and TCE.NrOperacion='"~fbn['NrOperacion']~"' "))
+    
+    ACN(f:fac,FBN['Precio2'])
+    ACT(g:fac,Copy(FBN['Cliente1'],1,25))
+    ACT(h:fac,FBN('UDN1'))
+    
+    FormatoCeldas(F:FAC,Exe('F9'))
+    ************inicia manif  
+    SetFilaActual(fac+1)
+
+
+    ACT(a:fac,'Fecha manifestacion')
+    *    ACT(b:fac,'Tramo')
+    ACT(b:fac,'Cumplimiento')
+    ACT(c:fac,'T.Cliente')
+
+    ACT(d:fac,'Nro. Manif')
+    ACT(e:fac,'Cliente')
+    ACT(f:fac,'Cantidad Ofertada')
+    ACT(g:fac,'Tipo') 
+    *
+    ACT(h:fac,'Precio/Tasa/Marg.Dif.')
+    ACT(i:fac,'Monto Ofertado')
+    ACT(j:fac,'Estado ')
+    act(k:fac,'Nr.Colocacion')
+
+    act(l:fac,'Cantidad adjudicada')
+    act(m:fac,'Precio/tasa/Margen')
+    act(n:fac,'Monto adjudicado')
+
+    AlinearCeldas(h:fac..h:fac+1,'D')
+    AlinearCeldas(l:fac..n:fac,'D')
+    SetFont(a:fac..x:fac+1,2)
+    AgregarMarco(a:fac..n:fac,1,0,Exe('COLOR6'))
+
+
+    SQL.ADD("SELECT r.CantidadEnProceso,r.NrOrden,r.FechaOrden,r.Estado,R.Especie,r.PrecioReal, r.CantidadCompletada,")
+    SQL.ADD("R.RB1 As tramo, R.RB7 As Cumplimiento,R.RB5, R.RB6 as Operatoria,R.NrOperacion1,r.PrecioLimite, r.CantidadTotalOrden, ")
+    SQL.ADD("R.Cliente,c.RazonSocial,r.NrOperacion2,r.Estado,r.Especie,r.CantidadCompletada,ob.NrBit,ob.Valor")
+    SQL.ADD("FROM   "~DBO~".Ordenes R  ")
+    SQL.ADD("INNER JOIN Clientes c on r.cliente = c.codigo")
+    SQL.ADD("INNER JOIN OPERACIONESBITS ob  on ob.NrOperacion = r.NrOrden")
+    SQL.ADD("WHERE R.NrOperacion1  ='"~FBN['NrOperacion']~"'")
+    SQL.ADD("and ob.Valor = 1")
+  
+
+    *******************************************
+    *recupera TCPCEM Y BUSCA ORDENES ASOCIADAS*
+    *******************************************
+    ACN(aa:11,FAC+1)
+    Recorrer SQL
+           
+        ACD(a:fac,FBN['FechaOrden'])
+        *        ACT(b:fac,iif(FBN['Tramo']=0,'Competitivo',IIF(FBN['Tramo'] = 1,'No Competitivo','Ambos'))) 
+        ACT(b:fac,iif(FBN['Cumplimiento']=0,'Parcial','Total')) 
+        ACT(c:fac,iif(EqStr(FBN['Cliente'],VAR('VEHICULODE')),'CP','Terceros'))
+        ACT(d:fac,FBN['NrOrden'])
+        ACLR(d:fac,FBN['NrOrden'])
+        ACT(e:fac,FBN['Cliente']~' - '~Copy(FBN['RazonSocial'],1,25))
+        ACN(f:fac,FBN['CantidadTotalOrden'])
+        ACT(g:fac,iif(FBN['RB5']=0  ,'Precio',iif(FBN['RB5']=1,'Tasa','Margen Diferencial')))
+        ACN(h:fac,FBN['PrecioLimite'])
+        ACN(i:fac,FBN['CantidadEnProceso'])
+        ACT(j:FAC,SQL("Select Nombre From "~DBO~".INSTANCIAS Where Tabla = 'Ordenes' and Nrinstancia = '"~fbn('NrBit')~"'"))
+        ACT(k:fac,FBN['NrOperacion2'])
+        if NoVacio(FBN['NrOperacion2'])
+            ACLO(k:fac,FBN['NrOperacion2'])
+        endif
+        ACN(l:fac,FBN['CantidadCompletada'])
+        ACN(m:fac,FBN['PrecioReal'])
+        ACN(n:fac,FBN['CantidadCompletada'] *FBN['PrecioReal'] )
+        FormatoCeldas(h:FAC,Exe('F8'))
+        FormatoCeldas(m:fac..m:fac,Exe('F8'))       
+
+    Proximo     
+    ****************
+    *suma de totales*
+    ****************
+    ifa
+    ACT(a:fac,'TOTALES')
+    ACN(f:fac, SUM(f:Val(aa:11)..f:fac))
+    ACN(i:fac, SUM(i:Val(aa:11)..i:fac))
+    ACN(l:fac, SUM(l:Val(aa:11)..l:fac))
+    ACN(n:fac, SUM(n:Val(aa:11)..n:fac))
+    SetFont(a:fac..n:fac,2) 
+    AgregarMarco(a:fac..n:fac,1,0)
+    FormatoCeldas(h:fac..h:fac,EXE('F8'))
+    FormatoCeldas(m:fac..m:fac,EXE('F8')) 
+    ifa
+proximo
+ACT(a:fac, 'Fin del informe.')
+ACO( 1, 15)
+ACO( 2, 10)
+ACO( 3, 10)
+ACO( 4, 15)
+ACO( 5, 20)
+ACO( 6, 12)
+ACO( 7, 10)
+ACO( 8, 12)
+ACO( 9, 10)
+ACO(10, 10)
+ACO(11, 10)
+ACO(12, 12)
+ACO(13, 12)
+ACO(14, 12)
+ACO(15, 1)
+
+Impresion(1,2)
+Impresion(2,1)
+Impresion(3,1)
+Impresion(4,1)
+
+LimitesVision(o:fac)
+SetPrintFit(3, 63)

@@ -1,0 +1,71 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1 : 'Fecha Desde'   ;;;;;;Dialogo.Fecha1 <= Fecha(Var('FEDEPDAT'));'Fecha Desde Invalida';NO;Fecha(Var('FEDEPDAT'));
+  Fecha2 : 'Fecha Hasta'   ;;;;;;Dialogo.Fecha2 >= Dialogo.Fecha1 Y Dialogo.Fecha2 <= Fecha(Var('FEDEPDAT'));'Fecha Hasta Invalida';NO;Fecha(Var('FEDEPDAT'));
+FinDialogo
+
+If Not OK
+  Cancelar
+EndIf
+
+SQL.ADD(" Select /*+ RULE */ D.NrDatanet ")
+SQL.ADD(" From "~DBO~".DATANET D, "~DBO~".MOVDATANET M ")
+SQL.ADD(" Where D.NrDatanet = M.NrDatanet ")
+SQL.ADD(" AND D.FechaBajada >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND D.FechaBajada <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+Recorrer SQL
+    Message('Eliminando NrDatanet '~fbn('NrDatanet'))
+    SQL.ADD(" Delete /*+ RULE */ "~DBO~".MOVDATANET ")
+    SQL.ADD(" Where NrDatanet = '"~fbn('NrDatanet')~"' ")
+    SQL.NEW
+    SQL.ADD(" Delete /*+ RULE */ "~DBO~".DATANET ")
+    SQL.ADD(" Where NrDatanet = '"~fbn('NrDatanet')~"' ")
+    SQL.NEW
+    SQL.EXEC
+Proximo
+SQL.ADD(" Select /*+ RULE */ T.NrTrans, B.NrBit ")
+SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS B ")
+SQL.ADD(" Where T.NrTrans = B.NrOperacion ")
+SQL.ADD(" AND T.Fecha2 >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND T.Fecha2 <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" AND T.TipoTr2 IN ('CRVM','DEVM','TRANSF','DEP','RET') ")
+SQL.ADD(" AND (T.CB2 = '1' OR T.CB3 = '1') ")
+SQL.ADD(" AND B.Valor = '1' ")
+Recorrer SQL
+    Message('Procesando Transaccion '~fbn('NrTrans'))
+    SQL.ADD(" Update /*+ RULE */ "~DBO~".MOVPENDIENTES ")
+    SQL.ADD(" Set Status = 'OK' ")
+    SQL.ADD(" Where NrOperacion = '"~fbn('NrTrans')~"' ")
+    SQL.NEW
+    SQL.EXEC
+    SQL.ADD(" Insert Into "~DBO~".MOVEJECUTADOS ")
+    SQL.ADD(" (Select * From "~DBO~".MOVPENDIENTES ")
+    SQL.ADD(" Where NrOperacion = '"~fbn('NrTrans')~"') ")
+    SQL.NEW
+    SQL.EXEC
+    SQL.ADD(" Delete /*+ RULE */ "~DBO~".MOVPENDIENTES ")
+    SQL.ADD(" Where NrOperacion = '"~fbn('NrTrans')~"' ")
+    SQL.NEW
+    SQL.EXEC
+    IF fbn('NrBit') <> 20
+        Message('Pasando Transaccion '~fbn('NrTrans')~' a Terminal')
+        SQL.ADD(" Update /*+ RULE */ "~DBO~".OPERACIONESBITS ")
+        SQL.ADD(" Set Valor = '0' ")
+        SQL.ADD(" Where NrOperacion = '"~fbn('NrTrans')~"' ")
+        SQL.ADD(" AND NrBit = "~Fstr(fbn('NrBit'), 0, 0)~" ")
+        SQL.NEW
+        SQL.EXEC
+        SQL.ADD(" Update /*+ RULE */ "~DBO~".OPERACIONESBITS ")
+        SQL.ADD(" Set Valor = '1' ")
+        SQL.ADD(" Where NrOperacion = '"~fbn('NrTrans')~"' ")
+        SQL.ADD(" AND NrBit = 20 ")
+        SQL.NEW
+        SQL.EXEC
+    ENDIF
+Proximo
+Message('Eliminando Conciliaciones')
+SQL.ADD(" Delete /*+ RULE */ "~DBO~".CONCILIACIONES ")
+SQL.ADD(" Where Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND Fecha <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.NEW
+SQL.EXEC

@@ -1,0 +1,134 @@
+﻿* Actualizar Cotizaciones a partir del informe
+* que toma los precios de Bloombergs (Spot y Futuros)
+
+HojaVisible(NO)
+LinkearHoja('BLOOM1',1)
+*- Bid es compra => Precio3 , Ask es venta = Precio2 , Last el de ayer => Precio4 y close => Precio1 es el ultimo
+*- Variables
+* z2 : Primera fila con contenido
+* z3 : Ultima fila con contenido
+* z4 : Primera Celda asignada
+* z5 : Ultima Celda asignada
+* z6 : Celda corriente
+
+ACN(z2,2)
+ACN(z3,1000)
+
+SetFilaActual(2)
+ACN(z4,fac)
+ACN(z5,fac)
+
+
+
+*- Recorrer valores
+Recorrer&i Val(z2),Val(z3)
+
+   ACT(a:Val(z5), LinkH(1,a:Val(z5)))
+   ACN(b:Val(z5), LinkH(1,b:Val(z5)))
+   ACN(c:Val(z5), LinkH(1,c:Val(z5)))
+   ACN(d:Val(z5), LinkH(1,d:Val(z5)))
+   ACN(e:Val(z5), LinkH(1,e:Val(z5)))
+
+   If Novacio(Val(a:Val(z5))) 
+       SCN(W:3,1)                           *** Contador de Leidos
+   endif
+
+   ***---Relevo si el Codigo informado (A:Val(Z:5)) existe como contrato de Futuros
+
+   ACN(BD:1, 0)    *  Bandera de Contratos 0=No hay contratos  1=Existe el Dato en Contratos
+   ACT(Y:1, Val(A:Val(Z:5))) * Codigo de Contrato/Especie
+   SQL.ADD("Select * from "~DBO~".CONTRATOS WHERE Codigo = '"~Val(Y:1)~"' ")
+   Recorrer SQL
+     ACD (Y:3, FBN['LastTradingDate']) 
+     ACT(ww:1, ItemLista(FBN['Especies'],1) )
+     ACN(BD:1, 1)         * Bandera de Seleccion (Contrato/Futuros)
+     acn(x:9, 0)           * Bandera de Seleccion Update o Insert para Futuros
+     ACN(x:9, SQL("SELECT 1 FROM "~DBO~".COTIZACIONES WHERE Codigo='"~Val(ww:1)~"' and CallPut='FUT'  and Fecha='"~IdxDate(Fsys)~"'  AND FechaEj = '"~IdxDate(Val(Y:3))~"' "))
+   Proximo
+
+   ***-- Existe el dato en Contratos (Bandera 1)-Se toma informacion leida para Cotizacion Futuros
+   ***---------------------------------------------------------------------------------------------
+   IF Val(BD:1) = 1       
+      If Novacio(Val(a:Val(z5))) 
+        SCN(W:4,1)      * W:4 = Contador de Contratos Futuros
+      endif
+      If (Val(b:Val(z5))+Val(c:Val(z5))+Val(d:Val(z5))+Val(e:Val(z5)))<>0 
+         if Val(x:9)=1          
+            *- **--- Ya habia una cotizacion futura previa entonces UPDATE (X:9=1) 
+            SQL.ADD("UPDATE "~DBO~".COTIZACIONES SET ")
+            SQL.ADD("FechaEj='"~IdxDate(Val(Y:3))~"', ")
+            SQL.ADD("Precio1="~FStr(Val(b:Val(z5)),1,8)~", ")
+            SQL.ADD("Precio2="~FStr(Val(c:Val(z5)),1,8)~", ")
+            SQL.ADD("Precio3="~FStr(Val(d:Val(z5)),1,8)~", ")
+            SQL.ADD("Precio4="~FStr(Val(e:Val(z5)),1,8)~"  ")
+            SQL.ADD("WHERE  Codigo='"~Val(ww:1)~"' and CallPut='FUT' and Fecha='"~IdxDate(Fsys)~"' AND FechaEj = '"~IdxDate(Val(Y:3))~"' ")
+            SQL.NEW
+            SQL.EXEC  
+         else   
+            *- **--- No habia una cotizacion futura previa entonces INSERT (X:9<>=1)      
+            SQL.ADD("INSERT INTO "~DBO~".COTIZACIONES ")
+            SQL.ADD("(Fecha, Codigo, FechaEj ,CallPut, Precio1,Precio2,Precio3,Precio4) ")
+            SQL.ADD(" VALUES ('"~IdxDate(Fsys)~"', '"~Copy(Val(ww:1),1,6)~"', '"~IdxDate(Val(Y:3))~"', 'FUT', ")
+            SQL.ADD(" "~Fstr(Val(e:Val(z5)),0,8)~","~Fstr(Val(c:Val(z5)),0,8)~","~Fstr(Val(d:Val(z5)),0,8)~","~Fstr(Val(b:Val(z5)),0,8)~" )")
+            SQL.NEW
+            SQL.EXEC
+         endif    
+      * --- No se considera el dato si llega cotizacion de Bloomberg en 0 (para los 4 campos)  
+      Else
+           If Novacio(Val(a:Val(z5))) 
+             SCN(W:9,1)      * W:9 = Contador de Ignorados  
+           endif     
+      Endif
+
+   ELSE
+   ***-- No Existe el dato en Contratos (Bandera 0) - Se toma informacion leida para Cotizacion SPOT
+   ***--------------------------------------------------------------------------------------------- 
+      If Novacio(Val(a:Val(z5))) 
+         SCN(W:5,1)      * W:5 = Contador de Cotizaciones Spot  
+      endif          
+      If (Val(b:Val(z5))+Val(c:Val(z5))+Val(d:Val(z5))+Val(e:Val(z5)))<>0 y SQL("SELECT Count(*) FROM "~DBO~".ESPECIES WHERE Codigo='"~Val(a:Val(z5))~"' ")=1
+          Message('Actualizando Cotizacion: '~Val(a:Val(z5)))
+  
+          *- Buscar Cotizacion Contado de hoy
+          ACN(x:3,SQL("SELECT Count(*) FROM "~DBO~".COTIZACIONES WHERE Codigo='"~Val(a:Val(z5))~"' and (CallPut='CON' or CallPut is Null) and Fecha='"~IdxDate(Fsys)~"' "))
+
+          If Val(x3)=1
+          *- Actualizar Precio 
+          *- Precio1: Close Precio2: Ask Precio3: Bid Precio4: Last
+      
+             SQL.ADD("UPDATE "~DBO~".COTIZACIONES SET ")
+             SQL.ADD("Precio1="~FStr(Val(b:Val(z5)),1,8)~", ")
+             SQL.ADD("Precio2="~FStr(Val(c:Val(z5)),1,8)~", ")
+             SQL.ADD("Precio3="~FStr(Val(d:Val(z5)),1,8)~", ")
+             SQL.ADD("Precio4="~FStr(Val(e:Val(z5)),1,8)~"  ")
+             SQL.ADD("WHERE  Codigo='"~Copy(Val(a:Val(z5)),1,6)~"' and (CallPut='CON' or CallPut is Null) and Fecha='"~IdxDate(Fsys)~"' ")
+             SQL.NEW
+             SQL.EXEC
+          Else
+          *- Insertar registro
+             SQL.ADD("INSERT INTO "~DBO~".COTIZACIONES ")
+             SQL.ADD("(Fecha, Codigo, CallPut, Precio1,Precio2,Precio3,Precio4) ")
+             SQL.ADD(" VALUES ('"~IdxDate(Fsys)~"', '"~Copy(Val(a:Val(z5)),1,6)~"', 'CON', ")
+             SQL.ADD(" "~Fstr(Val(e:Val(z5)),0,8)~","~Fstr(Val(c:Val(z5)),0,8)~","~Fstr(Val(d:Val(z5)),0,8)~","~Fstr(Val(b:Val(z5)),0,8)~" )")
+             SQL.NEW
+             SQL.EXEC
+          Endif
+   
+      else
+            * --- No se considera el spot si llega cotizacion de Bloomberg en 0 (para los 4 campos) 
+            If Novacio(Val(a:Val(z5))) 
+               SCN(W:9,1)      * W:9 = Contador de Ignorados 
+            endif     
+      endif
+
+   ENDIF 
+SCN(z5,1)
+Proximo
+
+MessageBox('Total Registros Input= '~Val(W:3))
+MessageBox('Registros Futuros = '~Val(W:4))
+MessageBox('Registros Spot    = '~Val(W:5))
+MessageBox('Registros Ignorados = '~Val(W:9))
+
+CerrarHoja('BLOOM1',1)
+

@@ -1,0 +1,315 @@
+﻿CrearDialogo
+    Fecha1          :   'Fecha Vto'                     ;1;1;;NO;;;;;FSYS
+    String1         :   'Moneda'                        ;2;1;;;;Eqstr(Dialogo.String1,Var('MONELOCA')) O Eqstr(Dialogo.String1,Var('MONEEXTR'));"Debe ingresar una moneda valida";NO;;Var('MONELOCA');'ARP|USD';;;
+    ListaTabla1     :   'Clientes'                      ;3;1;;;;;;;;;;;;;'Codigo' ; 'Codigo;RazonSocial' ; 'CLIENTES'
+    String3         :   'Sector'                        ;1;2;;NO;;;;;;SQL("SELECT SECTOR FROM "~DBO~".USRVEHICULO WHERE Codigo = '"~USUARIOACTIVO~"'");;;;;    
+    String2         :   'Tipo De Calculo'               ;2;2;;;;Eqstr(Dialogo.String2,'TEM') O Eqstr(Dialogo.String2,'TNA');"Debe ingresar un Tipo de Calculo valido";NO;;'TNA';'TNA|TEM';;;
+    TipoTasa        : 'Tipo Tasa'                       ;3;2;;NO;;;;;;SQL("Select Codigo from  "~DBO~".TIPOSTASA WHERE TiposOperacion LIKE ('%MMCREM|%')");;;;;;
+    ListaTabla2     :   'Oficial'                       ;4;2;;;;;;;;;;;;;'Codigo' ; 'Codigo;Descripcion' ; 'OFICIALESCUENTA'
+FinDialogo
+     
+if not ok
+   Cancelar("Evento Cancelado.")
+Endif
+
+*a: Cliente
+*b: Cuenta
+*c: NrOperacion
+*d: Saldo Minimo Actual
+*e: Plazo Actual
+*f: Valor de tasa Actual
+*g: Valor de tasa Transf Actual
+*h: Saldo minimo Nuevo
+*i: Plazo Nuevo
+*j: Tasa de Transferencia Nuevo
+*k: Tasa Nuevo
+*l: Check para renovar 1 si 0 no
+*m: Razon social del cliente
+
+*p: TipoTasa
+*aa: Valor Encaje del cliente
+*Excepciones
+*Tasa 
+    *ab:1 Tasa
+    *ab:2 Tasa Min
+    *ab:3 Tasa Max   
+    *ab:4 Tasa Min Exceso
+    *ab:5 Tasa Max Exceso
+*Tasa Transf
+    *ac:2 Tasa Min
+    *ac:3 Tasa Max   
+    *ac:4 Tasa Min Exceso
+    *ac:5 Tasa Max Exceso
+
+*ze:&i Error que impide que se cargue la op 1(si tiene) 0(no tiene)
+*za:&i Excepcion RANGOTASA la op 1(si tiene) 0(no tiene)
+*zb:&i Excepcion RANGOTRANS la op 1(si tiene) 0(no tiene)
+*zc:&i Excepcion SPREADNEG la op 1(si tiene) 0(no tiene)        
+*zd:&i Excepcion TASATMOD la op 1(si tiene) 0(no tiene)      
+*zf:&i Excepcion FECHAVALOR la op 1(si tiene) 0(no tiene)          
+*Instancias por las que puede pasar la operaciones MMCREM 
+ACT(az6,"1|2|7|8|10|30|70|91|92|93|")
+SetFilaActual(0)
+&CantOperaciones := 0
+&DiaHabil := Habiles(Dialogo.Fecha1, -1, 'ARG', SI)  + 1
+
+SQL.ADD("SELECT O.Cliente1, O.Cuenta1, O.NrOperacion, O.Cantidad, O.FechaOp,")
+SQL.ADD("O.Plazo, O.Precio1, O.Precio4, CL.OficialCuenta, O.FechaVto")
+SQL.ADD("FROM "~DBO~".OPERACIONES O INNER JOIN "~DBO~".CUENTAS CU ")
+SQL.ADD("ON O.Cliente1 = CU.Cliente AND O.Cuenta1 = CU.Codigo")
+SQL.ADD("INNER JOIN "~DBO~".CLIENTES CL ON O.Cliente1 = CL.Codigo")
+SQL.ADD("INNER JOIN "~DBO~".OPERACIONESBITS OB ON O.NrOperacion = OB.NrOperacion AND Valor = 1")
+SQL.ADD("WHERE O.TipoOp = 'MMCREM' AND O.FechaVto >= "~IdxDate2(&DiaHabil)~" AND  O.FechaVto <= "~IdxDate2(Dialogo.Fecha1)~" AND O.Especie = '"~Dialogo.String1~"'")
+if Eqstr(Dialogo.String2, 'TEM') 
+    SQL.ADD("AND CU.TEM = 'SI'")
+else
+    SQL.ADD("AND ISNULL(CU.TEM, 'NO') = 'NO'")
+endif 
+if NoVacio(Dialogo.ListaTabla1) 
+    SQL.ADD("AND O.Cliente1 IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~")")
+endif
+if NoVacio(Dialogo.ListaTabla2)
+    SQL.ADD("AND CL.OficialCuenta IN ("~Pipe2Comillas(Dialogo.ListaTabla2)~")")
+endif
+SQL.ADD("AND O.Sector1 = '"~Dialogo.String3~"'")
+SQL.ADD("AND O.Cliente1 NOT IN (SELECT cliente FROM "~DBO~".GRUPOSECONOMICOS WHERE cliente IS NOT NULL)")
+SQL.ADD("AND ISNULL(TRIM(NrOperacion4), '') = ''")
+SQL.ADD("AND OB.NrBit IN ('70','93') ")
+SQL.ADD("AND O.FechaOp <> O.FechaVto")
+
+
+Recorrer SQL
+    ACT(a:fac, FBN['Cliente1'])
+    ACT(b:fac, FBN['Cuenta1'])
+    ACN(aa:fac, SQL("SELECT ISNULL((SELECT Porcentaje FROM "~DBO~".PORENCAJETASAT WHERE CodJerarquia IN ("~Pipe2Comillas(Ascendientes('CLIENTES',Val(a:fac)))~")),0)"))
+    ACT(c:fac, FBN['NrOperacion'])
+    ACN(d:fac, FBN['Cantidad'])
+    ACN(e:fac, FBN['Plazo'])
+    ACN(f:fac, FBN['Precio1'])
+    ACN(g:fac, FBN['Precio4'])
+    ACN(h:fac, FBN['Cantidad'])
+    ACD(o:fac,FBN['FechaVto'])
+    ACN(i:fac, Val(e:fac))
+    ACT(p:fac, Dialogo.TipoTasa)
+    IF Eqstr(var('BASEXPILAR'), 'SI')
+        ACN(j:fac,SQL("SELECT dbo.ObtenerTasaTransferencia("~IdxDate2(Val(o:fac))~",'"~Val(p:fac)~"' ,'"~Dialogo.String1~"','"~Val(e:fac)~"')")+ Val(aa:fac))
+        ACN(k:fac,Val(j:fac))
+    else
+        ACN(j:fac,TasaDia(Val(p:fac), Dialogo.String1, Val(o:fac), Val(e:fac), 1) + Val(aa:fac))
+        ACN(k:fac,Val(j:fac))
+    endif
+    ACN(l:fac, 1)        
+    ACT(m:fac, SQL("SELECT RazonSocial FROM "~DBO~".CLIENTES WHERE Codigo = '"~Val(a:fac)~"'"))
+    ACT(n:fac, FBN['OficialCuenta'])
+    ACD(q:fac, FBN['FechaOp'])S
+    ACD(r:fac, Val(o:fac)+Val(e:fac))
+    &CantOperaciones := &CantOperaciones + 1
+    
+
+Proximo
+
+IF &CantOperaciones > 0
+    CrearListBox ; 'Arial,8,'
+        'Confirma'                  ; l1..l:fac     ;SI;;;60;CHECK;RGB(180,180,193); 
+        'Cliente'                   ; a1..a:fac     ;NO;SI;;100;STRING;;RGB(232,232,255); 
+        'Razon Social'              ; m1..m:fac     ;NO;SI;;200;STRING;;RGB(232,232,255); 
+        'Cuenta'                    ; b1..b:fac     ;NO;SI;;100;STRING;;RGB(232,232,255); 
+        'NrOperacion Actual'        ; c1..c:fac     ;NO;SI;;100;STRING;;RGB(232,232,255); 
+        'Saldo Minimo Actual'       ; d1..d:fac     ;NO;SI;;100;NUMERO;;RGB(232,232,255); 
+        'Fecha Op Actual'           ; q1..q:fac     ;NO;SI;;100;FECHA;RGB(232,232,255); 
+        'Plazo Actual'              ; e1..e:fac     ;NO;SI;;100;STRING;;RGB(232,232,255);;;;;;;;;;
+        'Fecha Vto Actual'          ; o1..o:fac     ;NO;SI;;100;FECHA;RGB(232,232,255);  
+        'Valor Tasa Actual'         ; f1..f:fac     ;NO;SI;;150;NUMERO;'#######.######';RGB(232,232,255); 
+        'Valor Tasa Transf Actual'  ; g1..g:fac     ;NO;SI;;150;NUMERO;'#######.######';RGB(232,232,255); 
+        'Saldo minimo nuevo'        ; h1..h:fac     ;SI;IIF(Val(l:FLB) = 1, Val(h:FLB) > 0);'El saldo debe ser mayor a cero';150;NUMERO;'###,###,###,###.##';RGB(180,180,193);
+        'Fecha Op Nuevo'            ; o1..o:fac     ;NO;SI;;120;FECHA;RGB(232,232,255); 
+        'Plazo Nuevo'               ; i1..i:fac     ;SI;IIF(Val(l:FLB) = 1, Val(i:FLB) > 0);'El plazo debe ser mayor a cero';100;NUMERO;'######';RGB(180,180,193);;;;;;;;;
+        'Fecha Vto Nuevo'           ; r1..r:fac     ;NO;SI;;120;FECHA;RGB(232,232,255);Val(o:FLB)+ Val(i:FLB) 
+        'Valor Tasa  Nuevo'         ; k1..k:fac     ;SI;IIF(Val(l:FLB) = 1, Val(k:FLB) > 0);'La tasa debe ser mayor a cero';140;NUMERO;'#######.######'         ;RGB(180,180,193);IIF(MODI,Val(k:FLB),IIF(Eqstr(var('BASEXPILAR'), 'SI'),SQL("SELECT dbo.ObtenerTasaTransferencia("~IdxDate2(Val(o:FLB))~",'"~Val(p:FLB)~"' ,'"~Dialogo.String1~"','"~Val(i:FLB)~"')")+ Val(aa:FLB),    TasaDia(Val(p:FLB), Dialogo.String1, Val(o:FLB), Val(i:FLB), 1) + Val(aa:FLB)))   ;NO ;NO
+        'Valor Tasa Transf Nuevo'   ; j1..j:fac     ;SI;IIF(Val(l:FLB) = 1, Val(j:FLB) > 0);'La tasa transf debe ser mayor a cero';140;NUMERO;'#######.######'  ;RGB(180,180,193);IIF(MODI,Val(j:FLB),IIF(Eqstr(var('BASEXPILAR'), 'SI'),SQL("SELECT dbo.ObtenerTasaTransferencia("~IdxDate2(Val(o:FLB))~",'"~Val(p:FLB)~"' ,'"~Dialogo.String1~"','"~Val(i:FLB)~"')")+ Val(aa:FLB),    TasaDia(Val(p:FLB), Dialogo.String1, Val(o:FLB), Val(i:FLB), 1) + Val(aa:FLB)))   ;NO ;NO        
+
+
+    FinListBox
+else
+   Cancelar('No hay operaciones que cumplan las condiciones')
+endif
+    
+if not ok
+   Cancelar('Evento Cancelado.')
+Endif     
+
+Recorrer&i  1 ,&CantOperaciones 
+    if Val(l:&i) = 1 
+        ACN(ze:&i,0)
+        &NrOperacion := GetNumerador(10)         
+        IF Eqstr(var('BASEXPILAR'), 'SI')
+            *Tasa Transf
+            ACN(ab:1,SQL("SELECT dbo.ObtenerTasaTransferencia("~IdxDate2(Val(o:&i))~",'"~Val(p:&i)~"' ,'"~Dialogo.String1~"','"~Val(i:&i)~"')")+ Val(aa:&i))
+            ACN(ac:2,Val(ab:1)*(1-Var('RANGOREM')/100))
+            ACN(ac:3,Val(ab:1)*(1+Var('RANGOREM')/100))
+            ACN(ac:4,Val(ab:1)*(1-Var('EXCESOREM')/100))
+            ACN(ac:5,Val(ab:1)*(1+Var('EXCESOREM')/100))
+            *Tasa
+            ACN(ab:2,Val(j:&i)*(1-Var('RANGOREM')/100))
+            ACN(ab:3,Val(j:&i)*(1+Var('RANGOREM')/100))
+            ACN(ab:4,Val(j:&i)*(1-Var('EXCESOREM')/100))
+            ACN(ab:5,Val(j:&i)*(1+Var('EXCESOREM')/100))      
+        else
+            ACN(ab:1,TasaDia(Val(p:&i), Dialogo.String1, Val(o:&i), Val(i:&i), 1) + Val(aa:&i))
+            *Tasa Transf
+            ACN(ac:2,Val(ab:1)*(1-Var('RANGOREM')/100))
+            ACN(ac:3,Val(ab:1)*(1+Var('RANGOREM')/100))
+            ACN(ac:4,Val(ab:1)*(1-Var('EXCESOREM')/100))
+            ACN(ac:5,Val(ab:1)*(1+Var('EXCESOREM')/100))
+            *Tasa
+            ACN(ab:2,Val(j:&i)*(1-Var('RANGOREM')/100))
+            ACN(ab:3,Val(j:&i)*(1+Var('RANGOREM')/100))
+            ACN(ab:4,Val(j:&i)*(1-Var('EXCESOREM')/100))
+            ACN(ab:5,Val(j:&i)*(1+Var('EXCESOREM')/100))
+        endif
+        *Excepcion Tasa
+        If (Val(k:&i) < Val(ab:4) O Val(k:&i) > Val(ab:5))
+        MessageBox('Tasa Fuera de Rango para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Tasa: '~Val(k:&i)~Chr(13)~Chr(10)~'Tasa minima: '~Val(ab:4)~Chr(13)~Chr(10)~'Tasa maxima: '~Val(ab:5)~Chr(13)~Chr(10),2,0)
+            ACN(ze:&i,1)
+        else if (Val(k:&i) < Val(ab:2) O Val(k:&i) > Val(ab:3))
+            if MessageBox('Tasa Exceso de Rango para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Tasa: '~Val(k:&i)~Chr(13)~Chr(10)~'Tasa minima: '~Val(ab:2)~Chr(13)~Chr(10)~'Tasa maxima: '~Val(ab:3)~Chr(13)~Chr(10),1,1) = 2
+                ACN(ze:&i,1)
+                else
+                    ACN(za:&i,1)
+                endif
+            endif
+        endif 
+        *Excepcion Tasa Transf
+        if Val(ze:&i) = 0
+            If (Val(j:&i) < Val(ac:4) O Val(j:&i) > Val(ac:5))
+                MessageBox('Tasa Transf Fuera de Rango para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Tasa: '~Val(k:&i)~Chr(13)~Chr(10)~'Tasa Transf minima: '~Val(ac:4)~Chr(13)~Chr(10)~'Tasa maxima:'~Val(ac:5)~Chr(13)~Chr(10),2,0)
+                ACN(ze:&i,1)
+                else if (Val(j:&i) < Val(ac:2) O Val(j:&i) > Val(ac:3))
+                if MessageBox('Tasa Transf Exceso de Rango para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Tasa minima: '~Val(ac:2)~Chr(13)~Chr(10)~'Tasa maxima: '~Val(ac:3)~Chr(13)~Chr(10),1,1) = 2
+                    ACN(ze:&i,1)
+                    else
+                        ACN(zb:&i,1)
+                    endif
+                endif
+            endif                
+        endif
+        
+        if Val(ze:&i) = 0
+            if (Val(k:&i)> Val(j:&i))
+                if MessageBox('Spread Negativo para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Diferencia: '~FStr(Val(k:&i)-Val(j:&i),,6),1,1) = 2
+                    ACN(ze:&i,1)
+                else
+                    ACN(zc:&i,1)                        
+                endif
+            endif
+        endif
+        
+        if Val(ze:&i) = 0
+            if (Val(j:&i) <> Val(ab:1))
+            if MessageBox('Tasa Transf modificada para la op: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'Original: '~Val(ab:1)~Chr(13)~Chr(10)~"Modificada: "~Val(j:&i),1,1) = 2
+                    ACN(ze:&i,1)
+                else
+                    ACN(zd:&i,1)                        
+                endif
+            endif
+        endif
+        
+        if Val(ze:&i) = 0        
+            if Val(o:&i) <> Fecha(FSYS)
+            if MessageBox('Es una Operacion FechaValor: '~Val(c:&i)~Chr(13)~Chr(10)~'Cliente: '~Val(a:&i)~Chr(13)~Chr(10)~'FechaOp: '~Val(o:&i)~Chr(13)~Chr(10)~"Fecha Sistema: "~Fecha(FSYS),1,1) = 2
+                    ACN(ze:&i,1)
+                else
+                    ACN(zf:&i,1)                        
+                endif
+            endif
+        endif
+        if Val(ze:&i) = 0
+            *Pasarla a Terminal
+            SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS")
+            SQL.ADD("SET Valor =")
+            SQL.ADD("CASE WHEN NrBit = 70 THEN 1 ELSE 0 END")
+            SQL.ADD("Where NrOperacion ='"~Val(c:&i)~"'")
+            SQL.NEW
+            *Agregar NrOperacion4 a Operacion Vieja
+            SQL.ADD("UPDATE "~DBO~".OPERACIONES")
+            SQL.ADD("SET NrOperacion4 = '"~&NrOperacion~"'")
+            * SQL.ADD("Observac2 = 'B'")
+            SQL.ADD("Where NrOperacion ='"~Val(c:&i)~"'")
+            SQL.NEW
+            *INSERT NUEVA OPERACION
+            SQL.ADD(" Insert INTO "~DBO~".OPERACIONES                                           ")
+            SQL.ADD(" (  TipoOp,           NrOperacion,       FechaOp,         Especie,         ")
+            SQL.ADD("  Cliente1,              Cantidad,       Vehiculo1,         FechaVto,      ")
+            SQL.ADD("  Operador,              TipoTasa,       Cuenta1,         Precio1,         ")
+            SQL.ADD("  FechaCarga,        FechaCargaSys,     OficialCuenta,     Precio4,        ")
+            SQL.ADD("  NrOperacion3,              Plazo,         Observac2,    Precio2,         ")
+            SQL.ADD("PorBonificacion,       NrOperacion2,       Sector1, Observac3)             ")
+            SQL.ADD(" Values  ")
+            * TipoOp
+            SQL.ADD("(      'MMCREM',        '"~&NrOperacion~"', "~IdxDate2(Val(o:&i))~", '"~Dialogo.String1~"',    ")
+            * Cliente1
+            SQL.ADD("'"~Val(a:&i)~"',        "~Val(h:&i)~",'"~VAR('VEHICULODE')~"',"~IdxDate2(Val(r:&i))~",         ")
+            * Operador
+            SQL.ADD("'"~USUARIOACTIVO~"',    '"~Val(p:&i)~"' ,'"~Val(b:&i)~"',     "~Val(k:&i)~",                   ")
+            * FechaCarga
+            SQL.ADD(      SQLAhora~",          "~IdxDate2(FSYS)~", '"~Val(n:&i)~"',  "~Val(j:&i)~",                 ")
+            *NrOperacion3
+            SQL.ADD("'"~&NrOperacion~"',"~FStr(Val(i:&i),1,0)~", 'A', '"~Val(ab:1)~"',                              ")                                                               
+            *Spread
+            SQL.ADD(Fstr(Val(aa:&i),0,6)~",'"~Val(c:&i)~"', '"~Dialogo.String3~"', 'RENOV')                         ")
+            SQL.NEW
+            *Agregar instancias
+            ACT(az3, &NrOperacion)
+            ACT(az4, 'OPERACIONES')
+            ACT(az5, '1|') 
+            (.'ALTAINSTA2'.)         
+
+            *Excepciones*
+            if Val(za:&i) =  1
+                SQL.ADD(" Insert INTO "~DBO~".EXCEPCIONES")
+                SQL.ADD("(NrOperacion,   Tipo,    Fecha,   Descripcion)")
+                SQL.ADD(" Values  ")
+                SQL.ADD("('"~&NrOperacion~"','RANGOTASA',"~IdxDate2(FSYS)~",'Tasa Fuera de Rango: "~Val(ab:2)~" y "~Val(ab:3)~"')")
+                SQL.NEW 
+            endif
+            
+            if Val(zb:&i) =  1
+                SQL.ADD(" Insert INTO "~DBO~".EXCEPCIONES")
+                SQL.ADD("(NrOperacion,   Tipo,    Fecha,   Descripcion)")
+                SQL.ADD(" Values  ")
+                SQL.ADD("('"~&NrOperacion~"','RANGOTRANS',"~IdxDate2(FSYS)~",'Tasa Transferencia Fuera de Rango: "~Val(ac:2)~" y "~Val(ac:3)~"')")
+                SQL.NEW 
+            endif
+            if Val(zf:&i) =  1
+                SQL.ADD(" Insert INTO "~DBO~".EXCEPCIONES")
+                SQL.ADD("(NrOperacion,   Tipo,    Fecha,   Descripcion)")
+                SQL.ADD(" Values  ")
+                SQL.ADD("('"~&NrOperacion~"','FVALOR',"~IdxDate2(FSYS)~", 'Es una Operacion FechaValor')")
+                SQL.NEW 
+            endif
+            if Val(zc:&i) =  1
+                SQL.ADD(" Insert INTO "~DBO~".EXCEPCIONES")
+                SQL.ADD("(NrOperacion,   Tipo,    Fecha,   Descripcion)")
+                SQL.ADD(" Values  ")
+                SQL.ADD("('"~&NrOperacion~"','SPREADNEG',"~IdxDate2(FSYS)~", 'Spread Negativo: "~FStr(Val(k:&i)-Val(j:&i),,6)~"')")
+                SQL.NEW 
+            endif
+            
+            if Val(zd:&i) =  1
+                SQL.ADD(" Insert INTO "~DBO~".EXCEPCIONES")
+                SQL.ADD("(NrOperacion,   Tipo,    Fecha,   Descripcion)")
+                SQL.ADD(" Values  ")
+                SQL.ADD("('"~&NrOperacion~"','TASATMOD',"~IdxDate2(FSYS)~", 'Tasa Transferencia: "~Val(ab:1)~". Tasa Transferencia Modificada: "~Val(j:&i)~". ')")
+                SQL.NEW 
+            endif
+            
+            &TotalOp := &TotalOp + 1  
+        endif
+    endif
+PROXIMO
+SQL.EXEC
+If &TotalOp = 1 
+    MessageBox("Se cargo "~FStr(&TotalOp,1,0)~" operacion")
+Else
+    MessageBox("Se cargaron "~FStr(&TotalOp,1,0)~" operaciones")
+Endif

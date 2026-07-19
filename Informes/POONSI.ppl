@@ -1,0 +1,576 @@
+﻿*- ON1: Dejo valor para linkear del informe de resultados el monto en moneda original
+ModoReproceso(SinDialogo)
+CrearDialogo
+   Fecha1     : "Fecha Vigencia"    ;1;1;;;;Dialogo.Fecha1 <> 0 Y Dialogo.Fecha1 <= Fsys;'Fecha Vigencia InValida';NO;Fsys;
+   Especie1   : "Especie"           ;;;;;;;;;;;;;
+   Cliente1   : "Entidad"           ;1;2;;;;;;;;;;;
+   Radio1     : "Expresado|ARP|USD" ;2;2;;;;;;;1
+*   Radio4     : "Consolidado|NO|SI" ;3;2;;;;;;;0
+   NrOperacion1: "Operacion"        ; ; ;;;;;;;;;;;;" TipoOp In ('MMONM','MMON','MMSIMV','MMPSI','MMSCMV','MMPSC')"
+   Lista1     : "Vehiculo"          ;5;1;;;;;;;;;IIf(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') "))
+   Lista2     : "TipoOp"            ;6;1;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo In ('MMON','MMONM','MMPSI','MMSIMV','MMSCMV','MMPSC') ")
+   Lista3     : "Operaciones"       ;-7;1;;NO;NO;;;;;;
+   Radio3      : "Consolidado|SI|NO";3;2;;SI;SI;;
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+
+SetFilaActual(3)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,2)
+
+*- Control de Vehiculos
+ACT(zz6, IIf(Vacio(UsrVehiculos(UsuarioActivo)),SQLSet("Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "),SQLSET("Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")) )
+ 
+ACT(a:FAC  ,"Detalle de Obligaciones Negociables y Prestamos Sindicados ")
+ACT(a:FAC+1,"Vigentes al "~Dialogo.Fecha1~" "~IIf(Dialogo.Radio3=1,' Por Vehiculo','Consolidado')  )
+SetFont(a:FAC..a:FAC+1,3)
+
+SetFilaActual(4)
+
+If Dialogo.Radio3=1
+   *- Corte de control por Vehiculo,NrOperacion
+   ACT(aa1," O.Vehiculo1+O.NrOperacion as Clave")
+Else
+   *- Corte de control por Vehiculo,NrOperacion
+   ACT(aa1,"O.NrOperacion as Clave")
+Endif
+
+ACT(mo1,VAR('MONEEXTR'))
+If Dialogo.Radio1=0
+   ACT(mo1,VAR('MONELOCA'))
+Endif
+
+If NoVacio(Dialogo.Cliente1)
+   ACT(a:FAC+1, 'Entidad : '~Dialogo.Cliente1~'  '~BuscarCampo('Clientes','RazonSocial','Codigo',Dialogo.Cliente1))
+Else
+   ACT(a:FAC+1, 'Entidad : Todos')
+Endif
+If NoVacio(Dialogo.Lista1)
+   ACT(a:FAC+2, 'Vehiculo : '~Dialogo.Lista1)
+Else
+   ACT(a:FAC+2, 'Vehiculo : '~IIf(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")))
+Endif
+If NoVacio(Dialogo.Especie1)
+   ACT(a:FAC+3, 'Especie : '~Dialogo.Especie1~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie1))
+Else
+   ACT(a:FAC+3, 'Especie : Todas')
+Endif
+If NoVacio(Dialogo.Lista2)
+   ACT(a:FAC+4, 'Tipo Op.: '~Dialogo.Lista2)
+Else
+   ACT(a:FAC+4, 'Tipo Op.: Todas')
+Endif
+If NoVacio(Dialogo.NrOperacion1)
+   ACT(a:FAC+5, 'NrOperacion: '~Dialogo.NrOperacion1)
+Else
+   ACT(a:FAC+5, 'NrOperacion: Todas')
+Endif
+
+ACT(a:FAC+6,'Expresado en  '~IIf(Dialogo.Radio1=0, Var('MONELOCA'), Var('MONEEXTR')))
+SetFont(a:FAC..N:FAC+6,2)
+SetFilaActual(FAC+7)
+
+*- Select de Operaciones
+*- Llamo a la funcion pidiendo Todos los settlements vigentes vi1: Vigentes=1 , Todos los Settements=0
+ACN(vi1,0)
+(.'PFONPSI'.)
+SQL.ADD("ORDER BY 1,5")
+
+*** b:400 Valor de la columna ***
+ACN(z:400,2)
+ACT(x:400,' ')
+ACN(lv1,0)
+
+Recorrer SQL
+   Message(fbn['Clave']~' '~fbn['FechaVto']~'  '~FBN['VResidual']~' '~fbn['TipoOp'])
+   
+   * Corte de Control por Cliente o Vehiculo
+   If Not EqStr(Val(x:400),fbn['Clave']) y Val(lv1)<>0
+      ACT(a:FAC  , 'Totales ')
+      SetFont(a:FAC..v:FAC,2)
+      AgregarMarco(a:FAC,0,0,Exe('COLOR8'))
+      
+      Ifa 
+      *- V.Residual Original y Swapeado
+      ACN(a:FAC,Val(a:Val(lv1)))        
+      ACN(b:FAC,Val(b:Val(lv1)))
+       
+      *- Cuota Amortizacion 
+      ACN(c:FAC,Val(c:Val(lv1)))
+      ACN(d:FAC,Val(d:Val(lv1)))
+       
+      *- Intereses Mon.Original
+      ACN(j:FAC,Val(j:Val(lv1)))     
+      ACN(k:FAC,Val(k:Val(lv1)))
+
+      *- Imp.Endeudamiento Mon.Original
+      ACN(l:FAC,Val(l:Val(lv1)))
+      ACN(m:FAC,Val(m:Val(lv1)))
+      ACN(n:FAC,Val(n:Val(lv1)))
+
+      FormatoCeldas(l:FAC,EXE('F5')) 
+
+      ACN(o:FAC, Val(o:Val(lv1)))
+      ACN(p:FAC, Val(p:Val(lv1)))
+      ACN(q:FAC, Val(q:Val(lv1)))
+      FormatoCeldas(o:FAC,EXE('F5')) 
+      
+      ACN(r:FAC, Val(r:Val(lv1)))
+      ACN(s:FAC, Val(s:Val(lv1)))
+
+      ACN(u:FAC, Val(u:Val(lv1)))
+      ACN(v:FAC, Val(v:Val(lv1)))
+      ACN(w:FAC, Val(w:Val(lv1)))
+      ACN(x:FAC, Val(x:Val(lv1)))
+      ACN(y:FAC, Val(y:Val(lv1)))
+
+      FormatoCeldas(m:FAC,EXE('F5'))    
+      SetFont(a:FAC..y:FAC,2)
+      AgregarMarco(a:FAC..y:FAC,0,0,Exe('COLOR8'))
+
+      *- Guardo el numero de fila para cuando tengo operaciones relacionadas
+      If Val(nu1)>13
+         ACN(fi4, FAC)
+      Endif
+
+      IFA
+
+      *- Vuelvo a setear en la fila comienzo de la operacion cabecera
+      ACN(fi3, Val(fi2))
+   Endif
+   
+   * Corte de Control por Cliente o Vehiculo
+   If Not EqStr(Val(x:400),fbn['Clave']) y [Vacio(Dialogo.Lista3) o Incluido(FBN['NrOperacion'],Dialogo.Lista3)]
+      Ifa
+      ACN(y:400,2)
+      ACT(x:400,fbn['Clave'])
+       
+      *- fi1: Fila Actual del Encabezado
+      ACN(fi1,FAC)
+       
+      *- Encabezado operacion
+      ACT(a:FAC  , 'Vehiculo: '~FBN['Vehiculo1'])
+      ACT(a:FAC+1, 'Cantidad: '~PYC(IIf(FBN['CantidadOri']<>0,FBN['CantidadOri'],FBN['Cantidad']),0,2) )
+    
+   
+      ACT(c:FAC  , 'TipoOp: '~FBN['TipoOp'])
+      ACT(c:FAC+1, 'Numero: '~FBN['NrOperacion'])
+      ACLO(c:FAC+1, FBN['NrOperacion'])
+      
+      ACT(e:FAC  , 'Especie: '~FBN['Especie'])
+      ACT(e:FAC+1, 'Entidad: '~FBN['Cliente1'])
+      
+      ACT(g:FAC  , 'Origen: '~FBN['FechaOp'])
+      ACT(g:FAC+1, 'Vto: '~FBN['FechaVto'])
+      
+      ACN(ab:FAC  , CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,Val(mo1)) )
+      ACT(i:FAC  , 'TC HOY: '~PYC(Val(ab:FAC),0,8) )
+      ACT(i:FAC+1, 'TC Conc: '~PYC(FBN['Cotizacion1'],0,8) )
+    
+      ACT(k:FAC  , 'TipoTasa: '~FBN['TipoTasa'])
+      ACT(k:FAC+1, 'DayCount: '~IIf(FBN['RB8']=0,'ACTACT', IIf(FBN['RB8']=1,'ACT365F', IIf(FBN['RB8']=2,'ACT360',IIf(FBN['RB8']=3,'360360','30E360')))) )
+      AgregarMarco(a:FAC..l:FAC+1,0,0,Exe('COLOR6'))
+      ACN(nu1,13)
+
+      *- Recupero todas las operaciones asociadas
+      SQL.ADD("SELECT * FROM  "~DBO~".OPERACIONES WHERE OperacionRef='"~FBN['NrOperacion']~"'  Order By FechaOp")
+
+      ***---ACN(cs1,0)
+      ACN(CS:1, 1)
+      Recorrer SQL
+         If Val(nu1)=13
+            ACT(op1, '')
+         Endif
+
+         ACT(13:FAC -1 , 'Op.Relacionadas ... ')
+         dfa
+         ACT(Val(nu1) :FAC+1, FBN['NrOperacion'])
+         ACLO(Val(nu1):FAC+1, FBN['NrOperacion'])
+         *- Lista de nroperaciones relacionadas en la operacion
+         ACT(op1, FBN['NrOperacion']~'|'~Val(op1))
+
+         IF Not Incluido(FBN['TipoOp'],'DTCAP|DTFLO')
+            *- Solo para Swaps
+            *- Calculo del tipo de cambio del swap para aplicar en amortizacion y cap. residual
+            IF Not EqStr(FBN['Especie'],FBN['ContraEspecie'])
+               ACN(cs1,IIf(EqStr(Modo(FBN['Especie'],FBN['ContraEspecie']),'DIR'),FBN['TotalBrutoCli2']/FBN['TotalAux3'],FBN['TotalAux3']/FBN['TotalBrutoCli2']) )
+            EndIf
+         Else
+            *- Para Swap el Notional y el residual es el mismo
+            ACN(cs1,1)
+         EndIf
+
+         SCN(nu1,1)
+      Proximo
+        
+      SetFont(a:FAC..Val(nu1):FAC+1,2)
+      SetFilaActual(FAC+3)
+
+      *- Titulos del Informe
+      ACT(a:FAC  ,'Capital Residual')
+      ACT(a:FAC+1,'Mon.Orig')
+      ACT(b:FAC+1,'Derivado')
+      AgregarMarco(a:FAC..b:FAC,1,0)
+      AgregarMarco(a:FAC+1..b:FAC+1,1,2)
+      SetFont(a:FAC..b:FAC+1,2)
+      
+      ACT(c:FAC  ,'Amortizacion')
+      ACT(c:FAC+1,'Mon.Orig')
+      ACT(d:FAC+1,'Derivado')
+      AgregarMarco(c:FAC..d:FAC,1,0)
+      AgregarMarco(c:FAC+1..d:FAC+1,1,2)
+      SetFont(c:FAC..d:FAC+1,2)
+        
+      ACT(e:FAC  ,'Periodo Interes')
+      ACT(e:FAC+1,'Inicio')
+      ACT(f:FAC+1,'Fin')
+      AgregarMarco(e:FAC..f:FAC,1,0)
+      AgregarMarco(e:FAC+1..f:FAC+1,1,2)
+      SetFont(e:FAC..f:FAC+1,2)
+      
+      ACT(g:FAC  ,'Tasa')
+      ACT(g:FAC+1,'Tipo')
+      ACT(h:FAC+1,'Spread')
+      ACT(i:FAC+1,'Total')
+      AgregarMarco(g:FAC..i:FAC,1,0)
+      AgregarMarco(g:FAC+1..i:FAC+1,1,2)
+      SetFont(g:FAC..i:FAC+1,2)
+        
+      ACT(j:FAC  ,'Intereses')
+      ACT(j:FAC+1,' En Mon.Or')
+      ACT(k:FAC+1,' En '~Val(mo1))
+      AgregarMarco(j:FAC..k:FAC,1,0)
+      AgregarMarco(j:FAC+1..k:FAC+1,1,2)
+      SetFont(j:FAC..k:FAC+1,2)
+       
+      ACT(l:FAC  ,' Imp.Endeudamiento ')
+      ACT(l:FAC+1,' Tasa ')
+      ACT(m:FAC+1,'Mon.Or')
+      ACT(n:FAC+1,Val(mo1)) 
+      AgregarMarco(l:FAC..n:FAC,1,0)
+      AgregarMarco(l:FAC+1..n:FAC+1,1,2)
+      SetFont(k:FAC..n:FAC+1,2)
+      
+      ACT(o:FAC  ,' Imp.WH ')
+      ACT(o:FAC+1,' Tasa ')
+      ACT(p:FAC+1,'Mon.Or')
+      ACT(q:FAC+1,Val(mo1)) 
+      AgregarMarco(o:FAC..q:FAC,1,0)
+      AgregarMarco(o:FAC+1..q:FAC+1,1,2)
+      SetFont(o:FAC..q:FAC+1,2)
+ 
+      ACT(r:FAC, 'Iva Vto')
+      ACT(r:FAC+1, 'en '~Val(mo1))
+      AgregarMarco(r:FAC..r:FAC+1,1,0)
+      SetFont(r:FAC..r:FAC+1,2)
+
+      ACT(s:FAC, 'Total a ')
+      ACT(s:FAC+1, 'Pagar MOr')
+      AgregarMarco(s:FAC..s:FAC+1,1,0)
+      SetFont(s:FAC..s:FAC+1,2)
+
+      ACT(t:FAC  ,' Dias')
+      ACT(t:FAC+1,' Trans ')
+      AgregarMarco(t:FAC..t:FAC+1,1,0)
+      SetFont(t:FAC..t:FAC+1,2)
+       
+      ACT(u:FAC  ,' Devengamiento ')
+      ACT(u:FAC+1,' Interes MOr')
+      ACT(v:FAC+1,' Imp.End MOr')
+      ACT(w:FAC+1,' Imp.End '~Val(mo1))
+      ACT(x:FAC+1,' Imp.WH MOr')
+      ACT(y:FAC+1,' Imp.WH '~Val(mo1))
+      AgregarMarco(u:FAC..y:FAC,1,0)
+      AgregarMarco(u:FAC+1..y:FAC+1,1,2)
+      SetFont(u:FAC..y:FAC+1,2)
+      SetFilaActual(FAC+2)
+
+      *- Guardo el numero de fila donde comienza la operacion cabecera
+      If Val(nu1)>13
+         ACN(fi2, FAC)
+      Endif
+   Endif
+
+   If [Vacio(Dialogo.Lista3) o Incluido(FBN['NrOperacion'],Dialogo.Lista3)]
+   *- Detalle de las Operaciones
+   ACT(no1,FBN['NrOperacion'])
+   ACD(fe1,FBN['FechaOp'])
+   ACD(fe2,FBN['FechaVto'])
+   ACD(fe3,Dialogo.Fecha1)
+   
+   *- Periodo Interes
+   ACD(e:FAC,Val(fe1))        
+   ACD(f:FAC,Val(fe2))
+
+   *- lv1: Linea de Cuota Vigente
+   If Val(e:FAC)<=Dialogo.Fecha1 y Val(f:FAC)>Dialogo.Fecha1
+      ACN(lv1,FAC)
+   Endif
+    
+   *- V.Residual y Cuota Amortizacion 
+   ACN(a:FAC,FBN['VResidual'])        
+   ACN(c:FAC,FBN['ImpAmort'])        
+   
+   ACN(ta1,0)
+   ACN(sp1,0)
+   
+   * ACN(nc2,Val(a:FAC)*Val(ab:Val(fi1)))        
+   * ACN(na2,Val(c:FAC)*Val(ab:Val(fi1)))        
+   
+   ACN(b:FAC,val(a:fac)*Val(cs1))
+   ACN(d:FAC,val(c:fac)*Val(cs1))
+   
+   *- Intereses Mon.Original
+   ACN(j:FAC,FBN['TotalIntereses'])           
+   ACN(k:FAC,FBN['TotalIntereses']*Val(ab:Val(fi1)))           
+   
+   If Val(nu1)=13
+      ACN(a:FAC,FBN['VResidual']*Val(ab:Val(fi1)))        
+      ACN(c:FAC,FBN['ImpAmort']*Val(ab:Val(fi1)))  
+      ACN(b:FAC,FBN['VResidual']*Val(ab:Val(fi1)))        
+      ACN(d:FAC,FBN['ImpAmort']*Val(ab:Val(fi1)))  
+   Endif
+   
+   *- Tasa
+   ACN(g:FAC,FBN['Tasa'])        
+   ACN(h:FAC,FBN['Spread'])
+   *- Claudia 18.10. Para que en el Corto+Largo y Costo prom de deuda calcule con la TTN
+   * ACN(i:FAC,Val(g:FAC)+Val(h:FAC))
+   ACN(i:FAC,FBN['TTN'])
+   *---- 
+
+   If Not Incluido(FBN['TipoOp'], 'MMON|MMONM') 
+      If Val(ta1)<>0
+         ACN(g:FAC,Val(ta1))        
+         ACN(h:FAC,Val(sp1))
+      Endif
+   Endif
+
+   FormatoCeldas(g:FAC..i:FAC,EXE('F5'))    
+
+   If Not Incluido(FBN['TipoOp'],'MMSCMV|MMPSC|') 
+      *- Imp.Endeudamiento Mon.Original
+      ACN(l:FAC,FBN['TasaImpInt'])
+      FormatoCeldas(l:FAC,EXE('F5'))    
+   
+      ACN(m:FAC,FBN['ImpInt'])
+   
+      *- Imp.Endeudamiento por el TIPO DE CAMBIO DEL DIA
+      ACN(n:FAC,Val(ab:Val(fi1))*Val(m:FAC))
+   
+      *- WH
+      ACN(o:FAC,FBN['TasaWH'])
+      FormatoCeldas(o:FAC,EXE('F5'))    
+   
+      ACN(p:FAC,FBN['ImpWH'])
+      ACN(q:FAC,Val(ab:Val(fi1))*Val(p:FAC))
+ 
+      ACN(r:FAC, Val(ab:Val(fi1))*FBN['ImpIva'])
+
+      ACN(s:FAC, Val(c:FAC)+Val(j:FAC)) 
+   Endif 
+   
+   *- Dias Transcurridos
+   If Val(e:FAC)<=Dialogo.Fecha1
+      ACN(t:FAC,Dialogo.Fecha1-Val(e:FAC)+1)
+   Else
+      ACN(t:FAC,0)
+   Endif
+   
+   *- Devengamientos
+   ACN(u:FAC, 0)
+   ACN(v:FAC, 0)
+   ACN(w:FAC, 0)
+   ACN(x:FAC, 0)
+   ACN(y:FAC, 0)
+   
+   *- Int. Mon.Original
+   If Val(fe1)<=Dialogo.Fecha1 y Dialogo.Fecha1<=Val(fe2)
+      ACN(u:FAC, ((FBN['VResidual']*(Val(g:FAC)+Val(h:FAC)))/100)*FACTORDIAS(Val(fe1),Dialogo.Fecha1+1,FBN['RB8']+1) )
+      
+      *- Imp.Endeudamiento Mon.Original
+      ACN(v:FAC, Val(l:FAC)*Val(u:FAC)/100)
+       
+      *- Imp.Endeudamiento Moneda Consulta 
+      ACN(w:FAC, Val(ab:Val(fi1))*Val(v:FAC))
+      
+      *- Imp.WH Mon.Original
+      ACN(x:FAC, Val(o:FAC)*Val(u:FAC)/100)
+      
+      *- Imp.WH Moneda Consulta 
+      ACN(y:FAC, Val(ab:Val(fi1))*Val(x:FAC))
+
+      If Not Incluido(FBN['TipoOp'],'MMSCMV|MMPSC|') 
+         *- Claudia Se multipla el VR por tasa y por plazo en lugar del importe amortizacion
+         *- o sea, se cambia val(c:fac) por val(a:fac) y solo para op.items
+         SCN(z:100, Val(a:FAC)*Val(i:FAC)*FBN['Plazo'])
+         SCN(z:101, Val(a:FAC)*Val(i:FAC))
+         SCN(z:102, Val(a:FAC)*FBN['Plazo'])
+         SCN(z:200, Val(a:FAC) )
+         SCN(z:201, Val(a:FAC)*Val(i:FAC))
+         SCN(z:202, Val(a:FAC)*FBN['Plazo'])
+      Endif
+   Endif
+
+   If Dialogo.Fecha1>Val(fe2)
+      *- El devengado es el total 
+      ACN(u:FAC, Val(j:FAC))
+      ACN(v:FAC, Val(m:FAC))
+      ACN(w:FAC, Val(n:FAC))
+      ACN(x:FAC, Val(o:FAC))
+      ACN(y:FAC, Val(p:FAC))
+
+      *- Para linkear en resumen de operaciones 
+      SCN(on1,val(u:fac)+val(v:fac)+val(x:fac))
+   Endif
+
+   *- Calculo las sumatorias par la operacion cabecera 
+   *- Saco el Imp. Endeudamiento e Imp. WH como promedio de las ops. relacionadas
+   If Incluido(FBN['TipoOp'],'MMSIMV|MMPSI|') y Incluido(FBN['NrOperacion'], Val(op1))
+      SCN(l:Val(fi3), (val(m:fac)/Val(j:Val(fi3)) )*100 )
+      SCN(m:Val(fi3), val(m:fac))
+      SCN(n:Val(fi3), val(n:fac))
+      SCN(o:Val(fi3), (val(p:fac)/Val(j:Val(fi3)))*100 )
+      SCN(p:Val(fi3), val(p:fac))
+      SCN(q:Val(fi3), val(q:fac))
+      SCN(r:Val(fi3), val(r:fac))
+      SCN(s:Val(fi3), val(s:fac)) 
+      SCN(v:Val(fi3), val(v:fac))
+      SCN(w:Val(fi3), val(w:fac))
+      SCN(x:Val(fi3), val(x:fac))
+      SCN(y:Val(fi3), val(y:fac))
+
+      SetFont(a:val(fi3)..y:val(fi3),1)
+
+      *- Totales para la op. Cabecera
+      If val(lv1)=fac
+         ACN(l:val(fi4),Val(l:Val(fi3)))
+         ACN(m:val(fi4),Val(m:Val(fi3)))
+         ACN(n:val(fi4),Val(n:Val(fi3)))
+
+         FormatoCeldas(l:val(fi4),EXE('F5')) 
+
+         ACN(o:val(fi4), Val(o:Val(fi3)))
+         ACN(p:val(fi4), Val(p:Val(fi3)))
+         ACN(q:val(fi4), Val(q:Val(fi3)))
+         FormatoCeldas(o:val(fi4),EXE('F5')) 
+      
+         ACN(r:val(fi4), Val(r:Val(fi3)))
+         ACN(s:val(fi4), Val(s:Val(fi3)))
+
+         ACN(u:val(fi4), Val(u:Val(fi3)))
+         ACN(v:val(fi4), Val(v:Val(fi3)))
+         ACN(w:val(fi4), Val(w:Val(fi3)))
+         ACN(x:val(fi4), Val(x:Val(fi3)))
+         ACN(y:val(fi4), Val(y:Val(fi3)))
+    
+         *- PARA LINKEAR EN EL RESUMEN OPERACIONES FINANCIERAS
+         ACT(fn5, 'fo5')
+         ACN(fo5, Val(z:100))
+         ACN(fo6, Val(z:101))
+         ACN(fo7, Val(z:102))
+
+         ACN(z:100, 0)
+         ACN(z:101, 0)
+         ACN(z:102, 0)
+      
+         FormatoCeldas(m:val(fi4),EXE('F5'))    
+         SetFont(a:val(fi4)..z:val(fi4),2)
+         AgregarMarco(a:val(fi4)..z:val(fi4),0,0,Exe('COLOR8'))      
+      Endif
+      SCN(fi3, 1)
+   Endif
+
+   FormatoCeldas(t:FAC,"0")   
+   BorrarCeldas(nc1..nc2)
+   BorrarCeldas(id1..id3)
+   BorrarCeldas(na1..na2)
+   SetFont(a:FAC..z:FAC,1)
+   EndIf
+
+Proximo
+Ifa
+ACT(a:FAC  , 'Totales ')
+SetFont(a:FAC..j:FAC,2)
+AgregarMarco(a:FAC,0,0,Exe('COLOR8'))
+
+Ifa 
+*- V.Residual Original y Swapeado
+ACN(a:FAC,Val(a:Val(lv1)))
+ACN(b:FAC,Val(b:Val(lv1)))
+
+*- Cuota Amortizacion 
+ACN(c:FAC,Val(c:Val(lv1)))
+ACN(d:FAC,Val(d:Val(lv1)))
+
+*- Intereses Mon.Original
+ACN(j:FAC,Val(j:Val(lv1)))
+
+*- Imp.Endeudamiento Mon.Original
+ACN(l:FAC,Val(l:Val(lv1)))
+FormatoCeldas(l:FAC,EXE('F5'))    
+
+ACN(m:FAC,Val(m:Val(lv1)))
+
+*- Imp.Endeudamiento por el TIPO DE CAMBIO DEL DIA
+ACN(n:FAC,Val(n:Val(lv1)))
+
+ACN(p:FAC, Val(p:Val(lv1)))
+ACN(q:FAC, Val(q:Val(lv1)))
+
+ACN(u:FAC, Val(u:Val(lv1)))
+ACN(v:FAC, Val(v:Val(lv1)))
+ACN(w:FAC, Val(w:Val(lv1)))
+ACN(w:FAC, Val(w:Val(lv1)))
+ACN(y:FAC, Val(y:Val(lv1)))
+
+*--- Valores para linkear en resumen fo1: Imp.Endeudamiento en moneda Original y fo2: WHT en moneda original y fo3: interes en moneda original
+ACN(fo1,val(v:fac))
+ACN(fo2,val(x:fac))
+ACN(fo3,val(u:fac))
+
+*- Para Linkear en resumen cuando lo llamo desde on on1: Suma Capital on2: Capital*Tasa on3: Capital * Plazo
+ACN(on1,val(z200))
+ACN(on2,val(z201))
+ACN(on3,val(z202))
+*-- Valores para linkear en la funcion prestamos sindicados del informe de resumen op. financieras
+ACN(fu1,val(v:val(fi4)))
+ACN(fu2,val(x:val(fi4)))
+ACN(fu3,val(u:val(fi4)))
+
+FormatoCeldas(o:FAC,EXE('F5'))    
+SetFont(a:FAC..y:FAC,2)
+AgregarMarco(a:FAC..y:FAC,0,0,Exe('COLOR8'))
+Ifa
+
+Recorrer&j 1,26
+   ACO(&j,8)
+Proximo
+
+*LimitesVision(y:FAC+1)
+Impresion(1,2)
+SetPrintFit(3, 48)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:FAC,2)
+SetFont(g:3,2)
+LimitesVision(y:FAC+1)
+
+*acn(ck1,val(fo5)/val(fo7))
+
+*
+*    Esto es lo que agrega Silvia
+*
+RangoTitulo(a:1..y:FAC+1, 11)

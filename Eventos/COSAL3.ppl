@@ -1,0 +1,250 @@
+﻿CrearDialogo
+    Radio1    : 'Filtra por|Fecha|Cuenta' ;;;;;;NoVacio(Dialogo.Radio1);'Debe seleccionar un filtro';NO;0;
+    Fecha1    : 'Fecha Desde'             ;3;;;;Dialogo.Radio1=1;NoVacio(Dialogo.Fecha1) o Dialogo.Radio1=0;'Debe agregar una fecha desde';NO;FSYS-365;
+    Fecha2    : 'Fecha Hasta'             ;4;;;;Dialogo.Radio1=1;[NoVacio(Dialogo.Fecha2) o Dialogo.Radio1=0] y Dialogo.Fecha2>Dialogo.Fecha1;'Debe agregar una fecha hasta, mayor a fecha desde';NO;FSYS;
+    Fecha3    : 'Fecha'                   ;3;;;;Dialogo.Radio1=0;NoVacio(Dialogo.Fecha3) o Dialogo.Radio1=1;'Debe indicar una fecha';NO;FSYS;
+    Vehiculo1 : 'Vehiculo'                ;5;;;;;;;;;;;;;
+    Cuenta1   : 'Cuenta'                  ;6;;;;Dialogo.Radio1=1;;;;;;;;;IIF(NoVacio(Dialogo.Vehiculo1),"Cliente='"~Dialogo.Vehiculo1~"' and Estado='HAB'","Estado='HAB'")
+    Cliente1  : 'Banco'                   ;6;;;;Dialogo.Radio1=0;;;;;;
+    Especie1  : 'Moneda'                  ;;;;;Dialogo.Radio1=0;;;;;;;;;"Tipo='MON'"
+    Radio2    : 'Totales en|ARP|USD'      ;;;;;Dialogo.Radio1=0;;;;0;;;;;
+FinDialogo
+
+IF Not OK
+  Cancelar
+ENDIF
+
+*let &filaLogo 1
+*@LOGO
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+let &monedaLocal Var('MONELOCA')
+let &monedaExtr Var('MONEEXTR')
+IF Dialogo.Radio2 = 0
+    let &monedaInforme &monedaLocal
+ELSE
+    let &monedaInforme &monedaExtr
+ENDIF
+
+
+
+ACT(C:1,'Consulta de Saldos Comitente')
+SetFont(C:1..C:1,3)
+SetFilaActual(6)
+let &Header fac
+**************************************************************HEADER*****************************************
+IF Dialogo.Radio1=1
+    ACO(1,10)
+    ACO(2,10)
+    ACT(A:fac,'Fecha Desde:  ' ~ Dialogo.Fecha1)
+    ifa
+    ACT(A:fac,'Fecha Hasta:  ' ~ Dialogo.Fecha2)
+    ifa
+    ACT(A:fac,'Cuenta:  ' ~ Dialogo.Cuenta1)
+    ifa
+    ACT(A:fac,'Vehiculo:  ' ~ BuscarCampo('CUENTAS','Cliente','Codigo',Dialogo.Cuenta1))
+ELSE
+    ACO(1,15)
+    ACO(2,15)
+    ACO(4,10)
+    ACT(A:fac,'Fecha:  ' ~ Dialogo.Fecha3)
+    ifa
+    IF NoVacio(Dialogo.Vehiculo1)
+        let &Vh Dialogo.Vehiculo1
+    ELSE
+        let &Vh 'Todos'
+    ENDIF
+    ACT(A:fac,'Vehiculo:  ' ~ &Vh)
+    ifa
+    IF NoVacio(Dialogo.Cliente1)
+        let &Cli Dialogo.Cliente1
+    ELSE
+        let &Cli 'Todos'
+    ENDIF
+    ACT(A:fac,'Banco:  ' ~ &Cli)
+    ifa
+    IF NoVacio(Dialogo.Especie1)
+        let &Mon Dialogo.Especie1
+    ELSE
+        let &Mon 'Todas'
+    ENDIF
+    ACT(A:fac,'Moneda:  ' ~ &Mon)
+    ifa
+    IF Dialogo.Radio2=0
+        let &monedaInforme 'ARP'
+    ELSE
+        let &monedaInforme 'USD'
+    ENDIF
+    ACT(A:fac,'Totales expresados en: '~&monedaInforme)
+    ifa
+ENDIF
+SetFont(A:&Header..A:fac,2)
+ifa
+IF Dialogo.Radio1=0
+    ACT(A:fac,'Vehiculo')
+    ACT(B:fac,'Cartera')
+    ACT(C:fac,'Banco')
+    ACT(D:fac,'Cuenta')
+    ACT(E:fac,'Moneda')
+    ACT(F:fac,'Saldo')
+    SetFont(A:fac..F:fac,2)
+    AgregarMarco(A:fac..F:fac,1,0,EXE('COLOR'))
+ENDIF
+*****************************************************************SQL************************************
+SQL.ADD("Select Fecha,Saldo,Cliente,EnteCustodia Vehiculo,Especie")
+IF Dialogo.Radio1=0
+    SQL.ADD(",Cuenta")
+ENDIF
+SQL.ADD("FROM "~DBO~".SALDOSDIA S Where")
+IF Dialogo.Radio1=1
+    SQL.ADD(" S.Cuenta = '"~Dialogo.Cuenta1~"'")
+    SQL.ADD("and (S.Fecha>='"~IdxDate(Dialogo.Fecha1)~"' and S.Fecha<='"~IdxDate(Dialogo.Fecha2)~"'")  
+    If SQL("Select 1 from "~DBO~".SALDOSDIA where Cuenta = '"~Dialogo.Cuenta1~"' and Fecha>='"~IdxDate(Dialogo.Fecha1)~"' and Fecha<='"~IdxDate(Dialogo.Fecha2)~"'")<>1
+        SQL.ADD("or Fecha IN (Select MAX(Fecha) FROM "~DBO~".SALDOSDIA ")
+        SQL.ADD("                   WHERE  Cuenta  = S.Cuenta  ")
+        SQL.ADD("                   AND Fecha  <= '"~IdxDate(Dialogo.Fecha2)~"') ") 
+    Endif 
+    SQL.ADD(")")
+ELSE
+    SQL.ADD("  S.Fecha  <= '"~IdxDate(Dialogo.Fecha3)~"' ")
+    SQL.ADD(" AND   S.Fecha IN (SELECT MAX(Fecha) FROM "~DBO~".SALDOSDIA ") 
+    SQL.ADD("                   WHERE  Cuenta  = S.Cuenta  ")
+    SQL.ADD("                   AND Fecha  <= '"~IdxDate(Dialogo.Fecha3)~"') ")
+    IF NoVacio(Dialogo.Especie1)
+        SQL.ADD(" and Especie = '"~Dialogo.Especie1~"'")
+    ENDIF
+    IF NoVacio(Dialogo.Cliente1)
+        SQL.ADD(" and Cliente = '"~Dialogo.Cliente1~"'")
+    ENDIF
+    IF NoVacio(Dialogo.Vehiculo1)
+        SQL.ADD(" and EnteCustodia = '"~Dialogo.Vehiculo1~"'")
+    ENDIF
+ENDIF
+SQL.ADD("and NrSaldo = '50'")
+IF Dialogo.Radio1=1
+    SQL.ADD("Order By Especie,Fecha")
+ELSE
+    SQL.ADD("Order By Vehiculo,Cliente,Especie")
+ENDIF
+let &Especie ''
+let &comienzoDatos fac
+Recorrer SQL
+    ****Filtro por cuenta
+    IF Dialogo.Radio1=1
+        If Not EqStr(FBN['Especie'],&Especie) or Vacio(&Especie)
+            ifa
+            ACT(A:fac,'Fecha')
+            ACT(B:fac,'Moneda')
+            ACT(C:fac,'Saldo') 
+            SetFont(A:fac..C:fac,2)
+            AgregarMarco(A:fac..C:fac,1,0,EXE('COLOR'))
+            ifa
+        Endif
+        ACD(A:fac,FBN['Fecha'])
+        ACT(B:fac,FBN['Especie'])
+        ACN(C:fac,FBN['Saldo'])
+        let &Especie FBN['Especie']
+        **Link a Detalle 
+        ACL(B:fac,'DETSAC',Fecha1=Val(A:fac),Cuenta1=Dialogo.Cuenta1,Vehiculo1='',Cliente1='',Especie1='')
+    ELSE
+        ***Filtro por fecha
+        IF NoVacio(&Especie) y (Not EqStr(&Especie,FBN['Especie']) o (Not EqStr(FBN['Cliente'],&Banco) y NoVacio(&Banco)) o (Not EqStr(FBN['Vehiculo'],&Vehiculo) y NoVacio(&Vehiculo)))
+            ACT(A:fac,'Total en '~&Especie)
+            ACN(F:fac,&TotalEspecie)
+            SetFont(A:fac..F:fac,2)
+            AgregarMarco(A:fac..F:fac,1,0,)
+            ifa
+            ifa
+            let &TotalEspecie 0
+        Endif
+*        IF Not EqStr(FBN['Cliente'],&Banco) y NoVacio(&Banco)
+*               ACT(A:fac,'Total banco '~&Banco~' -Expresado en '~&monedaInforme)
+*               ACN(F:fac,&TotalBanco)
+*               SetFont(A:fac..F:fac,2)
+*               AgregarMarco(A:fac..F:fac,1,0,)
+*               ifa
+*               ifa
+*               let &TotalBanco 0
+*        ENDIF
+        IF Not EqStr(FBN['Vehiculo'],&Vehiculo)
+                IF NoVacio(&Vehiculo)
+                    ACT(A:fac,'Total vehiculo '~&Vehiculo~' Expresado en '~&monedaInforme)
+                    ACN(F:fac,&TotalVh)
+                    SetFont(A:fac..F:fac,2)
+                    AgregarMarco(A:fac..F:fac,1,0,EXE('COLOR6'))
+                    let &TotalVh 0
+                ENDIF
+                ACT(A:fac,'Vehiculo '~FBN['Vehiculo'])
+                AgregarMarco(A:fac..F:fac,1,0,EXE('COLOR6'))
+                SetFont(A:fac..A:fac,2)
+                ifa
+        ENDIF
+        If  Not Eqstr(fbn('Cliente'), &Banco) o Not Eqstr(fbn('Vehiculo'), &Vehiculo)
+            ACT(C:fac,FBN['Cliente'])
+            SetFont(C:fac..C:fac,2)
+            ifa
+        ENDIF
+        ACT(D:fac,FBN['Cuenta'])
+        ACT(E:fac,FBN['Especie'])
+        ACN(F:fac,FBN['Saldo'])
+        let &Vehiculo FBN['Vehiculo']
+        let &Banco FBN['Cliente']
+        let &Especie FBN['Especie']
+        **Link a Detalle 
+        ACL(F:fac,'DETSAC',Fecha1=Dialogo.Fecha3,Cuenta1=Val(D:fac),Vehiculo1=&Vehiculo,Cliente1=&Banco,Especie1=&Especie)
+        let &TotalEspecie &TotalEspecie + FBN['Saldo']
+        If Not EqStr(&monedaInforme,FBN['Especie'])
+            let &Saldo FBN['Saldo']*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha3,1,SI,&monedaInforme)
+        Else
+            let &Saldo FBN['Saldo']
+        Endif
+        let &TotalVh &TotalVh + &Saldo
+        *  let &TotalBanco &TotalBanco + &Saldo
+    ENDIF
+Proximo
+
+IF NoVacio(&Especie)
+    ifa
+    ACT(A:fac,'Total en '~&Especie)
+    ACN(F:fac,&TotalEspecie)
+    SetFont(A:fac..F:fac,2)
+    AgregarMarco(A:fac..F:fac,1,0,)
+    ifa
+ENDIF
+*IF NoVacio(&Banco)
+*    ifa
+*    ACT(A:fac,'Total banco '~&Banco~' -Expresado en '~&monedaInforme)
+*    ACN(F:fac,&TotalBanco)
+*    SetFont(A:fac..F:fac,2)
+*    AgregarMarco(A:fac..F:fac,1,0,)
+*    ifa
+*ENDIF
+IF NoVacio(&Vehiculo)
+    ifa
+    ACT(A:fac,'Total vehiculo '~&Vehiculo~' Expresado en '~&monedaInforme)
+    ACN(F:fac,&TotalVh)
+    SetFont(A:fac..F:fac,2)
+    AgregarMarco(A:fac..F:fac,1,0,EXE('COLOR6'))
+ENDIF
+
+********************************************************************************************************************
+let &finDatos fac
+ifa
+ifa
+If Dialogo.Radio1 = 0
+    let &FormatoCol 4
+Else
+    let &FormatoCol 3
+Endif
+
+FormatoCeldas(&FormatoCol:&comienzoDatos+1..&FormatoCol:&finDatos, Exe('F2'))
+
+
+ACT(A:fac,'Fin del Reporte')
+SetFont(A:fac..A:fac,2)
+ifa
+LimitesVision(F:fac)
+

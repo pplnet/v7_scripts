@@ -1,0 +1,135 @@
+﻿* Movimientos de Fondos de Inversion por fondo y entre fechas
+CrearDialogo 
+  Especie1 : 'Especie';;;;;;NoVacio(Dialogo.Especie1);'Debe completar la especie';NO;;;  'SFRARP|SFRUSD|';;;"Status = 'HAB' and Tipo='FON'"
+  Fecha1   : 'D.Fecha';;;;;;;;;FSys
+  Fecha2   : 'H.Fecha';;;;;;;;;FSys
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+ACT(a1, 'Movimientos de Fondos de Inversion')
+ACT(a2, 'Especie : '~Dialogo.Especie1~' - '~BuscarCampo('ESPECIES','Extendido','Codigo',Dialogo.Especie1))
+ACT(a3, 'D.Fecha : '~Dialogo.Fecha1)
+ACT(a4, 'H.Fecha : '~Dialogo.Fecha2)
+
+ACT(a6, 'Saldo Inicio Mes: ')
+ACN(f6, Saldo(VAR('VEHICULODE'),Dialogo.Especie1,,,,,,5,PriDeMes(Dialogo.Fecha1,SI,'ARG')-1) * Cotizacion(Dialogo.Especie1, 'CON', , ,PriDeMes(Dialogo.Fecha1,SI,'ARG')-1, 1))
+AgregarMarco(a6..f6,2,0,RGB(192,192,192))
+
+ACT(a7, 'Saldo Inicio Dia: ')
+ACN(f7, Saldo(VAR('VEHICULODE'),Dialogo.Especie1,,,,,,5,Dialogo.Fecha1-1)* Cotizacion(Dialogo.Especie1, 'CON', , ,Dialogo.Fecha1-1, 1))
+AgregarMarco(a7..f7,2,0,Exe('COLOR'))
+
+ACT(a8, 'Nro.Oper.')
+ACT(b8, 'Fecha')
+ACT(c8, 'Cliente')
+ACT(d8, 'Suscribe')
+ACT(e8, 'Rescata')
+ACT(f8, 'Saldo')
+ACT(g8, 'Estado')
+
+AgregarMarco(a8..g8,2,0,Exe('COLOR'))
+
+SetFilaActual(8)
+SQL.ADD("Select TipoOp, Cliente1, MB3, ContraEspecie, NrOperacion, FechaVto FechaMov, TotalBrutoCli1 Cantidad from "~DBO~".OPERACIONES ")
+SQL.ADD(" where TipoOp in ('FCS','FCR') and FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+if NoVacio(Dialogo.Especie1)
+    SQL.ADD(" and Especie  = '"~Dialogo.Especie1~"' ")
+endif    
+SQL.ADD("and FechaVto <= '"~IdxDate(Dialogo.Fecha2)~"' order by NrOperacion")
+watch(SQL.BATCH())
+recorrer SQL
+ 
+  *if Not EqStr(Val(z4), fbn('FechaMov'))
+   if Not EqStr(Val(z4), fbn('FechaMov'))
+    if NoVacio(Val(z4))
+      ACT(a:fac, 'Saldo Fin Dia: ')
+      ACT(b:fac, Val(z4))
+      ACN(d:fac,Val(w9))
+      ACN(e:fac,Val(w10))
+      ACN(f:fac, Val(f:fac-1))
+      ACN(g:fac,ABS(Val(w9))-ABS(Val(w10)))
+      AgregarMarco(a:fac..g:fac,1,0,RGB(192,192,192))
+      SetFont(a:fac..g:fac, 1)
+      BorrarCeldas(w9..w10) 
+      BorrarCeldas(z4..z4) 
+      ifa
+    endif
+    ACD(z4, fbn('FechaMov'))
+  endif
+  ACT(a:fac, fbn('NrOperacion'))
+  ACLO(a:fac, fbn('NrOperacion'))
+  ACT(b:fac, Fecha(fbn('FechaMov')))
+  * Tipo de Operacion
+  ACT(w1,fbn('TipoOp'))
+  if Incluido(Val(w1),'FCS|FCR')
+    * nombre del cliente
+    ACT(z1, fbn('Cliente1'))
+    ACT(c:fac, Copy(BuscarCampo('CLIENTES','RazonSocial','Codigo',Val(z1)),1,30))
+    ACT(z2, fbn('MB3'))
+    ACT(z3, fbn('ContraEspecie'))
+    if EqStr(Val(w1),'FCS')
+      ACN(d:fac, fbn('Cantidad'))
+      SCN(w9,fbn('Cantidad'))
+      SCN(w11,fbn('Cantidad'))
+    else
+      ACN(e:fac, fbn('Cantidad'))
+      SCN(w10,fbn('Cantidad'))
+      SCN(w12,fbn('Cantidad'))
+    endif
+    if fac > 9
+      ACN(f:fac, Val(f:fac-1)+ABS(Val(d:fac))-ABS(Val(e:fac)))
+    else
+      ACN(f:fac, Val(f:7)+ABS(Val(d:fac))-ABS(Val(e:fac)))
+    endif
+    ACT(g:fac, 'Ejecutado')
+    ColorCeldas(g:fac,clRED)
+  else
+    DFA
+  endif
+proximo
+
+
+* Total por dia
+if NoVacio(Val(z4))
+  ifa
+  ACT(a:fac, 'Saldo Fin Dia: ')
+  ACT(b:fac, Val(z4))
+  ACN(d:fac,Val(w9))
+  ACN(e:fac,Val(w10))
+  ACN(f:fac, Val(f:fac-1))
+  ACN(g:fac,ABS(Val(w9))-ABS(Val(w10)))
+  AgregarMarco(a:fac..g:fac,1,0,RGB(192,192,192))
+  SetFont(a:fac..g:fac, 1)
+  BorrarCeldas(w9..w10) 
+  ifa
+endif
+
+ACT(a:fac+2, 'Saldo Fin Periodo: ')
+ACN(d:fac+2,Val(w11))
+ACN(e:fac+2,Val(w12))
+ACN(f:fac+2, Saldo(VAR('VEHICULODE'),Dialogo.Especie1,,,,,,10,Dialogo.Fecha2)*Cotizacion(Dialogo.Especie1, 'CON', , , Dialogo.Fecha2,1))
+AgregarMarco(a:fac+2..f:fac+2,2,0,Exe('COLOR'))
+
+CrearFont(1,'Arial,8,B')
+CrearFont(2,'Arial,8,')
+
+SetFont(a1..z8, 1)
+SetFont(a9..z:fac, 2)
+SetFont(a:fac+1..z:fac+2, 1)
+LimitesVision(h:fac+3)
+FormatoCeldas(d1..g:fac+2, Exe('F2'))
+ACO(1, 7)
+ACO(3, 20)
+ACO(4, 10)
+ACO(5, 10)
+ACO(6, 10)
+ACO(7, 10)
+
+CrearFont(6,"Arial,6,B")
+*RangoTitulo(a:8..h:fac, 1)
+Impresion(2, 1) 
+Impresion(3, 1) 
+Impresion(4, 1) 

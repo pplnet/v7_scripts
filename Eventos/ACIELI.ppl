@@ -1,0 +1,97 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:       'Fecha'      ;1;;;  ;  ;Dialogo.Fecha1>=Habiles(FSys,-Var('FVALORMAX'),'ARG') y Dialogo.Fecha1 <= Fsys;'Fecha fuera de rango permitido';NO;Fsys
+  NrOperacion1: 'Nro emision'; ;;;  ;  ;NoVacio(Dialogo.NrOperacion1);'Debe Ingresar una Operacion TCPCEM';NO;;;;;;"TipoOp in ('TCPCEM')"
+  TipoOp1:      'Tipo OP'    ; ;;;NO;NO;;;;;if(Novacio(Dialogo.NrOperacion1),SQL("SELECT TipoOp FROM "~DBO~".OPERACIONES  Where NrOperacion = '"~Dialogo.NrOperacion1~"' "),'')   
+  Check1:       'Procesa'    ; ;;;NO;NO;;;;1;
+Findialogo
+**Lista1:        'Mercados' ; ;;;NO;;;;;;'MAE';SQLSet("SELECT Codigo FROM "~DBO~".MERCADOS  ORDER BY Codigo ");SI
+if Not Ok
+   Cancelar
+endif
+if Dialogo.Check1=0
+  * No Procersa
+  HojaVisible(SI)
+endif
+
+IF Not EqStr(Dialogo.TipoOp1,'TCPCEM')
+  Cancelar('La Operacion Seleccionada no es TCPCEM --> '~Dialogo.TipoOp1)
+endif  
+ACN(co:1, SQL("select Count(*) from "~DBO~".MOVEJECUTADOS where NrOperacion = '"~Dialogo.NrOperacion1~"' "))
+**ACN(co:2,SQL("select RB8 from "~DBO~".OPERACIONES where NrOperacion = '"~Dialogo.NrOperacion1~"' "))
+ACN(in:1, SQL("select NrBit from "~DBO~".OPERACIONESBITS where NrOperacion = '"~Dialogo.NrOperacion1~"' and Valor = '1' "))
+        
+IF Val(co:1) > 0
+  Cancelar('La Operacion Seleccionada esta Liquidada (Anule la  Liquidacion) --> '~Dialogo.NrOperacion1)
+endif  
+
+Message('Anulando Cierre Manifestaciones')
+SQL.ADD("SELECT O.NrORDEN, O.Mercado4 ")
+SQL.ADD("  FROM "~DBO~".ORDENES O, "~DBO~".OPERACIONESBITS OB ")
+SQL.ADD(" WHERE OB.NrOperacion = O.NrORDEN ")
+SQL.ADD("   AND OB.NrBit       in (170)  ")
+SQL.ADD("   AND OB.Valor       = '1'   ")
+SQL.ADD("   AND O.FechaVto     <="~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   AND O.TipoOrden    = 'TMANIF' ")
+SQL.ADD("   AND O.NrOperacion1 = '"~Dialogo.NrOperacion1~"' ")
+* FJL 21/10/22 - Agrego esto para que no vuelva a Pendiente las ya Adjudicadas
+*SQL.ADD("   AND IsNull(O.Estado,'0') <> '2' ")
+SQL.ADD("   AND IsNull(O.CantidadCompletada,0) = 0 ")
+SQL.ADD("ORDER BY O.NrOrden ")
+watch(SQL.BATCH())
+Recorrer SQL
+  if Dialogo.Check1=1
+    * Procesa
+    Message('Anulando Cierre Manifestacion '~FBN('NrOrden'))
+
+* FJL 21/10/22 - A a Instancia Pendiente dependiendo del mercado
+*                Falta ver si siempre va a Pendiente
+*    EjecutarEvento('CBOINS', String1=FBN['NrOrden'], Radio1=1, Radio2=1, Entero1=170, Entero2=104)
+    if EqStr(fbn('Mercado4'),VAR('AMBBYMA'))
+      EjecutarEvento('CBOINS', String1=FBN['NrOrden'], Radio1=1, Radio2=1, Entero1=170, Entero2=54)
+    else
+      if EqStr(fbn('Mercado4'),VAR('AMBMAE'))
+        EjecutarEvento('CBOINS', String1=FBN['NrOrden'], Radio1=1, Radio2=1, Entero1=170, Entero2=104)
+      else
+        * Como Contingencia
+        EjecutarEvento('CBOINS', String1=FBN['NrOrden'], Radio1=1, Radio2=1, Entero1=170, Entero2=104)
+      endif
+    endif
+    SQL.ADD(" UPDATE "~DBO~".ORDENES")
+    SQL.ADD("   SET ESTADO = '' ")
+    SQL.ADD(" WHERE NrOrden  = '"~FBN['NrOrden']~"' ")
+    SQL.NEW 
+    
+    ** Se eliminan los Movimientos que netean los limites
+    SQL.ADD("Delete "~DBO~".MOVLIMITES  ")
+    SQL.ADD("Where NrOperacion = '"~fbn['NrOrden']~"' and Monto < 0")
+    SQL.NEW  
+    SQL.EXEC
+  else
+    * No Procesa
+    MessageBox('Anulando Cierre Manifestacion '~FBN('NrOrden')~' - No Procesa') 
+  endif    
+Proximo
+
+* Cierre de TCPCEM
+if Dialogo.Check1=1
+  * Procesa
+  Message('Anulando Cierre emisiones')
+
+  SQL.ADD(" Update "~DBO~".OPERACIONES   ") 
+  SQL.ADD(" Set RB8 = '0'            ") 
+  SQL.ADD(" Where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+  SQL.NEW
+
+  ** FJL 22/10/22 - Se eliminan los MovPendientes que se generaron en el cierre
+  SQL.ADD("Delete "~DBO~".MOVPENDIENTES  ")
+  SQL.ADD("Where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+  SQL.NEW  
+  SQL.EXEC
+  **  AA 14-12-2020 deja la Emision en instancia de Habilitada
+  EjecutarEvento('CBOINS', String1=Dialogo.NrOperacion1, Radio1=0, Radio2=2, Entero1=Val(in:1), Entero2=16)
+else
+  * No Procesa
+  MessageBox('Anulando Cierre emisiones - No Procesa')
+endif
+ 

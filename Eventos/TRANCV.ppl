@@ -1,0 +1,499 @@
+﻿CrearDialogo
+Fecha1    :'Fecha'         ; 1;1;;  ;  ;;;;FSYS
+**Fecha1    :'Fecha'         ; 1;1;;  ;  ;;;;Fecha('2025/08/12')
+Cliente1  :'Cliente'       ;  ; ;;  ;  ;;;;
+Especie1  :'Especie'       ;  ; ;;  ;  ;Vacio(Dialogo.Especie1) o [NoVacio(Dialogo.Especie1) y DesciendeDeEspecie(Dialogo.Especie1,'TITULO') y NOT DesciendeDeEspecie(Dialogo.Especie1,'CUPON')];'Debe Ingresar una Especie Valida';NO;;;;;;"Status = 'HAB' and Jerarquia Like '002%' and IsNull(EsCupon,'NO')='NO ' "
+NrTrans1  :'Transaccion'   ;  ; ;;  ;  ;;;;;;;;;" Mercado1='CV' and ((TipoTr2 in ('DTP','RTP') and CB6=1) or (TipoTr2 = 'DRT'))"
+Check1    :'Reprocesa'     ;  ; ;;  ;;;
+Radio1    : "Netea|SI|NO"  ;  ; ;;;;;;;1;
+Lista1    :'MERCADOS'      ; 1;2;;  ;  ;;;;VAR('TRXMERCADO');;SQLSet("Select Codigo From "~DBO~".MERCADOS Where Codigo in ("~Pipe2Comillas(VAR('TRXMERCADO'))~") ")
+String    : 'Path'         ;  ;1;;NO;;;;;VAR('PATHTRF');;;;'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+String1   :'Archivo .si1'  ;  ;1;;NO;                ;;;;VAR('SI1NOMB')~iif(Dialogo.Radio1=1,'-','N-')~Fecha(Dialogo.Fecha1,'yymmdd');VAR('SI1NOMB')~iif(Dialogo.Radio1=1,'-','N-')~Fecha(Dialogo.Fecha1,'yymmdd')
+String2   :'Archivo .si2'  ;  ;1;;NO;Dialogo.Radio1=1;;;;VAR('SI2NOMB')~'-'~Fecha(Dialogo.Fecha1,'yymmdd');VAR('SI2NOMB')~'-'~Fecha(Dialogo.Fecha1,'yymmdd')
+String3   :'Encodig'       ;  ;1;;NO;NO;;;;VAR('TRFENCO'); 
+Check3    :'Procesa'       ; 2;2;;NO;NO;;;;1
+FinDialogo
+If Not Ok 
+  Cancelar
+Endif
+if Dialogo.Check3=0
+HojaVisible(SI)
+endif
+
+ACT(az:1, BuscarCampo('CLIENTES','CodDepCajaValores','Codigo',Var('VEHICULODE')))
+
+ACN(z1,0)
+
+** obtencion fecha op
+**select Fechaop from OPERACIONES where Nroperacion =(SELECT TOP (1) NrOperacion FROM MOVEJECUTADOS
+**WHERE NrTrans2=(select NrOperacionRef1 from TRANSACCIONES2 where NrTrans='R0000349'))
+
+* Contador de transferencias
+acn(ax:3, 1)
+
+Message('Recuperando Movimientos...')
+IF Dialogo.Radio1=0
+   ** Netea
+   SQL.ADD(" Select *, case when Cantidad > 0 then 'DTP' else 'RTP' end Tipotr2 from ( ")
+   SQL.ADD(" Select  T.Especie,         T.Cliente1 ClienteTr, T.Fecha1 FechaLiq,  ")
+   SQL.ADD("         Round(sum(case when Tipotr2='DTP' then T.Cantidad1 else T.Cantidad1*-1 end),0) Cantidad, ")
+   SQL.ADD("         T.Cuenta1,         T.Mercado1,           T.Cuenta2,         T.Mercado2, ")
+   SQL.ADD("         C.NrAgenteBolsa,   T.RB1,                T.Cliente3,  CU.Numero, CU.Mercado, ")
+   SQL.ADD("         E.ISIN, CU.NrDepositante, C.DeposDelComitente Depositante, CU.Alias2 ")
+   SQL.ADD("   From "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E, "~DBO~".CUENTAS CU   ")
+   SQL.ADD("  Where T.Cliente1 = C.Codigo ")
+   SQL.ADD("    and T.Cuenta2  = CU.Codigo ")
+   SQL.ADD("    and T.Especie  = E.Codigo ")
+   SQL.ADD("    and E.Jerarquia like '"~Var('JERTITULOS')~"%' ")
+   SQL.ADD("    and T.Mercado1 In ("~Pipe2Comillas(Dialogo.Lista1)~")")
+   SQL.ADD("    and T.Mercado2 In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+   SQL.ADD("    and (T.TipoTr2  in ('DTP','RTP') and T.CB6=1) and CU.Mercado IN ("~Pipe2Comillas(VAR('MERNETEODE'))~") ")
+   SQL.ADD("    and T.Vehiculo1 = '"~Var('VEHICULODE')~"' ")
+   SQL.ADD("    and T.Fecha1    = "~IdxDate2(Dialogo.Fecha1)~" ")
+   If NoVacio(Dialogo.Nrtrans1)
+      SQL.ADD(" and T.NrTrans = '"~Dialogo.Nrtrans1~"' ")
+   Endif
+   If NoVacio(Dialogo.Especie1)
+      SQL.ADD(" and (T.Especie = '"~Dialogo.Especie1~"' or "~DBO~".DesciendeDeEspecie(T.Especie,'"~Dialogo.Especie1~"') = 1) ")
+   Endif
+   If NoVacio(Dialogo.Cliente1)
+      SQL.ADD(" and T.Cliente3 = '"~Dialogo.Cliente1~"' ")
+   Endif
+   SQL.ADD(" group by T.Especie, T.Cliente1 , T.Fecha1 , T.Cuenta1, T.Mercado1, T.Cuenta2, T.Mercado2,  ")
+   SQL.ADD(" C.NrAgenteBolsa,   T.RB1,                T.Cliente3,  CU.Numero, CU.Mercado, ")
+   SQL.ADD("          E.ISIN, CU.NrDepositante, C.DeposDelComitente , CU.Alias2  ) aux ")
+   SQL.ADD(" where Cantidad <> 0 ")
+   if Dialogo.Check1=0
+      SQL.ADD(" and Not Exists(SELECT 1 FROM "~DBO~".TRANSFCVA3 CT  ")
+      SQL.ADD("                 WHERE CT.Fecha = Fechaliq ")
+      SQL.ADD("                   AND CT.Especie = Especie ")
+      SQL.ADD("                   AND CT.Status  = '1' ")
+      SQL.ADD("                   AND ABS(IsNull(CT.Monto,0)) = Cantidad ) ")
+   else   
+      SQL.ADD(" and Exists(SELECT 1 FROM "~DBO~".TRANSFCVA3 CT  ")
+      SQL.ADD("                 WHERE CT.Fecha = Fechaliq ")
+      SQL.ADD("                   AND CT.Especie = Especie ")
+      SQL.ADD("                   AND CT.Status  = '1' ")
+      SQL.ADD("                   AND ABS(IsNull(CT.Monto,0)) = Cantidad ) ")
+   endif
+   SQL.ADD("Order By Especie, NrDepositante ")
+ELSE
+   ** No Netea
+   SQL.ADD(" Select  T.Especie,         T.Cliente1 ClienteTr, T.Fecha1 FechaLiq, T.NrTrans, ")
+   SQL.ADD("         T.Fecha2,          T.Fecha4,             T.NrOperacionRef1, ")
+   SQL.ADD("         T.TipoTr2,         T.Cliente1,           T.Cantidad1 Cantidad, ")
+   SQL.ADD("         T.Cuenta1,         T.Mercado1,           T.Cuenta2,         T.Mercado2, ")
+   SQL.ADD("         C.NrAgenteBolsa,   T.RB1,                T.Cliente3,  CU.Numero, CU.Mercado, ")
+   SQL.ADD("         E.ISIN, CU.NrDepositante, C.DeposDelComitente Depositante, CU.Alias2 ")
+   SQL.ADD("   From "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E, "~DBO~".CUENTAS CU   ")
+   SQL.ADD("  Where T.Cliente1 = C.Codigo ")
+   SQL.ADD("    and T.Cuenta2  = CU.Codigo ")
+   SQL.ADD("    and T.Especie  = E.Codigo ")
+   SQL.ADD("    and E.Jerarquia like '"~Var('JERTITULOS')~"%' ")
+   SQL.ADD("    and T.Mercado1 In ("~Pipe2Comillas(Dialogo.Lista1)~")")
+   SQL.ADD("    and T.Mercado2 In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+   If Dialogo.Radio1=0
+      SQL.ADD("    and (T.TipoTr2  in ('DTP','RTP') and T.CB6=1) and CU.Mercado IN ("~Pipe2Comillas(VAR('MERNETEODE'))~") ")
+   else
+      SQL.ADD("    and ((T.TipoTr2  in ('DTP','RTP') and T.CB6=1 and CU.Mercado Not IN ("~Pipe2Comillas(VAR('MERNETEODE'))~")) ")
+      SQL.ADD("      or (T.TipoTr2  = 'DRT' ) ) ")
+   endif
+   SQL.ADD("    and T.Vehiculo1 = '"~Var('VEHICULODE')~"' ")
+   SQL.ADD("    and T.Fecha1    = "~IdxDate2(Dialogo.Fecha1)~" ")
+   If NoVacio(Dialogo.Nrtrans1)
+      SQL.ADD(" and T.NrTrans = '"~Dialogo.Nrtrans1~"' ")
+   Endif
+   If NoVacio(Dialogo.Especie1)
+      SQL.ADD(" and (T.Especie = '"~Dialogo.Especie1~"' or "~DBO~".DesciendeDeEspecie(T.Especie,'"~Dialogo.Especie1~"') = 1) ")
+   Endif
+   If NoVacio(Dialogo.Cliente1)
+   SQL .ADD(" and T.Cliente3 = '"~Dialogo.Cliente1~"' ")
+   Endif
+   if Dialogo.Check1=0
+      SQL.ADD(" and Not Exists(SELECT 1 FROM "~DBO~".TRANSFCVA3 CT  ")
+      SQL.ADD("                 WHERE CT.NrTrans = T.NrTrans ")
+      SQL.ADD("                   AND CT.Especie = T.Especie ")
+      SQL.ADD("                   AND CT.Status  = '1' ")
+      SQL.ADD("                   AND ABS(IsNull(CT.Monto,0)) >= T.Cantidad1 ) ")
+   else   
+      SQL.ADD(" and Exists(SELECT 1 FROM "~DBO~".TRANSFCVA3 CT  ")
+      SQL.ADD("                 WHERE CT.NrTrans = T.NrTrans ")
+      SQL.ADD("                   AND CT.Especie = T.Especie ")
+      SQL.ADD("                   AND CT.Status  = '1' ")
+      SQL.ADD("                   AND ABS(IsNull(CT.Monto,0)) >= T.Cantidad1 ) ")
+   endif
+   SQL.ADD("Order By 1, 2, 3, 4 ")
+ENDIF
+
+watch(SQL.Batch)
+
+Recorrer SQL
+
+*    MessageBox('...'~fbn['NrTrans']~'-'~fbn['ClienteTr']~'-'~fbn['Especie']~'-'~fbn['Mercado1'])
+
+    **InstructingParty;SettlementParty;SecuritiesAccount;Instrument;InstrumentIdentifierType;CSDOfCounterparty;SettlementCounterparty;
+    **SecuritiesAccountOfCounterparty;InstructionReference;Instrument(MovementOfSecurities);Quantity;QuantityType;TransactionType;SettlementMethod;
+    **TradeDate;IntendedSettlementDate;PaymentType
+
+ACT(a:fac, fbn('Especie'))
+ACT(b:fac, fbn('ClienteTr'))
+ACN(j:fac, NrCupon2(fbn('Especie'),fbn('FechaLiq')))
+
+
+if Incluido(fbn['TipoTr2'],'DTP|RTP') 
+   ** Definicion tipo de registro Neteo 3, NoNeteo 1
+   If Dialogo.Radio1=1
+      ACT(y:fac,'.si1')
+   Else
+      ACT(y:fac,'.si1N')
+   Endif
+   if Incluido(fbn['TipoTr2'],'DTP') 
+        * Tipo Instruccion
+     ACT(ce:fac, 'Receive')
+        * Cuenta Propia CV
+     ACT(ca:fac, fbn('Cuenta1'))
+        * Mercado Cuenta Propia CV
+     ACT(cb:fac, fbn('Mercado1'))
+        * Cuenta Contraparte CV
+     ACT(cc:fac, fbn('Cuenta2'))
+        * Mercado Cuenta Contraparte CV
+     ACT(cd:fac, fbn('Mercado2'))      
+   else
+        * Tipo Instruccion
+     ACT(ce:fac, 'Deliver')
+        * Cuenta Propia CV
+     ACT(ca:fac, fbn('Cuenta1'))
+        * Mercado Cuenta Propia CV
+     ACT(cb:fac, fbn('Mercado1'))
+        * Cuenta Contraparte CV
+     ACT(cc:fac, fbn('Cuenta2'))
+        * Mercado Cuenta Contraparte CV
+     ACT(cd:fac, fbn('Mercado2'))
+   endif        
+   ACN(c:fac, fbn('Cantidad') )
+   ACN(p:fac, fbn('Cantidad'))
+else
+   ACT(y:fac,'.si2')
+
+   if EqStr(fbn('Cuenta1'),VAR('CTAVEHIC'))
+      * se reciben los titulos
+      * Cuenta Propia CV
+      ACT(ca:fac, fbn('Cuenta1'))
+      * Mercado Cuenta Propia CV
+      ACT(cb:fac, fbn('Mercado1'))
+      * Cuenta Contraparte CV
+      ACT(cc:fac, fbn('Cuenta2'))
+      * Mercado Cuenta Contraparte CV
+      ACT(cd:fac, fbn('Mercado2'))
+      * Tipo Instruccion
+      ACT(ce:fac, 'Deli/Rece')
+      ACN(c:fac, fbn('Cantidad') )
+      ACN(p:fac, fbn('Cantidad'))
+   else
+      * se envian los titulos
+      * Cuenta Propia CV
+      ACT(ca:fac, fbn('Cuenta2'))
+      * Mercado Cuenta Propia CV
+      ACT(cb:fac, fbn('Mercado2'))
+      * Cuenta Contraparte CV
+      ACT(cc:fac, fbn('Cuenta1'))
+      * Mercado Cuenta Contraparte CV
+      ACT(cd:fac, fbn('Mercado1'))
+      * Tipo Instruccion
+      ACT(ce:fac, 'Deli/Rece')
+      ACN(c:fac, fbn('Cantidad'))
+      ACN(p:fac, fbn('Cantidad'))
+   endif
+endif
+
+    * Depositante Contraparte
+    act(cf:fac, BuscarCampo('CUENTAS','Comitente','Codigo',Val(cc:fac)))
+    * Depositante Orig
+    ACT(cg:fac, fbn('Cliente3'))
+
+
+    ** verificar si sacar subcuenta de Alias2 o de Numero de cuenta
+    * Cuenta Vehiculo
+    act(cm:fac, BuscarCampo('CUENTAS','NrDepositante','Codigo',Val(ca:fac)))
+    * Sub-Cuenta Vehiculo
+    act(xy1,BuscarCampo('CUENTAS','Numero','Codigo',Val(ca:fac)))
+    act(cs:fac, Copy(val(xy1),Posicion('-',Val(xy1))+1,Longitud(val(xy1))-Posicion('-',Val(xy1))))
+    * Cuenta Contraparte
+    act(cn:fac, BuscarCampo('CUENTAS','NrDepositante','Codigo',Val(cc:fac)))
+    * Sub-Cuenta Contraparte
+    act(xy1,BuscarCampo('CUENTAS','Numero','Codigo',Val(cc:fac)))
+    act(ct:fac, Copy(val(xy1),Posicion('-',Val(xy1))+1,Longitud(val(xy1))-Posicion('-',Val(xy1))))
+
+If Dialogo.Radio1=1
+   if Incluido(fbn['TipoTr2'],'DRT')
+      ACD(d:fac, fbn('FechaLiq'))
+   else
+      ACD(d:fac,SQL("select Fechaop from OPERACIONES where Nroperacion =(SELECT TOP (1) NrOperacion FROM MOVEJECUTADOS WHERE NrTrans2=(select NrOperacionRef1 from TRANSACCIONES2 where NrTrans='"~fbn('NrTrans')~"'))"))
+   endif
+else
+   ACD(d:fac, fbn('FechaLiq'))
+endif
+ACD(h:fac, fbn('FechaLiq'))
+if Dialogo.radio1=0
+ACT(e:fac, 'N/A')
+ACT(f:fac, 'N/A')
+else
+ACT(e:fac, fbn('NrTrans'))
+ACT(f:fac, fbn('NrOperacionRef1'))
+endif
+ACT(g:fac, fbn('Mercado1'))
+act(l:fac, fbn('ISIN'))
+ACT(u:fac, fbn('TipoTr2'))
+
+    * Tipo Tratamiento (I/D)
+ACN(ch:fac, fbn('RB1'))
+if Val(ch:fac)=1
+      * Es Diferida
+ ACN(k:fac, 1)
+else
+ ACN(k:fac, 0)
+endif
+    * Reserva de Saldo
+ACN(ci:fac, 0)
+    * Solicitud de Matching
+ACN(cj:fac, 1)
+
+if Dialogo.Check1=1
+   if Dialogo.Radio1=1
+      act(o:fac, SQL("SELECT Max(CVTransfer) FROM "~DBO~".TRANSFCVA3 WHERE NrTrans='"~fbn['NrTrans']~"' "))
+   else
+      act(o:fac, SQL("SELECT CvTransfer FROM dbo.TRANSFCVA3 CT  WHERE CT.Fecha = "~IdxDate2(Dialogo.Fecha1)~" AND CT.Especie = '"~fbn('Especie')~"' AND CT.Status  = '1' AND ABS(IsNull(CT.Monto,0)) = "~Fstr(fbn('Cantidad'),0,0)~" "))
+   endif
+endif
+act(m:fac, val(cm:fac))
+if Incluido(fbn['TipoTr2'],'DRT') 
+   act(cn:fac, val(cm:fac))
+endif
+
+act(n:fac, val(cn:fac))
+
+act(r:fac, fbn('NrAgenteBolsa'))
+act(s:fac, val(cs:fac))
+act(t:fac, val(ct:fac))
+
+* Tipo    
+ACT(v:fac, val(ce:fac))
+
+ACN(w:fac, iif( Incluido(val(g:fac),Dialogo.Lista1),1,0) )
+if val(w:fac)=1
+   * Si esta incluido el Mercado en la lista1 pongo el total de Trans2 como Monto "A Transf."
+   ACN(i:fac, val(c:fac))
+endif
+SCN(z1,1)
+Proximo
+
+If Val(z1)=0
+   Cancelar('Error, NO se encontraron Vouchers con estas caracteristicas!!!')
+Endif
+
+
+ACN(x:3, 0)
+**InstructingParty;SettlementParty;SecuritiesAccount;Instrument;InstrumentIdentifierType;CSDOfCounterparty;SettlementCounterparty;SecuritiesAccountOfCounterparty;InstructionReference;Instrument(MovementOfSecurities);Quantity;QuantityType;TransactionType;SettlementMethod;TradeDate;IntendedSettlementDate;PaymentType')
+CrearListBox; 'Arial,8,';iif(Dialogo.Radio1=0,'NETEO','')~iif(Dialogo.Check1=0,' Transferencias a CV-A3 del '~Fecha(Dialogo.Fecha1),' Transferencias a CV-A3 del '~Fecha(Dialogo.Fecha1)~' REPROCESO')
+ 'Ok?'             ; w:1..w:fac ;SI;;;30;CHECK;RGB(220,220,193)
+ 'Movement'        ; v:1..v:fac ;NO;;;60;STRING;;RGB(180,180,193)
+ 'TradeDate'       ; d:1..d:fac ;NO;;;80;FECHA;RGB(180,180,193)
+ 'SettlementDate'  ; h:1..h:fac ;NO;;;90;FECHA;RGB(180,180,193)
+ 'NrTrans'         ; e:1..e:fac ;NO;;;60;STRING;;RGB(180,180,193)
+ 'Nro.Enviada'     ; o:1..o:fac ;NO;;;70;STRING;;RGB(180,180,193)
+ 'Referencia'      ; f:1..f:fac ;NO;;;60;STRING;;RGB(180,180,193)
+ 'Especie'         ; a:1..a:fac ;NO;;;70;STRING;;RGB(180,180,193)
+ 'Instrument'      ; l:1..l:fac ;NO;;;70;STRING;;RGB(180,180,193);BuscarCampo('ESPECIES','ISIN','Codigo', Val(a:FLB))
+ 'Cupon'           ; j:1..j:fac ;NO;;;50;NUMERO;'###';RGB(180,180,193);
+ 'Mercado'         ; g:1..g:fac ;NO;;;60;STRING;;RGB(180,180,193)
+ 'Quantity'        ; c:1..c:fac ;NO;;;90;NUMERO;'#,###,###,###.##';RGB(240,190,150)
+
+ 'Cta Propia'      ;ca:1..ca:fac;NO;;;100;STRING;;RGB(180,180,193)
+ 'Depositante'     ; m:1..m:fac ;SI;val(w:flb)=0 o NoVacio(Val(m:flb));'Falta Depositante Cuenta Propia';70;STRING;;RGB(180,180,193)
+ 'SubCta'          ; s:1..s:fac ;SI;val(w:flb)=0 o NoVacio(Val(s:flb));'Falta Sub Cuenta de Cuenta Propia';50;STRING;;RGB(180,180,193)
+ 
+  'Contraparte'     ;cg:1..cg:fac;NO;;;100;STRING;;RGB(180,180,193)
+ 'Cta Contraparte' ;cc:1..cc:fac;NO;;;100;STRING;;RGB(180,180,193)
+ 'Depositante'     ; n:1..n:fac ;SI;val(w:flb)=0 o NoVacio(Val(n:flb));'Falta Depositante de Contraparte';70;STRING;;RGB(180,180,193)
+ 'SubCta'          ; t:1..t:fac ;SI;val(w:flb)=0 o NoVacio(Val(t:flb));'Falta Sub Cuenta de Contraparte';50;STRING;;RGB(180,180,193)
+FinListBox
+
+
+
+If Not Ok
+ if Dialogo.Check3=1
+    Cancelar('Transferencias CV-A3, ha sido Cancelado!!!')
+
+ Endif
+Endif
+
+
+IF Dialogo.Radio1=1
+   ** Transferencias No neteadas
+   *-- Validaciones
+   acn(x:2,0)
+   Recorrer&j 1,fac
+      Message('...Validando ')
+      If Val(w:&j)=1
+         acn(aw:&j,1)
+         scn(ax:1, 1)
+         scn(ax:2, 1)
+      else      
+         acn(aw:&j,0)
+      Endif
+      ** Marcar si hay tipo .si1 .si2
+      If Val(w:&j)=1
+         if Incluido(Val(u:&j),'DRT')
+            ACN(tp2,1)
+         else
+            ACN(tp1,1)
+         endif
+      Endif 
+   Proximo
+
+   If val(ax:1)<1
+      Cancelar('La Generacion de Transferencias CV-A3, ha sido Cancelada!!!')
+   Endif
+
+   ** ver de abrir y cerrar ascii para cada grabacion de .si1 y .si2
+   Message('Borrando Archivos Originales '~Dialogo.String1~' '~Dialogo.String2)
+   if Dialogo.Check3=1
+      * Header 
+      ACT(ah:1,'InstructingParty;SettlementParty;SecuritiesAccount;Instrument;InstrumentIdentifierType;CSDOfCounterparty;SettlementCounterparty;SecuritiesAccountOfCounterparty;InstructionReference;Instrument(MovementOfSecurities);Quantity;QuantityType;TransactionType;SettlementMethod;TradeDate;IntendedSettlementDate;PaymentType')
+      ** AA 16-01-2026 incluir tipo de encoding cuando se instale nuevo core version 6.7.31 en adelante
+      **AbrirASCII(val(aa1),0,SI,1,Dialogo.String3)
+      **AbrirASCII(val(aa2),0,SI,1,Dialogo.String3)
+   
+      if Val(tp:1)=1
+         BorrarArchivo(Dialogo.String~Dialogo.String1~'.si1')
+         ACT(aa1, Dialogo.String~Dialogo.String1~'.si1')
+         AbrirASCII(val(aa1),0,SI)
+         IF Not Ok
+            Cancelar('No se pudo abrir el archivo '~Dialogo.String1)
+         Endif     
+         EscribirASCII(Val(ah:1))
+         CerrarAscii
+      endif
+ 
+      if Val(tp:2)=1
+         BorrarArchivo(Dialogo.String~Dialogo.String2~'.si2')
+         ACT(aa2, Dialogo.String~Dialogo.String2~'.si2')  
+         AbrirASCII(val(aa2),0,SI)
+         IF Not Ok
+            Cancelar('No se pudo abrir el archivo '~Dialogo.String2)
+         Endif     
+         EscribirASCII(Val(ah:1))
+         CerrarAscii
+      endif
+   
+
+      if Val(tp:1)=1
+         ** Generar .si1
+         **AbrirASCII(val(aa1),0,SI,1,Dialogo.String3)
+         AbrirASCII(val(aa1),0,SI)
+         Recorrer&i 1,val(z1)
+         ** verificar tipotr2  y cuenta para generar .si1
+            if Val(w:&i)=1 y Incluido(val(u:&i),'DTP|RTP')
+               ACT(vv:&i,Val(v:&i))
+               ACT(uu:&i,Val(u:&i))
+               act(m:&i, val(cm:&i))
+               act(n:&i, val(cn:&i))
+               act(s:&i, val(cs:&i))
+               act(t:&i, val(ct:&i))
+               (.'TRANCVTXT'.)
+            endif
+         Proximo
+      Endif
+      
+      if Val(tp:2)=1  
+         ** Generar .si2
+         **AbrirASCII(val(aa2),0,SI,1,Dialogo.String3)
+         AbrirASCII(val(aa2),0,SI)
+         Recorrer&i 1,val(z1)
+         ** verificar DRT par generar .si2
+            ACT(vv:&i,'Receive')   
+            ACT(uu:&i,'DTP')
+            act(m:&i, val(cm:&i))
+            act(n:&i, val(cn:&i))
+            act(s:&i, val(cs:&i))
+            act(t:&i, val(ct:&i))       
+            (.'TRANCVTXT'.)
+
+            ACT(vv:&i,'Deliver')
+            ACT(uu:&i,'RTP')
+            act(m:&i, val(cm:&i))
+            act(n:&i, val(cn:&i))
+            act(s:&i, val(cs:&i))
+            act(t:&i, val(ct:&i))       
+            (.'TRANCVTXT'.)
+         Proximo
+      endif
+   Endif
+   
+   if Dialogo.Check3=1 y (Val(tp:1)=1 o Val(tp:2)=1)
+      SQL.EXEC
+   endif
+
+ELSE
+   ** else Netea
+
+   acn(x:2,0)
+   Recorrer&j 1,fac
+     Message('...Validando ')
+     If Val(w:&j)=1
+        acn(aw:&j,1)
+        scn(ax:1, 1)
+        scn(ax:2, 1)
+        ACN(tp1,1)
+     Else      
+        acn(aw:&j,0)
+     Endif
+   Proximo
+
+   If val(ax:1)<1
+      Cancelar('La Generacion de Transferencias Neteadas, ha sido Cancelada!!!')
+   Endif
+
+   ** ver de abrir y cerrar ascii para cada grabacion de .si1 Neteo
+   Message('Borrando Archivos Originales '~Dialogo.String1~' '~Dialogo.String2)
+   if Dialogo.Check3=1
+      BorrarArchivo(Dialogo.String~Dialogo.String1~'.si1')
+      ACT(aa1, Dialogo.String~Dialogo.String1~'.si1')
+      
+      * Header 
+      ACT(ah:1,'InstructingParty;SettlementParty;SecuritiesAccount;Instrument;InstrumentIdentifierType;CSDOfCounterparty;SettlementCounterparty;SecuritiesAccountOfCounterparty;InstructionReference;Instrument(MovementOfSecurities);Quantity;QuantityType;TransactionType;SettlementMethod;TradeDate;IntendedSettlementDate;PaymentType')
+      ** AA 16-01-2026 incluir tipo de encoding cuando se instale nuevo core version 6.7.31 en adelante
+      **AbrirASCII(val(aa1),0,SI,1,Dialogo.String3)
+      AbrirASCII(val(aa1),0,SI)
+      IF Not Ok
+         Cancelar('No se pudo abrir el archivo '~Dialogo.String1)
+      Endif     
+      EscribirASCII(Val(ah:1))
+
+      ** Generar .si1 Neteado
+      Recorrer&i 1,val(z1)
+      if Val(w:&i)=1
+        ACT(vv:&i,Val(v:&i))
+        ACT(uu:&i,Val(u:&i))
+        act(m:&i, val(cm:&i))
+        act(n:&i, val(cn:&i))
+        act(s:&i, val(cs:&i))
+        act(t:&i, val(ct:&i))
+        (.'TRANCVTXT'.)
+      endif
+
+      Proximo
+   Endif   
+
+   if Dialogo.Check3=1 y (Val(tp:1)=1 o Val(tp:2)=1)
+      SQL.EXEC
+   endif
+
+ENDIF
+
+if Dialogo.Check3=1
+   CerrarAscii
+   Messagebox('El Evento Transferencias CV Finalizo OK!!!')
+else
+   Messagebox('El Evento Transferencias CV Finalizo OK!!! - Sin Procesar')
+endif

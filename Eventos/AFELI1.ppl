@@ -1,0 +1,168 @@
+﻿CrearDialogo
+  Fecha1 : 'Fecha' ;;;;;;;;NO;HABILES(FSys,-1, VAR('FERIADODEF'))
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+Message(' Afectacion de Limites dia '~Dialogo.Fecha1~' ...' )
+* Busco primer dia habil despues de hoy (t+1)
+ACD(x1,HABILES(Dialogo.Fecha1, 1, VAR('FERIADODEF')))
+* Busco segundo dia habil despues de hoy (t+2)
+ACD(x2,HABILES(Dialogo.Fecha1, 2, VAR('FERIADODEF')))
+* ACT(z11, VAR('MONEEXTR'))
+
+
+if Val(x1)>FSys
+  ACT(x4,'N')
+else
+  ACT(x4,'P')
+endif
+
+if Val(x2)>FSys
+  ACT(x5,'N')
+else
+  ACT(x5,'P')
+endif
+
+* Borrar cualquier afectacion al limite por fondos que se haya efectuado previamente
+* para ese dia
+SQL.ADD("Select NrTrans from "~DBO~".TRANSACCIONES2 where TipoTr2 = 'AFEF' and Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+
+Recorrer SQL
+  SQL.ADD("Delete from "~DBO~".MOVLIMITES where NrOperacion = '"~fbn('NrTrans')~"' ")  
+  SQL.NEW
+  SQL.ADD("Delete from "~DBO~".TRANSACCIONES2 where NrTrans = '"~fbn('NrTrans')~"' ")
+  SQL.NEW
+Proximo
+
+SQL.NEW
+SQL.EXEC
+
+ACN(w1,0)
+
+* Buscar Movimientos de limites de fondos comunes o afectaciones
+SQL.ADD("Select * from  "~DBO~".MOVLIMITES  ")
+SQL.ADD("where FechaMov ='"~IdxDate(Dialogo.Fecha1)~"' and Limite ='COTOR'  ")
+SQL.ADD("and (Descripcion like 'FCS %' or Descripcion like 'FCR %') ")
+SQL.ADD("order by FechaMov, Cliente, NrOperacion")
+
+Recorrer SQL
+  ACN(w1,1)
+  Message(' Operacion '~FBN['NrOperacion']~' '~FBN['Descripcion']~' ...')
+
+  * desafectar el limite por el valor original en fecha t+1
+  if Vacio(Val(z1))
+     ACT(z1,GetNumerador(4))
+  endif
+
+  ACN(a1,-fbn('Monto'))
+
+  ACT(z2,'DESF '~Copy(fbn('Descripcion'),5,6))
+  SCN(z3,-fbn('Monto'))
+
+  * Grabo en Trader el nro. de operacion del fondo que le dio origen
+  SQL.ADD("Insert into "~DBO~".MOVLIMITES (")
+  SQL.ADD("FechaMov, Cliente, Limite, ")
+  SQL.ADD("Especie, Monto, NrOperacion, ")
+  SQL.ADD("Descripcion, Bits, FechaLim, Vehiculo,Trader ")
+  SQL.ADD(") Values (")
+  SQL.ADD("'"~IdxDate(Val(x1))~"', '"~fbn('Cliente')~"', 'COTOR', ")
+  SQL.ADD("'"~fbn('Especie')~"', "~FStr(Val(a1),0,2)~", '"~Val(z1)~"', ")
+  SQL.ADD("'"~Val(z2)~"', '"~Val(x4)~"', Null, ' ','"~FBN['NrOperacion']~"' ")
+  SQL.ADD(")")
+  SQL.NEW
+  SQL.EXEC
+
+  Message(' Validacion para Determinar si redondoe o importe del monto ')
+
+  acn(a3,SQL("Select Monto from "~DBO~".MOVLIMITES Where FechaMov='"~IdxDate(Val(x1))~"' and Cliente='"~fbn('Cliente')~"' and Limite='COTOR' and Especie='"~fbn('Especie')~"' and NrOperacion='"~Val(z1)~"' and Descripcion='"~Val(z2)~"' and Trader='"~FBN['NrOperacion']~"' "))
+  acn(a2,fbn('Monto')+val(a3))
+
+  If Val(a2)<>0
+     Cancelar('Se produjo una Diferencia para '~FBN['NrOperacion']~' '~FBN['Descripcion']~' de '~Fstr(val(a2),0,2)~', El proceso se Cancelara  ...' )
+  EndIf
+Proximo
+
+* Actualizar Saldos
+SQL.ADD("Select E.Codigo, Sum(S.Saldo) as Sald  ")
+SQL.ADD("from "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E ")
+SQL.ADD("where  S.Especie = E.Codigo  ")
+SQL.ADD("  and  S.NrSaldo = 2 ")
+SQL.ADD("  and  S.Saldo <> 0 ")
+SQL.ADD("  and  E.Tipo = 'FON' ")
+SQL.ADD("  and  S.Fecha = (Select Max(D.Fecha) from "~DBO~".SALDOSDIA D ")
+SQL.ADD("                   where  D.EnteCustodia = S.EnteCustodia ")
+SQL.ADD("                   and    D.Especie = S.Especie  ")
+SQL.ADD("                   and    D.Cliente = S.Cliente  ")
+SQL.ADD("                   and    D.NrSaldo = 2 ")
+SQL.ADD("                   and    D.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD("group by E.Codigo  order by E.Codigo ")                   
+Recorrer SQL
+  ACN(w1,1)
+  ACT(x3,BuscarCampo('ESPECIES','Issuer','Codigo',fbn('Codigo')))
+  if Vacio(Val(z1))
+    ACT(z1,GetNumerador(4))
+  endif
+  ACT(z5,'AFEF '~fbn('Codigo'))
+
+  * ultima Cotizacion del fondo en dolares
+  ACN(z7,CotizacionC(fbn('Codigo'),,,,Val(x1),1,,VAR('MONEEXTR')))
+
+  ACN(z8,fbn('Sald')*Val(z7))
+  SCN(z9, Val(z8))
+
+  Message(FBN['Codigo'])
+  Message(val(x1))
+  Message(val(z7))
+  Message(val(z8))
+
+  *- Especie del limite
+  ACT(z11, SQL("SELECT Especie FROM "~DBO~".LIMASIGNADOS WHERE Cliente='"~val(x3)~"' and Limite='COTOR' "))
+
+  * Afectar el limite por el valor actualizado del Saldo del fondo en t+1
+  SQL.ADD("Insert into "~DBO~".MOVLIMITES (")
+  SQL.ADD("FechaMov, Cliente, Limite, ")
+  SQL.ADD("Especie, Monto, NrOperacion, ")
+  SQL.ADD("Descripcion, Bits, FechaLim, Vehiculo ")
+  SQL.ADD(") Values (")
+  SQL.ADD("'"~IdxDate(Val(x1))~"', '"~Val(x3)~"', 'COTOR', ")
+  SQL.ADD("'"~Val(z11)~"', "~FStr(Val(z8),0,2)~", '"~Val(z1)~"', ")
+  SQL.ADD("'"~Val(z5)~"', '"~Val(x4)~"', Null, ' '")
+  SQL.ADD(")")
+  SQL.NEW
+
+  * Desafectar el limite por el valor actualizado del Saldo del fondo en t+2
+  ACT(z10,'DESF '~fbn('Codigo'))
+  SQL.ADD("Insert into "~DBO~".MOVLIMITES (")
+  SQL.ADD("FechaMov, Cliente, Limite, ")
+  SQL.ADD("Especie, Monto, NrOperacion, ")
+  SQL.ADD("Descripcion, Bits, FechaLim, Vehiculo ")
+  SQL.ADD(") Values (")
+  SQL.ADD("'"~IdxDate(Val(x2))~"', '"~Val(x3)~"', 'COTOR', ")
+  SQL.ADD("'"~Val(z11)~"', "~FStr(-Val(z8),0,2)~", '"~Val(z1)~"', ")
+  SQL.ADD("'"~Val(z10)~"', '"~Val(x5)~"', Null, ' '")
+  SQL.ADD(")")
+  SQL.NEW
+Proximo
+
+if Val(w1)<>0 
+
+   ACT(z11, '')
+
+   * grabar transaccion x lo Actualizado ese dia
+   SQL.ADD("Insert into "~DBO~".TRANSACCIONES2 (")
+   SQL.ADD(" Especie,  Fecha1,  Cantidad1, ")
+   SQL.ADD(" TipoTr2, NrTrans, ")
+   SQL.ADD(" FechaCarga, FechaCargaSys, UsrInput ")
+   SQL.ADD(" ) Values ( ")
+   SQL.ADD("'"~Val(z11)~"', '"~IdxDate(Dialogo.Fecha1)~"', "~FStr(Val(z9),0,2)~", ")
+   SQL.ADD("'AFEF', '"~Val(z1)~"', ")
+   SQL.ADD(" "~SQLAhora~", "~SQLAhora~", '"~UsuarioActivo~"' ")
+   SQL.ADD(")")
+   SQL.NEW  
+   SQL.EXEC
+endif
+
+
+

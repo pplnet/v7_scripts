@@ -1,0 +1,188 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Vehiculo1  : "Vehiculo" ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Fecha1     : "F.Desde"  ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha Desde';NO;FSys
+  Fecha2     : "F.Hasta"  ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar la Fecha Hasta';NO;FSys
+  Lista1     : 'Trader'   ;;;;;;;;;;;SQLSet("Select Codigo from "~DBO~".USUARIOS")
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+  else
+   If [SQL("Select Count(*) from "~DBO~".VEHICULOS ") <> SQL("Select Count(*) from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"' ")] y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+endif
+
+*-- Veo solamente los tipos seleccionados
+SetListaClaves(2)
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(4)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,1)
+
+ACT(a:fac,"Volumen Operado por Trader")
+
+SetFont(a:fac..a:fac,2)
+SetFilaActual(5)
+
+ACT(a:FAC+1, 'Fecha Desde: '~Dialogo.Fecha1)
+ACT(a:FAC+2, 'Fecha Hasta: '~Dialogo.Fecha2)
+
+
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(a:FAC+3, 'Vehiculo : '~Dialogo.Vehiculo1~'  '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+else
+  ACT(a:FAC+3, 'Vehiculo : Todos')
+endif
+
+if NoVacio(Dialogo.Lista1)
+   ACT(A:fac+4, 'Traders : '~Pipe2Comillas(Dialogo.Lista1))
+else
+   ACT(A:fac+4, 'Traders : Todos')
+endif
+
+*if NoVacio(Dialogo.Lista2)
+*   ACT(A:fac+5, 'Tipo Op. : '~Pipe2Comillas(Dialogo.Lista2))
+*  else 
+*   ACT(A:fac+5, 'Tipo Op. : Todas')
+*endif
+
+SetFont(a:FAC+1..k:FAC+5,2)
+
+SetFilaActual(fac+7)
+
+ACT(a:FAC, 'Especie')
+ACT(b:FAC, 'Compra Contado')
+ACT(c:FAC, 'Precio Pro.')
+ACT(d:FAC, 'Venta Contado')
+ACT(e:FAC, 'Precio Pro.')
+ACT(f:FAC, 'Neto Contado')
+ACT(g:FAC, 'Compra Futuro')
+ACT(h:FAC, 'Precio Pro.')
+ACT(i:FAC, 'Venta Futuro')
+ACT(j:FAC, 'Precio Pro.')
+ACT(k:FAC, 'Neto Futuro')
+
+AlinearCeldas(a:FAC..a:FAC,'I')
+AlinearCeldas(b:FAC..k:FAC,'D')
+SetFont(a:FAC..k:FAC,2)
+AgregarMarco(a:FAC..k:FAC,2,0,Exe('COLOR'))
+
+SetFilaActual(FAC+1)
+ACN(z1,0)
+ACN(w1,fac)
+
+SQL.ADD("Select * From "~DBO~".OPERACIONES ")
+SQL.ADD("where FechaOp between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("and (TipoOp Like 'SEC%' or TipoOp Like 'SEV%') ")
+
+if NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD(" and Vehiculo1 = '"~Dialogo.Vehiculo1~"'")
+endif
+
+if NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and Operador In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+endif
+
+*if NoVacio(Dialogo.Lista2)
+*   SQL.ADD(" and TipoOp In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+*endif
+
+SQL.ADD("order by Especie, FechaEj, PrecioEj")
+
+recorrer SQL
+  DFA
+
+  if Not EqStr(FBN['Especie'], Val(z9)) o FBN['FechaEj']<>Val(z10) o FBN['PrecioEj']<>Val(z11)
+     if Val(z1) > 0
+        ACN(c:FAC, Val(c:FAC)/Val(b:FAC))
+        ACN(e:FAC, Val(e:FAC)/Val(d:FAC))
+        ACN(f:FAC, Val(b:FAC)-Val(d:FAC))
+        ACN(h:FAC, Val(h:FAC)/Val(g:FAC))
+        ACN(j:FAC, Val(j:FAC)/Val(i:FAC))
+        ACN(k:FAC, Val(g:FAC)-Val(i:FAC))
+     endif
+     IFA
+     ACT(a:FAC, FBN['Especie']~' '~FBN['FechaEj']~' '~FBN['PrecioEj'])
+     ACT(Z9,FBN['Especie'])
+     ACD(Z10,FBN['FechaEj'])
+     ACN(Z11,FBN['PrecioEj'])
+     ACN(z1,1)
+  endif
+
+  if Incluido(FBN['TipoOp'],'SECS|SECSV')
+      SCN(b:FAC, FBN['Cantidad'])
+      SCN(c:FAC, FBN['Cantidad']*FBN['Precio1'])
+  endif
+  if Incluido(FBN['TipoOp'],'SEVS|SEVSV')
+      SCN(d:FAC, FBN['Cantidad'])
+      SCN(e:FAC, FBN['Cantidad']*FBN['Precio1'])
+  endif
+  if Incluido(FBN['TipoOp'],'SECT|SECTV')
+      SCN(g:FAC, FBN['Cantidad'])
+      SCN(h:FAC, FBN['Cantidad']*FBN['Precio1'])
+  endif
+  if Incluido(FBN['TipoOp'],'SEVT|SEVTV')
+      SCN(i:FAC, FBN['Cantidad'])
+      SCN(j:FAC, FBN['Cantidad']*FBN['Precio1'])
+  endif
+proximo
+
+if Val(z1) > 0
+   ACN(c:FAC, Val(c:FAC)/Val(b:FAC))
+   ACN(e:FAC, Val(e:FAC)/Val(d:FAC))
+   ACN(f:FAC, Val(b:FAC)-Val(d:FAC))
+   ACN(h:FAC, Val(h:FAC)/Val(g:FAC))
+   ACN(j:FAC, Val(j:FAC)/Val(i:FAC))
+   ACN(k:FAC, Val(g:FAC)-Val(i:FAC))
+endif
+
+FormatoCeldas(b:Val(w1)..b:FAC,Exe('F2'))
+FormatoCeldas(d:Val(w1)..d:FAC,Exe('F2'))
+FormatoCeldas(f:Val(w1)..f:FAC,Exe('F2'))
+FormatoCeldas(g:Val(w1)..g:FAC,Exe('F2'))
+FormatoCeldas(i:Val(w1)..i:FAC,Exe('F2'))
+FormatoCeldas(k:Val(w1)..k:FAC,Exe('F2'))
+FormatoCeldas(c:Val(w1)..c:FAC,Exe('F6'))
+FormatoCeldas(e:Val(w1)..e:FAC,Exe('F6'))
+FormatoCeldas(h:Val(w1)..h:FAC,Exe('F6'))
+FormatoCeldas(j:Val(w1)..j:FAC,Exe('F6'))
+AgregarMarco(a:Val(w1)..a:FAC, 1)
+AgregarMarco(b:Val(w1)..c:FAC, 1)
+AgregarMarco(d:Val(w1)..e:FAC, 1)
+AgregarMarco(f:Val(w1)..f:FAC, 1)
+AgregarMarco(g:Val(w1)..h:FAC, 1)
+AgregarMarco(i:Val(w1)..j:FAC, 1)
+AgregarMarco(k:Val(w1)..k:FAC, 1)
+SetFont(a:Val(w1)..k:FAC,1)
+
+ACO(1,10)
+ACO(2,9)
+ACO(3,7)
+ACO(4,9)
+ACO(5,7)
+ACO(6,10)
+ACO(7,9)
+ACO(8,7)
+ACO(9,9)
+ACO(10,7)
+ACO(11,10)
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(k:FAC)
+*RangoTitulo(a:1..k:FAC, Val(w1)+3)
+

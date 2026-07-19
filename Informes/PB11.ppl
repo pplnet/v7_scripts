@@ -1,0 +1,319 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1   :'D.Fecha'    ;1;1;;;;Dialogo.Fecha1>0;'Debe ingresar una Fecha valida';NO;PriDeMes(FSys)
+  Vehiculo1:'Vehiculo'   ;1;2;;;;NOVACIO(Dialogo.Vehiculo1);'Vehiculo invalido';NO;VAR('VEHICULODE')
+  Fecha2   :'H.Fecha'    ;2;1;;;;Dialogo.Fecha1>0;'Debe ingresar una Fecha valida';NO;FSys
+  Radio1   :'Movimientos|Pendientes|Ejecutados|Todos';3;;;;;;;;2;
+  Check1   :'Todos'      ;4;1;;;;;;;1;
+  Lista1   :'Banco'      ;5;1;;;;[NOVACIO(Dialogo.Lista1)];;NO;;IIF(Dialogo.Check1=1,SQLSet("Select Codigo from "~DBO~".CLIENTES Where Sector='BAN' "));SQLSet("Select Codigo from "~DBO~".CLIENTES Where Sector='BAN' ");
+FinDialogo
+
+
+If Not Ok
+  Cancelar
+EndIf
+
+CrearFont(1, "Arial, 8,")
+CrearFont(2, "Arial, 8,B,")
+CrearFont(3, "Arial,10,B,")
+CrearFont(4, "Arial, 8,BI,")
+
+ACT(TT:1, '')
+
+IF Dialogo.Radio1 = 0
+    ACT(TT:1, 'Pendientes')
+ENDIF
+
+IF Dialogo.Radio1 = 1
+    ACT(TT:1, 'Ejecutados')
+ENDIF
+
+ACT(a:2, 'Vehiculo: '~BuscarCampo('VEHICULOS', 'Descripcion', 'Codigo', Dialogo.Vehiculo1) )
+
+IF Elementos(Dialogo.Lista1) < SQL(" Select Count(*) From "~DBO~".CLIENTES Where EsDepositante = 'SI' ")
+  ACT(a:3, 'Banco: '~Pipe2Comillas(Dialogo.Lista1))
+ENDIF
+IF Elementos(Dialogo.Lista1) = SQL(" Select Count(*) From "~DBO~".CLIENTES Where EsDepositante = 'SI' ")
+  ACT(a:3, 'Banco: TODOS')
+ENDIF
+
+ACT(a:5, 'Movimientos '~Val(TT:1)~' del '~Dialogo.Fecha1~' al '~Dialogo.Fecha2 )
+SetFont(a:2..a:4,2)
+SetFont(a:5, 3)
+
+SetFilaActual(8)
+
+ACT(a:fac, 'Fecha')
+ACT(b:fac, 'Concepto')
+ACT(c:fac, 'Operacion')
+ACT(e:fac, 'Importe')
+ACT(f:fac, 'Estado')
+AlinearCeldas(a:fac..f:fac, 'C')
+SetFont(a:fac..z:fac,2)
+AgregarMarco(a:fac..f:fac,1,1,EXE('COLOR'))
+
+ACT(ec:1,'')
+ACT(ca:1,'')
+ACT(ea:1,'')
+ACT(ma:1,'')
+
+ACN(z:1,0)
+ACN(TE:1,0)
+ACN(TP:1,0)
+
+IF Dialogo.Radio1 = 2
+    SQL.ADD(" SELECT M.FechaMov, M.Concepto, M.Cantidad, M.Cuenta, M.Mercado, M.Especie, M.Leyenda, ")
+    SQL.ADD(" C.Numero, E.Nombre, 'Ejecutado' Estado, M.NrOperacion, T.Nombre Descripcion, C.Comitente EnteCustodia, 'O' Tipo, M.Cupon ")
+    SQL.ADD(" FROM "~DBO~".MOVEJECUTADOS M, "~DBO~".CUENTAS C, "~DBO~".ESPECIES E, ")
+    SQL.ADD(" "~DBO~".OPERACIONES O, "~DBO~".TIPOSOPERACION T, "~DBO~".OPERACIONESBITS B ")
+    SQL.ADD(" WHERE M.Cuenta    = C.Codigo  ")
+    SQL.ADD(" AND   B.NrOperacion = O.NrOperacion ")
+    SQL.ADD(" AND   B.NrBit <> 30 ")
+    SQL.ADD(" AND   B.Valor = '1' ")
+    SQL.ADD(" AND   M.Especie      = E.Codigo ")
+    SQL.ADD(" AND   M.NrOperacion  = O.NrOperacion ")
+    IF Dialogo.Check1 = 0
+      SQL.ADD(" AND   C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    ENDIF
+    SQL.ADD(" AND   M.NrSaldo = 1 ")
+    SQL.ADD(" AND   O.TipoOp       = T.Codigo ")
+    SQL.ADD(" AND   O.Vehiculo1    = '"~Dialogo.Vehiculo1~"' ")
+    SQL.ADD(" AND   M.FechaMov     >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND   M.FechaMov     <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+    SQL.ADD(" UNION ALL ")
+    SQL.ADD(" SELECT M.FechaMov, M.Concepto, M.Cantidad, M.Cuenta, M.Mercado, M.Especie, M.Leyenda, ")
+    SQL.ADD(" C.Numero, E.Nombre, 'Ejecutado' Estado, M.NrOperacion, T.Nombre Descripcion, C.Comitente EnteCustodia, 'T' Tipo, M.Cupon ")
+    SQL.ADD(" FROM "~DBO~".MOVEJECUTADOS M, "~DBO~".CUENTAS C, "~DBO~".ESPECIES E, "~DBO~".TRANSACCIONES2 O, "~DBO~".TIPOSTRANSACCION2 T, "~DBO~".OPERACIONESBITS B ")
+    SQL.ADD(" WHERE M.Cuenta    = C.Codigo  ")
+    SQL.ADD(" AND   B.NrOperacion = O.NrTrans ")
+    SQL.ADD(" AND   B.NrBit <> 25 ")
+    SQL.ADD(" AND   B.Valor = '1' ")
+    SQL.ADD(" AND   M.NrSaldo = 1 ")
+    SQL.ADD(" AND   M.Especie      = E.Codigo ")
+    SQL.ADD(" AND   M.NrOperacion  = O.NrTrans")
+    SQL.ADD(" AND   O.TipoTr2      = T.Codigo ")
+    SQL.ADD(" AND   O.Vehiculo1    = '"~Dialogo.Vehiculo1~"' ")
+    IF Dialogo.Check1 = 0
+      SQL.ADD(" AND   C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    ENDIF
+    SQL.ADD(" AND   M.FechaMov     >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND   M.FechaMov     <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+    SQL.ADD(" UNION ALL ")
+    SQL.ADD(" SELECT M.FechaMov, M.Concepto, M.Cantidad*(-1) Cantidad, M.Cuenta, M.Mercado, M.Especie, M.Leyenda, ")
+    SQL.ADD(" C.Numero, E.Nombre, 'Pendiente' Estado, M.NrOperacion, T.Nombre Descripcion, C.Comitente EnteCustodia, 'O' Tipo, M.Cupon  ")
+    SQL.ADD(" FROM "~DBO~".MOVPENDIENTES M, "~DBO~".CUENTAS C, "~DBO~".ESPECIES E, ")
+    SQL.ADD(" "~DBO~".OPERACIONES O, "~DBO~".TIPOSOPERACION T, "~DBO~".OPERACIONESBITS B ")
+    SQL.ADD(" WHERE M.Cuenta    = C.Codigo ")
+    SQL.ADD(" AND   B.NrOperacion = O.NrOperacion ")
+    SQL.ADD(" AND   B.NrBit <> 30 ")
+    SQL.ADD(" AND   B.Valor = '1' ")
+    SQL.ADD(" AND   M.NrSaldo = 1 ")
+    SQL.ADD(" AND   M.Especie      = E.Codigo ")
+    SQL.ADD(" AND   M.NrOperacion  = O.NrOperacion ")
+    SQL.ADD(" AND   O.TipoOp       = T.Codigo ")
+    SQL.ADD(" AND   O.Vehiculo1    = '"~Dialogo.Vehiculo1~"' ")
+    IF Dialogo.Check1 = 0
+      SQL.ADD(" AND   C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    ENDIF
+    SQL.ADD(" AND   M.FechaMov     >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND   M.FechaMov     <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+    SQL.ADD(" UNION ALL ")
+    SQL.ADD(" SELECT M.FechaMov, M.Concepto, M.Cantidad, M.Cuenta, M.Mercado, M.Especie, M.Leyenda, ")
+    SQL.ADD(" C.Numero, E.Nombre, 'Pendiente' Estado, M.NrOperacion, T.Nombre Descripcion, C.Comitente EnteCustodia, 'T' Tipo, M.Cupon  ")
+    SQL.ADD(" FROM "~DBO~".MOVPENDIENTES M, "~DBO~".CUENTAS C, "~DBO~".ESPECIES E, ")
+    SQL.ADD(" "~DBO~".TRANSACCIONES2 O, "~DBO~".TIPOSTRANSACCION2 T, "~DBO~".OPERACIONESBITS B ")
+    SQL.ADD(" WHERE M.Cuenta    = C.Codigo  ")
+    SQL.ADD(" AND   B.NrOperacion = O.NrTrans ")
+    SQL.ADD(" AND   B.NrBit <> 25 ")
+    SQL.ADD(" AND   B.Valor = '1' ")
+    SQL.ADD(" AND   M.Especie      = E.Codigo ")
+    SQL.ADD(" AND   M.NrOperacion  = O.NrTrans ")
+    SQL.ADD(" AND   O.TipoTr2      = T.Codigo ")
+    SQL.ADD(" AND   M.NrSaldo      = 1 ")
+    SQL.ADD(" AND   O.Vehiculo1    = '"~Dialogo.Vehiculo1~"' ")
+    IF Dialogo.Check1 = 0
+      SQL.ADD(" AND   C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    ENDIF
+    SQL.ADD(" AND   M.FechaMov     >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND   M.FechaMov     <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+*    SQL.ADD(" ORDER BY M.Cuenta, M.Especie, M.FechaMov, M.Concepto ")
+    SQL.ADD(" ORDER BY 13, 4, 6, 1, 2 ")
+ENDIF
+
+IF Dialogo.Radio1 = 1
+    SQL.ADD(" SELECT M.FechaMov, M.Concepto, M.Cantidad, M.Cuenta, M.Mercado, M.Especie, M.Leyenda, ")
+    SQL.ADD(" C.Numero, E.Nombre, 'Ejecutado' Estado, M.NrOperacion, T.Nombre Descripcion, M.EnteCustodia, 'O' Tipo, M.Cupon ")
+    SQL.ADD(" FROM "~DBO~".MOVEJECUTADOS M, "~DBO~".CUENTAS C, "~DBO~".ESPECIES E, ")
+    SQL.ADD(" "~DBO~".OPERACIONES O, "~DBO~".TIPOSOPERACION T, "~DBO~".OPERACIONESBITS B ")
+    SQL.ADD(" WHERE M.Cuenta    = C.Codigo  ")
+    SQL.ADD(" AND   B.NrOperacion = O.NrOperacion ")
+    SQL.ADD(" AND   B.NrBit <> 30 ")
+    SQL.ADD(" AND   B.Valor = '1' ")
+    SQL.ADD(" AND   M.Especie      = E.Codigo ")
+    SQL.ADD(" AND   M.NrOperacion  = O.NrOperacion ")
+    SQL.ADD(" AND   M.NrSaldo = 1 ")
+    SQL.ADD(" AND   O.TipoOp       = T.Codigo ")
+    SQL.ADD(" AND   O.Vehiculo1    = '"~Dialogo.Vehiculo1~"' ")
+    IF Dialogo.Check1 = 0
+      SQL.ADD(" AND   C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    ENDIF
+    SQL.ADD(" AND   M.FechaMov     >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND   M.FechaMov     <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+    SQL.ADD(" UNION ALL ")
+    SQL.ADD(" SELECT M.FechaMov, M.Concepto, M.Cantidad, M.Cuenta, M.Mercado, M.Especie, M.Leyenda, ")
+    SQL.ADD(" C.Numero, E.Nombre, 'Ejecutado' Estado, M.NrOperacion, T.Nombre Descripcion, M.EnteCustodia, 'T' Tipo, M.Cupon ")
+    SQL.ADD(" FROM "~DBO~".MOVEJECUTADOS M, "~DBO~".CUENTAS C, "~DBO~".ESPECIES E, ")
+    SQL.ADD(" "~DBO~".TRANSACCIONES2 O, "~DBO~".TIPOSTRANSACCION2 T, "~DBO~".OPERACIONESBITS B ")
+    SQL.ADD(" WHERE M.Cuenta    = C.Codigo  ")
+    SQL.ADD(" AND   B.NrOperacion = O.NrTrans ")
+    SQL.ADD(" AND   B.NrBit <> 25 ")
+    SQL.ADD(" AND   B.Valor = '1' ")
+    SQL.ADD(" AND   M.Especie      = E.Codigo ")
+    SQL.ADD(" AND   M.NrOperacion  = O.NrTrans")
+    SQL.ADD(" AND   M.NrSaldo = 1 ")
+    SQL.ADD(" AND   O.TipoTr2      = T.Codigo ")
+    SQL.ADD(" AND   O.Vehiculo1    = '"~Dialogo.Vehiculo1~"' ")
+    IF Dialogo.Check1 = 0
+      SQL.ADD(" AND   C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    ENDIF
+    SQL.ADD(" AND   M.FechaMov     >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND   M.FechaMov     <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+*    SQL.ADD(" ORDER BY M.Cuenta, M.Especie, M.FechaMov, M.Concepto ")
+    SQL.ADD(" ORDER BY 13, 4, 6, 1, 2 ")
+ENDIF
+
+IF Dialogo.Radio1 = 0
+    SQL.ADD(" SELECT M.FechaMov, M.Concepto, M.Cantidad*(-1) Cantidad, M.Cuenta, M.Mercado, M.Especie, M.Leyenda, ")
+    SQL.ADD(" C.Numero, E.Nombre, 'Pendiente' Estado, M.NrOperacion, T.Nombre Descripcion, M.EnteCustodia, 'O' Tipo, M.Cupon  ")
+    SQL.ADD(" FROM "~DBO~".MOVPENDIENTES M, "~DBO~".CUENTAS C, "~DBO~".ESPECIES E, ")
+    SQL.ADD(" "~DBO~".OPERACIONES O, "~DBO~".TIPOSOPERACION T, "~DBO~".OPERACIONESBITS B ")
+    SQL.ADD(" WHERE M.Cuenta    = C.Codigo  ")
+    SQL.ADD(" AND   B.NrOperacion = O.NrOperacion ")
+    SQL.ADD(" AND   B.NrBit <> 30 ")
+    SQL.ADD(" AND   B.Valor = '1' ")
+    SQL.ADD(" AND   M.Especie      = E.Codigo ")
+    SQL.ADD(" AND   M.NrOperacion  = O.NrOperacion ")
+    SQL.ADD(" AND   M.NrSaldo = 1 ")
+    SQL.ADD(" AND   O.TipoOp       = T.Codigo ")
+    SQL.ADD(" AND   O.Vehiculo1    = '"~Dialogo.Vehiculo1~"' ")
+    IF Dialogo.Check1 = 0
+      SQL.ADD(" AND   C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    ENDIF
+    SQL.ADD(" AND   M.FechaMov     >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND   M.FechaMov     <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+    SQL.ADD(" UNION ALL ")
+    SQL.ADD(" SELECT M.FechaMov, M.Concepto, M.Cantidad, M.Cuenta, M.Mercado, M.Especie, M.Leyenda, ")
+    SQL.ADD(" C.Numero, E.Nombre, 'Pendiente' Estado, M.NrOperacion, T.Nombre Descripcion, M.EnteCustodia, 'T' Tipo, M.Cupon  ")
+    SQL.ADD(" FROM "~DBO~".MOVPENDIENTES M, "~DBO~".CUENTAS C, "~DBO~".ESPECIES E, ")
+    SQL.ADD(" "~DBO~".TRANSACCIONES2 O, "~DBO~".TIPOSTRANSACCION2 T, "~DBO~".OPERACIONESBITS B  ")
+    SQL.ADD(" WHERE M.Cuenta    = C.Codigo ")
+    SQL.ADD(" AND   B.NrOperacion = O.NrTrans ")
+    SQL.ADD(" AND   B.NrBit <> 40 ")
+    SQL.ADD(" AND   B.Valor = '1' ")
+    SQL.ADD(" AND   M.Especie      = E.Codigo ")
+    SQL.ADD(" AND   M.NrOperacion  = O.NrTrans ")
+    SQL.ADD(" AND   O.TipoTr2      = T.Codigo ")
+    SQL.ADD(" AND   M.NrSaldo = 1 ")
+    SQL.ADD(" AND   O.Vehiculo1    = '"~Dialogo.Vehiculo1~"' ")
+    IF Dialogo.Check1 = 0
+      SQL.ADD(" AND   C.Comitente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    ENDIF
+    SQL.ADD(" AND   M.FechaMov     >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND   M.FechaMov     <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+*    SQL.ADD(" ORDER BY M.Cuenta, M.Especie, M.FechaMov, M.Concepto ")
+    SQL.ADD(" ORDER BY 13, 4, 6, 1, 2 ")
+ENDIF
+
+Recorrer SQL
+ If DesciendeDeEspecie(fbn('Especie'), 'MONEDA')
+   IF NOT Eqstr(fbn('Cuenta'), Val(ca:1)) o NOT Eqstr(fbn('Especie'), Val(ea:1)) o NOT Eqstr(fbn('Mercado'), Val(ma:1)) o NOT Eqstr(fbn('EnteCustodia'), Val(ec:1)) o NOT Eqstr(fbn('Cupon'), Val(cu:1))
+      IF Val(z:1)<>0
+         ACT(a:fac, 'Total Pendiente ...' )
+         ACN(E:fac, Val(TP:1))
+         ifa
+         ACT(a:fac, 'Total Ejecutado ...' )
+         ACN(E:fac, Val(TE:1))
+         ifa
+         ACT(a:fac, 'Total Cuenta ...' )
+         ACN(e:fac, Val(TE:1) + Val(TP:1) + Val(SU:1))
+         SetFont(a:fac-2..z:fac,4)
+         Formatoceldas(e:fac-2..E:fac, EXE('F2'))
+         AgregarMarco(a:fac-2..f:fac,1,1,0)
+         ACN(TE:1, 0)
+         ACN(TP:1, 0)
+         ifa
+      ENDIF
+      ACN(z:1,1)
+      ifa
+      ACT(a:fac,'Banco: '~fbn('EnteCustodia')~' - Cuenta: '~fbn('Cuenta')~' '~fbn('Numero'))
+      ACT(a:fac,Val(a:fac)~' - Moneda: '~ fbn('Nombre'))
+      ACN(SU:1, SaldoC(Dialogo.Vehiculo1, fbn('Especie'),,,,,,fbn('Cuenta') ,1,Dialogo.Fecha1-1,fbn('Cupon')))
+      ACT(E:fac, 'Saldo Inicial: '~Fstr(Val(SU:1), 0, 2))
+      SetFont(a:fac..z:fac,2)
+      AgregarMarco(a:fac..f:fac,1,1,EXE('COLOR6'))
+      ifa
+      ACN(fi:1,fac)
+      ACT(ca:1,fbn('Cuenta'))
+      ACT(cu:1,fbn('Cupon'))
+      ACT(ea:1,fbn('Especie'))
+      ACT(ma:1,fbn('Mercado'))
+      ACT(ec:1,fbn('EnteCustodia'))
+   ENDIF
+   ACD(a:fac, fbn('FechaMov'))
+   ACT(b:fac, fbn('Concepto'))
+   ACT(c:fac, fbn('NrOperacion'))
+   IF Eqstr(fbn('Tipo'), 'O')
+      ACLO(c:fac, fbn('NrOperacion'))
+   ENDIF
+   IF Eqstr(fbn('Tipo'), 'T')
+      ACLT(c:fac, fbn('NrOperacion'))
+   ENDIF
+   IF Eqstr(fbn('Tipo'), 'F')
+      ACLF(c:fac, fbn('NrOperacion'))
+   ENDIF
+   ACT(d:fac, fbn('Leyenda'))
+   ACN(e:fac, fbn('Cantidad'))
+   ACT(f:fac, fbn('Estado'))
+   IF Eqstr(fbn('Estado'), 'Pendiente')
+      SCN(TP:1, fbn('Cantidad'))
+      ColorCeldas(f:fac,clBlue)
+   ELSE
+      SCN(TE:1, fbn('Cantidad'))
+      ColorCeldas(f:fac,clGreen)
+   ENDIF
+
+   SetFont(a:fac..z:fac,1)
+   Formatoceldas(e:fac, EXE('F2'))
+ Else
+   dfa
+ Endif
+Proximo
+
+ifa
+
+ACT(a:fac, 'Total Pendiente ...' )
+ACN(E:fac, Val(TP:1))
+ifa
+ACT(a:fac, 'Total Ejecutado ...' )
+ACN(E:fac, Val(TE:1))
+ifa
+
+ACT(a:fac, 'Total Cuenta ...' )
+ACN(e:fac, Val(TE:1) + Val(TP:1) + Val(SU:1))
+SetFont(a:fac-2..z:fac,4)
+Formatoceldas(e:fac-2..E:fac, EXE('F2'))
+AgregarMarco(a:fac-2..f:fac,1,1,0)
+
+ifa
+ifa
+
+ACT(a:fac, 'Fin del Informe.')
+SetFont(a:fac,2)
+
+ACO(1,10)
+ACO(2,10)
+ACO(4,20)
+ACO(5,10)
+
+LimitesVision(g:fac+2)
+SetMargins(0,0,0,2)

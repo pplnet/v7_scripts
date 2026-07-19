@@ -1,0 +1,186 @@
+﻿* PROCUO -- Prorrateo de Cuotas. 
+* Viene el importe con signo , el evento siempre suma
+* HOJAVISIBLE(SI)
+CrearDialogo
+   NrOperacion1:'Op  Cabecera'
+   NrOperacion2:'Op. Participante'
+   String1     :'Condicion de Select Cuotas'
+   Precio1     :'Importe de Cesion (Con Signo)'
+FinDialogo
+
+If not Ok
+ Cancelar
+EndIf
+
+
+*-- Calculo la Sumatoria de Porcentajes de las cuotas a insertar 
+SQL.ADD("SELECT SUM(Tasa1) As SumTasa, SUM(Cantidad4) As SumAmort ")
+SQL.ADD("FROM "~DBO~".CUOTAS WHERE NrOperacion='"~Dialogo.NrOperacion2~"' ")
+If NOVACIO(Dialogo.String1)   
+   SQL.ADD(" and "~Dialogo.String1~" ")
+EndIf
+
+Recorrer SQL
+  *-- A32: Sumatoria de cuotas a tratar  
+  *-- A33: Sumatoria de Capital que resta amortizar
+  ACN(A32,FBN['SumTasa'])
+  ACN(A33,FBN['SumAmort'])
+Proximo
+
+*-- a34: Obtengo el Factor a aplicar a cada importe a actual y asi obtener el nuevo importe de amortizacion
+IF VAL(A33)<>0
+   ACN(A34,1+(Dialogo.Precio1/VAL(A33)))
+ELSE 
+   *-- Obtengo el 1er. Valor Nominal
+   SQL.ADD(" SELECT Cantidad2 FROM "~DBO~".CUOTAS WHERE NrOperacion='"~Dialogo.NrOperacion2~"' ")
+
+   If NOVACIO(Dialogo.String1)   
+      SQL.ADD(" and "~Dialogo.String1~" ")
+   EndIf
+
+   Recorrer SQL
+      ACN(A33,FBN['Cantidad2'])
+      Break
+   Proximo
+   ACN(A34,0)
+ENDIF
+
+*-- A35: Tipo de Operacion que prorrateo
+ACT(A35,BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion2))
+
+*-- A10: Unidad de Tiempo Calculo de Intereses
+ACN(A10,IIF(EqStr(BuscarCampo('Operaciones','RB8','NrOperacion',Dialogo.NrOperacion2),'0'),36000,36500))
+
+*-- vn del periodo
+ACN (A3,VAL(A33)+Dialogo.Precio1)
+
+IF Val(A:3) < 0
+    ACN(A:3, 0)
+ENDIF
+
+*-- TASA IVA A20 WH A21
+ACN (A20,BuscarCampo('Operaciones','ImpGastos2','NrOperacion',Dialogo.NrOperacion2))
+ACN (A21,BuscarCampo('Operaciones','TotalAux1','NrOperacion',Dialogo.NrOperacion2))
+
+IF Not Incluido(VAL(A35),'MMONM')
+   ACN (A40,BuscarCampo('Operaciones','TasaImp1'  ,'NrOperacion',Dialogo.NrOperacion2))
+EndIf
+
+*-- UT IVA A24 WH A25
+ACT (A24,BuscarCampo('Operaciones','RB7','NrOperacion',Dialogo.NrOperacion2))
+ACT (A25,BuscarCampo('Operaciones','RB9','NrOperacion',Dialogo.NrOperacion2))
+
+*-- LOCAL O EXTRANJERO
+ACT (A26,BuscarCampo('Operaciones','CB10','NrOperacion',Dialogo.NrOperacion2))
+
+*-- Calculo CUOTAS
+SQL.ADD(" SELECT * FROM "~DBO~".CUOTAS WHERE NrOperacion='"~Dialogo.NrOperacion2~"' ")
+If NOVACIO(Dialogo.String1)   
+   SQL.ADD(" and "~Dialogo.String1~" ")
+EndIf
+
+Recorrer SQL
+  IF Incluido(VAL(A35),'MMONM')
+     ACN (A40,FBN['Tasa3'])
+  EndIf
+
+  *-- INTERES
+  acn (a4, val(a3) * ((FBN['Precio2']+FBN['Precio4'])/100) * FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],BuscarCampo('Operaciones','RB8','NrOperacion',Dialogo.NrOperacion1)+1))
+
+  * A4 es el interes
+  * A11 es el interes total
+  * A5 es el monto
+  * A6 es el monto total
+  * A7 es el importe iva
+  * A8 es el importe wh
+  * A9 es el importe de amortizaci¦n del per¦odo
+  * A30 Y 31 360 O 365 PARA IVA Y WH
+
+  ACN(A7,0)
+  ACN(A8,0)
+  ACN(A41,0)
+
+  If Val(a20)<>0
+    * PARA UT
+    IF EQSTR(VAL(A24),'0')
+      ACN(A30,360)
+    ELSE
+      ACN(A30,365)
+    ENDIF
+
+    IF Incluido(VAL(A35),'MMONM')
+       *       ACN (A7, val(a4)*VAL(A20)/100 )
+       ACN (A7, ((val(a3)*FBN['Tasa2']/100)*FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],BuscarCampo('Operaciones','RB8','NrOperacion',Dialogo.NrOperacion1)+1))*(VAL(A20)/100))
+    Else
+       ACN (A7, ((val(a3)*FBN['Tasa2']/100)*FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],BuscarCampo('Operaciones','RB8','NrOperacion',Dialogo.NrOperacion1)+1))*(VAL(A20)/100))
+    EndIf
+  EndIf
+
+  IF val(a40)<>0
+     * Calculo de Imp.Interes si la tasa es <>0
+     acn(a41,VAL(a4)*VAL(a40)/100)  
+  EndIf
+
+  * PARA EXTRANJERO
+  IF Not EQSTR(val(A26), '0')
+     IF EQSTR(VAL(A25),'0')
+        ACN(A31,360)
+     ELSE
+        ACN(A31,365)
+     ENDIF
+
+     IF Incluido(VAL(A35),'MMONM')
+        *        ACN (A8, val(a4)*VAL(A21)/100 )
+        ACN (A8, ((val(a3)*FBN['Total6']/100)*FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],BuscarCampo('Operaciones','RB8','NrOperacion',Dialogo.NrOperacion1)+1)) * (VAL(A21)/100))
+     Else
+        ACN (A8, ((val(a3)*FBN['Total6']/100)*FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],BuscarCampo('Operaciones','RB8','NrOperacion',Dialogo.NrOperacion1)+1)) * (VAL(A21)/100))
+     EndIf
+  ENDIF
+
+  *-- calcula el importe de amortizaci¦n del per¦odo
+  acn(A9, FBN['Cantidad4']*VAL(A34))
+
+  *-- INTERES TOTAL
+  acn (a11, val(a4)+val(a8)+val(a41))
+
+  *-- MONTO
+  ACN (A5, val(a9) +VAL(A4))
+
+  *-- MONTO TOTAL
+  ACN (A6, val(a9) +VAL(A11))
+
+
+  SQL.ADD("Update "~DBO~".CUOTAS SET ")
+  SQL.ADD(" Cantidad2= "~Fstr(VAL(A3),0,2)~", ")
+  SQL.ADD(" Cantidad4= "~Fstr(VAL(A9),0,2)~", ")
+  SQL.ADD(" Cantidad5= "~Fstr(VAL(A11),0,2)~", ")
+  SQL.ADD(" Cantidad3= "~Fstr(VAL(A4),0,2)~", ")
+  SQL.ADD(" Precio5= "~Fstr(VAL(A4),0,2)~", ")
+  SQL.ADD(" Precio1= "~Fstr(VAL(A7),0,2)~", ")
+  SQL.ADD(" Precio6= "~Fstr(VAL(A7),0,2)~", ")
+  SQL.ADD(" Precio3= "~Fstr(VAL(A8),0,2)~", ")
+  SQL.ADD(" Precio7= "~Fstr(VAL(A8),0,2)~", ")
+  SQL.ADD(" Total2= "~Fstr(VAL(A5),0,2)~", ")
+  SQL.ADD(" Total9= "~Fstr(VAL(A41),0,2)~", ")
+  IF Incluido(VAL(A35),'MMONM')
+     SQL.ADD(" Tasa3= "~Fstr(VAL(A40),0,2)~", ")
+  EndIf
+  SQL.ADD(" Total1= "~Fstr(VAL(A6),0,2)~", ")
+  SQL.ADD(" Cantidad1Ori     ="~Fstr(VAL(A9),0,2)~", ")
+  SQL.ADD(" Cantidad2Ori     ="~Fstr(VAL(A3),0,2)~", ")
+  SQL.ADD(" ResultadoIndice  =0 ")
+  SQL.ADD(" WHERE NrOperacion='"~Dialogo.NrOperacion2~"' ")
+  SQL.ADD(" AND NrCuota="~FStr(FBN['NrCuota'],2,0)~" ")
+  SQL.NEW
+  SQL.EXEC
+
+  *-- amortiza
+  ACN (A3, val(A3)-VAL(A9))
+Proximo
+
+
+
+
+
+
+

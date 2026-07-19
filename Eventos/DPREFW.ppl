@@ -1,0 +1,85 @@
+﻿* DPREFW: Resultado de Forward -PC-
+CrearDialogo
+  NrOperacion1 : "Operacion"                ;1;1;;;;NoVacio(Dialogo.NrOperacion1);'Debe Ingresar una Operacion';NO;
+  Especie1     : "Commodity"                ;1;2;;NO;;;;;;BuscarCampo('Operaciones','Especie','NrOperacion',Dialogo.NrOperacion1)
+  Precio2      : "Precio_Real"              ;2;1;;;;Dialogo.Precio2>0;'El Precio Real es Incorrecto';NO;
+  Fecha4       : "Fecha Vto"                ;;;;NO;;;;;;BuscarCampo('Operaciones','FechaEj','NrOperacion',Dialogo.NrOperacion1)
+  Precio3      : "Precio Pactado"           ;;;;NO;;;;;;BuscarCampo('Operaciones','PrecioEj','NrOperacion',Dialogo.NrOperacion1)
+  Radio3       : "    |Compra|Venta"        ;;;;NO;;;;;;BuscarCampo('Operaciones','MB3','NrOperacion',Dialogo.NrOperacion1)
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+If Not Incluido(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'DPFW|')
+   Cancelar('La operacion No '~Dialogo.NrOperacion1~' No es un Forward de Commodities')
+endif
+
+* Verifico que se encuentre en Back Office o Terminal
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+
+If VAL(X1)<>20 y VAL(X1)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+If Ok   
+   * X1: Recupero la Operacion
+   acn(x1,0)
+
+   SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+   SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+*  SQL.ADD("and FechaVto>='"~IdxDate(Fsys)~"' ")
+   SQL.ADD("and FechaEj <='"~IdxDate(Fsys)~"' ")
+*  SQL.ADD("and (CB8 is Null or CB8='0') ")
+
+   Recorrer SQL
+
+     acn(x1,1)
+
+     *-- Calculo el Resultado por Unidad    
+     IF Dialogo.Radio3=0 
+        ACN(Z3,(Dialogo.Precio2-FBN['PrecioEj']))
+     ELSE 
+        ACN(Z3,(FBN['PrecioEj']-Dialogo.Precio2))
+     ENDIF
+     
+     *** Calculo el Resultado TOTAL
+     ACN(Z2,VAL(Z3)*FBN['Cantidad'])
+  
+     Message('Actualizando la Opcion  .... ')                  
+
+     *** Marca la operacion como ejercida ***
+     SQL.ADD("Update "~DBO~".OPERACIONES ")
+     SQL.ADD("Set CB8 = '1', ")
+     SQL.ADD("Precio2   = "~Fstr(Dialogo.Precio2,0,7)~", ")
+     SQL.ADD("Precio3   = "~Fstr(VAL(Z3),0,2)~", ")
+     SQL.ADD("Precio4   = "~Fstr(VAL(Z2),0,2)~"  ")
+     SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+     SQL.NEW
+     SQL.EXEC
+
+     *-- Insert de Mov.Pendientes. El Resultado invierte el signo porque se ve desde el cliente
+     * EjecutarEvento('IMOVPE',NrOperacion1=Dialogo.NrOperacion1,Fecha1=FBN['FechaVto'],Cliente1=FBN['Cliente1'],Especie1=FBN['ContraEspecie'],Vehiculo1=FBN['Vehiculo1'],Entero1=1,Precio1=-VAL(Z2),String='Resultado Forward',Entero2=9,Entero3=0,String1='')
+
+     *** Actualiza movimientos y limites ****
+     SQL.ActualizarMovimientos(Dialogo.NrOperacion1,SI)
+     SQL.EXEC
+
+     *-- Actualizo la Instancia de la Operacion a Supervision
+     (.'MODIINSTAN'.)      
+   proximo
+
+   If Val(x1)=0
+      Cancelar('La operacion No '~Dialogo.NrOperacion1~' No puede ser Actualizada')
+   endif
+endif

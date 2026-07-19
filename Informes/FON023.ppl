@@ -1,0 +1,311 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1     : "Fecha Desde" ;1;1;;;;Dialogo.Fecha1<>0;'Fecha Incorrecta';NO;Fsys
+  Fecha2     : "Fecha Hasta" ;2;1;;;;Dialogo.Fecha2<>0;'Fecha Incorrecta';NO;Fsys
+  Cliente1   : "Entidad"     ;3;1;
+  Especie2   : "Moneda"      ;4;1;
+  Especie1   : "Fondo"       ;5;1;
+  Radio1     : "Tipo|Money Markets|Securities|Todos" ;6;1;;;;;;;2
+  * Filtrar por books
+  Radio2     : 'Filtra Book|SI|NO'    ;7;1;;;;;;;1;
+  Lista1     : 'Vehiculos'            ;8;1;;;Dialogo.Radio2=1;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='')"),SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+  Vehiculo1  : 'Vehiculo'             ;2;1;;Dialogo.Radio2=0;Dialogo.Radio2=0;Dialogo.Radio2=1 O NoVacio(Dialogo.Vehiculo1) ;'Vehiculo Invalido';NO;;;;;;;
+  Lista2     : 'Books'                ;3;1;;;Dialogo.Radio2=0;;;;;;SQLSet(" Select Codigo From "~DBO~".BOOKS Where Vehiculo = '"~Dialogo.Vehiculo1~"' ");;
+  Radio3     : 'Consolida Book|SI|NO' ;4;1;;Dialogo.Radio2=0;Dialogo.Radio2=0;;;;0;
+  
+*Cuando se filtra por book, agregar un radio debajo de esta manera:
+*Radio: 'Consolida Book|SI|NO'. Default SI.
+*Si Consolidado = SI, se comporta como ahora
+*Si Consolidado = NO, debe mostrar un cuadro por book
+  
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+***Si se selecciona Book, uso el mismo código cambiando lista vehiculo por campo vehiculo
+IF Dialogo.Radio2 = 0 
+  ACT(zz6,Dialogo.Vehiculo1)
+  IF Elementos(Dialogo.Lista2) > 0
+    ***ZZ6 es la celda que guarda la variable de vehiculo, seguirla a través del script
+    ***ZZ7 Guarda el dato del Book
+    ACT(zz7, Dialogo.Lista2)
+  ELSE
+    ACT(ZZ:7, SQLSet(" Select Codigo From "~DBO~".BOOKS Where Vehiculo = '"~Dialogo.Vehiculo1~"' "))
+  EndIf
+    *** Si no se selecciona Book (el Radio2 es cero) entonces trabaja igual que antes:
+ELSE
+  *-- Veo solamente los tipos seleccionados
+  * Vehiculos permitidos por el usuario
+  If NoVacio(Dialogo.Lista1)
+     ACT(zz6,Dialogo.Lista1)
+  Else
+    If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+    Else
+      ACT(zz6,SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='')")) 
+    EndIf
+   EndIf
+ENDIF
+
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+***Insertar Logo
+
+let &filaLogo 1
+
+@LOGO
+
+
+***Título
+
+SetFilaActual(FAC+6)
+ACT(a:FAC,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:FAC,2)
+ifa
+ifa
+ACT(a:fac, "Operaciones en Fondos Comun de Inversion")
+ACT(h:fac,'Fecha : '~Var('FECHASYS'))
+SetFont(a:fac..h:fac,3)
+
+
+****Mostrar datos
+SetFilaActual(FAC+2)
+
+if NoVacio(VAL(ZZ7))
+  ACT(a:FAC, 'Book : '~VAL(ZZ7))
+else
+  ACT(a:FAC, 'Book : Todos')
+endif
+
+ACN(w1,FAC)
+
+if NoVacio(VAL(ZZ6))
+  ACT(a:FAC+1, 'Vehiculo : '~VAL(ZZ6))
+else
+  ACT(a:FAC+1, 'Vehiculo : Todos')
+endif
+
+ACT(a:FAC+2, 'Fecha Desde : '~Dialogo.Fecha1)
+ACT(a:FAC+3, 'Fecha Hasta : '~Dialogo.Fecha2)
+if NoVacio(Dialogo.Cliente1)
+  ACT(a:FAC+4, 'Entidad : '~Dialogo.Cliente1~'  '~BuscarCampo('Clientes','RazonSocial','Codigo',Dialogo.Cliente1))
+ else
+  ACT(a:FAC+4, 'Entidad : Todas')
+endif
+if NoVacio(Dialogo.Especie2)
+  ACT(a:FAC+5, 'Moneda : '~Dialogo.Especie2~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie2))
+ else
+  ACT(a:FAC+5, 'Moneda : Todas')
+endif
+if NoVacio(Dialogo.Especie1)
+  ACT(a:FAC+6, 'Fondo : '~Dialogo.Especie1~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie1))
+ else
+  ACT(a:FAC+6, 'Fondo : Todos')
+endif
+ACT(a:FAC+7, 'Tipo Fondo : '~iif(Dialogo.Radio1=2,'Todos',iif(Dialogo.Radio1=1,'Securities','Money Markets')))
+SetFont(a:fac..n:FAC+7,2)
+
+SetFilaActual(FAC+9)
+
+SQL.ADD("Select E.Cotiza, E.Issuer, S.Especie, S.EnteCustodia, S.Saldo Cantidad, ")
+SQL.ADD("       0 Precio1, S.Fecha, '00000000' NrOperacion, 0 Tip, '' TipoOp,S.Book ")
+SQL.ADD("from "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E ")
+SQL.ADD("where  S.Especie = E.Codigo  ")
+SQL.ADD("  and  S.NrSaldo = 2 ")
+SQL.ADD("  and  Round(S.Saldo,0) <> 0 ")
+SQL.ADD("  and  E.Tipo = 'FON' ")
+if NoVacio(VAL(ZZ6))
+   SQL.ADD("and S.Cliente  in ("~Pipe2Comillas(val(zz6))~")")
+   SQL.ADD("and S.EnteCustodia in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+IF Dialogo.Radio2 = 0
+   SQL.ADD(" AND S.Book IN ("~Pipe2Comillas(val(zz7))~") ")
+ENDIF
+if NoVacio(Dialogo.Especie2)
+   SQL.ADD("and E.Cotiza = '"~Dialogo.Especie2~"' ")
+endif
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD("and E.Issuer = '"~Dialogo.Cliente1~"' ")
+endif
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD("and S.Especie = '"~Dialogo.Especie1~"' ")
+endif
+if Dialogo.Radio1 = 0
+   SQL.ADD(" and E.Alias2 = '0' ")
+endif
+if Dialogo.Radio1 = 1
+   SQL.ADD(" and E.Alias2 = '1' ")
+endif
+SQL.ADD("and   S.Fecha = (Select Max(D.Fecha) from "~DBO~".SALDOSDIA D ")
+SQL.ADD("                   where  D.EnteCustodia = S.EnteCustodia ")
+SQL.ADD("                   and    D.Especie = S.Especie  ")
+SQL.ADD("                   and    D.Cliente = S.Cliente  ")
+SQL.ADD("                   and    D.NrSaldo = 2 ")
+SQL.ADD("                   and    D.Fecha < '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD("Union ")
+SQL.ADD("Select E.Cotiza, E.Issuer, S.Especie, S.EnteCustodia, S.Cantidad, ")
+SQL.ADD("       O.Precio1, S.FechaMov Fecha, O.NrOperacion, 1 Tip, O.TipoOp ,O.Book1 ")
+SQL.ADD("from "~DBO~".OPERACIONES O,"~DBO~".MOVEJECUTADOS S, "~DBO~".ESPECIES E ")
+SQL.ADD("where  S.Especie = E.Codigo  ")
+SQL.ADD("  and  S.NrOperacion = O.NrOperacion ")
+SQL.ADD("  and  S.NrSaldo = 2 ")
+SQL.ADD("  and  E.Tipo = 'FON' ")
+
+if NoVacio(VAL(zz6))
+   SQL.ADD("and S.Cliente  in ("~Pipe2Comillas(val(zz6))~") ")
+   SQL.ADD("and S.EnteCustodia in ("~Pipe2Comillas(val(zz6))~") ")
+endif
+IF Dialogo.Radio2 = 0
+   SQL.ADD(" AND O.Book1 IN ("~Pipe2Comillas(val(zz7))~") ")
+ENDIF
+if NoVacio(Dialogo.Especie2)
+   SQL.ADD("and E.Cotiza = '"~Dialogo.Especie2~"' ")
+endif
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD("and E.Issuer = '"~Dialogo.Cliente1~"' ")
+endif
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD("and S.Especie = '"~Dialogo.Especie1~"' ")
+endif
+if Dialogo.Radio1 = 0
+   SQL.ADD(" and E.Alias2 = '0' ")
+endif
+if Dialogo.Radio1 = 1
+   SQL.ADD(" and E.Alias2 = '1' ")
+endif
+SQL.ADD("and   S.FechaMov Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("order by 4, 2, 1, 3, 7,11 ")
+
+act(ca1,' ')
+act(ca2,' ')
+act(ca3,' ')
+act(ca4,' ')
+act(ca5,' ')
+acn(cz1,0)
+acn(ca6,0)
+
+Recorrer SQL
+***Si es 0 (SI) Trabaja de la misma forma que antes
+***Consolidación Books
+If (Dialogo.Radio2=0 y Dialogo.Radio3=1)
+    acn(ca6,1)
+Endif
+  if Not EqStr(val(ca4),fbn['EnteCustodia']) o Not EqStr(val(ca2),fbn['Issuer']) o Not EqStr(val(ca1),fbn['Cotiza']) o Not EqStr(val(ca3),fbn['Especie'])  o [Val(ca6)=1 y Not EqStr(fbn['Book'],Val(ca5))]
+    ACT(ca5,fbn['Book'])
+     if val(cz1) > 0
+        acd(a:fac,Dialogo.Fecha2)
+        acn(g:fac,val(g:fac-1))
+        acn(h:fac,val(g:fac-1)*Cotizacion(val(ca3),,,,Habiles(Dialogo.Fecha2,0,'ARG',SI),1))
+        SetFont(a:fac..h:fac,2)
+        AgregarMarco(a:fac..i:fac,2,0)
+        ifa
+        ifa
+        ifa
+     endif
+     act(a:fac,'Vehiculo : '~fbn['EnteCustodia']~'  '~BuscarCampo('Vehiculos','Descripcion','Codigo',fbn['EnteCustodia']))
+     act(ca4,fbn['EnteCustodia'])
+     act(a:fac+1,'Entidad : '~fbn['Issuer']~'  '~BuscarCampo('Clientes','RazonSocial','Codigo',fbn['Issuer']))
+     act(ca2,fbn['Issuer'])
+     act(a:fac+2,'Moneda : '~fbn['Cotiza']~'  '~BuscarCampo('Especies','Nombre','Codigo',fbn['Cotiza']))
+     act(ca1,fbn['Cotiza'])
+     act(a:fac+3,'Fondo: '~fbn['Especie']~'  '~BuscarCampo('Especies','Nombre','Codigo',fbn['Especie']))
+     act(ca3,fbn['Especie'])
+     act(a:fac+4,'Valor Cuotaparte: ')
+     acn(c:fac+4,Cotizacion(fbn['Especie'],,,,Habiles(Dialogo.Fecha2,0,'ARG',SI),1))
+     If Dialogo.Radio2=0
+         act(a:fac+5,'Book: ')
+         act(b:fac+5,fbn['Book'])
+     Endif
+     FormatoCeldas(c:fac+5..c:fac+5,Exe('F7'))
+     SetFont(a:fac..r:fac+5,2)
+
+     SetFilaActual(fac+7)
+     act(a:fac,'Fecha Origen')
+     act(b:fac,'Valor Cuotaparte')
+     act(c:fac,'Debito')
+     act(e:fac,'Credito')
+     act(g:fac,'Saldo')
+     act(i:fac,'Nro.Operacion')
+     act(c:fac+1,'Cuota')
+     act(d:fac+1,'Monto')
+     act(e:fac+1,'Cuota')
+     act(f:fac+1,'Monto')
+     act(g:fac+1,'Cuota')
+     act(h:fac+1,'Monto')
+     SetFont(a:fac..i:fac+1,2)
+     AgregarMarco(a:fac..b:fac+1,2,0,Exe('COLOR'))
+     AgregarMarco(c:fac..d:fac,2,0,Exe('COLOR'))
+     AgregarMarco(e:fac..f:fac,2,0,Exe('COLOR'))
+     AgregarMarco(g:fac..h:fac,2,0,Exe('COLOR'))
+     AgregarMarco(c:fac+1..h:fac+1,2,2,Exe('COLOR'))
+     AgregarMarco(i:fac..i:fac+1,2,0,Exe('COLOR'))
+     ifa
+     ifa
+   Endif
+  acd(a:fac,fbn['Fecha'])
+  If fbn['Tip'] = 1
+     If Eqstr(FBN('TipoOp'), 'DIVIDE')
+        acn(b:fac, Cotizacion(fbn['Especie'],,,,val(a:fac),1,SI))
+     Else
+        acn(b:fac,fbn['Precio1'])
+     Endif
+     act(i:fac,fbn['NrOperacion'])
+     aclo(i:fac,fbn['NrOperacion'])
+  Else
+     acn(b:fac,Cotizacion(fbn['Especie'],,,,Habiles(val(a:fac),1,'ARG',SI),1))
+     act(i:fac,'Inicial')
+  Endif
+  if fbn['Cantidad'] < 0
+     acn(c:fac,fbn['Cantidad']*(-1))
+     acn(d:fac,fbn['Cantidad']*val(b:fac)*(-1))
+  else    
+     acn(e:fac,fbn['Cantidad'])
+     acn(f:fac,fbn['Cantidad']*val(b:fac))
+  endif
+  if val(cz1) = 0
+     acn(g:fac,fbn['Cantidad'])
+     acn(h:fac,fbn['Cantidad']*val(b:fac))
+    else
+     acn(g:fac,val(g:fac-1)+fbn['Cantidad'])
+     acn(h:fac,(val(g:fac-1)+fbn['Cantidad'])*val(b:fac))
+  endif
+  SetFont(a:fac..i:fac,1)
+  FormatoCeldas(b:fac..b:fac,Exe('F7'))
+  FormatoCeldas(C:fac..H:fac,Exe('F2'))
+  acn(cz1,1)
+
+  
+ 
+proximo
+
+
+if val(cz1) > 0
+   acd(a:fac+1,Dialogo.Fecha2)
+   acn(g:fac+1,val(g:fac))
+   acn(h:fac+1,val(g:fac)*Cotizacion(val(ca3),,,,Habiles(Dialogo.Fecha2,0,'ARG',SI),1))
+   SetFont(a:fac+1..h:fac+1,2)
+   AgregarMarco(a:fac+1..i:fac+1,2,0)
+endif
+
+ACO(1,9)
+ACO(2,11)
+ACO(3,11)
+ACO(4,11)
+ACO(5,11)
+ACO(6,11)
+ACO(7,11)
+ACO(8,11)
+ACO(9,11)
+
+Impresion(1,2)
+SetFilaActual(fac+3)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(i:fac)
+RangoTitulo(a1..i:fac,13)
+*  Vehiculo1  : "Veh¦culo"    ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))

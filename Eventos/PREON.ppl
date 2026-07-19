@@ -1,0 +1,228 @@
+﻿*-- PREON: Precancelacion de ON Utilizando Calls y Puts
+CrearDialogo
+  NrOperacion1 : "Operacion"                ;1;1;;;;NoVacio(Dialogo.NrOperacion1);'Debe Ingresar una Operacion';NO;
+  Fecha2       : "Fecha Ej."                ;;;;;;Dialogo.Fecha2>BuscarCampo('Operaciones','FechaOp','NrOperacion',Dialogo.NrOperacion1);'LA FECHA DE EJERCICIO DEBE SER MAYOR QUE LA FECHA DE ORIGEN DE LA OPERACION';NO
+  Fecha3       : "Ult.PagoInt"              ;;;;NO;;;;;;IIF(Incluido(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'MMON'),BuscarCampo('Operaciones','FechaOp','NrOperacion',Dialogo.NrOperacion1),SQL("SELECT Fecha1 FROM  "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and Fecha1<='"~IdxDate(Dialogo.Fecha2)~"' and Fecha2>='"~IdxDate(Dialogo.Fecha2)~"' ")) 
+  Radio2       : "Tipo|Call|Put"            ;;;;;;;;;0;
+  Precio10     : "Precio Ej"                ;;;;NO;;Dialogo.Precio10>0;'No se Ha Encontrado una Opcion de Precancelacion para Esta Fecha';NO;;SQL(" Select PrecioEj from "~DBO~".OPSCALLSPUTS where NrOperacion='"~Dialogo.NrOperacion1~"' and FechaEj='"~IdxDate(Dialogo.Fecha2)~"' and TipoOpcion='"~IIF(Dialogo.Radio2=0,'CAL','PUT')~"' ")
+  Entero1      : "Plazo"                    ;;;;NO;;;;;0;Dialogo.Fecha2-Dialogo.Fecha3
+  Precio7      : 'Tasa %'                   ;;;;NO;;;;;;Dialogo.Precio5+Dialogo.Precio6
+  Precio1      : '%_Canc'                   ;;;;;;Dialogo.Precio1>0 y Dialogo.Precio1<=100;'El Porcentaje Cancelable es Incorrecto';NO;;
+  Cantidad2    : 'Valor Nominal'            ;;;;NO;;;;;;BuscarCampo('Operaciones','Cantidad','NrOperacion',Dialogo.NrOperacion1);;;"###,###,###,###.##"
+  Radio3       : "Precancelable|Si|No"      ;2;2;;NO;;Dialogo.Radio3=0;'La Operacion DEBE SER PRECANCELABLE !!!';NO;;BuscarCampo('Operaciones','RB10','NrOperacion',Dialogo.NrOperacion1)
+  Fecha1       : 'Fecha_Pago'               ;3;2;;;;Dialogo.Fecha1>=Dialogo.Fecha2 Y ESHABIL(Dialogo.Fecha1,BuscarCampo('Operaciones','TablaFeriados1','NrOperacion',Dialogo.NrOperacion1)) Y ESHABIL(Dialogo.Fecha1,'ARG')];'La Fecha de Pago no es Dia Habil';NO;
+  Cantidad3    : 'Int_Corridos'             ;;;;;;;;;;Dialogo.Cantidad4*(Dialogo.Precio7/100)*FACTORDIAS(Dialogo.Fecha3,Dialogo.Fecha2,BuscarCampo('Operaciones','RB8','NrOperacion',Dialogo.NrOperacion1)+1);;;"###,###,###,###.##"
+  Cantidad4    : 'VN_Cancelado'             ;;;;NO;;;;;;Dialogo.Cantidad2*Dialogo.Precio1/100;;;"###,###,###,###.##"
+  Cantidad5    : 'Imp_Pagar'                ;;;;NO;;;;;;(Dialogo.Cantidad4*Dialogo.Precio10/100)+(Dialogo.Precio1-Dialogo.Precio1);;;"###,###,###,###.##"
+  Cantidad1    : 'Total_Pagar'              ;;;;NO;;;;;;Dialogo.Cantidad5+Dialogo.Cantidad3+(Dialogo.Precio1-Dialogo.Precio1);;;"###,###,###,###.##"
+  Precio5      : 'Tasa MMON'                ;;;;NO;NO;;;;;BuscarCampo('Operaciones','Precio1+Spread','NrOperacion',Dialogo.NrOperacion1)
+  Precio6      : 'Tasa MMONM'               ;;;;NO;NO;;;;;SQL("SELECT Precio2+Precio4 FROM  "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and Fecha1<='"~IdxDate(Dialogo.Fecha2)~"' and Fecha2>='"~IdxDate(Dialogo.Fecha2)~"' ")
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+ACT(ti1,BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1))
+
+If Not Incluido(VAL(ti1),'MMON|MMONM')
+   Cancelar('La operacion N# '~Dialogo.NrOperacion1~' No es una Obligacion Negociable')
+endif
+
+* Verifico que se encuentre en Back Office o Terminal
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+
+If VAL(X1)<>20 y VAL(X1)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+
+If Ok
+
+   * X1: Recupero la Operacion
+   acn(x1,0)
+   act(a1,IIF(Dialogo.Radio2=0,'CAL','PUT'))
+   act(a2,BuscarCampo('Operaciones','Vehiculo1','NrOperacion',Dialogo.NrOperacion1))
+   act(a3,BuscarCampo('Operaciones','Cliente1','NrOperacion',Dialogo.NrOperacion1))
+   act(a4,BuscarCampo('Operaciones','Especie','NrOperacion',Dialogo.NrOperacion1))
+
+   SQL.ADD("Select PrecioEj from "~DBO~".OPSCALLSPUTS ")
+   SQL.ADD("where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+   SQL.ADD("and FechaEj='"~IdxDate(Dialogo.Fecha2)~"' ")
+   SQL.ADD("and TipoOpcion='"~VAL(a1)~"' ")
+   SQL.ADD("and Ejercida='0' ")
+
+   Recorrer SQL
+
+     acn(x1,1)
+
+     Message('Actualizando Calls y  Puts  .... ')
+           
+     *** Marca la operacion como ejercida ***
+     SQL.ADD("Update "~DBO~".OPSCALLSPUTS ")
+     SQL.ADD("Set ")
+     SQL.ADD("Ejercida    ='1', ")
+     SQL.ADD("FechaPago   ='"~IdxDate(Dialogo.Fecha1)~"', ")
+     SQL.ADD("PorCancelar ="~Fstr(Dialogo.Precio1,0,2)~", ")
+     SQL.ADD("VNCancelado ="~Fstr(Dialogo.Cantidad4,0,2)~", ")
+     SQL.ADD("ImpVNCancela="~Fstr(Dialogo.Cantidad5,0,2)~", ")
+     SQL.ADD("IntCorridosEj="~Fstr(Dialogo.Cantidad3,0,2)~", ")
+     SQL.ADD("ImporteTotEj="~Fstr(Dialogo.Cantidad1,0,2)~" ")
+     SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+     SQL.ADD("and FechaEj='"~IdxDate(Dialogo.Fecha2)~"' ")
+     SQL.ADD("and TipoOpcion='"~VAL(a1)~"' ")
+     SQL.ADD("and Ejercida='0' ")
+     SQL.NEW
+
+     Message('Actualizando la Operacion Principal  .... ')                  
+     SQL.ADD("Update "~DBO~".OPERACIONES ")
+     SQL.ADD("Set ")
+     SQL.ADD("TotalNetoCli3 = TotalNetoCli3 - "~Fstr(Dialogo.Cantidad4,0,2)~" ")
+     SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+     SQL.NEW
+
+     If Incluido(VAL(ti1),'MMONM')
+        EjecutarEvento('PROCUO',NrOperacion1=Dialogo.NrOperacion1,NrOperacion2=Dialogo.NrOperacion1,String1=" Fecha2>='"~IdxDate(Dialogo.Fecha2)~"' ",Precio1=-Dialogo.Cantidad4)
+     Else 
+
+       SQL.ADD("SELECT PrecioEj,TotalAux2,TotalAux4,Precio1,Spread,FechaOp,FechaVto,TasaImp1,RB7,RB9,CB10,TotalAux1,ImpGastos2,RB8,TipoOp,PrecioEj/Cantidad as SumTasa,PrecioEj  As SumAmort ")
+       SQL.ADD("FROM "~DBO~".OPERACIONES WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+       Recorrer SQL
+          *-- A32: Sumatoria de cuotas a tratar  
+          *-- A33: Sumatoria de Capital que resta amortizar
+          ACN(A32,FBN['SumTasa'])
+          ACN(A33,FBN['SumAmort'])
+
+          *-- A35: Tipo de Operacion que prorrateo
+          ACT(A35,FBN['TipoOp'])
+    
+          *-- a34: Obtengo el Factor a aplicar a cada importe a actual y asi obtener el nuevo importe de amortizacion
+          ACN(A34,1+(-Dialogo.Cantidad4/VAL(A33)))
+ 
+
+          *-- A10: Unidad de Tiempo Calculo de Intereses
+          ACN(A10,IIF(EqStr(FBN['RB8'],'0'),36000,36500))
+
+          *-- vn del periodo
+          ACN (A3,VAL(A33)-Dialogo.Cantidad4)
+          *-- TASA IVA A20 WH A21
+          ACN (A20,FBN['ImpGastos2'])
+          ACN (A21,FBN['TotalAux1'])
+
+          *-- UT IVA A24 WH A25
+          ACT (A24,FBN['RB7'])
+          ACT (A25,FBN['RB9'])
+
+          *-- LOCAL O EXTRANJERO
+          ACT (A26,FBN['CB10'])
+
+          ACN (A40,FBN['TasaImp1'])
+
+          *-- INTERES
+          acn (a4, val(a3) * ((FBN['Precio1']+FBN['Spread'])/100) * FACTORDIAS(FBN['FechaOp'],FBN['FechaVto'],FBN['RB8']+1))
+
+          * A4 es el interes
+          * A11 es el interes total
+          * A5 es el monto
+          * A6 es el monto total
+          * A7 es el importe iva
+          * A8 es el importe wh
+          * A9 es el importe de amortizaci¦n del per¦odo
+          * A30 Y 31 360 O 365 PARA IVA Y WH
+
+          ACN(A7,0)
+          ACN(A8,0)
+          ACN(A41,0)
+
+          If Val(a20)<>0
+             * PARA UT
+             IF EQSTR(VAL(A24),'0')
+                ACN(A30,360)
+             ELSE
+                ACN(A30,365)
+             ENDIF
+
+             ACN (A7, ((val(a3)*FBN['TotalAux4']/100)*FACTORDIAS(FBN['FechaOp'],FBN['FechaVto'],FBN['RB8']+1))*(VAL(A20)/100))
+          EndIf
+
+          IF val(a40)<>0
+             * Calculo de Imp.Interes si la tasa es <>0
+             acn(a41,VAL(a4)*VAL(a40)/100)  
+          EndIf
+
+          * PARA EXTRANJERO
+          IF Not EQSTR(val(A26), '0')
+             IF EQSTR(VAL(A25),'0')
+                ACN(A31,360)
+             ELSE
+                ACN(A31,365)
+             ENDIF
+
+             ACN (A8, ((val(a3)*FBN['TotalAux2']/100)*FACTORDIAS(FBN['FechaOp'],FBN['FechaVto'],FBN['RB8']+1)) * (VAL(A21)/100))
+          ENDIF
+
+          *-- calcula el importe de amortizaci¦n del per¦odo
+          acn(A9, FBN['PrecioEj']*VAL(A34))
+
+          *-- INTERES TOTAL
+          acn (a11, val(a4)+val(a8)+val(a41))
+
+          *-- MONTO
+          ACN (A5, val(a9) +VAL(A4))
+
+          *-- MONTO TOTAL
+          ACN (A6, val(a9) +VAL(A11))
+    
+          * --- Op. Unico Vto. 
+          SQL.ADD("Update "~DBO~".OPERACIONES SET ")
+          *- V.Nominal
+          SQL.ADD(" PrecioEj= "~Fstr(VAL(A3),0,2)~", ")
+          *- Interes Total
+          SQL.ADD(" TotalNetoCli2= "~Fstr(VAL(A11),0,2)~", ")
+          *-Interes
+          SQL.ADD(" TotalIntereses= "~Fstr(VAL(A4),0,2)~", ")
+          *-Imp. IVA
+          SQL.ADD(" TotalIVA= "~Fstr(VAL(A7),0,2)~", ")
+          *-Imp. WH
+          SQL.ADD(" TotalAux3= "~Fstr(VAL(A8),0,2)~", ")
+          *-Monto
+          SQL.ADD(" TotalBrutoCli1= "~Fstr(VAL(A5),0,2)~", ")
+          *-Impto.Interes
+          SQL.ADD(" ImporteImp= "~Fstr(VAL(A41),0,2)~", ")
+          *- % Imp.Interes
+          SQL.ADD(" TasaImp1= "~Fstr(VAL(A40),0,2)~", ")
+          *-Monto Total
+          SQL.ADD(" TotalNetoCli1= "~Fstr(VAL(A6),0,2)~", ")
+          *-VN Orig
+          SQL.ADD(" CantidadOri     ="~Fstr(VAL(A3),0,2)~", ")
+          *-Resultado
+          SQL.ADD(" ResultadoIndice  =0 ")
+          SQL.ADD(" WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+          SQL.NEW
+          SQL.EXEC
+          dfa
+        Proximo
+     EndIf
+
+     * Actualizo la Instancia de la Operacion a Supervision
+     (.'MODIINSTAN'.)      
+
+     *** Actualiza movimientos y limites ****
+     SQL.ActualizarMovimientos(Dialogo.NrOperacion1,SI)
+     SQL.EXEC
+
+   proximo
+
+   If Val(x1)=0
+      Cancelar('La operacion N# '~Dialogo.NrOperacion1~' No Puede Precancelarse ')
+   endif
+endif

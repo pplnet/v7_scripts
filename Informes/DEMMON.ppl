@@ -1,0 +1,393 @@
+﻿HOJAVISIBLE(SI)
+*ModoReproceso(SinDialogo)
+CrearDialogo
+*--  Label1       : ''              ;1;1;;NO;;;;;'Con F2 muestra lista para seleccion'
+  Vehiculo1    : "Vehiculo"      ;1;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "));
+  Cliente1     : "Ent.Arranger"  ;2;;;;;;;;;;;
+  Cliente2     : "Ent.Agente"    ;3;;;;;;;;;;;
+  Fecha1       : "Vigente al"    ;4;1;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys;
+  NrOperacion1 : "Nr.Operacion"  ;5;;;;;;;;;;;
+  Radio1       : "Emision|Prima|Descuento"  ;2;2;;;;;;;0
+  Radio2       : "Expresado|ARP  |USD      ";4;2;;;;;;;0
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   else
+      ACT(zz6,Dialogo.Vehiculo1~"|")
+   endif
+else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+   EndIf
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+ACN(fi1,0)
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+
+SetFilaActual(3)
+ACT(h:FAC,'Fecha : '~Var('FECHASYS')~'    Hora: '~HORA(AHORA) )
+SetFont(h:FAC..h:FAC,1)
+
+SetFilaActual(4)
+if Dialogo.Radio1 = 0
+   ACT(emi1,'Prima de Emision')
+else
+   if Dialogo.Radio1 = 1   
+      ACT(emi1,'Descuento de Emision')
+   endif
+endif
+ACT(a:FAC, Val(emi1))
+
+ACT(mo1,VAR('MONELOCA'))
+If Dialogo.Radio2=1
+   ACT(mo1,VAR('MONEEXTR'))
+EndIf
+ACT(a:FAC+1, 'Expresado en '~Val(mo1))
+SetFont(a:FAC..a:FAC+1, 3)
+
+SetFilaActual(6)
+
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(a:FAC+1, 'Vehiculo : '~Dialogo.Vehiculo1~'  '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+else
+  ACT(a:FAC+1, 'Vehiculo : Todos')
+endif
+
+if NoVacio(Dialogo.Cliente1)
+  ACT(a:FAC+2, 'Ent.Arranger : '~Dialogo.Cliente1~'  '~BuscarCampo('Clientes','RazonSocial','Codigo',Dialogo.Cliente1))
+else
+  ACT(a:FAC+2, 'Ent.Agente : Todos')
+endif
+
+if NoVacio(Dialogo.Cliente2)
+  ACT(a:FAC+3, 'Ent.Agente : '~Dialogo.Cliente2~'  '~BuscarCampo('Clientes','RazonSocial','Codigo',Dialogo.Cliente2))
+else
+  ACT(a:FAC+3, 'Ent.Agente : Todos')
+endif
+
+ACT(a:FAC+4, 'Fecha Op. : '~Dialogo.Fecha1)
+SetFont(a:fac..k:FAC+4,2)
+
+SetFilaActual(FAC+6)
+
+ACN(z11, FAC+1)
+ACT(a:FAC,'Numero Op')
+ACT(b:FAC,'Tipo Op.')
+ACT(c:FAC,'Ent.Arranger')
+ACT(d:FAC,'Fecha Orig.')
+ACT(e:FAC,'Fecha Vto.')
+ACT(f:FAC,'Ent.Agente')
+ACT(g:FAC,'Esp.')
+ACT(h:FAC,'Importe')
+ACT(i:FAC,Val(emi1))
+ACT(j:FAC,'Per.Dev.')
+ACT(k:FAC,'Imp. dev. Acum.')
+ACT(l:FAC,'Imp. a devengar')
+ACT(m:FAC,'Imp. dev. del mes')
+
+AlinearCeldas(a:FAC..g:FAC,'I')
+AlinearCeldas(h:FAC..i:FAC,'C')
+AlinearCeldas(j:FAC..j:FAC,'I')
+AlinearCeldas(k:FAC..m:FAC,'C')
+SetFont(a:fac..m:FAC,2)
+AgregarMarco(a:FAC..m:FAC,2,0,Exe('COLOR'))
+
+act(t1,'')
+act(t2,'')
+act(t3,'')
+BorrarCeldas(w11..w15)
+BorrarCeldas(w21..w25)
+BorrarCeldas(w31..w35)
+BorrarCeldas(w91..w95)
+
+SetFilaActual(12)
+
+SQL.ADD(" select * from "~DBO~".OPERACIONES O where  ")
+   SQL.ADD("  O.FechaOp <='"~IdxDate(Dialogo.Fecha1)~"' ")
+   SQL.ADD(" and O.FechaVto >'"~IdxDate(Dialogo.Fecha1)~"' ")
+if NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion='"~Dialogo.NrOperacion1~"' ")
+EndIf
+SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" and O.Cliente1='"~Dialogo.Cliente1~"' ")
+EndIf
+If NoVacio(Dialogo.Cliente2)
+   SQL.ADD(" and O.Cliente2='"~Dialogo.Cliente2~"' ")
+EndIf
+If Dialogo.Radio1 = 0
+   SQL.ADD(" and O.MB3='1' ")
+else
+   SQL.ADD(" and O.MB3='2' ")
+Endif
+SQL.ADD(" and O.TipoOp IN ('MMONM','MMON') ")
+SQL.ADD(" ORDER BY O.Vehiculo1, O.TipoOp, O.Especie, O.NrOperacion ")
+
+Recorrer SQL   
+
+if Eqstr(Val(t1),'') y eqstr(Val(t2),'') y eqstr(Val(t3),'')
+   act(t1, fbn('Vehiculo1'))
+   act(t2, fbn('TipoOp'))
+   act(t3, fbn('Especie'))
+   act(a:fac,fbn('Vehiculo1'))
+   AgregarMarco(a:FAC..m:FAC,2,0,Exe('COLOR6'))
+   SetFont(a:fac..m:fac,2)
+   ifa
+else
+*-- Preparo corte de control
+  if Not Eqstr(fbn('Vehiculo1'),Val(t1)) y NoVacio(Val(t1))
+     act(a:fac,'Total Esp. '~Val(t3) )
+     act(c:fac,'Cotizacion en '~Val(mo1)~' : '~Val(az2))
+     acn(h:fac, Val(w31))
+     acn(i:fac, Val(w32))
+     acn(k:fac, Val(w33))
+     acn(l:fac, Val(w34))
+     acn(m:fac, Val(w35))
+     BorrarCeldas(w31..w35)
+     AgregarMarco(a:fac..m:fac,1,0,RGB(192,192,192))
+     SetFont(a:fac..m:fac,2)
+     ifa
+     act(a:fac,'Total Op. '~Val(t2)~' en '~Val(mo1))
+     acn(h:fac, Val(w21))
+     acn(i:fac, Val(w22))
+     acn(k:fac, Val(w23))
+     acn(l:fac, Val(w24))
+     acn(m:fac, Val(w25))
+     BorrarCeldas(w21..w25)
+     AgregarMarco(a:fac..m:fac,1,0,RGB(192,192,192))
+     SetFont(a:fac..m:fac,2)
+     ifa
+     act(a:fac,'Total Cia. '~Val(t1)~' en '~Val(mo1))
+     acn(h:fac, Val(w11))
+     acn(i:fac, Val(w12))
+     acn(k:fac, Val(w13))
+     acn(l:fac, Val(w14))
+     acn(m:fac, Val(w15))
+
+     SCN(w91, Val(w11))
+     SCN(w92, Val(w12))
+     SCN(w93, Val(w13))
+     SCN(w94, Val(w14))
+     SCN(w95, Val(w15))
+     
+     BorrarCeldas(w11..w15)
+     AgregarMarco(a:FAC..m:FAC,2,0,Exe('COLOR6'))
+     SetFont(a:fac..m:fac,2)
+     ifa
+     act(t1, fbn('Vehiculo1'))
+     act(t2, fbn('TipoOp'))
+     act(t3, fbn('Especie'))
+     ifa
+     act(a:fac,fbn('Vehiculo1'))
+     AgregarMarco(a:FAC..m:FAC,2,0,Exe('COLOR6'))
+     SetFont(a:fac..m:fac,2)
+     ifa
+  Else 
+   If [Not Eqstr(fbn['TipoOp'],Val(t2))] y NoVacio(Val(t2))
+        * Cambia El Tipo de Operacion
+        act(a:fac,'Total Esp. '~Val(t3) )
+        act(c:fac,'Cotizacion en '~Val(mo1)~' : '~Val(az2))
+        acn(h:fac, Val(w31))
+        acn(i:fac, Val(w32))
+        acn(k:fac, Val(w33))
+        acn(l:fac, Val(w34))
+        acn(m:fac, Val(w35))
+        BorrarCeldas(w31..w35)
+        AgregarMarco(a:fac..m:fac,1,0,RGB(192,192,192))
+        SetFont(a:fac..m:fac,2)
+        ifa
+        act(a:fac,'Total Op. '~Val(t2)~' en '~Val(mo1))
+        acn(h:fac, Val(w21))
+        acn(i:fac, Val(w22))
+        acn(k:fac, Val(w23))
+        acn(l:fac, Val(w24))
+        acn(m:fac, Val(w25))
+        BorrarCeldas(w21..w25)
+        AgregarMarco(a:fac..m:fac,1,0,RGB(192,192,192))
+        SetFont(a:fac..m:fac,2)
+        ifa
+        * Asignar Tipo Operacion
+        act(t1, fbn('Vehiculo1'))
+        act(t2, fbn('TipoOp'))
+        act(t3, fbn('Especie'))
+  Else
+   If [Not Eqstr(fbn['Especie'],Val(t3))] y NoVacio(Val(t3))
+*-- Cambia el Especie(Moneda)
+        act(a:fac,'Total Esp. '~Val(t3) )
+        act(c:fac,'Cotizacion en '~Val(mo1)~' : '~Val(az2))
+        acn(h:fac, Val(w31))
+        acn(i:fac, Val(w32))
+        acn(k:fac, Val(w33))
+        acn(l:fac, Val(w34))
+        acn(m:fac, Val(w35))
+        BorrarCeldas(w31..w35)
+        AgregarMarco(a:fac..m:fac,1,0,RGB(192,192,192))
+        SetFont(a:fac..m:fac,2)
+        ifa
+      * Asignar Especie
+        act(t1, fbn('Vehiculo1'))
+        act(t2, fbn('TipoOp'))
+        act(t3, fbn('Especie'))
+   EndIf
+  EndIf
+ Endif
+Endif
+
+      *-- A: NrOperacion 
+      *-- B: TipoOP
+      *-- C: Ent.Arranger
+      *-- D: Fecha Origen
+      *-- E: Fecha Vto.
+      *-- F: Ent.Agente    
+      *-- G: Especie 
+ACT(a:fac,FBN['NrOperacion'])
+ACLO(a:fac,FBN['NrOperacion'])
+ACT(b:fac,FBN['TipoOp'])
+ACT(c:fac,FBN['Cliente1'])
+ACT(d:fac,FBN['FechaOp'])
+ACT(e:fac,FBN['FechaVto'])
+ACT(f:fac,FBN['Cliente2'])
+ACT(g:fac,FBN['Especie'])
+ACN(az1,CotizacionC(fbn['Especie'],,,,Fsys,1,SI,IIF(Dialogo.Radio2=0,VAR('MONELOCA'),VAR('MONEEXTR'))) )
+
+If Eqstr(fbn['Especie'],Var('MONELOCA')) y Dialogo.Radio2=1
+   ACT(az2,PYC(1/val(az1),0,8)~' (INV) ')
+ELSE
+   ACT(az2,PYC(Val(az1),0,8))
+ENDIF
+
+
+*-- Obtengo el cßlculo de los importes
+*-- Importe
+
+ACN(h:fac,FBN['Cantidad']+FBN['TotalComisiones'])
+SCN(w31,Val(h:fac))
+SCN(w21,Val(h:fac)*Val(az1))
+SCN(w11,Val(h:fac)*Val(az1))
+*-- Emision Total
+ACN(i:fac,FBN['TotalDerechos'])
+SCN(w32,Val(i:fac))
+SCN(w22,Val(i:fac)*Val(az1))
+SCN(w12,Val(i:fac)*Val(az1))
+*-- Periodo Devengado
+ACN(j:fac,Dialogo.Fecha1-FBN['FechaOp']+1)
+
+*-- Importe devengado acumulado
+ACN(k:fac,(FBN['TotalDerechos']*Val(j:fac)/FBN['Plazo']))
+SCN(w33,Val(k:fac))
+SCN(w23,Val(k:fac)*Val(az1))
+SCN(w13,Val(k:fac)*Val(az1))
+*-- Importe a devengar
+ACN(l:fac, Val(i:fac)-Val(k:fac))
+SCN(w34,Val(l:fac))
+SCN(w24,Val(l:fac)*Val(az1))
+SCN(w14,Val(l:fac)*Val(az1))
+*-- Importe devengado del mes
+ACN(m:fac,(FBN['TotalDerechos']*(Dialogo.Fecha1-PriDeMes(Dialogo.Fecha1,SI)+1)/FBN['Plazo']))
+SCN(w35,Val(m:fac))
+SCN(w25,Val(m:fac)*Val(az1))
+SCN(w15,Val(m:fac)*Val(az1))
+SetFont(a:fac..m:FAC,1)
+
+SCN(fi1,1)
+Proximo
+*-- Veo si hay algo para listar
+if Val(fi1)=0
+   ** No entro en el select (resultado vacio)
+   HojaVisible(no)
+   Messagebox('No se encontraron operaciones.')
+else
+*-- Listo el ultimo total
+     ifa
+     act(a:fac,'Total Esp. '~Val(t3) )
+     act(c:fac,'Cotizacion en '~Val(mo1)~' : '~Val(az2))
+     acn(h:fac, Val(w31))
+     acn(i:fac, Val(w32))
+     acn(k:fac, Val(w33))
+     acn(l:fac, Val(w34))
+     acn(m:fac, Val(w35))
+     BorrarCeldas(w31..w35)
+     AgregarMarco(a:fac..m:fac,1,0,RGB(192,192,192))
+     SetFont(a:fac..m:fac,2)
+     ifa
+     act(a:fac,'Total Op. '~Val(t2)~' en '~Val(mo1) )
+     acn(h:fac, Val(w21))
+     acn(i:fac, Val(w22))
+     acn(k:fac, Val(w23))
+     acn(l:fac, Val(w24))
+     acn(m:fac, Val(w25))
+     BorrarCeldas(w21..w25)
+     AgregarMarco(a:fac..m:fac,1,0,RGB(192,192,192))
+     SetFont(a:fac..m:fac,2)
+     ifa
+     act(a:fac,'Total Cia. '~Val(t1)~' en '~Val(mo1))
+     acn(h:fac, Val(w11))
+     acn(i:fac, Val(w12))
+     acn(k:fac, Val(w13))
+     acn(l:fac, Val(w14))
+     acn(m:fac, Val(w15))
+
+     SCN(w91, Val(w11))
+     SCN(w92, Val(w12))
+     SCN(w93, Val(w13))
+     SCN(w94, Val(w14))
+     SCN(w95, Val(w15))
+     
+     BorrarCeldas(w11..w15)
+     AgregarMarco(a:FAC..m:FAC,2,0,Exe('COLOR6'))
+     SetFont(a:fac..m:fac,2)
+     ifa
+     ifa
+     act(a:fac,'Total General en '~Val(mo1))
+     acn(h:fac, Val(w91))
+     acn(i:fac, Val(w92))
+     acn(k:fac, Val(w93))
+     acn(l:fac, Val(w94))
+     acn(m:fac, Val(w95))
+
+     BorrarCeldas(w91..w95)
+     AgregarMarco(a:fac..m:fac,1,0,RGB(192,192,192))
+     SetFont(a:fac..m:fac,3)
+
+FormatoCeldas(e:val(z11)..e:fac,"0")
+FormatoCeldas(h:val(z11)..i:fac,Exe('F2'))
+FormatoCeldas(j:val(z11)..j:fac,"0")
+FormatoCeldas(k:val(z11)..m:fac,Exe('F2'))
+
+ACO(1,7)
+ACO(2,5)
+ACO(3,8)
+ACO(4,6)
+ACO(5,6)
+ACO(6,8)
+ACO(7,3)
+ACO(8,10)
+ACO(9,10)
+ACO(10,5)
+ACO(11,10)
+ACO(12,10)
+ACO(13,10)
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(m:FAC)
+*
+*    Esto es lo que agrega Silvia
+*
+RangoTitulo(a:1..m:FAC, 12)
+endif
+

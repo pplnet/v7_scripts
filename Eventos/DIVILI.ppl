@@ -1,0 +1,100 @@
+﻿*HojaVisible(SI)
+CrearDialogo
+  Vehiculo1  :'Vehiculo'   ;;;;;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar el Vehiculo';NO;'BANCO'
+  Fecha1     :'F.Posicion' ;;;;;;Dialogo.Fecha1<>0 y Dialogo.Fecha1 <= Fsys;'Debe Ingresar una Fecha';NO;FSys
+  Fecha2     :'F.Pago'     ;;;;;;Dialogo.Fecha2<>0 y Dialogo.Fecha2 <= Fsys y Dialogo.Fecha1 <= Dialogo.Fecha2;'Debe Ingresar una Fecha';NO;FSys
+  Especie1   :'Especie'    ;;;;;;NoVacio(Dialogo.Especie1) y DesciendeDeEspecie(Dialogo.Especie1,'TITULO');'Debe Ingresar una Especie';NO;
+  Check1     :'Div.Efec.'  ;5;1;;
+  Precio1    :'Porc.'      ;5;2;;;;Dialogo.Precio1>=0;'El Porcentaje debe ser Positivo';NO;
+  Especie2   :'Moneda'     ;6;1;;;;Vacio(Dialogo.Especie2) o DesciendeDeEspecie(Dialogo.Especie2,'MONEDA')];'Debe Ingresar una Moneda';NO;
+  Check2     :'Div.Acc.'   ;7;1;;
+  Precio2    :'Porc.'      ;7;2;;;;Dialogo.Precio2>=0;'El Porcentaje debe ser Positivo';NO;
+  Check3     :'Revaluo'    ;8;1;;
+  Precio9    :'Porc.'      ;8;2;;;;Dialogo.Precio9>=0;'El Porcentaje debe ser Positivo';NO;
+  Check4     :'Canje'      ;9;1;;
+  Precio10   :'Porc.'      ;9;2;;;;Dialogo.Precio10>=0;'El Porcentaje debe ser Positivo';NO;
+  Precio3    :'Fraccion'   ;10;1;;;;Dialogo.Precio3>=0;'La Fraccion debe ser Positiva';NO;
+  Precio4    :'Precio Fr.' ;10;2;;;;Dialogo.Precio4>=0;'El Precio de Fraccion debe ser Positivo';NO;
+  Precio5    :'Arancel CV' ;11;1;;;;Dialogo.Precio5>=0;'El Arancel de CV debe ser Positivo';NO;
+  Precio6    :'Minimo CV'  ;11;2;;;;Dialogo.Precio6>=0;'El Minimo de CV debe ser Positivo';NO;
+  Precio7    :'Arancel MBA';12;1;;;;Dialogo.Precio7>=0;'El Arancel de MBA debe ser Positivo';NO;
+  Precio8    :'Minimo MBA' ;12;2;;;;Dialogo.Precio8>=0;'El Minimo de MBA debe ser Positivo';NO;
+  Cuenta1    :'C.Propia'   ;13;1;;;;NoVacio(Dialogo.Cuenta1);'Debe Existir la Cuenta Contraparte';NO;Var('PCUPON')
+  Radio1     :'Cuentas |Vista |Caja Ahorros ';13;2;;;;;;;0    
+  Cuenta2    :'C.Ganan.'   ;14;1;;;;NoVacio(Dialogo.Cuenta2);'Debe Existir la Cuenta Ganancias';NO;Var('AMORT')
+  Cuenta3    :'C.Arancel'  ;  ; ;;;;NoVacio(Dialogo.Cuenta3);'Debe Existir la Cuenta Arancel';NO;Var('ARANCEL')
+  Cuenta4    :'C.IVA'      ;  ; ;;;;NoVacio(Dialogo.Cuenta4);'Debe Existir la Cuenta IVA';NO;Var('CTAIVA')
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+
+If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+   Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+endif
+
+If DifDias(Dialogo.Fecha2,Fsys,'ARG',SI) > Var('FVALORMAX')
+   Cancelar('Fecha Valor No Puede Superar '~Var('FVALORMAX')~' Dias')
+endif
+
+If Dialogo.Fecha2 < Fecha(Var('FECHAVALOR'))
+   Cancelar('Fecha Valor No Puede Superar '~Var('FECHAVALOR'))
+endif
+
+**** Valida que no haya transacciones por confirmar ***
+SQL.ADD("Select * FROM "~DBO~".TRANSACCIONES2 ")
+SQL.ADD("where  Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD("and    Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("and    (Bit7 = 0 or Bit7 is Null) ") 
+
+acn(z1,0)
+Recorrer SQL
+   acn(z1,1)
+Proximo
+
+if Val(z1)>0
+  Cancelar('La Especie '~Dialogo.Especie1~' tiene Vouchers Pendientes de Confirmacion')
+endif
+
+SetFilaActual(FAC)
+
+*** Toma las cuentas con saldos 5 de SaldosDia ***
+*** No toma en cuenta los saldos en opciones de la especie ***
+
+(.'CUSTDIVI05'.)
+
+SetFilaActual(3)
+recorrer SQL
+  acn(d:fac, SaldoC(fbn['Cliente'],Dialogo.Especie1,,,,fbn['Mercado'],,fbn['Cuenta'],fbn['NrSaldo'],fbn['Fe']))
+  if val(d:fac) <> 0
+     *** Calcula imoprtes de dividendos ***
+     (.'CALCDIVI2'.)
+     acn(e:fac,val(ae:fac))
+     acn(f:fac,val(af:fac))
+
+     if Eqstr(fbn['Cliente'],fbn['Mercado']) 
+        act(am:fac,Dialogo.Cuenta2)
+        act(an:fac,'CCO')
+     endif
+    else
+     dfa
+  endif
+proximo
+
+ACO(1,7)
+ACO(2,28)
+ACO(3,8)
+ACO(4,11)
+ACO(5,11)
+ACO(6,11)
+
+ListBox(a4..f:fac, 'Cliente                                           Tenencia')
+AlinearCeldas(a4..f:fac,'I')
+
+if Ok 
+  recorrerSel
+    *** genera el pago de cupon ***
+    (.'GENDIVIDEN'.)
+  Proximo
+endif
+

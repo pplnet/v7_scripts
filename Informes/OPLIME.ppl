@@ -1,0 +1,171 @@
+﻿CrearDialogo
+  Fecha1  : 'F.Desde'       ;;;;;;Dialogo.Fecha1<>0;'Debe ingresar Fecha Desde';NO;FSys
+  Fecha2  : 'F.Hasta'       ;;;;;;Dialogo.Fecha2<>0;'Debe ingresar Fecha Hasta';NO;FSys
+  Cliente1: 'Cliente'       ;;;;;;;;;
+  Mercado1: 'Mercado Liq.'  ;;;;;;;;;
+  Radio1  : 'Filtro|Titulos|FX|MMkts|Todas';;;;;;;;;3
+FinDialogo
+
+If Not OK
+  Cancelar
+EndIf
+
+CrearFont(1,'Arial,8,')
+CrearFont(2,'Arial,8,B')
+CrearFont(3,'Arial,9,B')
+
+SetFilaActual(4)
+
+ACT(A:FAC,'Operaciones Liquidadas por Mercado')
+SetFont(A:FAC,3)
+
+SetFilaActual(5)
+
+ACT(A:FAC+1,'Fecha Desde: '~Dialogo.Fecha1)
+ACT(A:FAC+2,'Fecha Hasta: '~Dialogo.Fecha2)
+ACT(A:FAC+3,'Cliente: '~Iif(NoVacio(Dialogo.Cliente1),Dialogo.Cliente1,'Todos'))
+ACT(A:FAC+4,'Mercado Liq.: '~Iif(NoVacio(Dialogo.Mercado1),Dialogo.Mercado1,'Todos'))
+IF Dialogo.Radio1 = 0
+   ACT(A:FAC+5,'Modulo: Titulos') 
+ENDIF
+IF Dialogo.Radio1 = 1
+   ACT(A:FAC+5,'Modulo: Foreign ExChange') 
+ENDIF
+IF Dialogo.Radio1 = 2
+   ACT(A:FAC+5,'Modulo: Money Market') 
+ENDIF
+IF Dialogo.Radio1 = 3
+   ACT(A:FAC+5,'Modulo: Todos') 
+ENDIF
+
+SetFont(A:FAC..A:FAC+5,2)
+SetFilaActual(FAC+5)
+
+SQL.ADD("Select Distinct T.NrTrans, T.Mercado1, T.Especie, (Case When T.TipoTr2 in ('RET','MATCH') Then -T.Cantidad1 Else T.Cantidad1 End) Cantidad From "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD("Where T.NrTrans = M.NrTrans2 ")
+SQL.ADD("  And M.NrSaldo = 1 ")
+SQL.ADD("  And (T.Fecha1 Between '"~IdxDate(Dialogo.Fecha1)~"' And '"~IdxDate(Dialogo.Fecha2)~"') ")
+SQL.ADD("  And T.TipoTr2 in ('DEP','RET','COMP','MATCH') ")
+SQL.ADD("  And T.Cantidad1 <> 0 ")
+
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" And T.Cliente1='"~Dialogo.Cliente1~"' ")
+EndIf
+If NoVacio(Dialogo.Mercado1)
+   SQL.ADD(" And T.Mercado1='"~Dialogo.Mercado1~"' ")
+EndIf
+If Dialogo.Radio1 = 0
+   SQL.ADD(" And M.Concepto = 'TI' ")
+EndIf
+If Dialogo.Radio1 = 1
+   SQL.ADD(" And M.Concepto = 'FX' ")
+EndIf
+If Dialogo.Radio1 = 2
+   SQL.ADD(" And M.Concepto = 'MM' ")
+EndIf
+
+SQL.ADD(" Union ")
+
+SQL.ADD("Select Distinct T.NrTrans, T.Mercado1, T.Especie1 Especie, -T.Cantidad2 Cantidad From "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD("Where T.NrTrans = M.NrTrans2 ")
+SQL.ADD("  And M.NrSaldo = 1 ")
+SQL.ADD("  And (T.Fecha1 Between '"~IdxDate(Dialogo.Fecha1)~"' And '"~IdxDate(Dialogo.Fecha2)~"') ")
+SQL.ADD("  And T.TipoTr2 = 'MATCH' ")
+SQL.ADD("  And T.Cantidad2 <> 0 ")
+
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" And T.Cliente1='"~Dialogo.Cliente1~"' ")
+EndIf
+If NoVacio(Dialogo.Mercado1)
+   SQL.ADD(" And T.Mercado1='"~Dialogo.Mercado1~"' ")
+EndIf
+If Dialogo.Radio1 = 0
+   SQL.ADD(" And M.Concepto = 'TI' ")
+EndIf
+If Dialogo.Radio1 = 1
+   SQL.ADD(" And M.Concepto = 'FX' ")
+EndIf
+If Dialogo.Radio1 = 2
+   SQL.ADD(" And M.Concepto = 'MM' ")
+EndIf
+
+SQL.ADD("Order by T.Mercado1, T.Especie ")
+watch(sql.batch)
+
+ACT(ME:1,'*')
+
+Recorrer SQL
+  If EqStr(Val(ME:1),'*')
+     IFA
+     ACT(A:FAC,'Mercado '~FBN['Mercado1'])
+     SetFont(A:FAC,2)
+     IFA
+     ACT(A:FAC,'Especie')
+     ACT(B:FAC,'Cantidad')
+     SetFont(A:FAC..B:FAC,2)
+     AgregarMarco(A:FAC..B:FAC,2,0,EXE('COLOR'))
+     IFA
+     ACN(TT:1,FBN['Cantidad'])
+  Else
+     If EqStr(FBN['Mercado1'],Val(ME:1)) y EqStr(FBN['Especie'],Val(ES:1))
+        SCN(TT:1,FBN['Cantidad'])
+        DFA
+     Else
+        If EqStr(FBN['Mercado1'],Val(ME:1)) y Not EqStr(FBN['Especie'],Val(ES:1))
+           If Val(Z:1)=0
+              DFA
+           EndIf
+           ACT(A:FAC,Val(ES:1))
+           ACN(B:FAC,Val(TT:1))
+           ACL(B:FAC,'DETOME', Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha2, Cliente1=Dialogo.Cliente1, Especie1=Val(ES:1), Mercado1=FBN['Mercado1'], Radio1=Dialogo.Radio1)
+           FormatoCeldas(B:FAC,EXE('F2'))
+           SetFont(A:FAC..B:FAC,1)
+           ACN(TT:1,FBN['Cantidad'])
+           ACN(Z:1,1)
+        Else
+           If Not EqStr(FBN['Mercado1'],Val(ME:1))
+              If Val(Z:1)=0
+                 DFA
+              EndIf
+              ACT(A:FAC,Val(ES:1))
+              ACN(B:FAC,Val(TT:1))
+              ACL(B:FAC,'DETOME', Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha2, Cliente1=Dialogo.Cliente1, Especie1=Val(ES:1), Mercado1=Val(ME:1), Radio1=Dialogo.Radio1)
+              FormatoCeldas(B:FAC,EXE('F2'))
+              SetFont(A:FAC..B:FAC,1)
+              IFA
+              IFA
+              ACT(A:FAC,'Mercado '~FBN['Mercado1'])
+              SetFont(A:FAC,2)
+              IFA
+              ACT(A:FAC,'Especie')
+              ACT(B:FAC,'Cantidad')
+              SetFont(A:FAC..B:FAC,2)
+              AgregarMarco(A:FAC..B:FAC,2,0,EXE('COLOR'))
+              IFA
+              ACN(TT:1,FBN['Cantidad'])
+              ACN(Z:1,0)
+           EndIf
+        EndIf
+     EndIf
+  EndIf
+  ACT(ME:1,FBN['Mercado1'])
+  ACT(ES:1,FBN['Especie'])
+Proximo
+
+ACT(A:FAC,Val(ES:1))
+ACN(B:FAC,Val(TT:1))
+ACL(B:FAC,'DETOME', Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha2, Cliente1=Dialogo.Cliente1, Especie1=Val(ES:1), Mercado1=Val(ME:1), Radio1=Dialogo.Radio1)
+FormatoCeldas(B:FAC,EXE('F2'))
+SetFont(A:FAC..B:FAC,1)
+
+SetFilaActual(FAC+2)
+ACT(A:FAC,'FIN DEL INFORME')
+SetFont(a:fac, 2)
+
+AgregarBMP(A1,EXE('LOGO'),EXE('ESCALOGO'))
+
+ACO(1,6)
+ACO(2,10)
+
+Impresion(1,2)
+LimitesVision(D:FAC+1)

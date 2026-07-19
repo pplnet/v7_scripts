@@ -1,0 +1,148 @@
+﻿**// DC:1 = DC de Capital
+**// DC:2 = DC de Interes
+**// FC:1 = Fecha Fin de mes anterior
+**// FC:2 = Fecha Fin de mes
+**// FC:9 = Inicio Cuota Vigente
+**// CP:1 = Capital correspondiente
+
+If Val(FC:1) < Val(FC:9)
+   ACD(FC:1, Val(FC:9))
+Endif
+
+*        Messagebox('Fecha Inicial: '~Fecha(Val(FC:9)))
+*        Messagebox('Fecha 1: '~Fecha(Val(FC:1)))
+*        Messagebox('Fecha 2: '~Fecha(Val(FC:2)))
+
+SQL.ADD(" Select Sum(Monto) DEV ")
+SQL.ADD(" From "~DBO~".MOVDEVENGADOS ")
+SQL.ADD(" Where NrOperacion = '"~FBN('NrOperacion')~"' ")
+SQL.ADD(" and Fecha > "~IdxDate2(Val(FC:9))~" ")
+SQL.ADD(" and Fecha <= "~IdxDate2(Val(FC:1))~" ")
+Recorrer SQL
+   ACN(TI:1, ABS(FBN('DEV')))
+Proximo
+
+**// Seteo en AP:1 si la Op. es Activa o Pasiva
+If Incluido(FBN('TipoOp'),Var('OPEACT'))
+   ACN(AP:1, 1)
+Else
+   ACN(AP:1, 2)
+Endif
+
+ *      Messagebox('Capital: '~Fstr(Val(CP:1),0,2))
+ *      Messagebox('Interes: '~Fstr(Val(TI:1),0,2))
+
+**//Si la moneda local del vehiculo es ARP
+IF Eqstr(#MONELOCAVH, #MONELOCAL)
+    ***//Obtengo la Dif Cambio en Pesos
+      ACN(DC:1, Val(CP:1) * ( COTIZACIONBNA(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO) - COTIZACIONBNA(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO) ) )
+      ACN(DC:2, Val(TI:1) * ( COTIZACIONBNA(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO) - COTIZACIONBNA(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO) ) )
+
+**        Messagebox('DC Capital: '~Fstr(Val(DC:1),0,2))
+**        Messagebox('DC Interes: '~Fstr(Val(DC:2),0,2))
+
+    ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+    ACN(DC:1, Val(DC:1) / COTIZACIONBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+    ACN(DC:2, Val(DC:2) / COTIZACIONBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+Else
+**//Si la moneda local del vehiculo NO es ARP se asume UYU
+   ***//Obtengo la Dif Cambio en Uruguayos
+   IF Eqstr(#MONEDA, #MONELOCAL)
+      **//Si la moneda de la operacion es ARP se utiliza triangulacion BNACBU
+      ACN(DC:1, Val(CP:1) * ( COTIZACIONBNABCU(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO) - COTIZACIONBNABCU(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO) ) )
+      ACN(DC:2, Val(TI:1) * ( COTIZACIONBNABCU(Var('MONEEXTR'),Val(FC:2),Val(AP:1),NO,NO) - COTIZACIONBNABCU(Var('MONEEXTR'),Val(FC:1),Val(AP:1),NO,NO) ) )
+
+**        Messagebox('DC Capital: '~Fstr(Val(DC:1),0,2))
+**        Messagebox('DC Interes: '~Fstr(Val(DC:2),0,2))
+
+      ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+      ACN(DC:1, Val(DC:1) / COTIZACIONBNABCU(Var('MONEEXTR'),Val(FV:1),Val(AP:1),NO,NO) )
+      ACN(DC:2, Val(DC:2) / COTIZACIONBNABCU(Var('MONEEXTR'),Val(FV:1),Val(AP:1),NO,NO) )
+   Else
+      **//Si la moneda de la operacion NO es ARP (USD|EUR|) se utilica CotizacionBCU
+      ACN(DC:1, Val(CP:1) * ( COTIZACIONBCU(fbn('Moneda'),Val(FC:2),Val(AP:1),NO,NO) - COTIZACIONBCU(fbn('Moneda'),Val(FC:1),Val(AP:1),NO,NO) ) )
+      ACN(DC:2, Val(TI:1) * ( COTIZACIONBCU(fbn('Moneda'),Val(FC:2),Val(AP:1),NO,NO) - COTIZACIONBCU(fbn('Moneda'),Val(FC:1),Val(AP:1),NO,NO) ) )
+
+**        Messagebox('Cotizacion1: '~Fstr(COTIZACIONBCU(fbn('Moneda'),Val(FC:1),Val(AP:1),NO,NO),0,4))
+**        Messagebox('Cotizacion2: '~Fstr(COTIZACIONBCU(fbn('Moneda'),Val(FC:2),Val(AP:1),NO,NO),0,4))
+
+**        Messagebox('DC Capital: '~Fstr(Val(DC:1),0,2))
+**        Messagebox('DC Interes: '~Fstr(Val(DC:2),0,2))
+
+      ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+      ACN(DC:1, Val(DC:1) / COTIZACIONBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+      ACN(DC:2, Val(DC:2) / COTIZACIONBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+
+**        Messagebox('DC Capital en '~FBN('Moneda')~' : '~Fstr(Val(DC:1),0,2))
+**        Messagebox('DC Interes en '~FBN('Moneda')~' : '~Fstr(Val(DC:2),0,2))
+
+   Endif
+Endif
+
+
+  **      Messagebox('Cotizacion1: '~Fstr(CotizacionC(fbn('Moneda'),,,,Val(FC:1),Val(AP:1),SI,VAR('MONELOCA')),0,4))
+  **      Messagebox('Cotizacion2: '~Fstr(CotizacionC(fbn('Moneda'),,,,Val(FC:2),Val(AP:1),SI,VAR('MONELOCA')),0,4))
+  **      Messagebox('Interes: '~Fstr(Val(DV:1),0,2))
+
+
+
+**// Si es Op. Vinculada se saca el promedio de las cotizacion de Compra y Venta
+If Incluido(FBN('TipoOp'),Var('OPEVIN'))
+   **// Si es TOMA es Pasiva, si es COLOCACION es Activa
+   If #TOMAMUTUO
+      ACN(AP:1, 2)
+   Else
+      ACN(AP:1, 1)
+   Endif
+   **//Si la moneda local del vehiculo es ARP
+   IF Eqstr(#MONELOCAVH, #MONELOCAL)
+      ***//Obtengo la Dif Cambio en Pesos
+      ACN(CT:1, (COTIZACIONBNA(fbn('Moneda'),Val(FC:1),1,NO,NO)+COTIZACIONBNA(fbn('Moneda'),Val(FC:1),2,NO,NO))/2)
+      ACN(CT:2, (COTIZACIONBNA(fbn('Moneda'),Val(FC:2),1,NO,NO)+COTIZACIONBNA(fbn('Moneda'),Val(FC:2),2,NO,NO))/2)
+      ACN(DC:1, Val(CP:1) * (Val(CT:2) - Val(CT:1)) )
+      ACN(DC:2, Val(TI:1) * (Val(CT:2) - Val(CT:1)) )
+
+
+*        Messagebox('Cotizacion1: '~Fstr(Val(CT:1),0,4))
+*        Messagebox('Cotizacion2: '~Fstr(Val(CT:2),0,4))
+
+*        Messagebox('DC Capital: '~Fstr(Val(DC:1),0,2))
+*        Messagebox('DC Interes: '~Fstr(Val(DC:2),0,2))
+
+   
+      ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+      ACN(DC:1, Val(DC:1) / COTIZACIONBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+      ACN(DC:2, Val(DC:2) / COTIZACIONBNA(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+   Else
+   **//Si la moneda local del vehiculo NO es ARP se asume UYU
+      ***//Obtengo la Dif Cambio en Uruguayos
+      IF Eqstr(#MONEDA, #MONELOCAL)
+         ACN(CT:1, (COTIZACIONBNABCU(Var('MONEEXTR'),Val(FC:1),1,NO,NO)+COTIZACIONBNABCU(Var('MONEEXTR'),Val(FC:1),2,NO,NO))/2)
+         ACN(CT:2, (COTIZACIONBNABCU(Var('MONEEXTR'),Val(FC:2),1,NO,NO)+COTIZACIONBNABCU(Var('MONEEXTR'),Val(FC:2),2,NO,NO))/2)
+         **//Si la moneda de la operacion es ARP se utiliza triangulacion BNACBU
+         ACN(DC:1, Val(CP:1) * (Val(CT:2) - Val(CT:1)) )
+         ACN(DC:2, Val(TI:1) * (Val(CT:2) - Val(CT:1)) )
+   
+         ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+         ACN(DC:1, Val(DC:1) / COTIZACIONBNABCU(Var('MONEEXTR'),Val(FV:1),Val(AP:1),NO,NO) )
+         ACN(DC:2, Val(DC:2) / COTIZACIONBNABCU(Var('MONEEXTR'),Val(FV:1),Val(AP:1),NO,NO) )
+      Else
+         ACN(CT:1, (COTIZACIONBCU(fbn('Moneda'),Val(FC:1),1,NO,NO)+COTIZACIONBCU(fbn('Moneda'),Val(FC:1),2,NO,NO))/2)
+         ACN(CT:2, (COTIZACIONBCU(fbn('Moneda'),Val(FC:2),1,NO,NO)+COTIZACIONBCU(fbn('Moneda'),Val(FC:2),2,NO,NO))/2)
+
+         **//Si la moneda de la operacion NO es ARP (USD|EUR|) se utilica CotizacionBCU
+         ACN(DC:1, Val(CP:1) * (Val(CT:2) - Val(CT:1)) )
+         ACN(DC:2, Val(TI:1) * (Val(CT:2) - Val(CT:1)) )
+   
+
+
+         ***//Paso la Dif de Cambio a la moneda de la operacion para generar en modelo contable
+         ACN(DC:1, Val(DC:1) / COTIZACIONBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+         ACN(DC:2, Val(DC:2) / COTIZACIONBCU(fbn('Moneda'),Val(FV:1),Val(AP:1),NO,NO) )
+
+*        Messagebox('DC Capital: '~Fstr(Val(DC:1),0,2))
+*        Messagebox('DC Interes: '~Fstr(Val(DC:2),0,2))
+
+      Endif
+   Endif
+Endif

@@ -1,0 +1,226 @@
+﻿***********************************************************************************************
+* Recibi un Registro 9903 con Codigo de Tasa PER (Com A 3500) y Genero la cotizacion
+***********************************************************************************************
+
+if EqStr(Var('LOGEAMAE'),'SI')
+  AbrirASCII(Val(z2)~'\REC-9903.txt',0)
+  EscribirASCII(Val(a:FAC))
+  CerrarASCII
+endif
+
+Message('Recibido Reg. Tasas e Indices (9903)')
+BorrarCeldas(s:1..t:35)
+*/Completo la Tabla
+ACT(s:1, 'Fecha')
+ACT(s:2, 'Longitud')
+ACT(s:3, 'Mercado')
+ACT(s:4, 'Agente')
+ACT(s:5, 'Operador')
+ACT(s:6, 'Fecha_aa')
+ACT(s:7, 'Fecha_mm')
+ACT(s:8, 'Fecha_dd')
+ACT(s:9, 'Hora_hh')
+ACT(s:10, 'Hora_mm (10)')
+ACT(s:11, 'Hora_ss')
+ACT(s:12, 'FechaCarga')
+ACT(s:13, 'Secuencia')
+ACT(s:14, 'Secuencia2') 
+ACT(s:15, 'CodigoReg (15)')
+ACT(s:16, 'CodigoMovi')
+ACT(s:17, 'CodigoTasa')
+ACT(s:18, 'CantOcurr')
+ACT(s:19, '# Ocurr')
+ACT(s:20, 'Fechatasa (20)')
+ACT(s:21, 'Periodo')
+ACT(s:22, 'Valor')
+ACT(s:23, 'Fecha(FechaTasa)')
+ACT(s:24, 'Num(Valor)')
+ACT(s:25, '# Cotiz (25)')
+ACT(s:26, 'Especie FPA')
+ACT(s:27, 'Plazo')
+ACT(s:28, 'Mercado')
+ACT(s:29, 'Fuente')
+ACT(s:30, 'Moneda (30)')
+ACT(s:31, 'CallPut')
+
+ACN(x2, 1)
+ACT(t:2, Copy(Val(a:FAC),Val(x2),4))
+SCN(x2, 4)
+ACT(t:3, Copy(Val(a:FAC),Val(x2),1))
+SCN(x2, 1)
+ACT(t:4, Copy(Val(a:FAC),Val(x2),3))
+SCN(x2, 3)
+ACT(t:5, Copy(Val(a:FAC),Val(x2),2))
+SCN(x2, 2)
+ACT(t:6, Copy(Val(a:FAC),Val(x2),2))
+SCN(x2, 2)
+ACT(t:7, Copy(Val(a:FAC),Val(x2),2))
+SCN(x2, 2)
+ACT(t:8, Copy(Val(a:FAC),Val(x2),2))
+SCN(x2, 2)
+ACT(t:9, Copy(Val(a:FAC),Val(x2),2))
+SCN(x2, 2)
+ACT(t:10, Copy(Val(a:FAC),Val(x2),2))
+SCN(x2, 2)
+ACT(t:11, Copy(Val(a:FAC),Val(x2),2))
+SCN(x2, 2)
+ACT(t:13, Copy(Val(a:FAC),Val(x2),5))
+SCN(x2, 5)
+ACT(t:15, Copy(Val(a:FAC),Val(x2),4))
+SCN(x2, 4)
+* Codigo Mov
+ACT(t:16, Copy(Val(a:FAC),Val(x2),1))
+SCN(x2, 1)
+* Codigo de Tasa
+ACT(t:17, Copy(Val(a:FAC),Val(x2),3))
+SCN(x2, 3)
+* Cantidad Ocurrencias
+ACT(t:18, Copy(Val(a:FAC),Val(x2),3))
+SCN(x2, 3)
+
+if EqStr(Val(t:17),'PES')
+  ** Esto esta hard porque no hay relacion entre PES y COMA35
+  ACT(t:26, 'COMA35')
+endif
+
+if NoVacio(Val(t:26))
+  *** Fecha
+  ACD(t:1, Fecha(Val(t:8)~'/'~Val(t:7)~'/'~'20'~Val(t:6)))
+  *** Fecha de Carga en SIOPEL
+  ACT(t:12, Val(t:7)~'/'~Val(t:8)~'/'~Val(t:6)~' '~Val(t:9)~':'~Val(t:10)~':'~Val(t:11))  
+  *** Secuencia2
+  ACT(t:14, Val(t:6)~Val(t:7)~Val(t:8)~Val(t:13))
+  *** Ocurrencias en numero
+  ACN(t:19, Num(Val(t:18)))
+endif
+
+if Val(t:19)>0
+  * Plazo
+  ACT(t:27, FStr(0,1,0))
+  * Meracdo
+  ACT(t:28, Var('AMBMAE'))
+  * Fuente
+  ACT(t:29, 'MAE')
+  * Moneda
+  ACT(t:30, 'ARP')
+  * CallPut
+  ACT(t:31, 'CON')
+
+  Recorrer&i 1,Val(t:19)
+    BorrarCeldas(t:20..t:25)
+    * Fecha
+    ACT(t:20, Copy(Val(a:FAC),Val(x2),8))
+    if EqStr(Val(t:20),'99999999')
+      Break
+    else
+      SCN(x2, 8)
+      * Periodo
+      ACT(t:21, Copy(Val(a:FAC),Val(x2),7))
+      SCN(x2, 7)
+      * Valor
+      ACT(t:22, Copy(Val(a:FAC),Val(x2),18))
+      SCN(x2, 18)
+      * Fecha
+      ACD(t:23, Fecha(Copy(Val(t:20),7,2)~'/'~Copy(Val(t:20),5,2)~'/'~Copy(Val(t:20),1,4)))
+      * Valor en numero
+      ACN(t:24, Round(Num(Val(t:22))/100000000,8))
+
+      SQL.ADD("Select Codigo from "~DBO~".COTIZACIONES ")
+      SQL.ADD(" where Fecha  = '"~IdxDate(Val(t:23))~"' ")
+      SQL.ADD("   and Codigo = '"~Val(t:26)~"' ")
+      SQL.ADD("   and Moneda = '"~Val(t:30)~"' ")
+      SQL.ADD("   and IsNull(CallPut,'CON') = '"~Val(t:31)~"' ")
+      * Nuevos campos NIIF
+      SQL.ADD("   and PlazoLiq = '"~Val(t:27)~"' ")
+      SQL.ADD("   and Mercado  = '"~Val(t:28)~"' ")
+      SQL.ADD("   and Fuente   = '"~Val(t:29)~"' ")
+      recorrer SQL
+        DFA
+        SCN(t:25, 1)
+      proximo
+      if Incluido(Val(t:16),'A|M')
+        if Val(t:25)>0
+          ACT(u:FAC, 'Update Cot')
+*          MessageBox('Update Cot')
+          */Actualizo la Tabla
+          SQL.ADD("Update "~DBO~".COTIZACIONES ")
+          SQL.ADD("   set PrecioMAE          = "~FStr(Val(t:24),0,8)~", ")
+          SQL.ADD("       Precio1            = "~FStr(Val(t:24),0,8)~", ")
+          SQL.ADD("       PrecioContable     = "~FStr(Val(t:24),0,8)~", ")
+          SQL.ADD("       FechaActualizacion = getdate() ")
+          SQL.ADD(" where Fecha  = '"~IdxDate(Val(t:23))~"' ")
+          SQL.ADD("   and Codigo = '"~Val(t:26)~"' ")
+          SQL.ADD("   and Moneda = '"~Val(t:30)~"' ")
+          SQL.ADD("   and IsNull(CallPut,'CON') = '"~Val(t:31)~"' ")
+          * Nuevos campos NIIF
+          SQL.ADD("   and PlazoLiq = '"~Val(t:27)~"' ")
+          SQL.ADD("   and Mercado  = '"~Val(t:28)~"' ")
+          SQL.ADD("   and Fuente   = '"~Val(t:29)~"' ")
+          SQL.NEW
+          SQL.EXEC
+        else
+          ACT(u:FAC, 'Insert Cot')
+*          MessageBox('Insert Cot')
+          SQL.ADD("Insert into "~DBO~".COTIZACIONES ( ")
+          SQL.ADD(" Fecha, Codigo, Moneda, CallPut, ")
+          SQL.ADD(" PrecioMAE, Precio1, PrecioContable, ")
+          * Nuevos campos NIIF
+          SQL.ADD(" PlazoLiq, ")
+          SQL.ADD(" Mercado, ")
+          SQL.ADD(" Fuente, ")
+          SQL.ADD(" FechaActualizacion ")
+          SQL.ADD(" ) Values ( ")
+          * Fecha
+          SQL.ADD(" '"~IdxDate(Val(t:23))~"', ")
+          * Codigo
+          SQL.ADD(" '"~Val(t:26)~"', ")
+          * Moneda
+          SQL.ADD(" '"~Val(t:30)~"', ")
+          * CallPut
+          SQL.ADD(" '"~Val(t:31)~"', ")
+          * PrecioMAE
+          SQL.ADD(" "~FStr(Val(t:24),0,8)~", ")
+          * Precio1
+          SQL.ADD(" "~FStr(Val(t:24),0,8)~", ")
+          * PrecioContable
+          SQL.ADD(" "~FStr(Val(t:24),0,8)~", ")
+          * Nuevos campos NIIF
+          * PlazoLiq
+          SQL.ADD(" '"~Val(t:27)~"', ")
+          * Mercado
+          SQL.ADD(" '"~Val(t:28)~"', ")
+          * Fuente
+          SQL.ADD(" '"~Val(t:29)~"', ")
+          SQL.ADD(" getdate() ")
+          SQL.ADD(" ) ")
+          SQL.NEW
+          SQL.EXEC
+        endif
+      else
+        if EqStr(Val(t:16),'B')
+          ACT(u:FAC, 'Delete Cot')
+*          MessageBox('Delete Cot')
+          SQL.ADD("Delete "~DBO~".COTIZACIONES ")
+          SQL.ADD(" where Fecha  = '"~IdxDate(Val(t:23))~"' ")
+          SQL.ADD("   and Codigo = '"~Val(t:26)~"' ")
+          SQL.ADD("   and Moneda = '"~Val(t:30)~"' ")
+          SQL.ADD("   and IsNull(CallPut,'CON') = '"~Val(t:31)~"' ")
+          * Nuevos campos NIIF
+          SQL.ADD("   and PlazoLiq = '"~Val(t:27)~"' ")
+          SQL.ADD("   and Mercado  = '"~Val(t:28)~"' ")
+          SQL.ADD("   and Fuente   = '"~Val(t:29)~"' ")
+          SQL.NEW
+          SQL.EXEC
+        else
+          if Eqstr(Var('LOGERRMAE'),'SI')
+            AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+            EscribirASCII(Pad('CodigoMovi incorrecto RECMAE115',30)~'-'~Val(A:FAC))
+            CerrarASCII
+          endif
+        endif
+      endif
+    endif
+  Proximo
+endif
+
+ACO(19,15)

@@ -1,0 +1,468 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  NrOperacion1   : "NrOperacion"                  ;;;;;;;;;;;;;;"TipoOp IN ('DDC','DDV')"
+  Radio2         : "|Impresora|Pantalla|PDF|Mail" ;;;;;;;;;1;;;;;
+  String1        : 'Path'                         ;;;;NO;Dialogo.Radio2=2;;;;VAR('PATHPDFBOL');;;;'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'  
+FinDialogo
+If Not OK
+   Cancelar
+Endif
+
+CrearFont(1, "Arial,8,")
+CrearFont(2, "Arial,8,B")
+CrearFont(3, "Arial,14,B")
+CrearFont(4, "Arial,6,")
+CrearFont(5, "Arial,10,BU")
+CrearFont(6, "Arial,10,B")
+CrearFont(7, "Arial,10,")
+CrearFont(9, "Arial,12,B")
+
+AgregarBMP(a:2,EXE('LOGO'),EXE('ESCALOGO')*1.2)
+
+* hardcodeado, no veo que puedea cambiar
+Let &CondIVAVehiculo 'IVA Responsable Inscripto'
+             
+ACT(EM:1,BuscarCampo('CLIENTES','DireccionEmail','Codigo',VAR('VEHICULODE')))
+ACT(d:2, BuscarCampo('CLIENTES','RazonSocial','Codigo',VAR('VEHICULODE'))  )
+ACT(d:3, BuscarCampo('CLIENTES','Direccion','Codigo',VAR('VEHICULODE')) )
+ACT(d:4, BuscarCampo('CLIENTES','CodigoPostal','Codigo',VAR('VEHICULODE'))~' '~MIRT(BuscarCampo('CLIENTES','Localidad','Codigo',VAR('VEHICULODE')))~' '~MIRT(BuscarCampo('PAISES','Nombre','Codigo',BuscarCampo('CLIENTES','PaisDir','Codigo',VAR('VEHICULODE'))) )  )
+ACT(d5, 'C.U.I.T. '~BuscarCampo('CLIENTES','CUIT','Codigo',VAR('VEHICULODE')))
+ACT(d6, 'Ing.Brutos Cap.Fed. '~BuscarCampo('CLIENTES','NrIngBrutos','Codigo',VAR('VEHICULODE')))
+ACT(d7, &CondIVAVehiculo)
+ACT(d8, 'Tel. '~BuscarCampo('CLIENTES','Telefono','Codigo',VAR('VEHICULODE')) )
+
+#ifdef BIND
+ACT(d9, 'Fax '~BuscarCampo('CLIENTES','Fax','Codigo',VAR('VEHICULODE'))  )
+ACT(VH:1,BuscarCampo('CLIENTES','CodigoCNV','Codigo',VAR('VEHICULODE')))
+ACT(d10, 'Agente de Liquidacion y Compensacion -Categoria propio- Nro.'~Val(VH:1)~' Registrado en la CNV')
+#else
+ACT(VH:1, BuscarCampo('CLIENTES','CodigoCNV','Codigo',VAR('VEHICULODE')))
+ACT(VH:2, BuscarCampo('CLIENTES','NrMAE','Codigo',VAR('VEHICULODE')))
+ACT(VH:3, BuscarCampo('CLIENTES','NrBYMA','Codigo',VAR('VEHICULODE')))
+ACT(VH:4, BuscarCampo('CLIENTES','CodigoMAV','Codigo',VAR('VEHICULODE')))
+
+ACT(d9, 'Agente de Liquidacion y Compensacion - Agente de Negociacion Integral')
+ACT(d10, 'Registro en CNV : '~Val(VH:1)~'   Agente MAE: '~Val(VH:2)~'  Agente BYMA: '~Val(VH:3))
+ACT(d11, 'Agente MAV : '~Val(VH:4))
+#endif
+
+SQL.ADD("SELECT O.*, C.RazonSocial, C.Direccion as Address, C.CodigoPostal, C.Localidad, C.Codigo, C.CondicionIVA, C.CUIT, C.CodComitente ")
+**Modificacion 1/6/23
+SQL.ADD(", C.Calle, C.Altura, C.Piso, C.Depto ")
+
+SQL.ADD("FROM   "~DBO~".OPERACIONES O,"~DBO~".CLIENTES C ")
+SQL.ADD("WHERE  O.NrOperacion  = '"~Dialogo.NrOperacion1~"'")
+SQL.ADD("       and O.Cliente1 = C.Codigo  ")
+
+watch(sql.batch)
+
+
+Recorrer SQL
+  SetFilaActual(13)
+  ACT(a:fac, fbn('RazonSocial'))
+  
+  **Modificacion 1/6/23
+  #ifdef BIND
+  ACT(a:fac+1, fbn('Address'))
+  #else
+  if Vacio(fbn('Address'))
+    ACT(a:fac+1, fbn('Calle') ~" "~ fbn('Altura') ~" "~ fbn('Piso') ~" "~ fbn('Depto'))
+  else
+    ACT(a:fac+1, fbn('Address'))
+  endif
+  #endif
+  
+  ACT(a:fac+2, fbn('CodigoPostal')~' - '~fbn('Localidad'))
+  let &CondIVA fbn('CondicionIVA')
+  let &TextoIVA 'IVA: Responsable Inscripto'
+  * Inscripto como default
+  if EqStr(&CondIVA, 'NO5')
+  let &TextoIVA 'IVA: No inscripto Adic 50%'
+  endif
+  if EqStr(&CondIVA, 'NOI')
+  let &TextoIVA 'IVA: No Inscripto'
+  endif
+  if EqStr(&CondIVA, 'EXE')
+  let &TextoIVA 'IVA: Exento'
+  endif
+  if EqStr(&CondIVA, 'GRA')
+  let &TextoIVA 'IVA: Gran Consumidor'
+  endif
+  if EqStr(&CondIVA, 'FIN')
+  let &TextoIVA 'IVA: Consumidor Final'
+  endif
+  if EqStr(&CondIVA, 'MON')
+  let &TextoIVA 'IVA: Monotibutista'
+  endif
+  if EqStr(&CondIVA, 'NOC')
+  let &TextoIVA 'IVA: No Categorizado'
+  endif
+  if EqStr(&CondIVA, 'OTR')
+  let &TextoIVA 'IVA: Otro'
+  endif
+  ACT(a:fac+3, &TextoIVA)
+   * formateo de CUIT del cliente   
+   If [NoVacio(FBN('CUIT')) y Not EqStr(FBN('CUIT'), '000000000000000')]
+      If [EqStr(Copy(FBN('CUIT'), 01, 04), '0000')]
+         ACT(ZB:10, Copy(FBN('CUIT'), 05, 11))
+      Else  
+         If [[EqStr(Copy(FBN('CUIT'), 03, 01), '-')] y [EqStr(Copy(FBN('CUIT'), 12, 01), '-')]]
+           ACT(ZB:10, Copy(FBN('CUIT'), 01, 13))
+           ACT(ZB:11, Copy(FBN('CUIT'), 01, 13))
+         Else           
+           ACT(ZB:10, Copy(FBN('CUIT'), 01, 11))
+           ACT(ZB:11, Copy(FBN('CUIT'), 01, 02)~'-'~Copy(FBN('CUIT'), 03, 08)~'-'~Copy(FBN('CUIT'), 11, 01))
+         EndIf      
+      EndIf
+      let &CUIT Val(ZB:10)
+   Else
+      ACT(ZB:10, '')
+      let &CUIT FBN['Cliente1']
+   EndIf
+   ACT(a:fac+4, 'CUIT: '~&CUIT)
+   
+   
+  
+   
+   #ifdef BIND
+   ACT(d:fac, 'Comprobante')
+   ACT(d:fac+1, 'BOLETO')
+   ACT(d:fac+2, 'Comitente')
+   ACT(e:fac+2, 'F.Operacion')
+   ACT(f:fac+2, 'F.Liquidacion')
+   ACT(g:fac+2, 'Numero')
+   
+   ACT(d:fac+3, fbn('CodComitente'))
+   ACT(e:fac+3, fbn('FechaOp'))
+   ACT(f:fac+3, fbn('FechaOp2'))
+   ACT(g:fac+3, fbn('NrBoleto'))
+   
+   #else
+   
+   ACT(a:fac+5, 'Comitente: ' ~ fbn('CodComitente'))
+   
+   ACT(d:fac+1, 'Comprobante')
+   ACT(d:fac+2, 'BOLETO')
+   ACT(d:fac+3, 'F.Operacion')
+   ACT(e:fac+3, 'F.Liquidacion')
+   ACT(f:fac+3, 'Numero')
+   
+    ACT(d:fac+4, fbn('FechaOp'))
+    ACT(e:fac+4, fbn('FechaOp2'))
+    ACT(f:fac+4, fbn('NrBoleto'))
+   #endif
+
+  Let &Especie 'CHEQUES'
+    #ifdef BIND
+     ACT(a:fac+6, 'Especie: '~&Especie)
+    #else  
+     ACT(a:fac+7, 'Especie: '~&Especie)
+    #endif
+   if Incluido(fbn('TipoOp'),'DDC|DDV' )
+    #ifdef BIND
+     ACT(a:fac+6, 'Especie: '~fbn('TipoDoc'))
+    #else
+     ACT(a:fac+7, 'Especie: '~fbn('TipoDoc'))
+    #endif
+   endif
+
+   if Incluido(fbn('TipoOp'),'DDC')
+    let &TipoOp 'Compra MAV'
+  else
+    let &TipoOp 'Venta MAV'
+  endif
+  
+  let &TNA fbn('Precio1')
+  let &TES &TNA*fbn('Plazo')/365
+  let &TEA (((1+(&TES/100))^(365/fbn('Plazo')))-1)*100
+
+  #ifdef BIND
+    ACT(a:fac+7, 'Operacion: '~&TipoOp~' T.N.A.: '~FStr(&TNA,0,4)~' T.E.S: '~FStr(&TES,0,4)~' T.E.A.: '~FStr(&TEA,0,4))
+  #else
+    ACT(a:fac+8, 'Operacion: '~&TipoOp~' T.N.A.: '~FStr(&TNA,0,4)~' T.E.A.: '~FStr(&TEA,0,4))
+  #endif
+  
+  if EqStr(fbn('CB1'),'1')
+    let &Garantizado 'Avalado'
+  else
+    let &Garantizado 'No Garantizado'  
+    if NoVacio(fbn('Observac3'))
+      let &Garantizado &Garantizado~'-CUIT Libr.:'~Trim(Mirt(fbn('Observac3')))
+    endif
+  endif
+  if Incluido(fbn('TipoOp'),'DDV') y NoVacio(fbn('MensajeChequeo'))
+    let &Garantizado &Garantizado~'-CUIT Compr.:'~Trim(Mirt(fbn('MensajeChequeo')))
+  endif
+
+  
+#ifdef BIND
+  ACT(a:fac+8, 'Observaciones: '~&Garantizado~' V/N: '~PyC(fbn('TotalBrutoCli1'),0,2)~' Tasa: '~FStr(fbn('Precio1'),0,4)~' anual, Plazo: '~FStr(fbn('Plazo'),0,0)~' dias, Interes: $'~PyC(fbn('TotalIntereses'),0,2)~'-')
+#else  
+  ACT(a:fac+9, 'Observaciones: '~&Garantizado ) 
+#endif
+  
+  #ifdef BIND
+    ACT(a:fac+10, 'Cantidad')
+    ACT(b:fac+10, 'Precio')
+    ACT(c:fac+10, 'Importe Bruto')
+    ACT(d:fac+10, 'Contraparte')
+    ACT(e:fac+10, 'Nro.Orden')
+    ACT(f:fac+10, 'F.Orden')
+    ACT(g:fac+10, 'H.Orden')
+  
+    ACN(a:fac+11, fbn('TotalBrutoCli1'))
+    ACN(b:fac+11, fbn('Cantidad')/fbn('TotalBrutoCli1')*100)
+    ACN(c:fac+11, fbn('Cantidad'))
+    ACT(d:fac+11, fbn('Cliente2'))
+    ACT(e:fac+11, fbn('NrOperacion2'))
+    ACD(f:fac+11, fbn('FechaOp'))
+    ACT(g:fac+11, fbn('Hora1'))
+  #else 
+    ACT(a:fac+11, 'Cantidad')
+    **ACT(b:fac+11, 'Precio')
+    ACT(b:fac+11, 'T.N.A')
+    ACT(c:fac+11, 'Importe Bruto')
+    ACT(d:fac+11, 'Intereses')
+    ACT(e:fac+11, 'Plazo')
+    ACT(f:fac+11, 'Nro.Orden')
+    ACT(g:fac+11, 'F.Orden')
+    ACT(h:fac+11, 'H.Orden')
+  
+    ACN(a:fac+12, fbn('TotalBrutoCli1'))
+    **ACN(b:fac+12, fbn('Cantidad')/fbn('TotalBrutoCli1')*100)
+    ACT(b:fac+12, FStr(&TNA,0,4))
+    ACN(c:fac+12, fbn('Cantidad'))
+    ACN(d:fac+12, fbn('TotalIntereses'))
+    ACN(e:fac+12, fbn('Plazo'))
+    
+    **Modificacion 1/6/23
+    ACT(f:fac+12, fbn('NrOperacion3'))
+    
+    ACD(g:fac+12, fbn('FechaOp'))
+    ACT(h:fac+12, fbn('Hora1'))
+  
+  #endif
+
+** AA 01-04-2026 se elimina la ducplicacion de cantidad e importe neto  
+  #ifdef BIND
+  ACT(a:fac+12, 'CHQ.: '~fbn('ObservacDoc')~' '~fbn('FechaVto')~' '~BuscarCampo('CLIENTES','RazonSocial','Codigo',fbn('Cliente3')))
+  *ACN(a:fac+14, fbn('TotalBrutoCli1'))
+  *ACN(c:fac+14, fbn('Cantidad'))
+  #else
+     IF Eqstri(fbn('TipoDoc'), 'PAGARE')
+        ABT(a:fac+17..d:fac+18, 'PAGARE: '~fbn('ObservacDoc')~' '~fbn('FechaVto')~' '~fbn('RazonSocial'),12,'black', 'normal')
+     ELSE
+        ABT(a:fac+17..d:fac+18, 'CHQ.: '~fbn('ObservacDoc')~' '~fbn('FechaVto')~' '~BuscarCampo('CLIENTES','RazonSocial','Codigo',fbn('Cliente3')),12,'black', 'normal')
+        *ACN(a:fac+15, fbn('TotalBrutoCli1'))
+        *ACN(c:fac+15, fbn('Cantidad'))
+
+     ENDIF
+  #endif
+
+**AA 13/02/2026 incoporacion gasto por adm de garantia
+#ifdef BIND  
+  ACT(e:fac+14, 'Arancel 1.00% P.A.')
+  ACN(g:fac+14, fbn('ImpGastos1'))
+  ACT(e:fac+15, 'D.Mercado')
+  ACN(g:fac+15, fbn('TotalDerechos'))
+  ACT(e:fac+16, 'Gastos')
+  ACN(g:fac+16, fbn('TotalGastos'))
+  ACT(e:fac+17, 'Gto. Adm. Gtia')
+  ACN(g:fac+17, fbn('MAVAdmGtiaVdr'))
+  ACT(e:fac+18, 'IVA s/ '~PyC(Val(g:fac+14)+Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17),0,2))
+  ACN(g:fac+18, (Val(g:fac+14)+Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17))*Var('IVA')/100)  
+
+  ** AA 01-04-2026 se cambia el campo de cantidad (c:fac) por la line original
+  if Incluido(fbn('TipoOp'),'DDC')
+     ACT(e:fac+19, 'Importe Neto')
+     *ACN(g:fac+19, Val(c:fac+14)+Val(g:fac+14)+Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17))
+     ACN(g:fac+19, Val(c:fac+12)+Val(g:fac+14)+Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17)+Val(g:fac+18))
+  else
+     ACT(e:fac+19, 'IVA RG 1603')
+     ACN(g:fac+19, fbn('TotalRetenciones'))
+     ACT(e:fac+20, 'Importe Neto')
+     *ACN(g:fac+20, Val(c:fac+14)-(Val(g:fac+14)+Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17)+Val(g:fac+18)))
+     ACN(g:fac+20, Val(c:fac+12)-(Val(g:fac+14)+Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17)+Val(g:fac+18)))
+  endif
+#else
+    **Modificacion 1/6/23
+  ACT(e:fac+15, 'Comision')
+  
+  ACN(g:fac+15, fbn('ImpGastos1'))
+  ACT(e:fac+16, 'D.Mercado')
+  ACN(g:fac+16, fbn('TotalDerechos'))
+  ACT(e:fac+17, 'Gastos')
+  ACN(g:fac+17, fbn('TotalGastos'))
+  ACT(e:fac+18, 'Gto. Adm. Gtia')
+  ACN(g:fac+18, fbn('MAVAdmGtiaVdr'))
+  ACT(e:fac+19, 'IVA s/ '~PyC(Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17)+Val(g:fac+18),0,2))
+  ACN(g:fac+19, (Val(g:fac+14)+Val(g:fac+15)+Val(g:fac+16))*Var('IVA')/100)
+  if Incluido(fbn('TipoOp'),'DDC')
+     ACT(e:fac+20, 'Importe Neto')
+     *ACN(g:fac+20, Val(c:fac+15)+Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17)+Val(g:fac+18))
+     ACN(g:fac+20, Val(c:fac+12)+Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17)+Val(g:fac+18)+Val(g:fac+19))
+  else
+    ACT(e:fac+20, 'IVA RG 1603')
+    ACN(g:fac+20, fbn('TotalRetenciones'))
+    ACT(e:fac+21, 'Importe Neto')
+    *ACN(g:fac+21, Val(c:fac+15)-(Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17)+Val(g:fac+18)+Val(g:fac+19)))
+    ACN(g:fac+21, Val(c:fac+12)-(Val(g:fac+15)+Val(g:fac+16)+Val(g:fac+17)+Val(g:fac+18)+Val(g:fac+19)))
+  endif
+  
+#endif  
+
+**AA 13/02/2026 incoporacion gasto por adm de garantia . se agrega nro de linea en variable
+#ifdef BIND 
+  ACN(li:1,35)
+  if Incluido(fbn('TipoOp'), 'DDC')
+    ACT(a:Val(li:1), 'Los Titulos Valores cuya compra se detalla quedan en custodia y/o garantia hasta su posterior retiro o venta. La no manifiestacion expresa en contrario del comitente')
+    ACT(a:Val(li:1)+1, 'hace presumir legalmente su autorizacion para el deposito colectivo de los titulos valores entregados al depositante (Art. 33 de la Ley 20643).')
+    ACT(a:Val(li:1)+2, 'El monto de IVA discriminado no puede computarse como crédito fiscal, excepto para los Responsables Inscriptos.')
+    ACT(a:Val(li:1)+3, 'Este boleto carece de autenticidad si no lleva la firma de '~Val(d:2)~'.')
+    ACT(a:Val(li:1)+4, ''~Val(d:2)~' es Agente de Negociación y Agente de Liquidación y Compensación - categoria Propio Nro.'~Val(vh:1)~' registrado en C.N.V.')
+    ACT(a:Val(li:1)+5, 'Si Ud.desconoce esta/s operacion/es por favor envie un email a '~Val(EM:1)~' dentro de las 48 hs. de notificado, para efectuar el reclamo ')
+    ACT(a:Val(li:1)+6, 'correspondiente. Se deja asentado que la recepcion del presente boleto sin que se hubiera recibido observaciones dentro del plazo reseñado implicara la aceptacion')
+    ACT(a:Val(li:1)+7, 'tacita de las operaciones que el mismo contiene.') 
+  endif
+  
+  if Incluido(fbn('TipoOp'), 'DDV')
+    ACT(a:Val(li:1), 'El monto de IVA discriminado no puede computarse como crédito fiscal, excepto para los Responsables Inscriptos.')
+    ACT(a:Val(li:1)+1, 'Este boleto carece de autenticidad si no lleva la firma de '~Val(d:2)~'.')
+    ACT(a:Val(li:1)+2, ''~Val(d:2)~' es Agente de Negociación y Agente de Liquidación y Compensación - categoria Propio Nro.'~Val(vh:1)~' registrado en C.N.V.')
+    ACT(a:Val(li:1)+3, 'Si Ud.desconoce esta/s operacion/es por favor envie un email a '~Val(EM:1)~' dentro de las 48 hs. de notificado, para efectuar el reclamo ')
+    ACT(a:Val(li:1)+4, 'correspondiente. Se deja asentado que la recepcion del presente boleto sin que se hubiera recibido observaciones dentro del plazo reseñado implicara la aceptacion')
+    ACT(a:Val(li:1)+5, 'tacita de las operaciones que el mismo contiene.') 
+  endif
+
+
+#else
+**Modificacion 2/6/23
+    #ifdef BACS
+    ABT(a:36..h:36, 'Los Títulos Valores cuya compra se detalla quedan en custodia y/o garantía hasta su posterior retiro o venta. La no manifestación expresa en contrario del Comitente hace presumir legalmente su autorización para el depósito colectivo de los Títulos Valores entregados al depositante (Art. 33 de la Ley 20.643). El monto de IVA discriminado no puede computarse como crédito fiscal, excepto para los Responsables Inscriptos. Conforme las reglamentaciones de los Mercados, la documentación de respaldo de cada operación se encuentra a disposición del cliente. Este boleto carece de autenticidad si no lleva la firma de BACS BANCO DE CRÉDITO Y SECURITIZACIÓN S.A.'~Chr(10)~'Esta operación encomendada por el inversor a realizar a BACS BANCO DE CRÉDITO Y SECURITIZACIÓN S.A. Agente de Liquidación y Compensación y Agente de Negociación Integral Registrado bajo el Nro. 25 de la CNV, es una inversión de riesgo a exclusivo cargo del inversor. La misma cuenta con la garantía de Bolsas y Mercados Argentinos S.A. alcanzada por los beneficios del art. 34 inc. b de su Estatuto Social.',3,,'pre-wrap')
+  
+    #else
+        ACN(li:1,36)
+        if Incluido(fbn('TipoOp'), 'DDC')
+            ACT(a:Val(li:1), 'Los Titulos Valores cuya compra se detalla quedan en custodia y/o garantia hasta su posterior retiro o venta. La no manifiestacion expresa en contrario del comitente')
+            ACT(a:Val(li:1)+1, 'hace presumir legalmente su autorizacion para el deposito colectivo de los titulos valores entregados al depositante (Art. 33 de la Ley 20643).')
+            ACT(a:Val(li:1)+2, 'El monto de IVA discriminado no puede computarse como crédito fiscal, excepto para los Responsables Inscriptos.')
+            ACT(a:Val(li:1)+3, 'Este boleto carece de autenticidad si no lleva la firma de '~Val(d:2)~'.')
+            ACT(a:Val(li:1)+4, ''~Val(d:2)~' es Agente de Negociación y Agente de Liquidación y Compensación - categoria Propio Nro.'~Val(vh:1)~' registrado en C.N.V.')
+            ACT(a:Val(li:1)+5, 'Si Ud.desconoce esta/s operacion/es por favor envie un email a '~Val(EM:1)~' dentro de las 48 hs. de notificado, para efectuar el reclamo ')
+            ACT(a:Val(li:1)+6, 'correspondiente. Se deja asentado que la recepcion del presente boleto sin que se hubiera recibido observaciones dentro del plazo reseñado implicara la aceptacion')
+            ACT(a:Val(li:1)+7, 'tacita de las operaciones que el mismo contiene.') 
+        endif
+
+        if Incluido(fbn('TipoOp'), 'DDV')
+            ACT(a:Val(li:1), 'El monto de IVA discriminado no puede computarse como crédito fiscal, excepto para los Responsables Inscriptos.')
+            ACT(a:Val(li:1)+1, 'Este boleto carece de autenticidad si no lleva la firma de '~Val(d:2)~'.')
+            ACT(a:Val(li:1)+2, ''~Val(d:2)~' es Agente de Negociación y Agente de Liquidación y Compensación - categoria Propio Nro.'~Val(vh:1)~' registrado en C.N.V.')
+            ACT(a:Val(li:1)+3, 'Si Ud.desconoce esta/s operacion/es por favor envie un email a '~Val(EM:1)~' dentro de las 48 hs. de notificado, para efectuar el reclamo ')
+            ACT(a:Val(li:1)+4, 'correspondiente. Se deja asentado que la recepcion del presente boleto sin que se hubiera recibido observaciones dentro del plazo reseñado implicara la aceptacion')
+            ACT(a:Val(li:1)+5, 'tacita de las operaciones que el mismo contiene.') 
+        endif
+  
+    #endif
+#endif
+
+#ifdef BIND
+setfont(a1..z100, 7)
+setfont(d:fac..d:fac+1, 9)
+SetFont(a23..g23, 6)
+if Incluido(fbn('TipoOp'),'DDC')
+  SetFont(e32..g32, 6)
+else
+  SetFont(e33..g33, 6)
+endif
+
+setfont(d10, 1)
+SetFont(a35..a42,1)
+
+#else
+  
+setfont(a1..z100, 7)
+setfont(d:fac..d:fac+2, 9)
+SetFont(a24..h24, 6)
+if Incluido(fbn('TipoOp'),'DDC')
+    SetFont(e33..g33, 6)
+else
+    SetFont(e34..g34, 6)
+endif
+
+setfont(d10, 7)
+SetFont(a35..a44,1)
+#endif  
+
+proximo
+
+
+ACO(1, 12)
+ACO(2, 12)
+ACO(3, 12)
+ACO(4, 12)
+ACO(5, 12)
+ACO(6, 12)
+ACO(7, 12)
+
+* ColorCeldas(a23..c23,Var('COLOR2'))
+*  FormatoCeldas(b:fac+15, EXE('F9'))
+
+  *PATH 
+  ACT(cu:1, val(d:2))
+  ACT(op:1, Dialogo.NrOperacion1)
+  ACT(ar:1, Dialogo.String1~'Boleto_Cliente_'~Val(cu:1)~'_'~Val(op:1)~'.pdf')
+  
+  *Email
+  ACT(em:3, BuscarCampo('OPERACIONES', 'Cliente1','NrOperacion', Dialogo.NrOperacion1))
+  ACT(em:2, BuscarCampo('Clientes', 'DireccionEmail', 'Codigo', Val(em:3)))
+
+  *Leyendas
+  ABT(AA:10..AA:20, LeerLeyenda('','','','MBOLETOASU'), 1)
+  ABT(ZK:1..ZK:4, LeerLeyenda('','','','MBOLETODET'), 1)
+  
+#ifdef BIND  
+  AgregarMarco(d13..g13,1,0,Exe('COLOR2'))
+  AgregarMarco(d13..g16,2,0)
+  AgregarMarco(a19..g21,1,0)
+  AgregarMarco(a23..g33,1,0)
+  AgregarMarco(a23..g26,1,0)
+  AgregarMarco(a23..g23,1,0,Exe('COLOR2'))
+  AlinearCeldas(a23..c23,'D')
+  AlinearCeldas(f23..f23,'D')
+  
+  LimitesVision(h:50)  
+#else
+  AgregarMarco(d14..f14,1,0,Exe('COLOR2'))
+  AgregarMarco(d14..f17,2,0)
+  AgregarMarco(a20..h22,1,0)
+  AgregarMarco(a24..h34,1,0)
+  AgregarMarco(a24..h27,1,0)
+  AgregarMarco(a24..h24,1,0,Exe('COLOR2'))
+  AlinearCeldas(a24..h24,'D')
+  AlinearCeldas(f24..f24,'D')
+  AlinearCeldas(a24..h25,'D')
+  
+  LimitesVision(i:50)  
+#endif  
+ 
+  
+
+If Dialogo.Radio2 = 0
+   ImprimirHoja(SI)
+Else
+   If Dialogo.Radio2 = 2
+      HojaVisible(NO)
+      SetPrintFit(4)
+      ExportarPdfLite(val(ar:1))
+   else
+    HojaVisible(SI)
+        If Dialogo.Radio2 = 3  
+         HojaVisible(NO)
+         SetPrintFit(4)
+         ExportarPdfLite(val(ar:1))
+         SendMail(Val(em:2),val(AA:10),val(ZK:1),SI,,,val(ar:1),,SI)
+        Endif 
+   endif
+Endif 
+
+Autofit(si)

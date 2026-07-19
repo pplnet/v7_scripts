@@ -1,0 +1,384 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1   : 'Fecha'       ;1;1; ;  ;  ;EsHabil(Dialogo.Fecha1,'ARG') y Dialogo.Fecha1<=FSys;'Fecha Invalida';NO;FSys;
+  Vehiculo1: 'Vehiculo:'   ;2;1; ;NO;SI;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+  Cliente1 : 'Cliente'     ;3;1; ;NO;NO;
+  Check1   : 'Procesa'     ;1;2; ;NO;NO;;;;1;
+  Check2   : 'Ejec.Liq.'   ;2;2; ;NO;NO;;;;1;
+  Check3   : 'Contingencia';3;2; ;NO;NO;;;;0;
+  Lista1   : 'Mercado'     ; ;1; ;SI;  ;;;;;;SQLSet("Select Codigo from "~DBO~".MERCADOS Where TipoNegocio Like '%FT%' or TipoNegocio Like '%FM%'  and MTM in(1)  ")
+  Lista2   : 'Producto'    ; ;1; ;SI;  ;;;;;;'Titulo|Moneda'
+ FinDialogo
+
+if not ok
+  Cancelar
+endif
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+If Eqstr(VAR('MTMRFXSIG') , 'SI')
+     ACD(fe:3, Habiles(Dialogo.Fecha1, +1, 'ARG'))
+Else
+     ACD(fe:3, Dialogo.Fecha1)
+Endif
+    
+If Eqstr(VAR('MTMMAESIG') , 'SI')
+     ACD(fe:2, Habiles(Dialogo.Fecha1, +1, 'ARG'))
+Else
+     ACD(fe:2, Dialogo.Fecha1)
+Endif
+
+
+* Log Corrida
+ACT(aa1,VAR('PATHLOGAUD')~'LOGMTM.TXT')
+AbrirASCII(val(aa1),0)
+
+EscribirASCII(Fecha(Fsys,'DDMMYYYY')~' '~HORA(AHORA)~' '~'Comienzo Corrida MTMFUT ')
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+
+
+** Generacion precios MTMCOT NDF
+** debe calcular siempre los precios mercados no regulados
+EjecutarEvento('CALFUT',Fecha1=Dialogo.Fecha1,Vehiculo1=Dialogo.Vehiculo1, Cliente1='',Check1=Dialogo.Check1,Check2=Dialogo.Check2,Check3=Dialogo.Check3, Lista1='', Lista2=Dialogo.Lista2)
+
+
+IF NoVacio(Dialogo.Lista1)
+    ACT(LS:1, Dialogo.Lista1)
+ELSE
+    ACT(LS:1, SQLSet("Select Codigo from "~DBO~".MERCADOS Where TipoNegocio Like '%FT%' or TipoNegocio Like '%FM%' and MTM in(1) "))
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+    ACT(LS:2, Dialogo.Lista2)
+ELSE
+    ***---ACT(LS:2, 'Titulo|Moneda|Tasa')
+    ***---Se deja provisoriamente hasta que se defina tema PRODUCTOS
+    ACT(LS:2, 'Titulo|Moneda')
+ENDIF
+
+SetFilaActual(1)
+ACT(a:FAC, 'Mercado')
+ACT(b:FAC, 'Producto')
+ACT(c:FAC, 'Cant Ops')
+ACT(d:FAC, 'Cont.Precio')
+ACT(e:FAC, 'Ult fecha')
+ACT(f:FAC, 'Cont.Fecha')
+ACT(g:FAC, 'Tipo Error')
+ACT(h:FAC, 'Hay Operaciones')
+SetFont(a:fac..l:fac,2)
+
+ACT(aa:FAC, 'Mercado')
+ACT(ab:FAC, 'Producto')
+ACT(ac:FAC, 'Nr Op')
+ACT(ad:FAC, 'Tipo Op')
+ACT(ae:FAC, 'Cot Hoy')
+ACT(af:FAC, 'Cot Ayer')
+ACT(ag:FAC, 'Cot Ant')
+ACT(ah:FAC, 'Difer.')
+ACT(ai:FAC, 'MTM')
+ACT(aj:FAC, '')
+
+SetFont(aa:fac..al:fac,2)
+
+** Armo lista de Mercado - Producto
+ACN(x:1, FAC)
+Recorrer&k 1, Elementos(Val(LS:1))
+  * Recorre Mercados
+  Recorrer&j 1, Elementos(Val(LS:2))
+    * Recorre Productos
+    IFA
+    ACT(a:FAC, ItemLista(Val(LS:1), &k))
+    ACT(b:FAC, ItemLista(Val(LS:2), &j))
+  proximo
+proximo
+ACN(y:1, FAC)
+
+if Val(y:1)=Val(x:1)
+  if Dialogo.Check1=1
+    Cancelar('No existe Mercado+Producto para analizar')
+  else
+    MessageBox('No existe Mercado+Producto para analizar')
+  endif
+endif
+
+if Val(y:1)>Val(x:1)
+  ***---Controlo si estan los precios para todas las operaciones
+  Recorrer&k 2, Val(y:1)
+    * Recorre Mercados+Producto
+    ACT(d:&k, 'OK')
+    SQL.ADD("Select O.Especie, O.ContraEspecie, O.FechaVto ")
+    SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B ")
+    SQL.ADD(" Where O.FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+*    SQL.ADD("   AND O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   AND O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD("   AND O.Mercado  = '"~Val(a:&k)~"' ")
+    IF EqStr(Val(b:&k),'Moneda')
+      SQL.ADD(" AND O.TipoOp IN ('FXCF','FXVF') ")
+    ENDIF
+    IF EqStr(Val(b:&k),'Titulo')
+      SQL.ADD(" AND O.TipoOp IN ('TICF','TIVF') ")
+    ENDIF
+    IF NoVacio(Dialogo.Cliente1)
+      SQL.ADD(" and O.Cliente1    = '"~Dialogo.Cliente1~"' ")
+    ENDIF
+    SQL.ADD("   and O.NrOperacion = B.NrOperacion ")
+    SQL.ADD("   and B.NrBit       in (10,70) ")
+    SQL.ADD("   and B.Valor       = '1' ")
+    SQL.ADD(" Order By O.FechaVto, O.NrOperacion ")
+    Recorrer SQL
+      DFA
+      SCN(c:&k, 1)
+      if EqStr(Val(d:&k), 'OK')
+        if SQL("Select 1 From "~DBO~".COTIZACIONESFUT Where Codigo = '"~fbn('Especie')~"' AND Moneda = '"~fbn('ContraEspecie')~"' AND FechaFut = '"~IdxDate(fbn('FechaVto'))~"' AND Mercado = '"~Val(a:&k)~"' AND CallPut = 'FUT' AND Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ") <> 1
+           MessageBox('Faltan Cotizaciones Futuro para el Vencimiento '~fbn('FechaVto')~' Mercado '~Val(a:&k)~' - Producto '~Val(b:&k)~'. MTM Cancelado para este Mercado+Producto')
+           ACT(d:&k, 'Error')
+        endif
+      endif
+    Proximo
+  Proximo
+endif
+
+EscribirASCII(Fecha(Fsys,'DDMMYYYY')~' '~HORA(AHORA)~' '~'Corrida MTMFUT - Control Precios')
+
+if Val(y:1)>Val(x:1)
+  ***---Controlo si ya fue procesado para cada mercado y producto seleccionado
+  Recorrer&k 2, Val(y:1)
+    if EqStr(Val(d:&k),'OK')
+      ACD(e:&k, SQL(" Select Max(Fecha) From "~DBO~".MTM Where Fecha <= '"~IdxDate(Dialogo.Fecha1)~"' AND Mercado = '"~Val(a:&k)~"' AND Producto = '"~Val(b:&k)~"' AND TipoMTM = 'MTM' AND Estado = 'PRO' "))
+      ACT(f:&k, 'OK')
+      IF Val(e:&k) = Dialogo.Fecha1
+        IF SQL(" Select 1 From "~DBO~".MTM Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' AND Mercado = '"~Val(a:&k)~"' AND Producto = '"~Val(b:&k)~"' AND TipoMTM = 'MTM' AND Estado = 'PRO' ") = 1
+          ACT(f:&k, 'Error')
+          ACT(g:&k, 'MTM ya procesado')
+          MessageBox('MTM ya procesado para Mercado '~Val(a:&k)~' - Producto '~Val(b:&k)~' - Fecha '~Dialogo.Fecha1)
+        ENDIF
+      ELSE
+        IF Val(e:&k) > 0
+            *  IF Val(e:&k) < Habiles(Dialogo.Fecha1, -1, 'ARG')
+            *    ACT(f:FAC, 'Error')
+            *    ACT(g:FAC, 'Faltan MTM')
+            *    MessageBox('El ultimo MTM procesado para el Mercado '~Val(a:&k)~' - Producto '~Val(b:&k)~' es del '~Val(e:&k)~' - DEBE PROCESAR LOS MTM FALTANTES PRIMERO')
+            *  endif
+        ENDIF
+      ENDIF
+    endif
+  Proximo
+endif
+
+if Val(y:1)>Val(x:1)
+  SetFilaActual(1)
+  Recorrer&k 2, Val(y:1)
+    * Recorre Mercado+Productos
+    acn(h:&k,0)
+    IF EqStr(Val(d:&k),'OK') y EqStr(Val(f:&k),'OK')
+      ***---FALTA FILTRAR POR PRODUCTO CUANDO SE DEFINA TEMA TABLA PARA PRODUCTOS
+      SQL.ADD("Select O.NrOperacion,   O.TipoOp,        O.Cliente1,       O.Especie,     O.Cantidad,     ")
+      SQL.ADD("       O.Precio1,       O.ContraEspecie, O.TotalBrutoCli1, O.Vehiculo1,   O.Book1,        O.Cuenta4,     ")
+      SQL.ADD("       O.FechaOp,       O.FechaVto,      O.FechaPago,      O.FechaPrecan, O.PrecioMer,    O.Mercado2,    ")
+      SQL.ADD("       O.FechaUltCupon, O.PrecioEj,      O.FechaEj,        O.MB1,         O.ObsErrorMAE,  O.TasaEspecie, ")
+      SQL.ADD("       O.TotalAux1,     O.TotalAux3,     O.ContraEspecie2, O.EnteCus1,    O.Mercado,      O.MB4,          ")
+      SQL.ADD("       O.Mercado4, M.LiquidaMTM          ")
+      SQL.ADD("  from "~DBO~".OPERACIONES O, "~DBO~".CLIENTES C , "~DBO~".OPERACIONESBITS B, "~DBO~".MERCADOS M ")
+      SQL.ADD(" Where C.Codigo    = O.Cliente1 ")
+      SQL.ADD(" AND O.Mercado = '"~Val(a:&k)~"' ")
+      SQL.ADD(" AND M.Codigo= O.Mercado ")
+      SQL.ADD(" AND O.FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+      SQL.ADD(" AND O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+      SQL.ADD(" AND O.NrOperacion = B.NrOperacion ")
+      SQL.ADD("   and B.NrBit   in (10,70) ")
+      SQL.ADD("   and B.Valor   = '1' ")
+      IF EqStr(Val(b:&k),'Moneda')
+        SQL.ADD(" AND O.TipoOp IN ('FXCF','FXVF') ")
+      ENDIF
+      IF EqStr(Val(b:&k),'Titulo')
+        SQL.ADD(" AND O.TipoOp IN ('TICF','TIVF') ")
+      ENDIF
+      if NoVacio(Dialogo.Cliente1)
+        SQL.ADD("   and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+      endif
+      SQL.ADD(" Order By O.FechaVto, O.NrOperacion ")
+      watch(SQL.BATCH())
+
+      EscribirASCII(Fecha(Fsys,'DDMMYYYY')~' '~HORA(AHORA)~' '~'Corrida MTMFUT - Lectura x Mercado '~Val(a:&k)~' Producto '~Val(b:&k))
+      
+      Recorrer SQL
+        Message(fbn('NrOperacion'))
+        ACT(aa:FAC, Val(a:&k))
+        ACT(ab:FAC, Val(b:&k))
+        ACT(ac:FAC, fbn('NrOperacion'))
+        ACT(ad:FAC, fbn('TipoOp'))
+        ACT(me:1, fbn('Mercado4'))
+        
+        IF EqStr(Val(ab:FAC),'Moneda')
+          * Cotizacion Hoy
+          ACN(CT:1, SQL("Select Top(1) Precio1 From "~DBO~".COTIZACIONESFUT Where Codigo = '"~fbn('Especie')~"' AND Moneda = '"~fbn('ContraEspecie')~"' AND FechaFut = '"~IdxDate(fbn('FechaVto'))~"' AND Mercado = '"~fbn('Mercado')~"' AND CallPut = 'FUT' AND Fecha <= '"~IdxDate(Dialogo.Fecha1)~"' Order By Fecha Desc "))
+          * Cotizacion Ayer
+          ACN(CT:2, SQL("Select Top(1) Precio1 From "~DBO~".COTIZACIONESFUT Where Codigo = '"~fbn('Especie')~"' AND Moneda = '"~fbn('ContraEspecie')~"' AND FechaFut = '"~IdxDate(fbn('FechaVto'))~"' AND Mercado = '"~fbn('Mercado')~"' AND CallPut = 'FUT' AND Fecha < '"~IdxDate(Dialogo.Fecha1)~"' Order By Fecha Desc "))
+        endif
+        IF EqStr(Val(ab:fac),'Titulos')
+          * Cotizacion Hoy
+          ACN(CT:1, SQL("Select Top(1) Precio1 From "~DBO~".COTIZACIONESFUT Where Codigo = '"~fbn('Especie')~"' AND Moneda = '"~fbn('ContraEspecie')~"' AND FechaFut = '"~IdxDate(fbn('FechaVto'))~"' AND Mercado = '"~fbn('Mercado')~"' AND CallPut = 'FUT' AND Fecha <= '"~IdxDate(Dialogo.Fecha1)~"' Order By Fecha Desc "))
+          * Cotizacion Ayer
+          ACN(CT:2, SQL("Select Top(1) Precio1 From "~DBO~".COTIZACIONESFUT Where Codigo = '"~fbn('Especie')~"' AND Moneda = '"~fbn('ContraEspecie')~"' AND FechaFut = '"~IdxDate(fbn('FechaVto'))~"' AND Mercado = '"~fbn('Mercado')~"' AND CallPut = 'FUT' AND Fecha < '"~IdxDate(Dialogo.Fecha1)~"' Order By Fecha Desc "))
+        endif
+        * Cotizacion Hoy
+        ACN(ae:FAC, Val(ct:1))
+        * Cotizacion Ayer
+        ACN(af:FAC, Val(ct:2))
+        IF Dialogo.Fecha1 = fbn('FechaOp')
+          ACN(CT:2, fbn('Precio1'))
+        ENDIF
+        * Cotizacion Anterior
+        ACN(ag:FAC, Val(ct:2))
+        * Diferencia Cotizacion (Hoy - anterior)
+        ACN(ah:FAC, Val(ae:FAC)-Val(ag:FAC))
+        * Resultado
+        IF Incluido(fbn('TipoOp'), 'TICF|FXCF')
+          ACN(ai:FAC, fbn('Cantidad') * Val(ah:FAC))
+        ELSE
+          ACN(ai:FAC, -fbn('Cantidad') * Val(ah:FAC))
+        ENDIF
+        if Dialogo.Check1=1
+          SQL.ADD(" Insert Into "~DBO~".MTMDIARIO ")
+          SQL.ADD(" (NrOperacion, Fecha, PrecioHoy, ")
+          SQL.ADD(" PrecioAyer, MTM, TipoMTM, Especie1, MTMEspecie, FechaCargaSys) ")
+          SQL.ADD(" Values ")
+          SQL.ADD(" ('"~FBN('NrOperacion')~"', '"~IdxDate(Dialogo.Fecha1)~"', "~Fstr(Val(ae:FAC), 0, 8)~", ")
+          SQL.ADD(" "~Fstr(Val(ag:FAC), 0, 8)~", "~Fstr(Val(ai:FAC), 0, 2)~", 'MTM', '"~FBN['ContraEspecie']~"', 0, "~IdxDate2(FSys)~") ")
+          SQL.ADD("  ")
+          SQL.NEW
+          SQL.ADD(" Update "~DBO~".OPERACIONES ")
+          SQL.ADD(" Set TotalAux3 = TotalAux3 + "~Fstr(Val(ai:FAC), 0, 2)~" ")
+          SQL.ADD(" Where NrOperacion = '"~FBN('NrOperacion')~"' ")
+          SQL.NEW
+          *SQL.EXEC
+
+           EscribirASCII(Fecha(Fsys,'DDMMYYYY')~' '~HORA(AHORA)~' '~'Corrida MTMFUT - Insert MTMDIARIO '~FBN('NrOperacion'))
+
+          ACN(cu:1,SQL(" Select count(*) From "~DBO~".MTMDIARIO Where NrOperacion = '"~FBN('NrOperacion')~"' "))
+          ACT(le:1,'Liquidacion MTM '~FBN['Especie'])
+          
+         ** AA 15/01/2025 solo se generan los movimientos para liquidacion diaria
+         if fbn('LiquidaMTM')=0
+          
+          If SQL(" Select 1 From "~DBO~".MOVPENDIENTES  Where "~IIF(Eqstr(Val(me:1), VAR('AMBROFEX'))," FechaMov = "~IdxDate2(Val(fe:3)),IIF(Eqstr(Val(me:1), VAR('AMBMAE'))," FechaMov = "~IdxDate2(Val(fe:2)), "FechaMov = "~IdxDate2(Dialogo.Fecha1)))~" AND NrOperacion = '"~FBN('NrOperacion')~"'  AND NrGrupo > 1000 ") = 1          
+             SQL.ADD(" Update "~DBO~".MOVPENDIENTES            ")
+** FJL 14/12/18 - Se cambia signo
+*             SQL.ADD(" Set Cantidad = "~Fstr(Val(ai:1),0,2)~", Leyenda = '"~Val(le:1)~"' ")
+             * PZ 7/6/2023 invierte signo para Rofex terceros
+             if Eqstr(FBN('Cliente1'),FBN('Vehiculo1'))
+                SQL.ADD(" Set Cantidad = "~Fstr(-Val(ai:1),0,2)~", ")
+             else
+                SQL.ADD(" Set Cantidad = "~Fstr(Val(ai:1),0,2)~", ")
+             endif   
+             SQL.ADD("     Leyenda = '"~Val(le:1)~"' ")
+             SQL.ADD(" Where  NrOperacion = '"~FBN('NrOperacion')~"' ")
+                        
+             if Eqstr(Val(me:1), VAR('AMBROFEX'))
+                SQL.ADD("   And  FechaMov = "~IdxDate2(Val(fe:3))~" ")
+             else             
+                if Eqstr(Val(me:1), VAR('AMBMAE'))
+                    SQL.ADD("   And  FechaMov = "~IdxDate2(Val(fe:2))~" ")
+                else
+                    SQL.ADD("   And  FechaMov = "~IdxDate2(Dialogo.Fecha1)~" ")
+                endif
+             endif
+
+             
+             SQL.NEW
+             *SQL.EXEC
+          Else                   
+             SQL.ADD(" Insert into "~DBO~".MOVPENDIENTES ( ")
+             SQL.ADD(" NrOperacion, Especie, Cliente, Mercado, EnteCustodia, ")
+             SQL.ADD(" Bits, NrSaldo, Cuenta, NrMov,  ")
+             SQL.ADD(" Book,  FechaMov, Cantidad, Leyenda,         ")
+             SQL.ADD(" NrGrupo, Concepto,         ")     
+             SQL.ADD( " NrGrupo2, Nrinstan                        ")   
+             SQL.ADD(" ) values  ( ")
+             SQL.ADD(" '"~FBN('NrOperacion')~"', ")
+             SQL.ADD(" '"~FBN['ContraEspecie']~"', ")
+             SQL.ADD(" '"~FBN('Cliente1')~"', ")
+             SQL.ADD(" '"~FBN('Mercado2')~"', ")
+             SQL.ADD(" '"~FBN('Vehiculo1')~"', ")
+             SQL.ADD(" 'MV', ")
+             SQL.ADD(" 1, ")
+             SQL.ADD(" '"~FBN('Cuenta4')~"', ")
+             SQL.ADD(" "~Fstr(1000+Val(cu:1),1,0)~", ")
+             SQL.ADD(" '"~FBN('Book1')~"', ")             
+             if Eqstr(Val(me:1), VAR('AMBROFEX'))
+                SQL.ADD("  "~IdxDate2(Val(fe:3))~", ")
+             else             
+                if Eqstr(Val(me:1), VAR('AMBMAE'))
+                    SQL.ADD("  "~IdxDate2(Val(fe:2))~", ")
+                else
+                    SQL.ADD("  "~IdxDate2(Dialogo.Fecha1)~", ")
+                endif
+             endif
+
+             
+             * Cantidad
+             ** FJL 14/12/18 - Se cambia signo
+*             SQL.ADD(" "~Fstr(Val(ai:fac),0,2)~", ")
+             * PZ 7/6/2023 invierte signo para Rofex terceros
+             if Eqstr(FBN('Cliente1'),FBN('Vehiculo1'))
+                SQL.ADD(" "~Fstr(-Val(ai:fac),0,2)~", ")
+             else   
+                SQL.ADD(" "~Fstr(Val(ai:fac),0,2)~", ")
+             endif   
+             SQL.ADD(" '"~Val(le:1)~"', ")
+             SQL.ADD(" 0, ")
+             SQL.ADD(" 'FM', ")
+             * PZ 7/6/2023 invierte signo para Rofex terceros
+             if Eqstr(FBN('Cliente1'),FBN('Vehiculo1'))
+                SQL.ADD(" "~Fstr(1000+Val(cu:1),1,0)~" , ")
+             else
+                SQL.ADD(" "~Fstr(3000+Val(cu:1),1,0)~" , ")
+             endif   
+             SQL.ADD(" "~Fstr(0,0,0)~" ")
+             SQL.ADD("         ) ")
+             SQL.NEW
+             *SQL.EXEC
+          Endif
+          
+          EscribirASCII(Fecha(Fsys,'DDMMYYYY')~' '~HORA(AHORA)~' '~'Corrida MTMFUT - ActualizarMovimientos3 '~FBN('NrOperacion'))
+         ENDIF
+          acn(h:&k,1)
+        endif
+        
+      Proximo
+      if Dialogo.Check1=1 y val(h:&k)=1
+        IF SQL(" Select 1 From "~DBO~".MTM Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' AND Mercado = '"~Val(a:&k)~"' AND Producto = '"~Val(b:&k)~"' AND TipoMTM = 'MTM' AND Estado = 'ANU' ") = 1
+          SQL.ADD(" Update "~DBO~".MTM ")
+          SQL.ADD(" Set Estado = 'PRO', ")
+          SQL.ADD(" FechaEstado = "~IdxDate2(FSys)~" ")
+          SQL.ADD(" Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+          SQL.ADD(" AND Mercado = '"~Val(a:&k)~"' ")
+          SQL.ADD(" AND Producto = '"~Val(b:&k)~"' ")
+          SQL.ADD(" AND TipoMTM = 'MTM' ")
+          SQL.ADD(" AND Estado = 'ANU' ")
+        ELSE
+          SQL.ADD(" Insert Into "~DBO~".MTM ")
+          SQL.ADD(" (Fecha, Mercado, Producto, Estado, TipoMTM, FechaEstado) ")
+          SQL.ADD(" Values ")
+          SQL.ADD(" ('"~IdxDate(Dialogo.Fecha1)~"', '"~Val(a:&k)~"', '"~Val(b:&k)~"', 'PRO', 'MTM', "~IdxDate2(FSys)~") ")
+        ENDIF
+        SQL.NEW
+        SQL.EXEC 
+
+        EscribirASCII(Fecha(Fsys,'DDMMYYYY')~' '~HORA(AHORA)~' '~'Corrida MTMFUT - Actualiza MTM ')
+       
+      endif
+    * Fin de OK Precios y fechas
+    endif
+  Proximo
+endif
+
+EscribirASCII(Fecha(Fsys,'DDMMYYYY')~' '~HORA(AHORA)~' '~'Corrida MTMFUT - Comienzo FIX ')
+CerrarASCII 
+
+Message('Generando Fixing del Dia ...')
+*EjecutarEvento('OTROFI',Fecha1=Dialogo.Fecha1,Vehiculo1=Dialogo.Vehiculo1, Check1=Dialogo.Check1, Lista1=Dialogo.Lista1, Lista2=Dialogo.Lista2)
+EjecutarEvento('FIXFUT',Fecha1=Dialogo.Fecha1,Vehiculo1=Dialogo.Vehiculo1, Cliente1='',Check1=Dialogo.Check1, Lista1=Dialogo.Lista1, Lista2=Dialogo.Lista2)
+   

@@ -1,0 +1,267 @@
+﻿**--VIMINM: Minuta Mensual de Capitalizacion de Interes para Cuenta Corriente Vinculadas
+** HojaVisible(SI)
+CrearDialogo
+  Fecha1     : "Fecha"        ;;;;;;NOVACIO(Dialogo.Fecha1);'Debe Ingresar la Fecha';NO;Fsys
+  Vehiculo1  : 'Vehiculo1'    ;;;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))];'El Vehiculo Colocador es Invalido';NO;
+  Vehiculo2  : 'Vehiculo2'    ;;;;;;NOVACIO(Dialogo.Vehiculo2) y [Incluido(Dialogo.Vehiculo2, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))];'El Vehiculo Tomador es Invalido';NO;;;;
+  Especie1   : 'Moneda'       ;;;;;;NOVACIO(Dialogo.Especie1) y DESCIENDEDEESPECIE(Dialogo.Especie1,'MONEDA');'Debe Ingresar una Especie Valida';NO;
+  Precio1    : 'Tasa'         ;;;;NO;NO;;;;0;
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+ACT(AV1,Dialogo.Vehiculo1)
+ACT(AV2,Dialogo.Vehiculo2)
+
+* Obtengo el Ultimo Dia Habil Del Mes Anterior 
+ACD(Z10,FinDeMes(Dialogo.Fecha1-35,NO,'ARG'))
+
+* Recupero la Diferencia a Hoy Surgida de la Fecha Valor a partir del Fecha Valor Mas Antiguo
+SQL.ADD("SELECT MIN(FechaOp) As FechaOp ")
+SQL.ADD("from "~DBO~".OPERACIONES ")
+SQL.ADD("where TipoOp='VIMD' and FechaOp<>FechaCargaSys and CB8='0' and CB6='1' and ")
+SQL.ADD("Especie ='"~Dialogo.Especie1~"' and ")
+SQL.ADD("Vehiculo1 ='"~Dialogo.Vehiculo1~"' and ")
+SQL.ADD("Vehiculo2 ='"~Dialogo.Vehiculo2~"' ")
+
+Recorrer SQL
+   ACD(AA1,FBN['FechaOp']) 
+Proximo 
+
+* Los Interes no calculados son desde la minima fecha hasta el fin de mes pasado inclusive
+IF VAL(AA1)<>0
+   ACN(AA2,DifDias(VAL(AA1),FinDeMes(VAL(AA1),NO,'ARG'),'ARG',SI))  
+
+   * AA3: Acumulador de Intereses 
+   * B2:  Diferencia de Interes para ese dia
+   ACN(AA3,0)
+
+   Recorrer&j 1,VAL(AA2)
+       SQL.ADD("SELECT O.* ")
+       SQL.ADD("from "~DBO~".OPERACIONES O")
+       SQL.ADD("where TipoOp='VIMIND' and FechaOp='"~IdxDate(VAL(AA1))~"' and ")
+       SQL.ADD("Especie ='"~Dialogo.Especie1~"' and ")
+       SQL.ADD("Vehiculo1 ='"~Dialogo.Vehiculo1~"' and ")
+       SQL.ADD("Vehiculo2 ='"~Dialogo.Vehiculo2~"' ")
+       SQL.ADD(" Order By O.FechaOp,O.NrOperacion ")
+
+       Recorrer SQL
+           ACN(AB3,FBN['TotalIntereses']*IIF(EqStr(FBN['MB4'],'0'),-1,1))   
+           ACN(AA3,VAL(AA3)+VAL(AB3))   
+       Proximo 
+       ACD(AA1,HABILES(VAL(AA1),1,'ARG',SI))
+   Proximo  
+EndIf
+
+* Obtengo la Minuta Mensual del Mes Anterior
+*SQL.ADD("SELECT O.* ")
+*SQL.ADD("from "~DBO~".OPERACIONES O")
+*SQL.ADD("where TipoOp='VIMINM' and FechaOp='"~IdxDate(VAL(AA1))~"' and ")
+*SQL.ADD("Especie ='"~Dialogo.Especie1~"' and ")
+*SQL.ADD("Vehiculo1 ='"~Dialogo.Vehiculo1~"' and ")
+*SQL.ADD("Vehiculo2 ='"~Dialogo.Vehiculo2~"' ")
+*SQL.ADD(" Order By O.FechaOp,O.NrOperacion ")
+
+*Recorrer SQL
+*     ACN(AA4,FBN['Cantidad']*IIF(EqStr(FBN['MB3'],'0'),-1,1))   
+*Proximo 
+
+ACN(Z11,VAL(AA3)-VAL(AA4))
+
+IF VAL(Z11)<>0
+   * Por la Diferencia de Interes Genero un Ajuste Fecha Valor VIAJFV
+   * Fecha del Ajuste: 1
+   * z3: Op. Ajuste  z8: Op.Ajuste Vinculada
+   ACT(z3,GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',Dialogo.Vehiculo1)))
+   ACT(z8,GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',Dialogo.Vehiculo2)))
+
+   Message('Generando Minuta de Mensual de Capitalizacion de Interes .... ')          
+   SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ")
+   SQL.ADD("(TipoOp, NrOperacion,FechaOp,Vehiculo1,Vehiculo2,Especie, ")
+   SQL.ADD(" MB3,Cantidad,Cliente1,CB6,RB3 ) ")
+   SQL.ADD("Values")
+   SQL.ADD("('VIAJFV','"~Val(z3)~"','"~IdxDate(VAL(AA1))~"','"~Dialogo.Vehiculo1~"','"~Dialogo.Vehiculo2~"','"~Dialogo.Especie1~"',")
+   SQL.ADD(" '"~Fstr(IIF(VAL(Z11)<=0,0,1),1,0)~"', ")
+   SQL.ADD(" "~Fstr(IIF(VAL(Z11)<=0,-VAL(Z11),VAL(Z11)),0,2)~", ")
+   SQL.ADD(" '"~Dialogo.Vehiculo2~"','1','1') ")
+   SQL.NEW
+   SQL.EXEC
+
+   * Insert de Instancias: Recibe z3: Nro.Op.
+   (."ALTAINSSU".)
+
+   Message('Generando Ajuste de Intereses Fecha Valor Vinculada .... ')
+   EjecutarEvento('INSEVI',NrOperacion1=VAL(Z3),TipoOp1='VIAJFV',String=" MB3= '"~Fstr(IIF(VAL(Z11)<=0,1,0),1,0)~"' ",Vehiculo1=Dialogo.Vehiculo2,Vehiculo2=Dialogo.Vehiculo1   EjecutarEvento('INSEVI',NrOperacion1=VAL(Z3),TipoOp1='VIMIND',String=" CB6='0',MB3='"~VAL(Z9)~"',MB4='"~VAL(Z9)~"' ",Vehiculo1=Dialogo.Vehiculo2,Vehiculo2=Dialogo.Vehiculo1,String1="") 
+ENDIF
+
+ACD(Z10,FinDeMes(Dialogo.Fecha1-35,NO,'ARG'))
+*** SQL.ADD("FechaOp>='"~IdxDate(VAL(Z10))~"' and ")
+
+SQL.ADD("SELECT SUM(TotalIntereses) As Interes,MB3 ")
+SQL.ADD("from "~DBO~".OPERACIONES O ")
+SQL.ADD("where (TipoOp='VIMIND' or TipoOp='VIMINM') and ")
+SQL.ADD("FechaOp<'"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("Especie ='"~Dialogo.Especie1~"' and ")
+SQL.ADD("Vehiculo1 ='"~Dialogo.Vehiculo1~"' and ")
+SQL.ADD("Vehiculo2 ='"~Dialogo.Vehiculo2~"' and (NrOperacion2 IS NULL or NrOperacion2='') ")
+SQL.ADD("       AND NOT EXISTS ")
+SQL.ADD(" (SELECT TipoOp ")
+SQL.ADD("from "~DBO~".OPERACIONES O")
+SQL.ADD("where TipoOp='VIMINM' and FechaOp='"~IdxDate(Dialogo.Fecha1)~"' and ")
+SQL.ADD("       Especie ='"~Dialogo.Especie1~"' and ")
+SQL.ADD("Vehiculo1 ='"~Dialogo.Vehiculo1~"' and ")
+SQL.ADD("Vehiculo2 ='"~Dialogo.Vehiculo2~"' ) ")
+SQL.ADD("Group By MB3 ")
+
+Recorrer SQL
+   * Acumulo el Interes
+   ACN(Z11,VAL(Z11)+FBN['Interes']*IIF(FBN['MB3']=0,-1,1))   
+Proximo 
+
+IF Round(VAL(Z11),2)<>0
+    
+   Message('Obteniendo los Nros. de Operaciones a Generar .... ')          
+
+   *-- Z3 Nro. Minuta Diaria Y4: Importe de IVA
+   *-- Z7: MB3 Z8: Nro. Operacion Referencia Z9: MB3 de la Vinculada 
+
+   ACT(z3,GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',Dialogo.Vehiculo1)))
+   ACT(z8,GetNumerador(BuscarCampo('VEHICULOS','Alias1','Codigo',Dialogo.Vehiculo2)))
+
+   *-- Z7: MB3
+   ACT(Z7,IIF(VAL(Z11)>0,'1','0') )
+   ACT(Z9,IIF(EqStr(VAL(Z7),'0'),'1','0') )
+
+   IF VAL(Z11)<0
+      ACN(Z11,-VAL(Z11))
+   Else
+      ACT(AV1,Dialogo.Vehiculo2)
+      ACT(AV2,Dialogo.Vehiculo1)   
+   ENDIF
+
+   * Obtengo el Nro de Caso para la Minuta Vinculada AB6: Caso
+   (."CASOVINCU".)    
+
+   Message('Calculando los Impuestos para Operacion Directa ')
+
+   ACT(AV1,Dialogo.Vehiculo1)
+   ACT(AV2,Dialogo.Vehiculo2)
+
+   * Determina los Impuestos de Vinculadas
+   * Y5 : Imp.Ret.IVA  Y6 : Alicuota de IVA  Y12: Alicuota Percepcion  Y13: Importe  de Percepcion
+   * Y16: IvaNeto  Y20: MontoCapitalizable Y19:TTN
+   * I1: Tasa Impuesto Extr I2: Importe de Impuesto Ext
+   * W1: Tasa WH  W2: Importe de WH Directa  
+
+   (."IMPVIN".)
+
+
+   * Retencion Reforma Impositiva
+   (."VINREFIMPO".)
+
+   ACD(Z14,HABILES(Dialogo.Fecha1,1,'ARG',SI))
+   ACN(Z15,VAL(Z14)-Dialogo.Fecha1)
+
+   Message('Generando Minuta de Mensual de Capitalizacion de Interes .... ')          
+
+   SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ")
+   SQL.ADD("(TipoOp, NrOperacion,FechaOp,Vehiculo1,Vehiculo2,Especie, ")
+   SQL.ADD(" MB3,Cantidad,ImpGastos1,TotalIVA,TotalRetenciones,")
+   SQL.ADD(" NrOperacion3,Cliente1,ImpGastos2,")
+   SQL.ADD(" TotalImpuestos,Plazo,FechaVto,UsrInput,Operador,")
+   SQL.ADD(" TotalComisiones,TotalBrutoCli1,CB6,")
+   SQL.ADD(" RB6,TotalAux1,TotalAux3,")
+   SQL.ADD(" TasaPrecan,Comision,RB3,FechaCarga,")
+   SQL.ADD(" TasaImp1,ImporteImp,TotalGastos  ) ") 
+   SQL.ADD("Values")
+   SQL.ADD("('VIMINM','"~Val(z3)~"','"~IdxDate(Dialogo.Fecha1)~"','"~Dialogo.Vehiculo1~"','"~Dialogo.Vehiculo2~"','"~Dialogo.Especie1~"',")
+   SQL.ADD(" '"~Val(z7)~"', "~Fstr(VAL(Z11),0,2)~","~Fstr(VAL(Y6),0,2)~","~Fstr(VAL(Y4),0,2)~","~Fstr(VAL(y5),0,2)~", ")
+   SQL.ADD(" '"~Val(z8)~"','"~Dialogo.Vehiculo2~"',"~Fstr(VAL(Y12),0,2)~",")
+   SQL.ADD(" "~Fstr(VAL(Y13),0,2)~","~Fstr(VAL(Z15),0,0)~",")
+   SQL.ADD(" '"~IdxDate(VAL(Z14))~"','"~USUARIOACTIVO~"','"~USUARIOACTIVO~"',")
+   SQL.ADD(" "~Fstr(VAL(Y16),0,2)~","~Fstr(VAL(Y20),0,2)~",'1',")
+   SQL.ADD(" '"~Fstr(Val(AB6),0,0)~"',"~Fstr(Val(W1),0,2)~","~Fstr(Val(W2),0,2)~",")
+   SQL.ADD(" "~Fstr(Val(I1),0,2)~","~Fstr(Val(I2),0,2)~",'1','"~IdxDate(Fsys)~"',")
+   SQL.ADD(" "~Fstr(val(y43),0,2)~","~Fstr(Val(y42),0,2)~","~Fstr(Val(y41),0,2)~" ) ")
+   SQL.NEW
+   SQL.EXEC
+
+   *** Actualiza movimientos y limites ****
+   SQL.ActualizarMovimientos(Val(z3),SI)
+   SQL.EXEC
+
+   * Insert de Instancias: Recibe z3: Nro.Op.
+   (."ALTAINSSU".)
+
+   Message('Generando Minuta de Mensual Vinculada .... ')
+
+   ACT(AV1,Dialogo.Vehiculo2)
+   ACT(AV2,Dialogo.Vehiculo1)
+   ACT(Z7,VAL(Z9))
+
+*MessageBox('Antes de Impvin vinculada '~Fstr(val(y41),0,2))
+   (."IMPVIN".)
+
+
+   * Retencion Reforma Impositiva
+   (."VINREFIMPO".)
+
+*MessageBox('Despues de Impvin vinculada '~Fstr(val(y41),0,2))
+
+   Message('Generando Minuta de Mensual de Capitalizacion de Interes Vinculados.... ')          
+
+   SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ")
+   SQL.ADD("(TipoOp, NrOperacion,FechaOp,Vehiculo1,Vehiculo2,Especie, ")
+   SQL.ADD(" MB3,Cantidad,ImpGastos1,TotalIVA,TotalRetenciones,")
+   SQL.ADD(" NrOperacion3,Cliente1,ImpGastos2,")
+   SQL.ADD(" TotalImpuestos,Plazo,FechaVto,UsrInput,Operador,")
+   SQL.ADD(" TotalComisiones,TotalBrutoCli1,CB6,")
+   SQL.ADD(" RB6,TotalAux1,TotalAux3,")
+   SQL.ADD(" TasaPrecan,Comision,RB3,FechaCarga,") 
+   SQL.ADD(" TasaImp1,ImporteImp,TotalGastos  ) ") 
+   SQL.ADD("Values")
+   SQL.ADD("('VIMINM','"~Val(z8)~"','"~IdxDate(Dialogo.Fecha1)~"','"~Dialogo.Vehiculo2~"','"~Dialogo.Vehiculo1~"','"~Dialogo.Especie1~"',")
+   SQL.ADD(" '"~Val(z9)~"', "~Fstr(VAL(Z11),0,2)~","~Fstr(VAL(Y6),0,2)~","~Fstr(VAL(Y4),0,2)~","~Fstr(VAL(y5),0,2)~", ")
+   SQL.ADD(" '"~Val(z3)~"','"~Dialogo.Vehiculo1~"',"~Fstr(VAL(Y12),0,2)~",")
+   SQL.ADD(" "~Fstr(VAL(Y13),0,2)~","~Fstr(VAL(Z15),0,0)~",")
+   SQL.ADD(" '"~IdxDate(VAL(Z14))~"','"~USUARIOACTIVO~"','"~USUARIOACTIVO~"',")
+   SQL.ADD(" "~Fstr(VAL(Y16),0,2)~","~Fstr(VAL(Y20),0,2)~",'0',")
+   SQL.ADD(" '"~Fstr(Val(AB6),0,0)~"',"~Fstr(Val(W1),0,2)~","~Fstr(Val(W2),0,2)~",")
+   SQL.ADD(" "~Fstr(Val(I1),0,2)~","~Fstr(Val(I2),0,2)~",'1','"~IdxDate(Fsys)~"',")
+   SQL.ADD(" "~Fstr(val(y43),0,2)~","~Fstr(Val(y42),0,2)~","~Fstr(Val(y41),0,2)~" ) ")
+   SQL.NEW
+   SQL.EXEC
+
+   *** Actualiza movimientos y limites ****
+   SQL.ActualizarMovimientos(Val(z8),SI)
+   SQL.EXEC
+
+   * Insert de Instancias: Recibe z3: Nro.Op.
+   ACT(z3,VAL(Z8))
+   (."ALTAINSSU".)
+ 
+   * Actualizo las Minutas Diarias que Tome para generar la Mensual
+   * y grabo el nro. de Minuta Mensual Relacionada
+***    SQL.ADD("FechaOp>='"~IdxDate(VAL(Z10))~"' and ")
+   
+   ACT(Z10,SQL("SELECT NrOperacion3 FROM "~DBO~".OPERACIONES Where NrOperacion='"~VAL(Z3)~"' "))
+
+   SQL.ADD("UPDATE "~DBO~".OPERACIONES")
+   SQL.ADD(" Set NrOperacion2='"~VAL(Z3)~"' ")
+   SQL.ADD("where (TipoOp='VIMIND' or TipoOp='VIMINM') and FechaOp<'"~IdxDate(Dialogo.Fecha1)~"' and ")
+   SQL.ADD("Especie ='"~Dialogo.Especie1~"' and ")
+   SQL.ADD("Vehiculo1 ='"~Dialogo.Vehiculo1~"' and ")
+   SQL.ADD("Vehiculo2 ='"~Dialogo.Vehiculo2~"' and (NrOperacion2 IS NULL or NrOperacion2='')")
+   SQL.NEW
+
+   SQL.ADD("UPDATE "~DBO~".OPERACIONES")
+   SQL.ADD(" Set NrOperacion2='"~VAL(Z10)~"' ")
+   SQL.ADD("where (TipoOp='VIMIND' or TipoOp='VIMINM') and FechaOp<'"~IdxDate(Dialogo.Fecha1)~"' and ")
+   SQL.ADD("Especie ='"~Dialogo.Especie1~"' and ")
+   SQL.ADD("Vehiculo1 ='"~Dialogo.Vehiculo2~"' and ")
+   SQL.ADD("Vehiculo2 ='"~Dialogo.Vehiculo1~"' and (NrOperacion2 IS NULL or NrOperacion2='')")
+   SQL.NEW
+   SQL.EXEC
+EndIf

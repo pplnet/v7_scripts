@@ -1,0 +1,166 @@
+﻿ACT(ST:1, '')
+ACT(ST:1, 'SIA')
+***---Id Envio
+ACT(ST:1, Val(ST:1)~Pad(Copy(ItemLista(Val(LS:1), &k), 1, 7), 7))
+ACT(ST:1, Val(ST:1)~LPad(Fstr(Val(EV:1), 0, 0), 3))
+***---Fecha Proceso en Juliano
+ACD(FE:1, Fsys)
+(.'FECHAJULIA'.)
+ACT(FP:1, Val(FE:2))
+ACT(ST:1, Val(ST:1)~Val(FP:1))
+ACT(NP:1, LinkH(1, C:Val(FL:1)))
+ACT(EO:1, Copy(LinkH(1, EX:Val(FL:1)), 1, 6))
+ACT(SR:1, Copy(LinkH(1, EZ:Val(FL:1)), 1, 28))
+ACT(ES:1, LinkH(1, EI:Val(FL:1)))
+ACD(FT:1, FinDeMes(Dialogo.Fecha1,SI))
+IF CeldaVacia(ES:1)
+   ***---Si no tiene contraespecie, pongo a la especie como moneda
+   ACT(ES:1, Val(EO:1))
+ENDIF
+ACT(TO:1, Pad('SECS', 6))
+ACN(BD:2, 0)
+SQL.ADD(" Select Condicion, ICOrigen, ICInstante, ICSubInstante, ICConcepto ")
+SQL.ADD(" From "~DBO~".ICRELACIONES Where ConceptoFPA Like '%"~Trim(Val(LY:1))~"%' ")
+IF Val(QQ:1) = 0
+   SQL.ADD(" AND TipoOp = '"~Val(TO:1)~"' ")
+ELSE
+   SQL.ADD(" AND TipoOp Is Null ")
+ENDIF
+
+Recorrer SQL
+    ***---Determino Origen, Instante, SubInstante y Concepto
+    ACT(CD:1, fbn('Condicion'))
+    IF Val(QQ:1) = 1
+        ***---Comision
+        ACT(NR:1, SQL(" Select O.NrOperacion From "~DBO~".OPERACIONES O, "~DBO~".COMISIONES2 C Where O.NrOperacion = C.NrOperacion AND O.NrOperacion = '"~Val(NP:1)~"' "~Val(CD:1)~" "))
+    ENDIF
+    IF Val(QQ:1) = 2
+        ***---CER
+        ACT(NR:1, SQL(" Select NrOperacion From "~DBO~".OPERACIONES Where NrOperacion = '"~Val(NP:1)~"' "~Val(CD:1)~" "))
+    ENDIF
+    IF Val(QQ:1) = 0
+        ***---Resto
+        IF Incluido(Val(TO:1), 'DTSFF|DTSFFM|DTSFV|DTSFVM|DTSVV|DTSVVM')
+            ACT(FF:1, Var('FECHAMIGRA'))
+            ACT(NR:1, SQL(" Select NrOperacion From "~DBO~".OPERACIONES Where NrOperacion = '"~Val(NP:1)~"' "~Val(CD:1)~" '"~IdxDate(Fecha(Val(FF:1)))~"' "))
+        ELSE
+            ACT(NR:1, SQL(" Select NrOperacion From "~DBO~".OPERACIONES Where NrOperacion = '"~Val(NP:1)~"' "~Val(CD:1)~" "))
+        ENDIF
+    ENDIF
+    IF Eqstr(Val(NP:1), Val(NR:1))
+        ***---Esta es la relacion buscada
+        ACT(OG:1, fbn('ICOrigen'))
+        ACT(IT:1, fbn('ICInstante'))
+        ACT(SS:1, fbn('ICSubInstante'))
+        ACT(CP:1, Pad(Copy(BuscarCampo('ICCONCEPTOS','Descripcion','Codigo', fbn('ICConcepto')), 1, 25), 25))
+        ACN(BD:2, 1)
+        Break
+    ELSE
+        ***---No se encuentra relacion buscada
+        ACT(OG:1, '999')
+        ACT(IT:1, '99')
+        ACT(SS:1, '99')
+        ACT(CP:1, Pad('', 25))
+    ENDIF
+    ACN(BD:2, 1)
+Proximo
+IF Val(BD:2) = 0
+    ***---No encontro la relacion para el TipoOp
+    ACT(OG:1, '999')
+    ACT(IT:1, '99')
+    ACT(SS:1, '99')
+    ACT(CP:1, Pad('', 25))
+ENDIF
+ACN(ZZ:1, 0)
+IF Eqstr(Val(OG:1), '999')
+    ***---Movimiento sin relacion
+    ACN(ZZ:1, 1)
+    ACT(OG:1, Pad('', 3))
+    ACT(IT:1, Pad('', 2))
+    ACT(SS:1, Pad('', 2))
+ENDIF
+***---Tipo de Asiento, Origen, Instante, SubInstante
+ACT(ST:1, Val(ST:1)~Val(OG:1)~Val(IT:1)~Val(OG:1)~Val(IT:1)~Val(SS:1))
+***---Tipo de Operacion, Concepto
+ACT(ST:1, Val(ST:1)~Val(TO:1)~Val(CP:1))
+ACT(ET:1, Pad(LinkH(1, EC:Val(FL:1)), 10))
+ACT(VH:1, Pad(Copy(ItemLista(Val(LS:1), &k), 1, 10), 10))
+***---Entidad, NrOperacion, Vehiculo
+ACT(ST:1, Val(ST:1)~Val(ET:1)~Val(NP:1)~Val(VH:1))
+***---Valor1
+ACT(VL:1, Pad0(Fstr(BuscarCampo('VEHICULOS','Valor1','Codigo', ItemLista(Val(LS:1), &k)), 0, 0), 5))
+ACT(ST:1, Val(ST:1)~Val(VL:1))
+***---Descripcion de linea (Remark)
+ACT(DL:1, Pad('SIAF '~Val(OG:1)~' '~Val(IT:1), 30))
+***---Descripcion (Exa)
+ACT(DS:1, Val(CP:1))
+***---Tipo de Documento
+ACT(TD:1, Var('INTTIPODOC'))
+***---Descripcion de linea (Remark), Descripcion (Exa), Tipo de Documento
+ACT(ST:1, Val(ST:1)~Val(DL:1)~Val(DS:1)~Val(TD:1))
+ACD(FE:1, Val(FT:1))
+(.'FECHAJULIA'.)
+ACT(FC:1, Val(FE:2))
+***---Fecha Valor
+ACT(FV:1, Val(FC:1))
+ACT(ST:1, Val(ST:1)~Val(FC:1)~Val(FV:1))
+***---Importe
+ACT(IM:1, LPad(Fstr(Round(Val(CN:1)*Val(SG:1), 2), 0, 2), 15))
+ACT(IM:2, '')
+ACN(XX:1, 0)
+Repetir
+    SCN(XX:1, 1)
+    IF Val(XX:1) > 15
+        Break
+    ENDIF
+    IF Not Eqstr(Copy(Val(IM:1), Val(XX:1), 1), '.')
+        ACT(IM:2, Val(IM:2)~Copy(Val(IM:1), Val(XX:1), 1))
+    ENDIF
+Proximo
+ACT(IM:2, Lpad(Val(IM:2), 15))
+***---Cotizacion
+IF Not Eqstr(Val(EO:1), Var('MONELOCA'))
+    ACN(CT:1, CotizacionC(Val(EO:1),,,,Dialogo.Fecha1, 1, SI, Var('MONELOCA')))
+    ACN(CT:3, Val(CT:1))
+    ACT(CT:1, Lpad(Fstr(Round(Val(CT:1), 7), 0, 7), 15))
+    ACT(CT:2, '')
+    ACN(XX:1, 0)
+    Repetir
+        SCN(XX:1, 1)
+        IF Val(XX:1) > 15
+            Break
+        ENDIF
+        IF Not Eqstr(Copy(Val(CT:1), Val(XX:1), 1), '.')
+            ACT(CT:2, Val(CT:2)~Copy(Val(CT:1), Val(XX:1), 1))
+        ENDIF
+    Proximo
+    ACT(CT:2, Lpad(Val(CT:2), 15))
+ELSE
+    ACN(CT:3, 0)
+    ACT(CT:2, Lpad('', 15))
+ENDIF
+***---Moneda
+ACT(MO:1, Pad(Val(ES:1), 6))
+***---Unidades
+ACT(UN:1, Pad0('', 15))
+***---Unidad de Medida
+ACT(UM:1, Lpad('', 10))
+***---Importe, Cotizacion, Moneda, Unidades, Unidad de Medida
+ACT(ST:1, Val(ST:1)~Val(IM:2)~Val(CT:2)~Val(MO:1)~Val(UN:1)~Val(UM:1))
+***---Concepto FPA
+ACT(CF:1, Pad(Copy(Val(LY:1), 1, 40), 40))
+ACT(ST:1, Val(ST:1)~Val(CF:1))
+IF Incluido(val(TO:1), 'SECS|SEVS|SECT|SEVT')
+    ***---Especie Titulo
+    ACT(ST:1, Val(ST:1)~Pad(Val(EO:1), 28))
+ELSE
+    IF Incluido(val(TO:1), 'MMON|MMONM')
+        ***---Serie de ON
+        ACT(ST:1, Val(ST:1)~Pad(Val(SR:1), 28))
+    ELSE
+        ACT(ST:1, Val(ST:1)~Pad('', 28))
+    ENDIF
+ENDIF
+ACT(VH:2, Pad(Copy(Val(VH:1), BuscarCampo('VEHICULOS','Valor3','Codigo', Val(VH:1)), 1),1))
+***---Grabo Archivo
+(.'INTCONTAB4'.)

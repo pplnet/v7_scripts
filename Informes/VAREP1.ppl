@@ -1,0 +1,239 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1    : 'Fecha Desde' ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar una Fecha';NO;PriDeMes(FSys,SI)
+  Fecha2    : 'Fecha Hasta' ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar una Fecha';NO;FinDeMes(FSys,SI)
+  Vehiculo1 : 'Vehiculo'    ;;;;;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar un Vehiculo';NO;;;
+  Especie1  : 'Especie'     ;;;;;;Vacio(Dialogo.Especie1) O Incluido(Dialogo.Especie1, Descendientes('ESPECIES','TITULO'));'Especie Invalida';NO;;;;;;" Codigo In ("~Pipe2Comillas(Descendientes('ESPECIES','TITULO'))~") ";;;;;
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,11,B")
+
+SetFilaActual(2)
+ACT(A:FAC, 'Valuacion y Resultados de Securities por PEPS')
+SetFont(A:fac, 3)
+SetFilaActual(FAC+2)
+ACN(w1,FAC)
+ACN(FI:1, fac)
+ACT(a:FAC, 'Fecha Desde: '~Dialogo.Fecha1)
+ifa
+ACT(a:FAC, 'Fecha Hasta: '~Dialogo.Fecha2)
+ifa
+ACT(a:FAC, 'Vehiculo: '~Dialogo.Vehiculo1)
+ifa
+if NoVacio(Dialogo.Especie1)
+   ACT(a:FAC, 'Especie: '~Dialogo.Especie1)
+else
+   ACT(a:FAC, 'Especie: Todas')
+endif
+SetFont(A:Val(FI:1)..A:fac, 2)
+ifa
+ACN(BD:8, 0)
+ACT(ML:1, Var('MONELOCA'))
+***---Fecha Inicio del Periodo
+ACD(FE:1, BuscarCampo('VEHICULOS','Fecha1','Codigo', Dialogo.Vehiculo1))
+ACT(ID:1, Var('INDICEPEPS'))
+***---Obtengo Especies con Saldo
+SQL.ADD(" SELECT S.Saldo, S.Especie FROM "~DBO~".SALDOSDIA S ")
+SQL.ADD(" WHERE S.NrSaldo = 1")
+SQL.ADD(" AND S.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND S.Cliente = '"~Dialogo.Vehiculo1~"' ")
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and S.Especie   = '"~Dialogo.Especie1~"' ")
+ELSE
+   SQL.ADD(" AND S.Especie IN ("~Pipe2Comillas(Descendientes('ESPECIES','TITULO'))~") ")
+endif
+SQL.ADD(" AND S.Fecha IN (Select MAX(S1.Fecha) from "~DBO~".SALDOSDIA S1 ")
+SQL.ADD("                 WHERE (S1.Mercado = S.Mercado OR (S1.Mercado IS NULL AND S.Mercado IS NULL))")
+SQL.ADD("                 and S1.Cuenta = S.Cuenta ")
+SQL.ADD("                 and S1.Cliente = S.Cliente ")
+SQL.ADD("                 and S1.Especie = S.Especie ")
+SQL.ADD("                 and (S1.EnteCustodia = S.EnteCustodia OR (S1.EnteCustodia IS NULL AND S.EnteCustodia IS NULL) ) ")
+SQL.ADD("                 and S1.NrSaldo = S.NrSaldo ")
+SQL.ADD("                 and S1.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD(" Order By Especie ")
+Recorrer SQL
+    DFA
+    ACT(LS:1, Val(LS:1)~fbn('Especie')~'|')
+Proximo
+***---Proceso especies con saldo mas especies sin saldo como operaciones del periodo
+IF Elementos(Val(LS:1)) > 0
+    SQL.ADD(" SELECT S.Saldo, S.Especie FROM "~DBO~".SALDOSDIA S ")
+    SQL.ADD(" WHERE S.NrSaldo = 1")
+    SQL.ADD(" AND S.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+    SQL.ADD(" AND S.Cliente = '"~Dialogo.Vehiculo1~"' ")
+    SQL.ADD(" AND Round(S.Saldo, 0) <> 0 ")
+    if NoVacio(Dialogo.Especie1)
+       SQL.ADD(" and S.Especie   = '"~Dialogo.Especie1~"' ")
+    ELSE
+       SQL.ADD(" AND S.Especie IN ("~Pipe2Comillas(Descendientes('ESPECIES','TITULO'))~") ")
+    endif
+    SQL.ADD(" AND S.Especie IN ("~Pipe2Comillas(Val(LS:1))~") ")
+    SQL.ADD(" AND S.Fecha IN (Select MAX(S1.Fecha) from "~DBO~".SALDOSDIA S1 ")
+    SQL.ADD("                 WHERE (S1.Mercado = S.Mercado OR (S1.Mercado IS NULL AND S.Mercado IS NULL))")
+    SQL.ADD("                 and S1.Cuenta = S.Cuenta ")
+    SQL.ADD("                 and S1.Cliente = S.Cliente ")
+    SQL.ADD("                 and S1.Especie = S.Especie ")
+    SQL.ADD("                 and (S1.EnteCustodia = S.EnteCustodia OR (S1.EnteCustodia IS NULL AND S.EnteCustodia IS NULL) ) ")
+    SQL.ADD("                 and S1.NrSaldo = S.NrSaldo ")
+    SQL.ADD("                 and S1.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+
+    SQL.ADD(" UNION ")
+ENDIF
+
+SQL.ADD(" SELECT Distinct 0 Saldo, Especie FROM "~DBO~".OPERACIONES O ")
+SQL.ADD(" Where O.TipoOp IN ('SECS', 'SEVS','SECSV','SEVSV','SECT','SEVT','SECTV','SEVTV') ")
+IF NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie   = '"~Dialogo.Especie1~"' ")
+ELSE
+   SQL.ADD(" AND O.Especie IN ("~Pipe2Comillas(Descendientes('ESPECIES','TITULO'))~") ")
+ENDIF
+IF Elementos(Val(LS:1)) > 0
+    SQL.ADD(" AND O.Especie Not IN ("~Pipe2Comillas(Val(LS:1))~") ")
+ENDIF
+SQL.ADD(" and O.FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and O.FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" Order By Especie ")
+Recorrer SQL
+    Message('Saldo Inicial '~fbn('Especie'))
+    IF Val(BD:8) > 0
+        ***---Cambio de Especie - Actividad Periodo Especie Anterior
+        (.'VAREPS1'.)
+        SetFilaActual(fac+2)
+    ENDIF
+    ifa
+    ACN(SA:1, fbn('Saldo'))
+    ACN(SA:101, fbn('Saldo'))
+    ACT(A:fac, 'Especie/FCI:')
+    ACT(B:fac, fbn('Especie'))
+    ACT(C:fac, 'Pais Emision:')
+    ACT(D:fac, BuscarCampo('CLIENTES','PaisDir','Codigo', BuscarCampo('ESPECIES','Issuer','Codigo', fbn('Especie'))))
+    ACT(F:fac, 'Moneda:')
+    ACT(G:FAC, CotizaEn(fbn('Especie')))
+    SetFont(A:fac..H:fac, 2)
+    AgregarMarco(A:fac..O:fac, 0, 0, Exe('COLOR'))
+    SetFilaActual(fac+2)
+    ACT(A:fac, 'Posicion al '~Dialogo.Fecha1)
+    ACN(B:fac, fbn('Saldo'))
+    SetFont(A:fac..B:fac, 2)
+    ifa
+    ACT(A:fac, 'Fecha:')
+    ACT(B:fac, 'Movimiento')
+    ACT(C:fac, 'Operacion')
+    ACT(D:fac, 'VN/Cuotas')
+    ACT(E:fac, 'Precio')
+    ACT(F:fac, 'Valor')
+    ACT(G:fac, 'T.C.')
+    ACT(H:fac, 'Valor ARP')
+    SetFont(A:fac..H:fac, 2)
+    AgregarMarco(A:fac..O:fac, 0, 0, Exe('COLOR6'))
+    SQL.ADD(" Select FechaOp, NrOperacion, Cantidad, Precio1, Especie, Cotizacion1, ContraEspecie ")
+    SQL.ADD(" From "~DBO~".OPERACIONES ")
+    SQL.ADD(" where TipoOp IN ('SECS','SECSV','SECT','SECTV') ")
+    SQL.ADD(" and FechaOp < '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" and Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+    SQL.ADD(" and Especie = '"~fbn('Especie')~"' ")
+    ***---Para no levantar operaciones que no tienen saldo (porque no estan liquidadas)
+    SQL.ADD(" AND Especie IN ("~Pipe2Comillas(Val(LS:1))~") ")
+    SQL.ADD(" Order by FechaOp Desc, NrOperacion Desc ")
+    ACN(LI:100, Val(PO:100))
+    ACN(FI:2, 0)
+    ACN(SL:1, 0)
+    Recorrer SQL
+        ***---Operaciones que componen el saldo
+        DFA
+        SCN(FI:2, 1)
+        SCN(SL:1, fbn('Cantidad'))
+        ACD(AA:Val(FI:2), fbn('FechaOp'))
+        ACT(AB:Val(FI:2), 'Compra')
+        ***---Fecha de la suscripcion
+        ACD(FE:2, fbn('FechaOp'))
+        ACT(AC:Val(FI:2), fbn('NrOperacion'))
+        ACN(AE:Val(FI:2), fbn('Precio1'))
+        ***---ACT(CT:Val(FI:2), CotizaEn(fbn('Especie')))
+        ACT(CT:Val(FI:2), fbn('ContraEspecie'))
+        IF Not Eqstr(Val(CT:Val(FI:2)), Val(ML:1))
+            IF fbn('Cotizacion1') > 0
+                ACN(TC:1, fbn('Cotizacion1'))
+            ELSE
+                ***---ACN(TC:1, CotizacionC(Val(CT:Val(FI:2)),,,,fbn('FechaOp'),1,SI,Val(ML:1)))
+                ACN(TC:1, CotizacionBNA(Val(CT:Val(FI:2)), fbn('FechaOp')-1,1,NO,NO))
+            ENDIF
+        ELSE
+            ACN(TC:1, 1)
+        ENDIF
+        IF Val(SL:1) > Val(SA:1)
+            ***---Me pase del saldo a cubrir
+            ***---Saldo parcial de la operacion
+            ACN(SO:Val(FI:2), Val(SL:1) - Val(SA:1))
+            ACN(AD:Val(FI:2), fbn('Cantidad') - Val(SO:Val(FI:2)))
+            ACN(AF:Val(FI:2), Val(AD:Val(FI:2))*fbn('Precio1'))
+            ACN(AG:Val(FI:2), Val(TC:1))
+            ACN(AH:Val(FI:2), Val(AF:Val(FI:2))*Val(TC:1))
+            ACT(AL:Val(FI:2), 'Vendida Parcial')
+            Break
+        ELSE
+            ACN(SO:Val(FI:2), 0)
+            ACN(AD:Val(FI:2), fbn('Cantidad') - Val(SO:Val(FI:2)))
+            ACN(AF:Val(FI:2), Val(AD:Val(FI:2))*fbn('Precio1'))
+            ACN(AG:Val(FI:2), Val(TC:1))
+            ACN(AH:Val(FI:2), Val(AF:Val(FI:2))*Val(TC:1))
+            ACT(AL:Val(FI:2), 'Pendiente')
+        ENDIF
+        IF Val(SL:1) = Val(SA:1)
+            ***---Cubri todo el saldo utilizando el total de los V.N.
+            Break
+        ENDIF
+        SCN(PO:100,1)
+        SCN(JP:100, fbn('Cantidad')*fbn('Precio1'))
+    Proximo
+    ifa
+    Recorrer&k 1, Val(FI:2)
+        ***---Ordeno las operaciones del saldo al reves
+        ACD(A:fac+Val(FI:2)-&k, Val(AA:&k))
+        ACT(B:fac+Val(FI:2)-&k, Val(AB:&k))
+        ACT(C:fac+Val(FI:2)-&k, Val(AC:&k))
+        ACLO(C:fac+Val(FI:2)-&k, Val(AC:&k))
+        ACN(D:fac+Val(FI:2)-&k, Val(AD:&k))
+        ACN(E:fac+Val(FI:2)-&k, Val(AE:&k))
+        ACN(F:fac+Val(FI:2)-&k, Val(AF:&k))
+        ACN(G:fac+Val(FI:2)-&k, Val(AG:&k))
+        ACN(H:fac+Val(FI:2)-&k, Val(AH:&k))
+    Proximo
+    SetFont(A:fac..H:fac+Val(FI:2), 1)
+    FormatoCeldas(D:fac..D:fac+Val(FI:2), Exe('F2'))
+    FormatoCeldas(E:fac..E:fac+Val(FI:2), Exe('F8'))
+    FormatoCeldas(G:fac..G:fac+Val(FI:2), Exe('F8'))
+    ACT(ES:1, fbn('Especie'))
+    SCN(BD:8, 1)
+Proximo
+IF Val(BD:8) > 0
+    (.'VAREPS1'.)
+ENDIF
+
+ACO(1, 10)
+ACO(2, 10)
+ACO(3, 8)
+ACO(4, 10)
+ACO(6, 10)
+ACO(8, 10)
+ACO(10, 10)
+ACO(11, 14)
+ACO(12, 10)
+ACO(13, 10)
+ACO(14, 10)
+ACO(16, 12)
+ACO(17, 12)
+ACO(18, 13)
+SetFilaActual(fac+2)
+ACT(A:fac, 'Fin del Informe')
+SetFont(A:fac, 2)
+Impresion(1, 2)
+SetPrintFit(3, 75)
+LimitesVision(S:fac+2)

@@ -1,0 +1,824 @@
+﻿*#define PRUEBA
+MostrarCuadroDeMensajes
+CrearDialogo
+  Especie1 :'Especie'                 ;1;1;;;;NoVacio(Dialogo.Especie1) Y DesciendeDeEspecie(Dialogo.Especie1,'ACCION');'Especie Invalida';NO;;;;;;"Status='HAB' and Jerarquia Like '"~Jerarquia('ESPECIES','ACCION')~"%' ";
+  Fecha2   :'R.Date'                  ;1;2;;;;Dialogo.Fecha2 <= Fsys;'Record Date Invalida';NO;fsys
+  Fecha1   :'F.Pago'                  ;2;2;;;;Dialogo.Fecha1 >= Dialogo.Fecha2;'Fecha de Pago Invalida';NO;fsys
+  Mercado1 :'Mercado'                 ;2;1;;
+  Radio1   :'F.Pago|Efectivo|Acciones';4;1;;;;;;;0
+  Precio1  :'%'                       ;5;1;;;;Dialogo.Precio1>0;'El % debe ser positivo';NO;
+*  Especie2 :'Moneda Fraccion'         ;6;1;;  ;;NoVacio(Dialogo.Especie2);'Debe ingresar moneda Fraccion';NO;VAR('MONELOCA')IF(NoVacio(Dialogo.Especie1),QUERY(" Select MonedaEmision from "~DBO~".ESPECIES where Codigo='"~Dialogo.Especie1~"' "));'ARP|USD|';;;" Status='HAB' and Jerarquia Like '"~Jerarquia('ESPECIES','MONEDA')~"%' "
+* FJL 04/09/23 - Por Pedido de BIND se deja editable
+  Especie2 :'Moneda'                  ;6;1;;SI;;NoVacio(Dialogo.Especie2) Y SQL("Select COUNT(*) from "~DBO~".ESPECIES where Codigo='"~Dialogo.Especie2~"' and Status='HAB' and "~DBO~".EsTerminalEspecie(Codigo)=1 and "~DBO~".DesciendeDeEspecie(Codigo,'MONEDA')=1") = 1 ;'Debe ser moneda terminal y estar habilitada';NO;;IF(NoVacio(Dialogo.Especie1),QUERY(" Select MonedaEmision from "~DBO~".ESPECIES where Codigo='"~Dialogo.Especie1~"' "));;;;" Status='HAB' and Jerarquia Like '"~Jerarquia('ESPECIES','MONEDA')~"%' "
+  Precio2  :'Pre.Fracc.'              ;7;1;;;Dialogo.Radio1=1;[Dialogo.Radio1=0] o [Dialogo.Precio2>0];'El Precio de la Fraccion debe ser positivo';NO
+  Vehiculo1:'Vehiculo'                ;6;2;;;;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;VAR('VEHICULODE')
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+#ifdef PRUEBA
+  HojaVisible(SI)
+#endif 
+
+IF NoVacio(Dialogo.Mercado1)
+  IF SQL(" Select 1 From "~DBO~".TRANSACCIONES2 Where TipoTr2='PDIVID' and Especie='"~Dialogo.Especie1~"' and Fecha2='"~IdxDate(Dialogo.Fecha2)~"' and Vehiculo1='"~Dialogo.Vehiculo1~"' and Mercado1='"~Dialogo.Mercado1~"' ") = 1
+    Cancelar(' Pago de Dividendos ya Ejectutado para Especie '~Dialogo.Especie1~' Fecha '~Dialogo.Fecha2~' Vehiculo '~Dialogo.Vehiculo1~' Mercado '~Dialogo.Mercado1)
+  ENDIF
+ELSE
+  IF SQL(" Select 1 From "~DBO~".TRANSACCIONES2 Where TipoTr2='PDIVID' and Especie='"~Dialogo.Especie1~"' and Fecha2='"~IdxDate(Dialogo.Fecha2)~"' and Vehiculo1='"~Dialogo.Vehiculo1~"' ") = 1
+    Cancelar(' Pago de Dividendos ya Ejectutado para Especie '~Dialogo.Especie1~' Fecha '~Dialogo.Fecha2~' Vehiculo '~Dialogo.Vehiculo1)
+  ENDIF
+ENDIF
+
+ACN(SL:1, BuscarCampo('EstadosCustodia','NrSaldo','Codigo', VAR('SALLIBRECU')))
+* Saldos Libre
+ACT(sl:2, VAR('LIBREDISP'))
+* Saldos Bloquedos
+ACT(sl:3, VAR('BLOQUEOS'))
+* Saldos Parking
+ACT(sl:4, VAR('SALPARK'))
+** FJL 01/07/22 - Cuanta Vista para saldos bloquedas
+* Mercado Liquidacion Saldo Bloquedos
+ACT(ml:1, VAR('MERAUXLIQ'))
+
+ACN(CT:1, CotizacionC(Dialogo.Especie2,,,,Dialogo.Fecha2,1,SI,VAR('MONELOCA')))
+ACN(CT:2, CotizacionC(Dialogo.Especie1,,,,Dialogo.Fecha2,1,SI,Dialogo.Especie2))
+***---Obtengo datos de la especie
+SQL.ADD(" Select Nombre, ISIN, LaminaMinima ")
+SQL.ADD(" From "~DBO~".ESPECIES ")
+SQL.ADD(" Where Codigo = '"~Dialogo.Especie1~"' ")
+
+Recorrer SQL
+  DFA
+  ACT(NM:1, fbn('Nombre'))
+  ACT(AI:1, fbn('ISIN'))
+  ACN(LM:1, IIF(fbn('LaminaMinima')=0,1,fbn('LaminaMinima')))
+Proximo
+
+ACN(BJ:1, 0)
+ACN(BJ:2, 0)
+ACN(FI:1, 1)
+ACN(FI:2, 0)
+****---SALDOS Libre
+SQL.ADD("SELECT 0 Tipo, S.Cliente, S.Especie, S.Mercado, S.Cuenta, S.EnteCustodia, S.NrSaldo, C.RazonSocial, ")
+SQL.ADD("       S.CallPut, S.FechaEj, S.PrecioEj, S.Saldo, ")
+SQL.ADD("       C.TipoCliente, C.CondicionGan, C.CondicionIVA, C.Res3125 ")
+** FJL 21/05/21 - Cambio de criterio - Depedne de la cuenta
+*SQL.ADD(" FROM "~DBO~".SALDOSDIA S, "~DBO~".CLIENTES C ")
+SQL.ADD("  from "~DBO~".SALDOSDIA S, "~DBO~".CLIENTES C, "~DBO~".CUENTAS CU ")
+SQL.ADD(" WHERE S.Cliente      = C.Codigo ")
+SQL.ADD("   and C.Status       = 'HAB' ")   
+*SQL.ADD("   AND S.NrSaldo      = "~Fstr(Val(SL:1), 0, 0)~" ")
+SQL.ADD("   AND S.NrSaldo      in ("~Pipe2Comillas(Val(sl:2))~") ")
+SQL.ADD("   AND S.NrSaldo      Not in ("~Pipe2Comillas(Val(sl:4))~") ")
+SQL.ADD("   AND S.NrSaldo      <> 1 ")
+SQL.ADD("   AND S.Especie      ='"~Dialogo.Especie1~"' ")
+
+** FJL 21/05/21 - Cambio de criterio
+***---SQL.ADD(" AND S.EnteCustodia = '"~Dialogo.Vehiculo1~"'")
+**SQL.ADD(" AND S.Cliente = '"~Dialogo.Vehiculo1~"'")
+*SQL.ADD(" AND (('CLI' = C.CategDepositante AND '"~Dialogo.Vehiculo1~"' = S.EnteCustodia AND 'HAB' = C.Status) ")
+*SQL.ADD("       OR ('"~Dialogo.Vehiculo1~"' = C.Codigo AND 'HAB' = C.Status )) ")   
+SQL.ADD("   AND S.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and S.Cuenta       = CU.Codigo ")
+SQL.ADD("   and CU.Comitente   = '"~Dialogo.Vehiculo1~"' ")
+If NoVacio(Dialogo.Mercado1)
+  SQL.ADD(" AND S.Mercado      = '"~Dialogo.Mercado1~"' ")
+EndIf
+SQL.ADD("   AND S.Fecha IN (SELECT Max(S1.Fecha)  ")
+SQL.ADD("                     FROM "~DBO~".SALDOSDIA S1")
+SQL.ADD("                    WHERE S1.Cliente = S.Cliente ")
+SQL.ADD("                      AND S1.Especie = S.Especie ")
+SQL.ADD("                      AND S1.Mercado = S.Mercado ")
+SQL.ADD("                      AND S1.EnteCustodia = S.EnteCustodia ")
+SQL.ADD("                      AND S1.NrSaldo = S.NrSaldo  ")
+SQL.ADD("                      AND S1.Cuenta  = S.Cuenta   ")
+SQL.ADD("                      AND (S1.CallPut = S.CallPut or (S1.CallPut Is Null and S.CallPut Is Null))")
+SQL.ADD("                      AND (S1.FechaEj = S.FechaEj or (S1.FechaEj Is Null and S.FechaEj Is Null))")
+SQL.ADD("                      AND (S1.PrecioEj = S.PrecioEj or (S1.PrecioEj Is Null and S.PrecioEj Is Null))")
+SQL.ADD("                      AND S1.Fecha <= '"~IdxDate(Dialogo.Fecha2)~"') ")
+
+SQL.ADD("union all ")
+
+* Saldos Bloqueo
+SQL.ADD("SELECT 0 Tipo, S.Cliente, S.Especie, S.Mercado, S.Cuenta, S.EnteCustodia, S.NrSaldo, C.RazonSocial, ")
+SQL.ADD("       S.CallPut, S.FechaEj, S.PrecioEj, S.Saldo, ")
+SQL.ADD("       C.TipoCliente, C.CondicionGan, C.CondicionIVA, C.Res3125 ")
+SQL.ADD("  from "~DBO~".SALDOSDIA S, "~DBO~".CLIENTES C, "~DBO~".CUENTAS CU ")
+SQL.ADD(" WHERE S.Cliente      = C.Codigo ")
+SQL.ADD("   and C.Status       = 'HAB' ")   
+SQL.ADD("   AND S.NrSaldo      in ("~Pipe2Comillas(Val(sl:3))~") ")
+SQL.ADD("   AND S.NrSaldo      Not in ("~Pipe2Comillas(Val(sl:4))~") ")
+SQL.ADD("   AND S.Especie      ='"~Dialogo.Especie1~"' ")
+SQL.ADD("   AND S.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and S.Cuenta       = CU.Codigo ")
+SQL.ADD("   and CU.Comitente   = '"~Dialogo.Vehiculo1~"' ")
+If NoVacio(Dialogo.Mercado1)
+  SQL.ADD(" AND S.Mercado      = '"~Dialogo.Mercado1~"' ")
+EndIf
+SQL.ADD("   AND S.Fecha IN (SELECT Max(S1.Fecha)  ")
+SQL.ADD("                     FROM "~DBO~".SALDOSDIA S1")
+SQL.ADD("                    WHERE S1.Cliente = S.Cliente ")
+SQL.ADD("                      AND S1.Especie = S.Especie ")
+SQL.ADD("                      AND S1.Mercado = S.Mercado ")
+SQL.ADD("                      AND S1.EnteCustodia = S.EnteCustodia ")
+SQL.ADD("                      AND S1.NrSaldo = S.NrSaldo  ")
+SQL.ADD("                      AND S1.Cuenta  = S.Cuenta   ")
+SQL.ADD("                      AND (S1.CallPut = S.CallPut or (S1.CallPut Is Null and S.CallPut Is Null))")
+SQL.ADD("                      AND (S1.FechaEj = S.FechaEj or (S1.FechaEj Is Null and S.FechaEj Is Null))")
+SQL.ADD("                      AND (S1.PrecioEj = S.PrecioEj or (S1.PrecioEj Is Null and S.PrecioEj Is Null))")
+SQL.ADD("                      AND S1.Fecha <= '"~IdxDate(Dialogo.Fecha2)~"') ")
+
+SQL.ADD("union all ")
+
+* Saldos Parking
+SQL.ADD("SELECT 1 Tipo, S.Cliente, S.Especie, S.Mercado, S.Cuenta, S.EnteCustodia, S.NrSaldo, C.RazonSocial, ")
+SQL.ADD("       S.CallPut, S.FechaEj, S.PrecioEj, S.Saldo, ")
+SQL.ADD("       C.TipoCliente, C.CondicionGan, C.CondicionIVA, C.Res3125 ")
+SQL.ADD("  from "~DBO~".SALDOSDIA S, "~DBO~".CLIENTES C, "~DBO~".CUENTAS CU ")
+SQL.ADD(" WHERE S.Cliente      = C.Codigo ")
+SQL.ADD("   and C.Status       = 'HAB' ")   
+SQL.ADD("   AND S.NrSaldo      in ("~Pipe2Comillas(Val(sl:4))~") ")
+SQL.ADD("   AND S.Especie      ='"~Dialogo.Especie1~"' ")
+
+SQL.ADD("   AND S.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and S.Cuenta       = CU.Codigo ")
+SQL.ADD("   and CU.Comitente   = '"~Dialogo.Vehiculo1~"' ")
+If NoVacio(Dialogo.Mercado1)
+  SQL.ADD(" AND S.Mercado      = '"~Dialogo.Mercado1~"' ")
+EndIf
+SQL.ADD("   AND S.Fecha IN (SELECT Max(S1.Fecha)  ")
+SQL.ADD("                     FROM "~DBO~".SALDOSDIA S1")
+SQL.ADD("                    WHERE S1.Cliente = S.Cliente ")
+SQL.ADD("                      AND S1.Especie = S.Especie ")
+SQL.ADD("                      AND S1.Mercado = S.Mercado ")
+SQL.ADD("                      AND S1.EnteCustodia = S.EnteCustodia ")
+SQL.ADD("                      AND S1.NrSaldo = S.NrSaldo  ")
+SQL.ADD("                      AND S1.Cuenta  = S.Cuenta   ")
+SQL.ADD("                      AND (S1.CallPut = S.CallPut or (S1.CallPut Is Null and S.CallPut Is Null))")
+SQL.ADD("                      AND (S1.FechaEj = S.FechaEj or (S1.FechaEj Is Null and S.FechaEj Is Null))")
+SQL.ADD("                      AND (S1.PrecioEj = S.PrecioEj or (S1.PrecioEj Is Null and S.PrecioEj Is Null))")
+SQL.ADD("                      AND S1.Fecha <= '"~IdxDate(Dialogo.Fecha2)~"') ")
+
+SQL.ADD(" ORDER BY Tipo, S.NrSaldo, S.Cliente, S.Especie, S.CallPut, S.FechaEj, S.PrecioEj, S.EnteCustodia, S.Mercado, S.Cuenta ")
+
+watch(SQL.Batch)
+
+ACN(Z:1,0)
+Recorrer SQL
+#ifdef PRUEBA
+*     MessageBox('Prueba '~fbn('RazonSocial')~' - NrSaldo '~FStr(fbn('NrSaldo'))~' - Saldo '~PyC(fbn('Saldo'),1,2))
+#endif 
+
+  IF fbn('Saldo') <> 0
+     IF fbn('Tipo')=0
+       SCN(fi:2, 1)
+     else
+       #ifdef PRUEBA
+         * Tambien muestra saldos parking
+         SCN(fi:2, 1)
+       #endif 
+     endif
+     ACN(BJ:1, 1)
+     Message(fbn('RazonSocial'))
+     ACN(A:fac, 1)
+     ACT(b:fac, fbn('Mercado'))
+     ACT(c:fac, fbn('Cliente'))
+     ACT(d:fac, fbn('RazonSocial'))
+     ACT(e:fac, fbn('CallPut'))
+     ACD(f:fac, fbn('FechaEj'))
+     ACN(g:fac, fbn('PrecioEj'))
+     ACN(h:fac, fbn('Saldo'))
+     ACN(i:fac, Dialogo.Precio1)
+     ACT(M:fac, fbn('Cuenta'))
+     ACT(TC:fac, fbn('TipoCliente'))
+     ACT(R:fac, Dialogo.Especie2)
+     ACN(SD:fac, fbn('NrSaldo'))
+     ACN(u:fac, fbn('NrSaldo'))
+     ACN(v:fac, fbn('Tipo'))
+     ACN(w:fac, Val(u:fac))
+     if Val(u:fac)>201
+       ACN(w:fac, Val(u:fac)-100)
+     endif
+     ACT(x:fac, BuscarCampo('ESTADOSCUSTODIA','Descripcion','NrSaldo',Val(w:fac)))
+** FJL 01/07/22 - Cuanta Vista para saldos bloquedas
+     ACN(y:fac, 0)
+     if Incluido(Val(u:fac),Val(sl:3))
+       ACN(y:fac, 1)
+     endif
+     
+     If Dialogo.Radio1 = 0
+        * Efvo
+** FJL 28/08/23 - Issue EXTBIND 6032
+*        ACN(j:fac, Val(h:fac)*Val(i:fac)/100)
+        ACN(j:fac, 0)
+        ACN(k:fac, 0)
+        ACN(l:fac, 0)                                                                                                                                                                                        
+** FJL 19/11/21 - Se agrega monto en Moneda - Base para Comisiones
+** FJL 28/08/23 - Issue EXTBIND 6032
+*        ACN(t:fac, Val(j:fac)*Val(ct:2))
+        ACN(t:fac, Val(h:fac)*Val(i:fac)/100)
+     Else
+        * Acciones
+        ACN(j:fac, Val(h:fac)*Val(i:fac)/100 )
+        ACN(k:fac, Dialogo.Precio2)
+*        ACN(ln:fac, (((Val(j:fac)/Val(lm:1)) - (Val(j:fac) DIV Val(lm:1)))*Val(lm:1)))
+        ACN(lo:fac, Val(j:fac)/Val(lm:1) )
+        ACN(lp:fac, Trunc(Val(j:fac)/Val(lm:1),0) )
+        ACN(lq:fac, (Val(lo:fac) - Val(lp:fac))*Val(lm:1))
+        ACN(ln:fac, Val(lq:fac))
+        ACN(l:fac, Val(ln:fac)*Val(k:fac))
+        ACN(j:fac, Val(j:fac)-Val(ln:fac))
+        ACN(PR:fac, Dialogo.Precio2*Val(CT:1))
+** FJL 19/11/21 - Se agrega monto en Moneda - Base para Comisiones
+        ACN(t:fac, Val(j:fac)*Val(ct:2))
+     Endif
+** FJL 26/04/22 - Si es saldo de parking no tiene monto moneda
+     if Val(v:fac)=1
+        ACN(t:fac, 0)
+     endif
+
+     ***---Cuenta Moneda
+** FJL 24/05/21 - No utilizaba Mercado ni orden para buscar. Le agregue el orden
+**                El mercado habria de determinarlo cuando es CV.
+*     ACT(N:fac, SQL("Select Codigo from "~DBO~".CUENTAS where Cliente='"~fbn('Cliente')~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Dialogo.Especie2~"%') and Estado='HAB' and TipoCuenta In ('CC','CA')  "))
+
+** FJL 01/07/22 - Cuanta Vista para saldos bloquedas
+*     ACT(N:fac, SQL("Select TOP 1 Codigo from "~DBO~".CUENTAS where Cliente='"~fbn('Cliente')~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Dialogo.Especie2~"%') and Estado='HAB' and TipoCuenta In ('CC','CA') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+     if Val(y:fac)=1
+       * Saldo bloqueado
+       ACT(N:fac, SQL("Select TOP 1 Codigo from "~DBO~".CUENTAS where Cliente='"~fbn('Cliente')~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Dialogo.Especie2~"%') and Estado='HAB' and TipoCuenta In ('VIS') and Mercado='"~Val(ml:1)~"' ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+     else
+       ACT(N:fac, SQL("Select TOP 1 Codigo from "~DBO~".CUENTAS where Cliente='"~fbn('Cliente')~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Dialogo.Especie2~"%') and Estado='HAB' and TipoCuenta In ('CC','CA') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+     endif
+     ACN(Z:1,1)
+
+     if Not EqStr(Val(c:fac),Dialogo.Vehiculo1) y Val(t:fac)>0
+       If Dialogo.Radio1 = 0
+         * Efvo
+         ACT(ae:fac, 'DIVEFE')
+       else
+         * Acciones
+         ACT(ae:fac, 'DIVACC')
+       endif
+       ACN(ag:fac, COTIZACIONC(val(r:fac),,,,Dialogo.Fecha1,25,SI,VAR('MONELOCA')))     
+       ACN(ah:fac, iif(EqStr(Modo(val(r:fac),VAR('MONELOCA')),'INV'),1/val(ag:fac),val(ag:fac)))
+       
+** FJL 19/11/21 - Se agrega monto en Moneda - Base para Comisiones
+*       ACN(af:fac, MontoArancelC(,Val(c:fac),Dialogo.Especie1,Dialogo.Vehiculo1,Val(ae:fac),VAL(j:fac)*iif(Eqstr(VAR('LIQCOMMO'),'SI'),1,Val(ah:fac)),4,,,,'PDIVID',,,,,,,SI))
+*       ACN(aa:fac, MontoArancelC(,Val(c:fac),Dialogo.Especie1,Dialogo.Vehiculo1,Val(ae:fac),VAL(j:fac)*iif(Eqstr(VAR('LIQCOMMO'),'SI'),1,Val(ah:fac)),0,,,,'PDIVID',,,,,,,SI))
+       ACN(af:fac, MontoArancelC(,Val(c:fac),Dialogo.Especie1,Dialogo.Vehiculo1,Val(ae:fac),VAL(t:fac)*iif(Eqstr(VAR('LIQCOMMO'),'SI'),1,Val(ah:fac)),4,,,,'PDIVID',Val(b:fac),,,SI,SI,,SI))
+       ACN(aa:fac, MontoArancelC(,Val(c:fac),Dialogo.Especie1,Dialogo.Vehiculo1,Val(ae:fac),VAL(t:fac)*iif(Eqstr(VAR('LIQCOMMO'),'SI'),1,Val(ah:fac)),0,,,,'PDIVID',Val(b:fac),,,SI,SI,,SI))
+
+       * Cond   
+       ACT(ac:fac, BuscarCampo('CLIENTES','CondicionIVA','Codigo',Dialogo.Vehiculo1))
+       * Tasa iva  
+** FJL 17/03/25 - BIND Issue 7163 - No usar IVA General
+*       ACN(ad:fac, MontoImpuesto('IVARGCOM',Dialogo.Fecha1,3,Val(ac:fac))/100)
+       ACN(ad:fac, MontoImpuesto('IVACOMECA',Dialogo.Fecha1,3,Val(ac:fac))/100)
+
+       * IVA
+       ACN(ab:fac, Val(aa:fac)*Val(ad:fac))
+     else
+       ACN(aa:fac, 0)
+       ACN(ab:fac, 0)
+     endif  
+     
+     ** FJL 23/8/22 - Se agrgan Comisiones CV
+     if Val(t:fac)>0
+       if EqStr(Val(c:fac),Dialogo.Vehiculo1)
+         * Cartera Propia
+         ACN(bl:fac, 1)
+       else
+         * Terceros
+         ACN(bl:fac, 0)
+       endif
+       If Dialogo.Radio1 = 0
+         * Efvo
+         ACT(be:fac, 'CVDIVE')
+       else
+         * Acciones
+         ACT(be:fac, 'CVDIVA')
+       endif
+       ACN(bg:fac, COTIZACIONC(val(r:fac),,,,Dialogo.Fecha1,25,SI,VAR('MONELOCA')))     
+       ACN(bh:fac, iif(EqStr(Modo(val(r:fac),VAR('MONELOCA')),'INV'),1/val(bg:fac),val(bg:fac)))
+       
+       ACN(bf:fac, MontoArancelC(,Val(c:fac),Dialogo.Especie1,Dialogo.Vehiculo1,Val(be:fac),VAL(t:fac)*iif(Eqstr(VAR('LIQCOMMO'),'SI'),1,Val(bh:fac)),4,,,,'PDIVID',Val(b:fac),,,SI,SI,,SI))
+       ACN(ba:fac, MontoArancelC(,Val(c:fac),Dialogo.Especie1,Dialogo.Vehiculo1,Val(be:fac),VAL(t:fac)*iif(Eqstr(VAR('LIQCOMMO'),'SI'),1,Val(bh:fac)),0,,,,'PDIVID',Val(b:fac),,,SI,SI,,SI))
+
+       * Cond IVA
+       ACT(bc:fac, BuscarCampo('CLIENTES','CondicionIVA','Codigo',Dialogo.Vehiculo1))
+       * Tasa iva  
+** FJL 17/03/25 - BIND Issue 7163 - No usar IVA General
+*       ACN(bd:fac, MontoImpuesto('IVARGCOM',Dialogo.Fecha1,3,Val(bc:fac))/100)
+       ACN(bd:fac, MontoImpuesto('IVACOMECA',Dialogo.Fecha1,3,Val(bc:fac))/100)
+
+       * IVA
+       ACN(bb:fac, Val(ba:fac)*Val(bd:fac))
+     else
+       ACN(ba:fac, 0)
+       ACN(bb:fac, 0)
+     endif  
+  ELSE
+     DFA
+  ENDIF
+Proximo
+
+IF Val(BJ:1) = 1
+   If Dialogo.Radio1 = 0
+      * Efvo
+      CrearListBox ; 'Arial,8,';'  Pago de Dividendos: '~Val(NM:1)~' (ISIN: '~Val(AI:1)~') Pago en Efectivo. - SALDOS'
+        'Ok?'           ;a:Val(FI:1)..a:Val(fi:2);SI;;;30;CHECK ;
+        'Mercado'       ;b:Val(FI:1)..b:Val(fi:2);NO;;;60;STRING;;RGB(220,220,193)
+        'Cliente'       ;c:Val(FI:1)..c:Val(fi:2);NO;;;100;STRING;;RGB(220,220,193)
+        'Saldo'         ;h:Val(FI:1)..h:Val(fi:2);NO;;;100;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        '% x Accion'    ;i:Val(FI:1)..i:Val(fi:2);NO;;;100;NUMERO;'###.########';RGB(220,220,193)
+** FJL 28/08/23 - Issue EXTBIND 6032
+*        'Total Acciones';j:Val(FI:1)..j:Val(fi:2);NO;;;120;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Moneda'        ;r:Val(FI:1)..r:Val(fi:2);NO;;;60;STRING;;RGB(220,220,193)
+        'Total Moneda'  ;t:Val(FI:1)..t:Val(fi:2);NO;;;100;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Cta.Especie'   ;m:Val(FI:1)..m:Val(fi:2);NO;;;100;STRING;;RGB(220,220,193)
+        'Cta.Moneda'    ;n:Val(FI:1)..n:Val(fi:2);SI;Val(A:FLB)=0 o Incluido(Val(N:FLB), SQLSet(" Select Codigo From "~DBO~".CUENTAS Where Cliente='"~Val(C:FLB)~"' AND Estado='HAB' AND (Especies LIKE '%"~Dialogo.Especie2~"%' OR Especies LIKE '%MONEDA%')"));'Cuenta Moneda Invalida';100;TABLA;'CUENTAS';'Codigo';'Codigo; Nombre';" Cliente = '"~Val(C:FLB)~"' AND Estado = 'HAB' AND TipoCuenta IN ('CC','CA','VIS') AND (Especies Like '%MONEDA%' or Especies Like '%"~Dialogo.Especie2~"%')";RGB(255,255,193);
+        'Comision'      ;aa:Val(FI:1)..aa:Val(fi:2);NO;;;80;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'IVA Com'       ;ab:Val(FI:1)..ab:Val(fi:2);NO;;;80;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        ** FJL 23/8/22 - Se agrgan Comisiones CV
+        'Comision CV'   ;ba:Val(FI:1)..ba:Val(fi:2);NO;;;80;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'IVA Com CV'    ;bb:Val(FI:1)..bb:Val(fi:2);NO;;;80;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Estado'        ;x:Val(FI:1)..x:Val(fi:2);NO;;;100;STRING;;RGB(220,220,193)
+        #ifdef PRUEBA
+          'NrSaldo'       ;u:Val(FI:1)..u:Val(fi:2);NO;;;80;NUMERO;'###';RGB(220,220,193)
+          'Tipo'          ;v:Val(FI:1)..v:Val(fi:2);NO;;;80;NUMERO;'###';RGB(220,220,193)
+        #endif 
+      FinListBox
+   Else
+      * Acciones
+      CrearListBox ; 'Arial,8,';'  Pago de Dividendos: '~Val(NM:1)~' (ISIN: '~Val(AI:1)~') Pago en Acciones. - SALDOS'
+        'Ok?'           ;a:Val(FI:1)..a:Val(fi:2);SI;;;30;CHECK ;
+        'Mercado'       ;b:Val(FI:1)..b:Val(fi:2);NO;;;60;STRING;;RGB(220,220,193)
+        'Cliente'       ;c:Val(FI:1)..c:Val(fi:2);NO;;;100;STRING;;RGB(220,220,193)
+        'Saldo'         ;h:Val(FI:1)..h:Val(fi:2);NO;;;100;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        '%'             ;i:Val(FI:1)..i:Val(fi:2);NO;;;100;NUMERO;'###,###.#####';RGB(220,220,193)
+        'Total Acciones';j:Val(FI:1)..j:Val(fi:2);NO;;;100;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Pre.Fracc.'    ;k:Val(FI:1)..k:Val(fi:2);NO;;;100;NUMERO;'###.########';RGB(220,220,193)
+        'Tot.Fracc.'    ;l:Val(FI:1)..l:Val(fi:2);NO;;;100;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Moneda'        ;r:Val(FI:1)..r:Val(fi:2);NO;VAL(R:VAL(FI:1));;60;STRING;;RGB(220,220,193)
+        'Total Moneda'  ;t:Val(FI:1)..t:Val(fi:2);NO;;;100;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Cta.Especie'   ;m:Val(FI:1)..m:Val(fi:2);NO;;;100;STRING;;RGB(220,220,193)
+        'Cta.Moneda'    ;n:Val(FI:1)..n:Val(fi:2);SI;Val(A:FLB)=0 o Incluido(Val(N:FLB), SQLSet(" Select Codigo From "~DBO~".CUENTAS Where Cliente='"~Val(C:FLB)~"' AND Estado='HAB' AND (Especies LIKE '%"~Dialogo.Especie2~"%' OR Especies LIKE '%MONEDA%')"));'Cuenta Moneda Invalida';100;TABLA;'CUENTAS';'Codigo';'Codigo; Nombre';" Cliente = '"~Val(C:FLB)~"' AND Estado = 'HAB' AND TipoCuenta IN ('CC','CA','VIS') AND (Especies Like '%MONEDA%' or Especies Like '%"~Dialogo.Especie2~"%')";RGB(255,255,193);
+        'Comision'      ;aa:Val(FI:1)..aa:Val(fi:2);NO;;;80;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'IVA Com'       ;ab:Val(FI:1)..ab:Val(fi:2);NO;;;80;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        ** FJL 23/8/22 - Se agrgan Comisiones CV
+        'Comision CV'   ;ba:Val(FI:1)..ba:Val(fi:2);NO;;;80;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'IVA Com CV'    ;bb:Val(FI:1)..bb:Val(fi:2);NO;;;80;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Estado'        ;x:Val(FI:1)..x:Val(fi:2);NO;;;100;STRING;;RGB(220,220,193)
+        #ifdef PRUEBA
+          'NrSaldo'       ;u:Val(FI:1)..u:Val(fi:2);NO;;;80;NUMERO;'###';RGB(220,220,193)
+          'Tipo'          ;v:Val(FI:1)..v:Val(fi:2);NO;;;80;NUMERO;'###';RGB(220,220,193)
+        #endif 
+      FinListBox
+   Endif
+
+   If NOT OK
+      MessageBox('Pago de dividendos de SALDOS cancelado')
+   ELSE
+#ifdef PRUEBA
+  MessageBox('Despues ListBox 1')
+#else
+
+      Recorrer&k Val(FI:1), fac
+        IF Val(A:&k) = 1
+           ***---Genero PDIVID de Saldos
+           ACT(XX:1, GetNumerador(45))
+           SQL.ADD(" INSERT INTO "~DBO~".TRANSACCIONES2 ")
+           SQL.ADD("(TipoTr2, NrTrans, Cliente1, Especie, ")
+           SQL.ADD(" Fecha1, Fecha2, Especie2, ")
+           SQL.ADD(" Cantidad1, Cantidad2, Cantidad3, ")
+           SQL.ADD(" Precio1, Precio2, RB1, ")
+           SQL.ADD(" RB10, Mercado1, Numerador, ")
+           SQL.ADD(" Cuenta1, Cuenta2, Cupon1, ")
+           SQL.ADD(" Vehiculo1, FechaCargaSys, FechaCarga, ")
+           SQL.ADD(" Cantidad4, Cliente2, ")
+* FJL 26/08/21 - Comisiones Eventos Corporativos
+           SQL.ADD(" Cantidad10, Cantidad11, ")
+* FJL 18/12/21 - Se guarda Monto Moneda (Base Comisiones)
+           SQL.ADD(" Cantidad9, ")
+* FJL 24/08/22 - se agregan Comisiones e IVA CV
+           if Val(bl:&k)=1
+             * Cartera Propia
+             SQL.ADD(" Cantidad12, Cantidad13, ")
+           else
+             * Terceros
+             SQL.ADD(" Cantidad14, Cantidad15, ")
+           endif
+* FJL 01/07/22 - Cuanta Vista para saldos bloquedas
+*                En CB3 se guarda si es bloqueado
+           SQL.ADD(" CB3, ")
+* FJL 26/04/22 - Se guarda NrSaldo para usar en los movimientos
+           SQL.ADD(" Cambio5, ")
+           SQL.ADD("RB2, CB1) ")
+           SQL.ADD(" VALUES ")
+           SQL.ADD("('PDIVID', '"~Val(XX:1)~"', '"~Val(c:&k)~"', '"~Dialogo.Especie1~"', ")
+           SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', '"~IdxDate(Dialogo.Fecha2)~"', '"~Dialogo.Especie2~"', ")
+           SQL.ADD(" "~FStr(Val(h:&k),0,4)~", "~FStr(Val(j:&k),0,4)~", "~FStr(Val(l:&k),0,4)~", ")
+           SQL.ADD(" "~FStr(Dialogo.Precio1,0,6)~", "~FStr(Val(PR:&k),0,6)~", '1', ")
+           SQL.ADD(" "~Fstr(Dialogo.Radio1, 0, 0)~", '"~Val(b:&k)~"', 45, ")
+           SQL.ADD(" '"~Val(m:&k)~"', '"~Val(n:&k)~"', '0', ")
+           SQL.ADD(" '"~Dialogo.Vehiculo1~"', '"~IdxDate(Fsys)~"', "~SQLAhora~", ")
+           SQL.ADD(" "~FStr(Val(SD:&k),0,0)~", '"~Val(O:&k)~"', ")
+* FJL 26/08/21 - Comisiones Eventos Corporativos
+           SQL.ADD(" "~FStr(Val(aa:&k),0,2)~", "~FStr(Val(ab:&k),0,2)~", ")
+* FJL 18/12/21 - Se guarda Monto Moneda (Base Comisiones)
+           SQL.ADD(" "~FStr(Val(t:&k),0,2)~", ")
+* FJL 24/08/22 - se agregan Comisiones e IVA CV
+           SQL.ADD(" "~FStr(Val(ba:&k),0,2)~", "~FStr(Val(bb:&k),0,2)~", ")
+* FJL 01/07/22 - Cuanta Vista para saldos bloquedas
+*                En CB3 se guarda si es bloqueado
+           SQL.ADD(" "~FStr(Val(y:&k),0,0)~", ")
+* FJL 26/04/22 - Se guarda NrSaldo para usar en los movimientos
+           SQL.ADD(" "~FStr(Val(u:&k),0,0)~", ")
+           SQL.ADD(" '0', '0') ")
+           SQL.NEW
+           SQL.EXEC
+           SQL.ActualizarMovimientosT2(Val(XX:1),SI,NO,NO,NO)   
+           SQL.EXEC
+           SQL.ADD(" INSERT INTO "~DBO~".OPERACIONESBITS ") 
+           SQL.ADD(" (NrOperacion, NrBit, Valor) ")
+           SQL.ADD(" VALUES ")
+           SQL.ADD(" ('"~Val(XX:1)~"',51, '1') ")
+           SQL.NEW
+           SQL.EXEC
+           ***---IF Eqstr(Val(C:&k), Dialogo.Vehiculo1) Y Val(BJ:2) = 0 Y Dialogo.Radio1 = 1
+** FJL - Se saca la parte de Posiciones para STD
+           IF Eqstr(Val(C:&k), Dialogo.Vehiculo1) Y Not Eqstr(Val(B:&k), Val(B:&k-1)) y NO
+              ***---Corto Posiciones a VTO
+              ACN(BJ:2, 1)
+              SQL.ADD(" Select Cliente, CantidadFin, Sector as Mercado, 'Spot' Posicion, Fecha, NrSaldo, Book ")
+              SQL.ADD(" From "~DBO~".POSICIONES P ")
+              SQL.ADD(" Where Especie = '"~Dialogo.Especie1~"' ")
+              SQL.ADD(" AND Cliente = '"~Dialogo.Vehiculo1~"' ")
+              SQL.ADD(" AND Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+              SQL.ADD(" and NrSaldo = 111 ")
+              SQL.ADD(" AND Sector = '"~Val(B:&k)~"' ")
+              SQL.ADD(" AND Fecha = (Select Max(Fecha) From "~DBO~".POSICIONES ")
+              SQL.ADD("               Where P.Especie = P2.Especie ")
+              SQL.ADD("               AND P.Cliente = P2.Cliente ")
+              SQL.ADD("               AND P.Vehiculo = P2.Vehiculo ")
+              SQL.ADD("               AND P.NrSaldo = P2.NrSaldo ")
+              SQL.ADD("               AND P.Sector = P2.Sector ")
+              SQL.ADD("               AND P.Book = P2.Book ")
+              SQL.ADD("               AND Fecha <= '"~IdxDate(Dialogo.Fecha2)~"') ")
+              Watch(SQL.BATCH)
+              Recorrer SQL
+                IF fbn('CantidadFin') <> 0
+                   ACN(BJ:1, 1)
+                   ACN(A:fac, 1)
+                   ACT(b:fac, fbn('Mercado'))
+                   ACT(c:fac, fbn('Cliente'))
+                   ACD(D:fac, fbn('Fecha'))
+                   ACT(BK:fac, fbn('Book'))
+                   ACT(E:fac, fbn('Posicion'))
+                   ACN(h:fac, fbn('CantidadFin'))
+                   ACN(i:fac, Dialogo.Precio1)
+                   ACT(R:fac, Dialogo.Especie2)
+                   ACN(SD:fac, fbn('NrSaldo'))
+                   If Dialogo.Radio1 = 0
+                       ACN(j:fac, Val(h:fac)*Val(i:fac)/100)
+                       ACN(k:fac, 0)
+                       ACN(l:fac, 0)                                                                                                                                                                                        
+                   Else
+                      ACN(j:fac, Val(h:fac)*Val(i:fac)/100 )
+                      ACN(k:fac, Dialogo.Precio2)
+                      ACN(ln:fac, (((Val(j:fac)/Val(lm:1)) - (Val(j:fac) DIV Val(lm:1)))*Val(lm:1)))
+                      ACN(l:fac, Val(ln:fac)*Val(k:fac))
+                      ACN(j:fac, Val(j:fac)-Val(ln:fac))
+                   Endif
+                   ***---Genero PDIVID de POSICIONES
+                   ACT(XX:1, GetNumerador(45))
+                   SQL.ADD(" INSERT INTO "~DBO~".TRANSACCIONES2 ")
+                   SQL.ADD("(TipoTr2, NrTrans, Cliente1, Especie, ")
+                   SQL.ADD(" Fecha1, Fecha2, Especie2, ")
+                   SQL.ADD(" Cantidad1, Cantidad2, Cantidad3, ")
+                   SQL.ADD(" Precio1, Precio2, RB1, ")
+                   SQL.ADD(" RB10, Mercado1, Numerador, ")
+                   SQL.ADD(" Cuenta1, Cuenta2, Book1, Cupon1, ")
+                   SQL.ADD(" Vehiculo1, FechaCargaSys, FechaCarga, ")
+                   SQL.ADD(" Cantidad4, Cliente2, ")
+* FJL 26/08/21 - Comisiones Eventos Corporativos
+                   SQL.ADD(" Cantidad10, Cantidad11, ")
+                   SQL.ADD("RB2, CB1) ")
+                   SQL.ADD(" VALUES ")
+                   SQL.ADD("('PDIVID', '"~Val(XX:1)~"', '"~Val(c:fac)~"', '"~Dialogo.Especie1~"', ")
+                   SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', '"~IdxDate(Dialogo.Fecha2)~"', '"~Dialogo.Especie2~"', ")
+                   SQL.ADD(" "~FStr(Val(h:fac),0,4)~", "~FStr(Val(j:fac),0,4)~", "~FStr(Val(l:fac),0,4)~", ")
+                   SQL.ADD(" "~FStr(Dialogo.Precio1,0,6)~", "~FStr(Dialogo.Precio2*Val(CT:1),0,6)~", '0', ")
+                   SQL.ADD(" "~Fstr(Dialogo.Radio1, 0, 0)~", '"~Val(b:fac)~"', 45, ")
+                   SQL.ADD(" '"~Val(m:fac)~"', '"~Val(n:fac)~"', '"~Val(BK:fac)~"', '0', ")
+                   SQL.ADD(" '"~Dialogo.Vehiculo1~"', '"~IdxDate(Fsys)~"', "~SQLAhora~", ")
+                   SQL.ADD(" "~FStr(Val(SD:fac),0,0)~", '"~Dialogo.Vehiculo1~"', ")
+* FJL 26/08/21 - Comisiones Eventos Corporativos
+                   SQL.ADD(" "~FStr(Val(aa:fac),0,0)~", "~FStr(Val(ab:fac),0,0)~", ")
+                   SQL.ADD(" '0', ")
+                   If Dialogo.Radio1 = 0
+                      SQL.ADD(" '1' ")
+                   Else
+                      SQL.ADD(" '0' ")
+                   EndIf
+                   SQL.ADD(" ) ")
+                   SQL.NEW
+                   SQL.EXEC
+                   SQL.ActualizarMovimientosT2(Val(XX:1),NO,NO,NO,SI)   
+                   SQL.EXEC
+                   SQL.ADD(" INSERT INTO "~DBO~".OPERACIONESBITS ") 
+                   SQL.ADD(" (NrOperacion, NrBit, Valor) ")
+                   SQL.ADD(" VALUES ")
+                   SQL.ADD(" ('"~Val(XX:1)~"',51, '1') ")
+                   SQL.NEW
+                   SQL.EXEC
+                ELSE
+                   DFA
+                ENDIF
+              Proximo
+           ENDIF
+* Hasta aca se saco
+        ENDIF
+      Proximo
+#endif 
+   Endif
+ENDIF
+
+* FJL 22/01/23 - Saco lo de Pendientes para mostrar en Demo
+IF NO
+ACN(FI:1, fac+1)
+ACN(BJ:1, 0)
+
+***---MOVPENDIENTES
+SQL.ADD("SELECT M.Cliente, M.Especie, M.Mercado, M.Cuenta, M.EnteCustodia, SUM(M.Cantidad) Cantidad, C.RazonSocial, ")
+SQL.ADD("       M.CallPut,  M.PrecioEj, M.Book, M.FechaEj, M.NrSaldo, SUM(((M.Cantidad*"~Dialogo.Precio1~")/100)) Total, ")
+SQL.ADD("       C.TipoCliente, C.CondicionGan, C.CondicionIVA, C.Res3125, O.TipoOp Tipo ")
+** FJL 24/05/21 - Cambio de criterio - Depedne de la cuenta
+*SQL.ADD("  FROM "~DBO~".MOVPENDIENTES M, "~DBO~".CLIENTES C, "~DBO~".OPERACIONES O ")
+SQL.ADD("  FROM "~DBO~".MOVPENDIENTES M, "~DBO~".CLIENTES C, "~DBO~".OPERACIONES O, "~DBO~".CUENTAS CU ")
+SQL.ADD(" WHERE M.Cliente      = C.Codigo ")
+SQL.ADD("   and C.Status       = 'HAB' ")   
+SQL.ADD("   AND M.NrSaldo      = 1 ")
+SQL.ADD("   AND M.Especie      ='"~Dialogo.Especie1~"' ")
+SQL.ADD("   AND M.NrOperacion  = O.NrOperacion ")
+** FJL 24/05/21 - Cambio de criterio
+***---SQL.ADD(" AND M.EnteCustodia = '"~Dialogo.Vehiculo1~"'")
+*SQL.ADD("   AND M.Cliente = '"~Dialogo.Vehiculo1~"'")
+*SQL.ADD("   AND (('CLI' = C.CategDepositante AND '"~Dialogo.Vehiculo1~"' = M.EnteCustodia AND 'HAB' = C.Status) ")
+*SQL.ADD("        OR ('"~Dialogo.Vehiculo1~"' = C.Codigo AND 'HAB' = C.Status )) ")
+SQL.ADD("   AND M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and M.Cuenta       = CU.Codigo ")
+SQL.ADD("   and CU.Comitente   = '"~Dialogo.Vehiculo1~"' ")
+If NoVacio(Dialogo.Mercado1)
+  SQL.ADD(" AND M.Mercado      = '"~Dialogo.Mercado1~"'")
+EndIf
+
+SQL.ADD("   AND M.FechaMov    <= '"~IdxDate(Dialogo.Fecha2)~"'  ")
+SQL.ADD(" GROUP BY M.Cliente, M.Especie, M.Mercado, M.Cuenta, M.EnteCustodia, C.RazonSocial, M.CallPut, M.FechaEj, M.PrecioEj, M.Book,  M.NrSaldo, ")
+SQL.ADD("          C.TipoCliente, C.CondicionGan, C.CondicionIVA, C.Res3125, O.TipoOp ")
+
+SQL.ADD(" Union ")
+
+SQL.ADD("SELECT M.Cliente, M.Especie, M.Mercado, M.Cuenta, M.EnteCustodia, SUM(M.Cantidad) Cantidad, C.RazonSocial, ")
+SQL.ADD("       M.CallPut, M.PrecioEj, M.Book, M.FechaEj, M.NrSaldo, SUM(((M.Cantidad*"~Dialogo.Precio1~")/100)) Total, ")
+SQL.ADD("       C.TipoCliente, C.CondicionGan, C.CondicionIVA, C.Res3125, T.TipoTr2 Tipo ")
+** FJL 24/05/21 - Cambio de criterio - Depedne de la cuenta
+*SQL.ADD(" FROM "~DBO~".MOVPENDIENTES M, "~DBO~".CLIENTES C, "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD("  FROM "~DBO~".MOVPENDIENTES M, "~DBO~".CLIENTES C, "~DBO~".TRANSACCIONES2 T, "~DBO~".CUENTAS CU ")
+SQL.ADD(" WHERE M.Cliente      = C.Codigo ")
+SQL.ADD("   and C.Status       = 'HAB' ")   
+SQL.ADD("   AND M.NrSaldo      = "~Fstr(Val(SL:1), 0, 0)~" ")
+SQL.ADD("   AND M.Especie      = '"~Dialogo.Especie1~"' ")
+SQL.ADD("   AND M.NrOperacion  = T.NrTrans ")
+SQL.ADD("   AND (T.TipoTr2 not in ('PDIVID','DTP','RTP') or (CB6 = '0' and  T.TipoTr2 in ('DTP','RTP'))) ")
+** FJL 24/05/21 - Cambio de criterio
+***---SQL.ADD(" AND M.EnteCustodia = '"~Dialogo.Vehiculo1~"'")
+*SQL.ADD("   AND M.Cliente = '"~Dialogo.Vehiculo1~"'")
+*SQL.ADD(" AND (('CLI' = C.CategDepositante AND '"~Dialogo.Vehiculo1~"' = M.EnteCustodia AND 'HAB' = C.Status) ")
+*SQL.ADD("       OR ('"~Dialogo.Vehiculo1~"' = C.Codigo AND 'HAB' = C.Status )) ")
+SQL.ADD("   AND M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and M.Cuenta       = CU.Codigo ")
+SQL.ADD("   and CU.Comitente   = '"~Dialogo.Vehiculo1~"' ")
+If NoVacio(Dialogo.Mercado1)
+  SQL.ADD(" AND M.Mercado      = '"~Dialogo.Mercado1~"'")
+EndIf
+SQL.ADD("   AND M.FechaMov    <= '"~IdxDate(Dialogo.Fecha2)~"'  ")
+SQL.ADD(" GROUP BY M.Cliente, M.Especie, M.Mercado, M.Cuenta, M.EnteCustodia, C.RazonSocial, M.CallPut, M.FechaEj, M.PrecioEj, M.Book, M.NrSaldo, ")
+SQL.ADD("          C.TipoCliente, C.CondicionGan, C.CondicionIVA, C.Res3125, T.TipoTr2  ")
+
+SQL.ADD(" Union ")
+
+SQL.ADD("SELECT T.Cliente1 Cliente, T.Especie, T.Mercado1 Mercado, T.Cuenta1 Cuenta, '' EnteCustodia, T.Cantidad1 Cantidad, C.RazonSocial, ")
+SQL.ADD("       '' CallPut, '' PrecioEj, '' Book, '' FechaEj, '101' NrSaldo, ((T.Cantidad1*"~Dialogo.Precio1~")/100) Total, ")
+SQL.ADD("       C.TipoCliente, C.CondicionGan, C.CondicionIVA, C.Res3125, T.TipoTr2 Tipo  ")
+** FJL 24/05/21 - Cambio de criterio - Depedne de la cuenta
+*SQL.ADD(" FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C ")
+SQL.ADD("  FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".CUENTAS CU ")
+SQL.ADD(" WHERE T.Cliente1     = C.Codigo ")
+SQL.ADD("   and C.Status       = 'HAB' ")   
+SQL.ADD("   AND T.Especie      = '"~Dialogo.Especie1~"' ")
+SQL.ADD("   and T.TipoTr2      in ('DTP','RTP') ")
+SQL.ADD("   AND T.CB6          = '1' ")
+SQL.ADD("   AND T.CB9          <> 1 ")
+** FJL 24/05/21 - Cambio de criterio
+*SQL.ADD("   AND T.Cliente1     = '"~Dialogo.Vehiculo1~"'")
+*SQL.ADD("   AND (('CLI' = C.CategDepositante AND 'HAB' = C.Status) ")
+*SQL.ADD("       OR ('"~Dialogo.Vehiculo1~"' = C.Codigo AND 'HAB' = C.Status )) ")
+SQL.ADD("   and T.Cuenta1      = CU.Codigo ")
+SQL.ADD("   and CU.Comitente   = '"~Dialogo.Vehiculo1~"' ")
+
+If NoVacio(Dialogo.Mercado1)
+  SQL.ADD(" AND T.Mercado1     = '"~Dialogo.Mercado1~"'")
+EndIf
+SQL.ADD("   AND T.Fecha1      <= '"~IdxDate(Dialogo.Fecha2)~"'  ")
+* FJL 25/08/21 - Daba error SQL
+*SQL.ADD(" ORDER BY Cliente, Especie, Mercado, Cuenta ")
+SQL.ADD(" ORDER BY 1,2,3,4 ")
+ACN(Z:3,0)
+Recorrer SQL
+  ACN(Z:4,SQL(" select 1 from "~DBO~".TRANSACCIONES2 where TipoTr2='PDIVID' and Especie='"~fbn('Especie')~"' and Fecha1='"~IdxDate(Dialogo.Fecha1)~"' and Fecha2='"~IdxDate(Dialogo.Fecha2)~"' and Cuenta1='"~fbn('Cuenta')~"' and Especie2='"~Dialogo.Especie2~"' and Cantidad1="~FStr(fbn('Cantidad'),0,4)~" and RB1='2' and Vehiculo1='"~Dialogo.Vehiculo1~"' "))
+  If Val(Z:4)=1
+     DFA
+  Else
+     ACN(BJ:1, 1)
+     ACN(A:fac, 1)
+     ACT(b:fac, fbn('Mercado'))
+     ACT(c:fac, fbn('Cliente'))
+     ACT(d:fac, fbn('RazonSocial'))
+     ACT(e:fac, fbn('CallPut'))
+     ACD(f:fac, fbn('FechaEj'))
+     ACN(g:fac, fbn('PrecioEj'))
+     If Not EqStr(fbn('Tipo'),'DTP')
+        ACN(h:fac, -fbn('Cantidad'))
+        ACN(j:fac, -fbn('Total'))
+     Else
+        ACN(h:fac, fbn('Cantidad'))
+        ACN(j:fac, fbn('Total'))
+     EndIf
+     * ACD(Q:fac, fbn('FechaMov'))
+     ACN(i:fac, Dialogo.Precio1)
+     ACT(M:fac, fbn('Cuenta'))
+     ACT(BK:fac, fbn('Book'))
+     ACT(TC:fac, fbn('TipoCliente'))
+     ACT(R:fac, Dialogo.Especie2)
+     ACN(SD:fac, fbn('NrSaldo'))
+     If Dialogo.Radio1 = 0
+        * Efvo
+*        ACN(j:fac, Val(h:fac)*Val(i:fac)/100)
+        ACN(k:fac, 0)
+        ACN(l:fac, 0)                                                                                                                                                                                        
+        ACN(t:fac, Val(h:fac)*Val(i:fac)/100)
+     Else
+        * Acciones
+*        ACN(j:fac, Val(h:fac)*Val(i:fac)/100 )
+        ACN(k:fac, Dialogo.Precio2)
+        ACN(ln:fac, (((Val(j:fac)/Val(lm:1)) - (Val(j:fac) DIV Val(lm:1)))*Val(lm:1)))
+        ACN(l:fac, Val(ln:fac)*Val(k:fac))
+        ACN(j:fac, Val(j:fac)-Val(ln:fac))
+        ACN(PR:fac, Dialogo.Precio2*Val(CT:1))
+** FJL 19/11/21 - Se agrega monto en Moneda - Base para Comisiones
+        ACN(t:fac, Val(j:fac)*Val(ct:2))
+     Endif
+     ***---Cuenta Moneda
+** FJL 24/05/21 - No utilizaba Mercado ni orden para buscar. Le agregue el orden
+**                El mercado habria de determinarlo cuando es CV.
+*     ACT(N:fac, SQL("Select Codigo from "~DBO~".CUENTAS where Cliente='"~fbn('Cliente')~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Dialogo.Especie2~"%') and Estado='HAB' and TipoCuenta In ('CC','CA') "))
+     ACT(N:fac, SQL("Select TOP 1 Codigo from "~DBO~".CUENTAS where Cliente='"~fbn('Cliente')~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Dialogo.Especie2~"%') and Estado='HAB' and TipoCuenta In ('CC','CA') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC "))
+     ACN(Z:3,1)
+
+     if Not EqStr(Val(c:fac),Dialogo.Vehiculo1) y Val(t:fac)>0
+       If Dialogo.Radio1 = 0
+         * Efvo
+         ACT(ae:fac, 'DIVEFE')
+       else
+         * Acciones
+         ACT(ae:fac, 'DIVACC')
+       endif
+       ACN(ag:fac, COTIZACIONC(val(r:fac),,,,Dialogo.Fecha1,25,SI,VAR('MONELOCA')))     
+       ACN(ah:fac, iif(EqStr(Modo(val(r:fac),VAR('MONELOCA')),'INV'),1/val(ag:fac),val(ag:fac)))
+       
+       ACN(af:fac, MontoArancelC(,Val(c:fac),Dialogo.Especie1,Dialogo.Vehiculo1,Val(ae:fac),VAL(t:fac)*iif(Eqstr(VAR('LIQCOMMO'),'SI'),1,Val(ah:fac)),4,,,,'PDIVID',Val(b:fac),,,SI,SI,,SI))
+       ACN(aa:fac, MontoArancelC(,Val(c:fac),Dialogo.Especie1,Dialogo.Vehiculo1,Val(ae:fac),VAL(t:fac)*iif(Eqstr(VAR('LIQCOMMO'),'SI'),1,Val(ah:fac)),0,,,,'PDIVID',Val(b:fac),,,SI,SI,,SI))
+
+       * Cond IVA
+       ACT(ac:fac, BuscarCampo('CLIENTES','CondicionIVA','Codigo',Dialogo.Vehiculo1))
+       * tasa iva  
+** FJL 17/03/25 - BIND Issue 7163 - No usar IVA General
+*       ACN(ad:fac, MontoImpuesto('IVARGCOM',Dialogo.Fecha1,3,Val(ac:fac))/100)
+       ACN(ad:fac, MontoImpuesto('IVACOMECA',Dialogo.Fecha1,3,Val(ac:fac))/100)
+
+       * IVA
+       ACN(ab:fac, Val(aa:fac)*Val(ad:fac))
+     else
+       ACN(aa:fac, 0)
+       ACN(ab:fac, 0)
+     endif  
+  EndIf
+Proximo
+
+If Val(Z:1)=0 y Val(Z:3)=0
+   MessageBox('No hay Saldos ni Movimientos Pendientes para los datos ingresados')
+Else
+   If Val(Z:1)=0 y Val(Z:3)=1
+      MessageBox('No hay Saldos para los datos ingresados')
+   Else
+      If Val(Z:1)=1 y Val(Z:3)=0
+         MessageBox('No hay Movimientos Pendientes para los datos ingresados')
+      EndIf
+   EndIf
+EndIf
+
+IF Val(BJ:1) = 1
+   If Dialogo.Radio1 = 0
+      * Efvo
+      CrearListBox ; 'Arial,8,';'  Pago de Dividendos: '~Val(NM:1)~' (ISIN: '~Val(AI:1)~') Pago en Efectivo. - MOVPENDIENTES'
+        'Ok?'             ;a:Val(FI:1)..a:fac;SI;;;30;CHECK ;
+        'Mercado'         ;b:Val(FI:1)..b:fac;NO;;;100;STRING;;RGB(220,220,193)
+        'Cliente'         ;c:Val(FI:1)..c:fac;NO;;;100;STRING;;RGB(220,220,193)
+        ** 'Book'            ;BK:Val(FI:1)..BK:fac;NO;;;100;STRING;;RGB(220,220,193)
+        ** 'Fecha Mov'       ;Q:Val(FI:1)..Q:fac;NO;;;100;FECHA;RGB(220,220,193)
+        'Cantidad'        ;h:Val(FI:1)..h:fac;NO;;;120;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        '%'               ;i:Val(FI:1)..i:fac;NO;;;100;NUMERO;'###.########';RGB(220,220,193)
+        'Moneda'          ;r:Val(FI:1)..r:fac;NO;;;70;STRING;;RGB(220,220,193)
+        'Total Moneda'    ;j:Val(FI:1)..j:fac;NO;;;120;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Cta.Especie'     ;m:Val(FI:1)..m:fac;NO;;;100;STRING;;RGB(220,220,193)
+        'Cta.Moneda'      ;n:Val(FI:1)..n:fac;SI;Val(A:FLB)=0 o Incluido(Val(N:FLB), SQLSet(" Select Codigo From "~DBO~".CUENTAS Where Cliente='"~Val(C:FLB)~"' AND Estado='HAB' AND (Especies LIKE '%"~Dialogo.Especie2~"%' OR Especies LIKE '%MONEDA%')"));'Cuenta Moneda Invalida';100;TABLA;'CUENTAS';'Codigo';'Codigo; Nombre';" Cliente = '"~Val(C:FLB)~"' AND Estado = 'HAB' AND TipoCuenta IN ('CC','CA') AND (Especies Like '%MONEDA%' or Especies Like '%"~Dialogo.Especie2~"%')";RGB(255,255,193);
+        'Comision'        ;aa:Val(FI:1)..aa:fac;NO;;;120;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'IVA'             ;ab:Val(FI:1)..ab:fac;NO;;;120;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+      FinListBox
+   Else
+      * Acciones
+      CrearListBox ; 'Arial,8,';'  Pago de Dividendos: '~Val(NM:1)~' (ISIN: '~Val(AI:1)~') Pago en Acciones. - MOVPENDIENTES'
+        'Ok?'            ;a:Val(FI:1)..a:fac;SI;;;30;CHECK ;
+        'Mercado'        ;b:Val(FI:1)..b:fac;NO;;;100;STRING;;RGB(220,220,193)
+        'Cliente'        ;c:Val(FI:1)..c:fac;NO;;;100;STRING;;RGB(220,220,193)
+        ** 'Book'           ;BK:Val(FI:1)..BK:fac;NO;;;100;STRING;;RGB(220,220,193)
+        ** 'Fecha Mov'      ;Q:Val(FI:1)..Q:fac;NO;;;100;FECHA;RGB(220,220,193)
+        'Cantidad'       ;h:Val(FI:1)..h:fac;NO;;;120;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        '%'              ;i:Val(FI:1)..i:fac;NO;;;100;NUMERO;'###,###.#####';RGB(220,220,193)
+        'Total Acciones' ;j:Val(FI:1)..j:fac;NO;;;120;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Pre.Fracc.'     ;k:Val(FI:1)..k:fac;NO;;;100;NUMERO;'###.########';RGB(220,220,193)
+        'Tot.Fracc.'     ;l:Val(FI:1)..l:fac;NO;;;100;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Moneda'         ;r:Val(FI:1)..R:fac;NO;;;70;STRING;;RGB(220,220,193)
+        'Total Moneda'   ;t:Val(FI:1)..t:fac;NO;;;120;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'Cta.Especie'    ;m:Val(FI:1)..m:fac;NO;;;100;STRING;;RGB(220,220,193)
+        'Cta.Moneda'     ;n:Val(FI:1)..n:fac;SI;Val(A:FLB)=0 o Incluido(Val(N:FLB), SQLSet(" Select Codigo From "~DBO~".CUENTAS Where Cliente='"~Val(C:FLB)~"' AND Estado='HAB' AND (Especies LIKE '%"~Dialogo.Especie2~"%' OR Especies LIKE '%MONEDA%')"));'Cuenta Moneda Invalida';100;TABLA;'CUENTAS';'Codigo';'Codigo; Nombre';" Cliente = '"~Val(C:FLB)~"' AND Estado = 'HAB' AND TipoCuenta IN ('CC','CA') AND (Especies Like '%MONEDA%' or Especies Like '%"~Dialogo.Especie2~"%')";RGB(255,255,193);
+        'Comision'       ;aa:Val(FI:1)..aa:fac;NO;;;120;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+        'IVA'            ;ab:Val(FI:1)..ab:fac;NO;;;120;NUMERO;'#,###,###,###.##';RGB(220,220,193)
+      FinListBox
+   Endif
+
+   If NOT OK
+      MessageBox('Pago de dividendos de MOVIMIENTOS PENDIENTES cancelado')
+   ELSE
+#ifdef PRUEBA
+  MessageBox('Despues ListBox 2')
+#else      
+     Recorrer&k Val(FI:1), fac
+        IF Val(A:&k) = 1
+           ACT(XX:1, GetNumerador(45))
+           SQL.ADD(" INSERT INTO "~DBO~".TRANSACCIONES2 ")
+           SQL.ADD("(TipoTr2, NrTrans, Cliente1, Especie, ")
+           SQL.ADD(" Fecha1, Fecha2, Especie2, ")
+           SQL.ADD(" Cantidad1, Cantidad2, Cantidad3, ")
+           SQL.ADD(" Precio1, Precio2, RB1, ")
+           SQL.ADD(" RB10, Mercado1, Numerador, ")
+           SQL.ADD(" Cuenta1, Cuenta2, Book1, Cupon1, ")
+           SQL.ADD(" Vehiculo1, FechaCargaSys, FechaCarga, ")
+           SQL.ADD(" Cantidad4, Cliente2, ")
+           * FJL 26/08/21 - Comisiones Eventos Corporativos
+           SQL.ADD(" Cantidad10, Cantidad11, ")
+           SQL.ADD(" RB2, CB1) ")
+           SQL.ADD(" VALUES ")
+           SQL.ADD("('PDIVID', '"~Val(XX:1)~"', '"~Val(c:&k)~"', '"~Dialogo.Especie1~"', ")
+           SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', '"~IdxDate(Dialogo.Fecha2)~"', '"~Dialogo.Especie2~"', ")
+           SQL.ADD(" "~FStr(Val(h:&k),0,4)~", "~FStr(Val(j:&k),0,4)~", "~FStr(Val(l:&k),0,4)~", ")
+           SQL.ADD(" "~FStr(Dialogo.Precio1,0,6)~", "~FStr(Val(PR:&k),0,6)~", '2', ")
+           SQL.ADD(" "~Fstr(Dialogo.Radio1, 0, 0)~", '"~Val(b:&k)~"', 45, ")
+           SQL.ADD(" '"~Val(m:&k)~"', '"~Val(n:&k)~"', '"~Val(BK:&k)~"', '0', ")
+           SQL.ADD(" '"~Dialogo.Vehiculo1~"', '"~IdxDate(Fsys)~"', "~SQLAhora~", ")
+           SQL.ADD(" "~FStr(Val(SD:&k),0,0)~", '"~Val(O:&k)~"', ")
+           * FJL 26/08/21 - Comisiones Eventos Corporativos
+           SQL.ADD(" "~FStr(Val(aa:fac),0,0)~", "~FStr(Val(ab:fac),0,0)~", ")
+           SQL.ADD(" '0', '0') ")
+           SQL.NEW
+           SQL.EXEC
+           SQL.ActualizarMovimientosT2(Val(XX:1),SI,NO,NO,NO)   
+           SQL.EXEC
+           SQL.ADD(" INSERT INTO "~DBO~".OPERACIONESBITS ") 
+           SQL.ADD(" (NrOperacion, NrBit, Valor) ")
+           SQL.ADD(" VALUES ")
+           SQL.ADD(" ('"~Val(XX:1)~"',51, '1') ")
+           SQL.NEW
+           SQL.EXEC
+        ENDIF
+      Proximo
+#endif 
+   Endif
+ENDIF
+
+ENDIF

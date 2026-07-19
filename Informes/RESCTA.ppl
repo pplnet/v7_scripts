@@ -1,0 +1,1160 @@
+﻿HOJAVISIBLE(NO)
+CrearDialogo
+  Cliente1    :'Cliente'         ;;;;;;NoVacio(Dialogo.Cliente1);'Ingrese un Cliente';;;
+  Fecha1      :'Fecha Desde'     ;;;;;;Dialogo.Fecha1<>0 y Dialogo.Fecha1 <= Fsys;'Debe Ingresar una Fecha Desde';NO;PriDeMes(Fsys-30,SI)
+  Fecha2      :'Fecha Hasta'     ;;;;;;Dialogo.Fecha2<>0 y Dialogo.Fecha2 >= Dialogo.Fecha1 y Dialogo.Fecha2 <= Fsys;'Debe Ingresar una Fecha Hasta valida';NO;FinDeMes(Dialogo.fecha1,SI);FinDeMes(Dialogo.fecha1,SI)
+  Radio1      :"|Pantalla|PDF|Mail"   ;;;;;;;;;1;;;;;
+  String1     :'Path Destino'    ;1;2;;;;;;;VAR('PATHRESCT2')
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+* AA 18-08-2023 Reconstruye saldos por si se hubiera desliquidado FValor
+EjecutarEvento2('DES81')
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+CrearFont(4, 'Arial,8,BI')
+ 
+act(cu:1,Dialogo.Cliente1)
+act(ar:1,Dialogo.String1~'Estado_Cliente_'~Val(cu:1)~'.pdf')
+                           
+act(pi:1,Var('RESCTAPIEA'))
+act(pi:2,Var('RESCTAPIEB'))
+act(pi:3,Var('RESCTAPIEC'))
+
+let &lugarFecha Var('RESCTALUG')~" "~Fecha(FSYS)
+** Incluir Variable RESCTACOT para definir que cotizacion se muestra y ver campo 1 precio1 25 preciocontable
+ACN(co1,CotizacionC(VAR('MONEEXTR'),,,,Dialogo.Fecha1,25,SI,VAR('MONELOCA')))
+ACN(co2,CotizacionC(VAR('MONEEXTR'),,,,Dialogo.Fecha2,25,SI,VAR('MONELOCA')))
+
+** Caratula
+
+ACT(aa4, FECHA(Dialogo.Fecha1))
+ACT(aa5, FECHA(Dialogo.Fecha2 ))
+ACT(aa6, FECHA(FSYS))
+
+SQL.ADD("Select RazonSocial,Direccion,CodigoPostal,Localidad,CUIT,CondicionIVA,NrIngBrutos, ")
+#ifdef BIND
+   SQL.ADD(" P.Nombre as Pais, Telefono, Fax, CodigoCNV,CodDepCajaValores as Depositante ")
+#else
+   SQL.ADD(" P.Nombre as Pais, Telefono, Fax, CodigoCNV,CodComitente as Depositante ")
+#endif
+SQL.ADD(" FROM "~DBO~".CLIENTES C, "~DBO~".PAISES P ")
+SQL.ADD(" Where C.Codigo = '"~VAR('VEHICULODE')~"' ")
+SQL.ADD("   and P.Codigo = C.Pais ")
+**watch(sql.batch)
+
+Recorrer SQL
+   ACT(aa2,FBN['Depositante'])
+   ACT(aa7,FBN['RazonSocial'])
+   ACT(aa8,FBN['Direccion'])
+   ACT(aa9,FBN['CodigoPostal'])
+   ACT(aa10,FBN['Localidad'])   
+   #ifdef BACS
+     ACT(aa11,FBN['CUIT']) 
+     ACT(aa12,'IVA ')
+     If EqStr(fbn('CondicionIVA'),'INS')
+     ACT(aa12,Val(aa12)~'R.Inscripto')
+     Else
+        if EqStr(fbn('CondicionIVA'),'NOI')
+           ACT(aa12,Val(aa12)~'R. No Inscripto')
+        else
+           if EqStr(fbn('CondicionIVA'),'EXE')
+              ACT(aa12,Val(aa12)~'Exento')
+           else
+              if EqStr(fbn('CondicionIVA'),'FIN')
+                 ACT(aa12,Val(aa12)~'Cons.Final')
+              else
+                 if EqStr(fbn('CondicionIVA'),'MON')
+                    ACT(aa12,Val(aa12)~'Monotributo')
+                 else
+                    ACT(aa12,Val(aa12)~'Otro')
+                 endif
+              endif
+           endif
+        endif
+     Endif
+     ACT(aa13,'Ing.Brutos '~FBN['NrIngBrutos']) 
+   #else
+      ACT(aa11,FBN['Pais'])   
+      ACT(aa12,'T '~FBN['Telefono'])   
+      ACT(aa13,'F '~FBN['Fax']) 
+   #endif
+   ACT(aa20,FBN['CodigoCNV'])
+Proximo
+
+SQL.ADD("Select Codigo,RazonSocial,CUIT,CodComitente as Depositante, DeposDelComitente as ComitenteCLI, DireccionEmail Email, ")
+SQL.ADD("(select Top(1) NrDepositante from "~DBO~".CUENTAS Where Cliente = '"~Dialogo.Cliente1~"' and Comitente = '"~VAR('VEHICULODE')~"' and TipoCuenta = 'CUS' and NrDepositante is not Null) as ComitenteCTA ")
+SQL.ADD("FROM "~DBO~".CLIENTES  ")
+SQL.ADD("Where Codigo = '"~Dialogo.Cliente1~"' ")
+*watch(sql.batch)
+
+Recorrer SQL
+   ACT(aa1,FBN['Codigo']~' - '~FBN['RazonSocial'])
+   #ifdef BACS
+       ACT(aa2,FBN['ComitenteCTA'])
+   #else
+       ACT(aa2,Val(aa2)~'/'~FBN['ComitenteCTA'])
+   #endif
+   ACT(aa3,FBN['CUIT'])   
+   ACT(aa21,FBN['Email']) 
+Proximo
+
+
+
+ACT(aa14,Var('RESCTAAGEN'))
+** Codigo CNV en pie aa15
+ACT(aa15,Var('RESCTARAGE')~' '~Val(aa20))
+ACT(aa16,Var('RESCTAPIE1'))
+ACT(aa17,Var('RESCTAPIE2'))
+ACT(aa18,Var('RESCTAPIE3'))
+ACT(aa19,Var('RESCTAPIE4'))
+
+*- Saldo Libre Disponibilidad 
+ACN(SL:1,BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALLIBRECU')) )
+
+***---Saldo Bloq. x ventas 
+ACN(SB:1,BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALBLOQVTA')) )
+***---Saldo Bloq. x ventas USD
+ACN(SB:2,BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALBLOQVUS')) )
+
+** Posicion Inicial  Tabla1
+**     Bonos 
+
+** xy3 saldo inicial especie
+ACN(xy3,1)
+
+SQL.ADD("Select S.Especie, E.Nombre, S.Mercado, sum(S.Saldo) as VN, S.NrSaldo, EC.Descripcion DescEst, ")
+SQL.ADD(" ISNULL((Select Top(1) PrecioContable From "~DBO~".COTIZACIONES C Where Codigo = S.Especie AND Moneda = '"~VAR('MONELOCA')~"' AND Fecha <= '"~IdxDate(Dialogo.Fecha1-1)~"' Order By Fecha Desc),1) as PrecioARP ")
+SQL.ADD("from "~DBO~".SALDOSDIA S ")
+SQL.ADD("     INNER JOIN  "~DBO~".ESPECIES E WITH (NOLOCK) ON S.Especie=E.Codigo ")
+SQL.ADD("     INNER JOIN "~DBO~".ESTADOSCUSTODIA EC WITH (NOLOCK)  ")
+SQL.ADD("           ON (S.NrSaldo>201 or S.NrSaldo=101) AND (S.NrSaldo not in(121,227)) AND ((S.NrSaldo-100=EC.NrSaldo AND S.NrSaldo>201) or (S.NrSaldo=EC.NrSaldo AND S.NrSaldo=101)) ")
+SQL.ADD("where S.Cliente = '"~Dialogo.Cliente1~"' AND ")
+SQL.ADD("      S.EnteCustodia = '"~VAR('VEHICULODE')~"' AND ")
+**22-08-2023 AA se igualan estados Nrsaldos a informe SLCUFP "Saldo de Custodia a Fecha Posicion" inner join
+**SQL.ADD("      ((S.NrSaldo = "~Fstr(val(SL:1),0,0)~" AND S.NrSaldo = EC.NrSaldo) OR (S.NrSaldo > "~Fstr(val(SL:1),0,0)~"+100 AND S.NrSaldo-100 = EC.NrSaldo)) AND  " )
+SQL.ADD("      S.Saldo <> 0 AND ")
+SQL.ADD("      S.Especie = E.Codigo AND ")
+SQL.ADD("      S.Fecha = (SELECT MAX(S2.Fecha) ")
+SQL.ADD("                  FROM "~DBO~".SALDOSDIA S2 ")
+SQL.ADD("                  WHERE S2.Cliente = S.Cliente  AND ")
+SQL.ADD("                        S2.Especie = S.Especie  AND ")
+SQL.ADD("                        S2.EnteCustodia = S.EnteCustodia AND ")
+SQL.ADD("                        S2.Mercado = S.Mercado AND ")
+SQL.ADD("                        S2.Fecha <= '"~IdxDate(Dialogo.Fecha1-1)~"' AND ")
+SQL.ADD("                        S2.Cuenta  = S.Cuenta   AND ")
+SQL.ADD("                        S2.NrSaldo = S.NrSaldo) ")
+**22-08-2023 AA se igualan estados Nrsaldos a informe SLCUFP "Saldo de Custodia a Fecha Posicion" 
+***---Excluyo Saldos Bloqueados por venta
+***SQL.ADD(" AND S.NrSaldo <> "~Val(SB:1)~"+100 AND S.NrSaldo <> "~Val(SB:2)~"+100")
+SQL.ADD(" Group by Especie, Nombre, Mercado, S.NrSaldo, EC.Descripcion  ")
+*watch(sql.batch)
+
+ACN(fi1,0)
+ACN(xy1,0)
+ACN(xy10,0)
+Recorrer SQL
+   if Val(xy1)=0
+      ACT(a:fac, "TITULOS")
+      SetFont(a:fac, 3)
+      ACN(fi1,fac)
+      ifa
+      ACT(a:fac,'Especie')
+      ACT(b:fac,'Nombre')
+      ACT(c:fac,'Custodia')
+      ACT(d:fac,'Estado')
+      ACT(e:fac,'V.N.')
+      ACT(f:fac,'Precio')
+      ACT(g:fac,'Valor ARP')
+      ACT(h:fac,'Valor USD')
+      SetFont(a:fac..h:fac, 2)      
+      ACN(xy1,1)
+      ACN(xy10,1)
+      ifa
+   endif
+   
+   ACT(a:fac,FBN['Especie'])
+   ACT(b:fac,FBN['Nombre'])
+   ACT(c:fac,FBN['Mercado']) 
+   ACT(d:fac,FBN['DescEst']) 
+   ACT(e:fac,PYC(FBN['VN'], 0, 2))
+   *ACT(e:fac,PYC(FBN['PrecioARP'], 0, 5))
+   ACT(f:fac,PYC(FBN['PrecioARP'], 0, 6))
+   ACT(g:fac,PYC((FBN['VN']*FBN['PrecioARP']), 0, 2))
+   ACT(h:fac,PYC(((FBN['VN']*FBN['PrecioARP'])/Val(co1)), 0, 2))
+   ACT(ea:Val(xy3),FBN['Especie'])
+   ACN(eb:Val(xy3),FBN['VN'])
+   ACT(ec:Val(xy3),FBN['Mercado']) 
+   SCN(xy3,1)        
+   
+Proximo
+ACN(fi2,fac)
+
+**     Derivados 
+ACN(fi3,Val(fi2)+1)
+
+ACN(fi4,Val(fi3))
+
+**     Monedas 
+
+** AA 24-07-2023 
+** Verificar: si son saldos previos a fecha de Proceso --> Solo saldosdia Nrsaldo 81, si es del dia de proceso saldosdia Nrsaldo 81 y los movejecutados del dia
+** queda como STD la agrupacion por especie y mercado 
+         SQL.ADD("select Especie,Mercado,Sum(Saldo) Saldo from ")
+         SQL.ADD("(select Especie,Mercado,Saldo from "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E")
+         **SQL.ADD("   where S.Cuenta in (select Codigo from CUENTAS where Cliente='"~Dialogo.Cliente1~"' and TipoCuenta = 'VIS' and (Especies like '%'+S.Especie+'%' or Especies like '%MONEDA%')) ")
+         SQL.ADD("   where S.Cuenta in (select Codigo from CUENTAS where Cliente='"~Dialogo.Cliente1~"' and TipoCuenta = 'VIS')  ")
+         SQL.ADD("     and S.Especie = E.Codigo ")
+         SQL.ADD("     and S.NrSaldo = 81 ")
+         SQL.ADD("     and Cliente = '"~Dialogo.Cliente1~"' ")
+         SQL.ADD("     and S.Mercado  in ("~Pipe2Comillas(VAR('RESCTAMERM'))~")  ")
+         SQL.ADD("     and E.Jerarquia like '"~VAR('JERMONEDA')~"%' ")         
+         SQL.ADD("     and S.Fecha = (SELECT MAX(S2.Fecha) ")
+         SQL.ADD("                   FROM "~DBO~".SALDOSDIA S2 ")
+         SQL.ADD("                   WHERE S2.Cliente = S.Cliente  AND ")
+         SQL.ADD("                         S2.Especie = S.Especie  AND ")
+         SQL.ADD("                         S2.EnteCustodia = S.EnteCustodia AND ")
+         SQL.ADD("                         S2.Mercado = S.Mercado AND ")
+         ** AA 07-09-2023  cambio solicitado PZ
+         * SQL.ADD("                         S2.Fecha <= '"~IdxDate(Dialogo.Fecha1-1)~"' AND ")
+         SQL.ADD("                         S2.Fecha < '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+         SQL.ADD("                         S2.Cuenta  = S.Cuenta   AND ")
+         SQL.ADD("                         S2.NrSaldo = S.NrSaldo) ")
+         SQL.ADD(" ) AUX")    
+         SQL.ADD("Group by Especie,Mercado ") 
+         SQL.ADD("Order by Especie,Mercado ")           
+        *watch(sql.batch)
+
+ACN(fi5,fac)
+ACN(xy1,0)
+ACN(mn:1,0)
+
+Recorrer SQL
+   if Val(xy1)=0
+      ifa
+      ACT(a:fac, "MONEDAS")
+      SetFont(a:fac, 3)
+      ACN(fi5,fac)
+      ifa
+      ACT(a:fac,'Especie')
+      *#ifdef BACS
+         ACT(b:fac,'Nombre - Mercado')
+         *#else
+         *   ACT(b:fac,'Nombre')
+         *#endif
+      ACT(g:fac,'Saldo')
+      SetFont(a:fac..g:fac, 2)      
+      ACN(xy1,1)
+      ACN(xy10,1)
+      ifa
+   endif
+
+   ACT(a:fac,FBN['Especie'])
+   *#ifdef BACS
+      ACT(b:fac,BuscarCampo('ESPECIES','Nombre','Codigo',FBN['Especie'])~' - '~ BuscarCampo('MERCADOS','Descripcion','Codigo',FBN['Mercado']))
+      *#else
+      *ACT(b:fac,BuscarCampo('ESPECIES','Nombre','Codigo',FBN['Especie']))
+      *#endif
+   ACT(g:fac,PYC((FBN['Saldo']), 0, 2))
+   SCN(mn:1,1)
+   ACT(ma:val(mn:1),FBN['Especie'])
+   ACT(mb:val(mn:1),FBN['Mercado'])   
+   ACN(mc:val(mn:1),FBN['Saldo'])
+Proximo
+
+ACN(fi6,fac)
+
+ACN(z1,Val(f6))
+
+if  val(xy10)> 0
+    ** Tipo cambio Moneda Extranjera (VAR('MONEEXTR')) Tabla2
+
+    ACT(ab1,'Tipo De Cambio')
+    ACT(ac1, PYC(Val(co1), 1, 2))
+else
+   #ifdef BACS 
+       ACT(ab1,'Sin Tenencia Inicial')
+   #else 
+       ACT(ab1,'Sin Posicion Inicial')
+   #endif 
+endif    
+
+
+** Hoja Movimientos
+
+**     Bonos Tabla3
+ACN(fi7,Val(fi6)+1)
+ACN(fi8,Val(fi7))
+
+SQL.ADD("Select FechaOp, FechaVto, Especie, ContraEspecie, Cantidad, Precio1, TotalBrutoCli1, TotalAux2 Comision, TotalIVA, TotalNetoCli1, NrOperacion, ")
+SQL.ADD("  Case When TipoOp = 'TIC' then 'Venta' else 'Compra' end TipoOper, Case when E.InteresesC = 'CLE' Then TotalIntereses else 0 end Intereses ")
+SQL.ADD("  , TotalNetoCli1 as SaldoFinal, UDN2 Rueda, Mercado, TotalGastos,TotalIvaAdi ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E ")
+SQL.ADD(" where O.Especie=E.Codigo  ")
+SQL.ADD("and (select Top(1) CT.Comitente from "~DBO~".CUENTAS CT Where CT.Codigo = O.Cuenta1 and TipoCuenta = 'CUS' and Comitente is not Null) = '"~VAR('VEHICULODE')~"' ")
+SQL.ADD("and O.Mercado in ("~Pipe2Comillas(VAR('RESCTAMERT'))~") ")
+SQL.ADD("and Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and TipoOp in ('TIC','TIV') ")
+**SQL.ADD("and Especie = 'AY24' ")
+SQL.ADD("and FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("and E.Jerarquia like '"~VAR('JERTITULOS')~"%' ")
+SQL.ADD("and CB4 <> 1 ")
+SQL.ADD(" UNION ")
+SQL.ADD("Select FechaOp, FechaVto, Especie, ContraEspecie, Cantidad, Precio1, TotalBrutoCli1, TotalAux2 Comision, TotalIVA, TotalNetoCli1, NrOperacion, ")
+SQL.ADD("  Case When TipoOp = 'TIDE' then 'Plazo Fijo Tit.' else 'Prestamo' end TipoOper, Case when E.InteresesC = 'CLE' Then TotalIntereses else 0 end Intereses ")
+SQL.ADD("  , TotalNetoCli1 as SaldoFinal, UDN2 Rueda, Mercado, TotalGastos,TotalIvaAdi ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E where O.Especie=E.Codigo  ")
+SQL.ADD("and (select Top(1) CT.Comitente from "~DBO~".CUENTAS CT Where CT.Codigo = O.Cuenta1 and TipoCuenta = 'CUS' and Comitente is not Null) = '"~VAR('VEHICULODE')~"' ")
+SQL.ADD("and O.Mercado in ("~Pipe2Comillas(VAR('RESCTAMERT'))~") ")
+SQL.ADD("and Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and TipoOp in ('TIDE','TIPO') ")
+**SQL.ADD("and Especie = 'AY24' ")
+SQL.ADD("and FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("and E.Jerarquia like '"~VAR('JERTITULOS')~"%' ")
+SQL.ADD(" UNION ")
+SQL.ADD("Select FechaOp, FechaVto, Especie, ContraEspecie, Cantidad, Precio1, TotalBrutoCli1, TotalAux2 Comision, TotalIVA, TotalNetoCli1, NrOperacion, ")
+SQL.ADD("  Case When TipoOp = 'TICO' then 'Call Tomado' else 'Call Otorgado' end TipoOper, Case when E.InteresesC = 'CLE' Then TotalIntereses else 0 end Intereses ")
+SQL.ADD("  , TotalNetoCli1 as SaldoFinal, UDN2 Rueda, Mercado, TotalGastos,TotalIvaAdi ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E where O.Especie=E.Codigo  ")
+SQL.ADD("and (select Top(1) CT.Comitente from "~DBO~".CUENTAS CT Where CT.Codigo = O.Cuenta1 and TipoCuenta = 'CUS' and Comitente is not Null) = '"~VAR('VEHICULODE')~"' ")
+SQL.ADD("and O.Mercado in ("~Pipe2Comillas(VAR('RESCTAMERT'))~") ")
+SQL.ADD("and Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and TipoOp in ('TICO','TICT') ")
+**SQL.ADD("and Especie = 'AY24' ")
+SQL.ADD("and FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("and E.Jerarquia like '"~VAR('JERTITULOS')~"%' ")
+SQL.ADD(" UNION ALL ")
+SQL.ADD("Select FechaVto, FechaVto, Especie, ContraEspecie, Cantidad*-1 Cantidad, Precio1, TotalBrutoCli1, TotalAux2 Comision, TotalIVA, TotalNetoCli1, NrOperacion, ")
+SQL.ADD("  Case When TipoOp = 'TIDE' then 'Vto Plazo Fijo Tit.' else 'Vto Prestamo' end TipoOper, Case when E.InteresesC = 'CLE' Then TotalIntereses else 0 end Intereses ")
+SQL.ADD("  , TotalNetoCli1 as SaldoFinal, UDN2 Rueda, Mercado, TotalGastos,TotalIvaAdi ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E where O.Especie=E.Codigo  ")
+SQL.ADD("and (select Top(1) CT.Comitente from "~DBO~".CUENTAS CT Where CT.Codigo = O.Cuenta1 and TipoCuenta = 'CUS' and Comitente is not Null) = '"~VAR('VEHICULODE')~"' ")
+SQL.ADD("and O.Mercado in ("~Pipe2Comillas(VAR('RESCTAMERT'))~") ")
+SQL.ADD("and Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and TipoOp in ('TIDE','TIPO') ")
+**SQL.ADD("and Especie = 'AY24' ")
+SQL.ADD("and FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaVto <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("and E.Jerarquia like '"~VAR('JERTITULOS')~"%' ")
+SQL.ADD(" UNION ALL ")
+SQL.ADD("Select FechaVto, FechaVto, Especie, ContraEspecie, Cantidad*-1 Cantidad, Precio1, TotalBrutoCli1, TotalAux2 Comision, TotalIVA, TotalNetoCli1, NrOperacion, ")
+SQL.ADD("  Case When TipoOp = 'TICO' then 'Vto Call Tomado' else 'Vto Call Otorgado' end TipoOper, Case when E.InteresesC = 'CLE' Then TotalIntereses else 0 end Intereses ")
+SQL.ADD("  , TotalNetoCli1 as SaldoFinal, UDN2 Rueda, Mercado, TotalGastos,TotalIvaAdi ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E where O.Especie=E.Codigo  ")
+SQL.ADD("and (select Top(1) CT.Comitente from "~DBO~".CUENTAS CT Where CT.Codigo = O.Cuenta1 and TipoCuenta = 'CUS' and Comitente is not Null) = '"~VAR('VEHICULODE')~"' ")
+SQL.ADD("and O.Mercado in ("~Pipe2Comillas(VAR('RESCTAMERT'))~") ")
+SQL.ADD("and Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and TipoOp in ('TICO','TICT') ")
+**SQL.ADD("and Especie = 'AY24' ")
+SQL.ADD("and FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaVto <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("and E.Jerarquia like '"~VAR('JERTITULOS')~"%' ")
+
+SQL.ADD(" UNION ")
+
+SQL.ADD("Select FechaOp, FechaVto, Especie, ContraEspecie, Cantidad, Precio1, TotalBrutoCli1, TotalAux2 Comision, TotalIVA, TotalNetoCli1, NrOperacion, ")
+SQL.ADD("  Case When TipoOp = 'TIC' then 'Compra' else 'Venta' end TipoOper, Case when E.InteresesC = 'CLE' Then TotalIntereses else 0 end Intereses ")
+SQL.ADD("  , TotalNetoCli1 as SaldoFinal, UDN2 Rueda, Mercado, TotalGastos,TotalIvaAdi ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E where O.Especie=E.Codigo  ")
+SQL.ADD("and Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and (select Top(1) CT.Comitente from "~DBO~".CUENTAS CT Where CT.Codigo = O.Cuenta1 and TipoCuenta = 'CUS' and Comitente is not Null) = '"~VAR('VEHICULODE')~"' ")
+SQL.ADD("and O.Mercado in ("~Pipe2Comillas(VAR('RESCTAMERT'))~") ")
+SQL.ADD("and TipoOp in ('TIC','TIV') ")
+**SQL.ADD("and Especie = 'AY24' ")
+SQL.ADD("and FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("and E.Jerarquia like '"~VAR('JERTITULOS')~"%' ")
+SQL.ADD("and CB4 = 1 ")
+SQL.ADD(" UNION ")
+SQL.ADD("Select FechaOp, FechaVto, Especie, ContraEspecie, Cantidad, Precio1, TotalBrutoCli1, TotalAux2 Comision, TotalIVA, TotalNetoCli1, NrOperacion, ")
+SQL.ADD(" 'Compra Col.Primaria'  TipoOper, Case when E.InteresesC = 'CLE' Then TotalIntereses else 0 end Intereses ")
+SQL.ADD("  , TotalNetoCli1 as SaldoFinal, UDN2 Rueda, Mercado, TotalGastos,TotalIvaAdi ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E where O.Especie=E.Codigo  ")
+SQL.ADD("and Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and (select Top(1) CT.Comitente from "~DBO~".CUENTAS CT Where CT.Codigo = O.Cuenta1 and TipoCuenta = 'CUS' and Comitente is not Null) = '"~VAR('VEHICULODE')~"' ")
+SQL.ADD("and O.Mercado in ("~Pipe2Comillas(VAR('RESCTAMERT'))~") ")
+SQL.ADD("and TipoOp in ('TCOPRI') ")
+**SQL.ADD("and Especie = 'AY24' ")
+SQL.ADD("and FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("and E.Jerarquia like '"~VAR('JERTITULOS')~"%' ")
+SQL.ADD(" UNION ")
+SQL.ADD("select  fecha1 FechaOp, Fecha1 FechaVto, Especie,'' ContraEspecie, Cantidad1 Cantidad,Precio1, cambio1 totalbrutocli1, 0 Comision, 0 TotalIVA, cambio1 totalnetocli1, Nrtrans NrOperacion, ")
+SQL.ADD("  Case When TipoTr2 = 'DTP' then 'Deposito' when TipoTr2 = 'RTP' then 'Retiro' else 'Transf.' end TipoOper, 0 Intereses, Cambio1 as SaldoFinal, '' Rueda, Mercado1 Mercado ,0 TotalGastos, 0 TotalIvaAdi")
+SQL.ADD("from "~DBO~".TRANSACCIONES2 T where TipoTr2 in ('DTP','RTP','DRT') ")
+SQL.ADD("and (select Top(1) CT.Comitente from "~DBO~".CUENTAS CT Where CT.Codigo = T.Cuenta1 and TipoCuenta = 'CUS' and Comitente is not Null) = '"~VAR('VEHICULODE')~"' ")
+SQL.ADD("and (Mercado1 in ("~Pipe2Comillas(VAR('RESCTAMERT'))~") or Mercado2 in ("~Pipe2Comillas(VAR('RESCTAMERT'))~"))")
+SQL.ADD("    and (NrOperacionRef1 = '' or NrOperacionRef1 is Null) and (NrOperacionRef2 = '' or NrOperacionRef2 is Null) ")
+SQL.ADD("    and Cliente1 = '"~Dialogo.Cliente1~"' ")
+*SQL.ADD("and Especie = 'AY24' ")
+SQL.ADD("    and Fecha1 >= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha1 <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" union ")
+SQL.ADD("select  T.Fecha1 FechaOp, M.FechaMov FechaVto,M.Especie, '' ContraEspecie, M.Cantidad ,1 Precio, Cantidad Totalbruto1, 0 Comision, 0 TotalIVA, Cantidad TotalnetoCli1, Nrtrans NrOperacion, ")
+SQL.ADD("  Case When TipoTr2 = 'CANJE' then 'Canje' when TipoTr2 = 'STOCK' then 'Split' when TipoTr2 = 'PDIVID' then 'Dividendos' else 'Transf.' end TipoOper, 0 Intereses,Cambio1 as SaldoFinal, '' Rueda, Mercado ,0 TotalGastos, 0 TotalIvaAdi")
+SQL.ADD("from "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C , "~DBO~".MOVEJECUTADOS M, "~DBO~".ESPECIES E ")
+SQL.ADD("where TipoTr2 in ('CANJE','STOCK','PDIVID') ")
+SQL.ADD("and (select Top(1) CT.Comitente from "~DBO~".CUENTAS CT Where CT.Codigo = T.Cuenta1 and TipoCuenta = 'CUS' and Comitente is not Null) = '"~VAR('VEHICULODE')~"' ")
+SQL.ADD("and (Mercado1 in ("~Pipe2Comillas(VAR('RESCTAMERT'))~") or Mercado2 in ("~Pipe2Comillas(VAR('RESCTAMERT'))~"))")
+SQL.ADD("    and (NrOperacionRef1 = '' or NrOperacionRef1 is Null) and (NrOperacionRef2 = '' or NrOperacionRef2 is Null) ")
+SQL.ADD("    and M.NrOperacion = T.NrTrans ")
+SQL.ADD("    and M.Especie  =  E.Codigo and E.Jerarquia not like '"~VAR('JERMONEDA')~"%' ")
+SQL.ADD("    and T.Cambio5 = 101 ")
+SQL.ADD("    and Cliente1 = C.Codigo ")
+**SQL.ADD("and M.Especie = 'AY24' ")
+SQL.ADD("    and Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("    and M.FechaMov >= '"~IdxDate(Dialogo.Fecha1)~"' and M.FechaMov <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("Order by 3,mercado,1  ")
+**SQL.ADD("Order by 3,17,1  ")
+*watch(sql.batch)
+
+*ACN(fi7,fac)
+ACN(xy1,0)
+ACN(xy10,0)
+ACT(es:1,'')
+Recorrer SQL
+   if Val(xy1)=0
+      ACT(a:fac, "TITULOS")
+      SetFont(a:fac, 3)
+      ACN(fi7,fac)
+      ifa
+      #ifdef MLASA
+         ACT(a:fac,'Fecha Op.')
+         ACT(b:fac,'Fecha Liq.')
+         ACT(c:fac,'Tipo Op.')
+         ACT(d:fac,'Rueda')
+         ACT(e:fac,'Especie')
+         ACT(f:fac,'Moneda')
+         ACT(g:fac,'V.N.') 
+         ACT(h:fac,'Precio')
+         ACT(i:fac,'Monto Bruto')
+         ACT(j:fac,'Intereses')
+         ACT(k:fac,'Comisiones')
+         ACT(l:fac,'I.V.A.')
+         ACT(m:fac,'Monto Neto')
+         ACT(n:fac,'Nro.Op.')      
+         ACT(o:fac,'Saldo Final') 
+      #else
+         ACT(a:fac,'Fecha Op.')
+         ACT(b:fac,'Fecha Liq.')
+         ACT(c:fac,'Tipo Op.')
+         ACT(d:fac,'Especie')
+         ACT(e:fac,'Moneda')
+         ACT(f:fac,'V.N.') 
+         ACT(g:fac,'Precio')
+         ACT(h:fac,'Monto Bruto')
+         ACT(i:fac,'Comisiones')
+         ACT(j:fac,'IVA Comisiones')
+         ACT(k:fac,'Derechos')
+         ACT(l:fac,'IVA Derechos')         
+         ACT(m:fac,'Monto Neto')
+         ACT(n:fac,'Nro.Op.')      
+         ACT(o:fac,'Saldo Final') 
+      #endif
+
+      SetFont(a:fac..n:fac, 2)      
+      ACN(xy1,1)
+      ACN(xy2,1) 
+      ACN(xy10,1)      
+      ifa
+      
+      ACN(sa:1,0)
+      ACT(es:1,FBN['Especie']~FBN['Mercado'])
+      recorrer&i 1,Val(xy3)
+        if Eqstr(Val(es:1),val(ea:&i)~val(ec:&i))
+           ACN(sa:1,val(eb:&i)) 
+        endif
+      Proximo
+   endif
+   
+      if Not EqStr(Val(es:1),FBN['Especie']~FBN['Mercado'])
+         ACN(sa:1,0)
+         ACT(es:1,FBN['Especie']~FBN['Mercado'])
+         IFA
+         recorrer&i 1,Val(xy3)
+           if Eqstr(Val(es:1),val(ea:&i)~val(ec:&i))
+              ACN(sa:1,val(eb:&i)) 
+              Break
+           endif
+         Proximo  
+      Endif
+    #ifdef MLASA
+      ACT(a:fac,FBN['FechaOp'])
+      ACT(b:fac,FBN['FechaVto'])
+      ACT(c:fac,FBN['TipoOper']) 
+      ACT(d:fac,FBN['Rueda']) 
+      ACT(e:fac,FBN['Especie']~'-'~FBN['Mercado'])
+      ACT(f:fac,FBN['ContraEspecie'])
+      ACT(g:fac,PYC(ABS(FBN['Cantidad']), 0, 2))
+      ACT(h:fac,PYC(ABS(FBN['Precio1']), 0, 6))
+      ACT(i:fac,PYC(ABS(FBN['TotalBrutoCli1']), 0, 2))
+      ACT(j:fac,PYC(ABS(FBN['Intereses']), 0, 2))
+      ACT(k:fac,PYC(ABS(FBN['Comision']), 0, 2))
+      ACT(l:fac,PYC(ABS(FBN['TotalIVA']), 0, 2))
+      ACT(m:fac,PYC(ABS(FBN['TotalNetoCli1']), 0, 2))
+      ACT(n:fac, FBN['NrOperacion'])
+      if Incluido(FBN['TipoOper'],'Compra|Vto Deposito|Dividendos|Call Tomado|Compra Col.Primaria')
+         ACN(sa:1,val(sa:1)+ABS(FBN['Cantidad']))
+      Else
+      if Incluido(FBN['TipoOper'],'Venta|Retiro|Call Otorgado|Vto Call Tomado|Vto Prestamo|Deposito')
+           ACN(sa:1,val(sa:1)-ABS(FBN['Cantidad']))
+        Else
+           **  Falta definir  Split Canje y Transferencia
+           ACN(sa:1,val(sa:1)+ABS(FBN['Cantidad']))
+        Endif
+      Endif   
+      ACT(o:fac,PYC(val(sa:1), 0, 2))
+
+    #else
+      ACT(a:fac,FBN['FechaOp'])
+      ACT(b:fac,FBN['FechaVto'])
+      ACT(c:fac,FBN['TipoOper']) 
+      ACT(d:fac,FBN['Especie']~'-'~FBN['Mercado'])
+      ACT(e:fac,FBN['ContraEspecie'])
+      ACT(f:fac,PYC(ABS(FBN['Cantidad']), 0, 2))
+      ACT(g:fac,PYC(ABS(FBN['Precio1']), 0, 6))
+      ACT(h:fac,PYC(ABS(FBN['TotalBrutoCli1']), 0, 2))
+      ACT(i:fac,PYC(ABS(FBN['Comision']), 0, 2))
+      ACT(j:fac,PYC(ABS(FBN['TotalIVA']), 0, 2))
+      ACT(k:fac,PYC(ABS(FBN['TotalGastos']), 0, 2))
+      ACT(l:fac,PYC(ABS(FBN['TotalIvaAdi']), 0, 2))      
+      ACT(m:fac,PYC(ABS(FBN['TotalNetoCli1']), 0, 2))
+      ACT(n:fac, FBN['NrOperacion'])
+      if Incluido(FBN['TipoOper'],'Compra|Deposito|Vto Plazo Fijo Tit.|Dividendos|Call Tomado|Compra Col.Primaria')
+         ACN(sa:1,val(sa:1)+ABS(FBN['Cantidad']))
+      Else
+         if Incluido(FBN['TipoOper'],'Venta|Retiro|Call Otorgado|Vto Call Tomado|Vto Prestamo|Plazo Fijo Tit.')
+            ACN(sa:1,val(sa:1)-ABS(FBN['Cantidad']))
+         Else
+           **  Falta definir  Split Canje y Transferencia
+           ACN(sa:1,val(sa:1)+ABS(FBN['Cantidad']))
+         Endif
+      Endif   
+      ACT(o:fac,PYC(val(sa:1), 0, 2))
+    #endif
+    ACN(fi8,fac)
+Proximo
+**ACN(fi8,fac)
+**     Movimientos
+**     Derivados Tabla4
+
+SQL.ADD("Select FechaOp, FechaVto, ContraEspecie, Cantidad, Precio1, TotalBrutoCli1, TotalAux1 as Comision, TotalIVA as IVAComision, ")
+SQL.ADD("  TotalGastos as Derechos, TotalIvaAdi as IVADerechos, TotalNetoCli1, NrOperacion, ")
+SQL.ADD("  Case When Mercado = '"~VAR('MERROFEX')~"' then ObservacDoc else Especie end Especie, ")   
+SQL.ADD("  Case When TipoOp = 'FXCF' then 'Venta Futuro' When TipoOp = 'FXVF' then 'Compra Futuro' When TipoOp = 'DDC' then 'Documento Compra' else 'Documento Venta' end TipoOper, /* TotalNetoCli1 as SaldoFinal */")
+**SQL.ADD("  Case When TipoOp = 'FXCF' then TotalBrutoCli1-TotalAux1-TotalIVA-TotalGastos-TotalIVAADI else TotalBrutoCli1+TotalAux1+TotalIVA+TotalGastos+TotalIVAADI end SaldoFinal")
+SQL.ADD("  TotalBrutoCli1  SaldoFinal")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E where O.Especie=E.Codigo  ")
+SQL.ADD("and Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and TipoOp in ('FXCF','FXVF') ")
+SQL.ADD("and FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("order by Especie,FechaOp ")    
+ACN(fi9,fac)
+ACN(xy1,0)
+watch(sql.batch)
+Recorrer SQL
+   if Val(xy1)=0
+      ACT(a:fac, 'DERIVADOS')
+      SetFont(a:fac, 3)
+      ACN(fi9,fac)
+      ifa
+      if no
+      ACT(a:fac,'Fecha Op.')
+      ACT(b:fac,'Fecha Liq.')
+      ACT(c:fac,'Tipo Op.')
+      ACT(d:fac,'Especie')
+      ACT(e:fac,'Moneda')
+      ACT(f:fac,'V.N.') 
+      ACT(g:fac,'Precio')
+      ACT(h:fac,'Nro.Op.')
+      ACT(i:fac,'Saldo Final')
+      endif
+      
+         ACT(a:fac,'Fecha Op.')
+         ACT(b:fac,'Fecha Liq.')
+         ACT(c:fac,'Tipo Op.')
+         ACT(d:fac,'Especie')
+         ACT(e:fac,'Moneda')
+         ACT(f:fac,'V.N.') 
+         ACT(g:fac,'Precio')
+         ACT(h:fac,'Comisiones')
+         ACT(i:fac,'IVA Comisiones')
+         ACT(j:fac,'Derechos')
+         ACT(k:fac,'IVA Derechos')
+         ACT(l:fac,'Nro.Op.')      
+         ACT(m:fac,'Saldo Final') 
+      
+      
+      SetFont(a:fac..1:fac, 2)      
+      ACN(xy1,1)
+      ACN(xy2,1)
+      ACN(xy10,1)      
+      ifa
+   endif
+   
+   if no
+   ACT(a:fac,FBN['FechaOp'])
+   ACT(b:fac,FBN['FechaVto'])
+   ACT(c:fac,FBN['TipoOper']) 
+   ACT(d:fac,FBN['Especie'])
+   ACT(e:fac,FBN['ContraEspecie'])
+   ACT(f:fac,PYC(FBN['Cantidad'], 0, 2))
+   ACT(g:fac,PYC(FBN['Precio1'], 0, 5))
+   ACT(h:fac, FBN['NrOperacion'])
+   ACT(i:fac,PYC(FBN['SaldoFinal'], 0, 2))
+   endif
+   
+   ACT(a:fac,FBN['FechaOp'])
+   ACT(b:fac,FBN['FechaVto'])
+   ACT(c:fac,FBN['TipoOper']) 
+   ACT(d:fac,FBN['Especie'])
+   ACT(e:fac,FBN['ContraEspecie'])
+   ACT(f:fac,PYC(FBN['Cantidad'], 0, 2))
+   ACT(g:fac,PYC(FBN['Precio1'], 0, 5))
+   ACT(h:fac,PYC(FBN['Comision'], 0, 2))
+   ACT(i:fac,PYC(FBN['IVAComision'], 0, 2))
+   ACT(j:fac,PYC(FBN['Derechos'], 0, 2))
+   ACT(k:fac,PYC(FBN['IVADerechos'], 0, 2))
+   ACT(l:fac, FBN['NrOperacion'])
+   ACT(m:fac,PYC(FBN['SaldoFinal'], 0, 2))
+Proximo
+ACN(fi10,fac)
+If Val(xy1)=0
+   ifa
+   ACN(fi9,fac)
+   ACN(fi10,fac)   
+Endif   
+**     Movimientos
+**     Monedas Tabla5
+#ifdef MLASA
+      ACN(fi11,fac)
+      ACN(xy1,0)
+#else
+        ** AA 28-07-2023 se incorporar corte por mercado como STD
+
+        SQL.ADD("Select FechaMov,Mercado,M.Especie,NrMov,MonedaEmision,Cantidad,NrTrans2,isnull(T.ConceptoPago,'') Concepto,  ")
+        SQL.ADD("       NrOperacion,Cantidad as SaldoFinal,")
+        SQL.ADD("       Case when T.Observaciones like '%pr:%' then T.Observaciones else M.Leyenda end Leyenda, ")
+        SQL.ADD("Case when SUBSTRING(NrOperacion,1,1)='T' then (select TipoOp from OPERACIONES O where O.NrOperacion=M.NrOperacion) ")
+        SQL.ADD("     when SUBSTRING(NrOperacion,1,2)='DD' then (select TipoOp from OPERACIONES O where O.NrOperacion=M.NrOperacion) else 'OTRO' end TipoOP, ")
+        SQL.ADD("Case when SUBSTRING(NrOperacion,1,1)='T' then (select CB4 from OPERACIONES O where O.NrOperacion=M.NrOperacion) else 0 end Bilateral, '1' Movi, ")
+        SQL.ADD("(select TipoOp from OPERACIONES O where O.NrOperacion=M.NrOperacion) TipoOpx ")
+        SQL.ADD(" from "~DBO~".MOVEJECUTADOS M ")
+        SQL.ADD(" left join "~DBO~".TRANSACCIONES2 T on M.NrOperacion =T.NrTrans ")
+        SQL.ADD(" left join "~DBO~".ESPECIES E on M.Especie=E.Codigo ")
+        SQL.ADD(" where Cliente = '"~Dialogo.Cliente1~"' ")
+        SQL.ADD("and NrSaldo = 1 ")
+        SQL.ADD("and Mercado in ("~Pipe2Comillas(VAR('RESCTAMERM'))~") ")
+        SQL.ADD("and FechaMov >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaMov <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+        SQL.ADD("and E.Jerarquia like '"~VAR('JERMONEDA')~"%' ")
+        SQL.ADD(" union ")
+        SQL.ADD("Select FechaMov,Mercado,M.Especie,NrMov,MonedaEmision,Cantidad,NrTrans2,isnull(T.ConceptoPago,'') Concepto,  ")
+        SQL.ADD("       NrOperacion,Cantidad as SaldoFinal,")
+        ** AA 8-05-2026  Pendiente se incorpora pegado a la leyenda
+        **SQL.ADD("       Case when T.Observaciones like '%pr:%' then T.Observaciones+' - Pendiente' else M.Leyenda+' - Pendiente' end Leyenda, ")        
+        SQL.ADD("       Case when T.Observaciones like '%pr:%' then T.Observaciones else M.Leyenda end Leyenda, ")        
+        SQL.ADD("Case when SUBSTRING(NrOperacion,1,1)='T' then (select TipoOp from OPERACIONES O where O.NrOperacion=M.NrOperacion)  ")
+        SQL.ADD("     when SUBSTRING(NrOperacion,1,2)='DD' then (select TipoOp from OPERACIONES O where O.NrOperacion=M.NrOperacion) else 'OTRO' end TipoOP, ")
+        SQL.ADD("Case when SUBSTRING(NrOperacion,1,1)='T' then (select CB4 from OPERACIONES O where O.NrOperacion=M.NrOperacion) else 0 end Bilateral, '2' Movi, ")
+        SQL.ADD("(select TipoOp from OPERACIONES O where O.NrOperacion=M.NrOperacion) TipoOpx ")
+        SQL.ADD(" from "~DBO~".MOVPENDIENTES M ")
+        SQL.ADD(" left join "~DBO~".TRANSACCIONES2 T on M.NrOperacion =T.NrTrans ")
+        SQL.ADD(" left join "~DBO~".ESPECIES E on M.Especie=E.Codigo ")
+        SQL.ADD(" where Cliente = '"~Dialogo.Cliente1~"' ")
+        SQL.ADD("and NrSaldo = 1 ")
+        SQL.ADD("and Mercado in ("~Pipe2Comillas(VAR('RESCTAMERM'))~") ")
+        SQL.ADD("and FechaMov >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaMov <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+        SQL.ADD("and E.Jerarquia like '"~VAR('JERMONEDA')~"%' ")
+        SQL.ADD("order by 2,3,1,4,12,8 ")     
+        **watch(sql.batch)
+    ACN(fi11,fac)
+    ACN(xy1,0)
+    ACT(mo:1,'')
+    
+    Recorrer SQL
+      if Val(xy1)=0
+         ACT(a:fac,'MONEDAS')
+         SetFont(a:fac, 3)
+         ACN(fi11,fac)
+         ifa
+         ACT(a:fac,'Fecha Movimiento')
+         ACT(b:fac,'Concepto')
+         * ACT(c:fac,'Especie')
+         ACT(d:fac,'Moneda')
+         ACT(e:fac,'Cantidad')
+         ACT(f:fac,'Nro.Op.')
+         ACT(g:fac,'Saldo Final')
+
+         SetFont(a:fac..g:fac, 2)      
+         ACN(xy1,1)
+         ACN(xy2,1)
+         ifa
+         
+         ** AA 28-07-2023 corte por mercado especie  es STD
+         **#ifdef BACS
+             ACT(mo:1,FBN['Especie']~FBN['Mercado'])
+             ACT(mo:2,FBN['Especie'])
+             ACT(mo:3,FBN['Mercado'])
+             SQL.ADD("select Sum(Saldo) Saldo from ")
+             SQL.ADD("(select Saldo from "~DBO~".SALDOSDIA S ")
+             SQL.ADD("   where S.Cuenta in (select Codigo from CUENTAS where Cliente='"~Dialogo.Cliente1~"' and TipoCuenta = 'VIS' /*and (Especies like '%"~FBN['Especie']~"%' or Especies like '%MONEDA%')*/) ")
+             SQL.ADD("     and S.Cliente = '"~Dialogo.Cliente1~"'  ")
+             SQL.ADD("     and S.NrSaldo = 81 ")
+             SQL.ADD("     and S.Especie = '"~FBN['Especie']~"'")
+             SQL.ADD("     and S.Mercado = '"~FBN['Mercado']~"'")
+             SQL.ADD("     and S.Fecha = (SELECT MAX(S2.Fecha) ")
+             SQL.ADD("                   FROM "~DBO~".SALDOSDIA S2 ")
+             SQL.ADD("                   WHERE S2.Cliente = S.Cliente  AND ")
+             SQL.ADD("                         S2.Especie = S.Especie  AND ")
+             SQL.ADD("                         S2.EnteCustodia = S.EnteCustodia AND ")
+             SQL.ADD("                         S2.Mercado = S.Mercado AND ")
+             ** AA 07-09-2023  cambio solicitado PZ
+             * SQL.ADD("                         S2.Fecha <= '"~IdxDate(Dialogo.Fecha1-1)~"' AND ")
+             SQL.ADD("                         S2.Fecha < '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+             SQL.ADD("                         S2.Cuenta  = S.Cuenta   AND ")
+             SQL.ADD("                         S2.NrSaldo = S.NrSaldo) ")
+             SQL.ADD(" ) AUX")    
+            *watch(sql.batch)
+         Recorrer SQL
+           dfa
+           ACN(sa:1,FBN['Saldo'])
+         Proximo
+            if EqStr(VAR('RESCTAMOVS'),'SI')
+               ACT(b:fac,'Saldo Inicial - '~ BuscarCampo('MERCADOS','Descripcion','Codigo',FBN['Mercado']))
+               ACT(d:fac,FBN['Especie']) 
+               ACT(g:fac,PYC(val(sa:1), 0, 2))
+            else   
+               ACT(b:fac,BuscarCampo('MERCADOS','Descripcion','Codigo',FBN['Mercado']))
+            endif
+            if Val(mn:1)=0
+               ACN(mm:1,1)
+            else
+               ACN(mm:1,val(mn:1))
+            endif            
+            Recorrer&i 1,Val(mm:1)
+               if Not EqStr(Val(mo:1),Val(ma:&i)~Val(mb:&i))
+                  SCN(mn:1,1)
+                  ACT(ma:val(mn:1),Val(mo:2))
+                  ACT(mb:val(mn:1),Val(mo:3))
+                  ACT(mc:val(mn:1),val(sa:1))
+                  break
+               Else
+                  ACT(mc:&i,val(sa:1))
+                  break
+               Endif
+            Proximo
+         ifa
+      endif
+      
+        if Not EqStr(Val(mo:1),FBN['Especie']~FBN['Mercado'])
+         ACT(mo:1,FBN['Especie']~FBN['Mercado'])
+         ACT(mo:2,FBN['Especie'])
+         ACT(mo:3,FBN['Mercado'])         
+         ACN(mc:val(mn:1),val(sa:1))
+         *#else
+         *if Not EqStr(Val(mo:1),FBN['Especie'])
+         *ACT(mo:1,FBN['Especie'])
+         *#endif
+         SQL.ADD("select Sum(Saldo) Saldo from ")
+         SQL.ADD("(select Saldo from "~DBO~".SALDOSDIA S ")
+         SQL.ADD("   where S.Cuenta in (select Codigo from CUENTAS where Cliente='"~Dialogo.Cliente1~"' and TipoCuenta = 'VIS' /*and (Especies like '%"~FBN['Especie']~"%' or Especies like '%MONEDA%')*/) ")
+         SQL.ADD("     and S.Especie = '"~FBN['Especie']~"'")
+         SQL.ADD("     and S.Cliente = '"~Dialogo.Cliente1~"' ")
+         SQL.ADD("     and S.NrSaldo = 81 ")
+         *#ifdef BACS
+          SQL.ADD("    and S.Mercado = '"~FBN['Mercado']~"'")
+          *#endif
+         SQL.ADD("     and S.Fecha = (SELECT MAX(S2.Fecha) ")
+         SQL.ADD("                   FROM "~DBO~".SALDOSDIA S2 ")
+         SQL.ADD("                   WHERE S2.Cliente = S.Cliente  AND ")
+         SQL.ADD("                         S2.Especie = S.Especie  AND ")
+         SQL.ADD("                         S2.EnteCustodia = S.EnteCustodia AND ")
+         SQL.ADD("                         S2.Mercado = S.Mercado AND ")
+         ** AA 07-09-2023  cambio solicitado PZ
+         *  SQL.ADD("                         S2.Fecha <= '"~IdxDate(Dialogo.Fecha1-1)~"' AND ")
+         SQL.ADD("                         S2.Fecha < '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+         SQL.ADD("                         S2.Cuenta  = S.Cuenta   AND ")
+         SQL.ADD("                         S2.NrSaldo = S.NrSaldo) ")
+         SQL.ADD(" ) AUX")    
+         *watch(sql.batch)   
+         Recorrer SQL
+           dfa
+           ACN(sa:1,FBN['Saldo'])
+         Proximo
+         IFA
+            if EqStr(VAR('RESCTAMOVS'),'SI')
+               ACT(b:fac,'Saldo Inicial - '~ BuscarCampo('MERCADOS','Descripcion','Codigo',FBN['Mercado']))
+               ACT(d:fac,FBN['Especie']) 
+               ACT(g:fac,PYC(val(sa:1), 0, 2))
+            else   
+               ACT(b:fac,BuscarCampo('MERCADOS','Descripcion','Codigo',FBN['Mercado']))
+            endif
+            ACN(mm:1,val(mn:1))
+            Recorrer&i 1,Val(mm:1)
+               if Not EqStr(Val(mo:1),Val(ma:&i)~Val(mb:&i))
+                  SCN(mn:1,1)
+                  ACT(ma:val(mn:1),Val(mo:2))
+                  ACT(mb:val(mn:1),Val(mo:3))
+                  ACT(mc:val(mn:1),val(sa:1))
+                  break
+               Else
+                  ACT(mc:&i,val(sa:1))
+                  break
+               Endif
+            Proximo
+         ifa
+      Endif
+      ACT(a:fac,FBN['FechaMov'])
+      if Vacio(FBN['Concepto'])
+      ** buscar si es VFONDOS %pr: %
+         ACN(xx0,Posicion('Vis Fond',FBN['Leyenda'], 18))
+         if Val(xx0) > 0
+            ACT(b:fac,Copy(FBN['Leyenda'],1,Val(xx0)-1))
+         else
+            ACT(b:fac,FBN['Leyenda'])
+         endif
+           if EqStr(FBN['Movi'],'2')
+              ACT(b:fac,TRIM(Val(b:fac))~' - Pendiente')
+           endif   
+      else
+         ACT(b:fac, BuscarCampo('CNCONCEPTOSPAGOCOBRO','Descripcion','Codigo',FBN['Concepto']))
+      endif
+      ACN(xy101,FBN['Cantidad'])
+      ACN(xy105,0)
+      ** AA 10-11-2023  solo se cambian TIC/TIV y TCOPRI
+      **if Not Incluido(FBN['TipoOp'], 'TIDE|TIPO|TICO|TICT|OTRO|')
+      if Incluido(FBN['TipoOp'], 'TIC|TIV|TCOPRI|')
+         ACN(xy105,SQL("select CB4 from OPERACIONES O where O.NrOperacion='"~FBN['NrOperacion']~"'"))
+         ACN(xy101,FBN['Cantidad']*-1)
+      Endif   
+      IF Val(xy105)=0  y not Incluido(fbn('NrMov'), '11|12|13|14')
+      
+      If Incluido(FBN['TipoOp'], 'TIC|TIFC')
+         ACT(b:FAC, 'Venta'~Copy(Val(b:FAC),Longitud('Compra')+1,Longitud(Val(b:FAC))) )
+         if FBN['Bilateral']=0 y EqStr(FBN['TipoOp'], 'TIC')
+            ACN(xy101,FBN['Cantidad'])
+         endif         
+      Endif
+      If Incluido(FBN['TipoOp'], 'TIV|TIFV')
+         ACT(b:FAC, 'Compra'~Copy(Val(b:FAC),Longitud('Venta')+1,Longitud(Val(b:FAC))) )
+         if FBN['Bilateral']=0 y EqStr(FBN['TipoOp'], 'TIV')
+            ACN(xy101,FBN['Cantidad'])
+         endif
+      Endif
+      If Incluido(FBN['TipoOp'], 'OTRO')
+         If EqStr(FBN['TipoOpx'], 'FXV')
+            ACT(b:FAC, 'Compra'~Copy(Val(b:FAC),Longitud('Venta')+1,Longitud(Val(b:FAC))) )
+         Else
+            ACT(b:FAC, 'Venta'~Copy(Val(b:FAC),Longitud('Compra')+1,Longitud(Val(b:FAC))) )
+         endif
+      Endif      
+      If Incluido(FBN['TipoOp'], 'TICT|')
+         ACN(xy100, Posicion('Tomado',Val(b:fac), 1, Longitud(Val(b:fac))) -1)
+         ACT(xy102, Copy(val(b:fac),1,val(xy100))~'Otorgado '~Copy(val(b:fac),8+Val(xy100),Longitud(Val(b:fac))))
+         ACT(b:FAC, Val(xy102))
+         **ACN(xy101,FBN['Cantidad']*-1)
+      Endif
+      If Incluido(FBN['TipoOp'], 'TICO|')
+         ACN(xy100, Posicion('Otorgado',Val(b:fac), 1, Longitud(Val(b:fac))) -1)
+         ACT(xy102, Copy(val(b:fac),1,val(xy100))~'Tomado '~Copy(val(b:fac),10+Val(xy100),Longitud(Val(b:fac))))
+         ACT(b:FAC, Val(xy102))
+         **ACN(xy101,FBN['Cantidad']*-1)
+      Endif
+      If Incluido(FBN['TipoOp'], 'TIPO|')
+         ACN(xy100, Posicion('Otorgado',Val(b:fac), 1, Longitud(Val(b:fac))) -1)
+         ACT(xy102, Copy(val(b:fac),1,val(xy100))~''~Copy(val(b:fac),10+Val(xy100),Longitud(Val(b:fac))))
+         ACT(b:FAC, Val(xy102))
+         **ACN(xy101,FBN['Cantidad']*-1)
+      Endif
+      If Incluido(FBN['TipoOp'], 'DDC|DDV')
+      If EqStr(FBN['TipoOp'], 'DDC')
+            ACT(b:FAC, Val(b:FAC) )
+         Else
+            ACT(b:FAC, Val(b:FAC) )
+         endif
+      Endif            
+      ENDIF   
+      *ACT(c:fac,FBN['Especie']) 
+      ACT(d:fac,FBN['MonedaEmision'])
+      ACT(e:fac,PYC(Val(xy101), 0, 2))
+      ACT(f:fac, FBN['NrOperacion'])
+      ACN(sa:1,val(sa:1)+Val(xy101))
+      ACT(g:fac,PYC(val(sa:1), 0, 2))
+    Proximo
+    ** Ultimo saldo
+    ACN(mm:1,val(mn:1))
+    Recorrer&i 1,Val(mm:1)
+       if Not EqStr(Val(mo:1),Val(ma:&i)~Val(mb:&i))
+          SCN(mn:1,1)
+          ACT(ma:val(mn:1),Val(mo:2))
+          ACT(mb:val(mn:1),Val(mo:3))
+          ACT(mc:val(mn:1),val(sa:1))
+          break
+       Else
+          ACT(mc:&i,val(sa:1))
+          break
+       Endif
+    Proximo
+    
+#endif
+
+if  val(xy2)= 0
+    ifa
+    ACT(ab3,'Sin Movimientos para el Periodo')
+    ACN(xy2,0)
+endif
+    
+ACN(fi12,fac)
+
+
+** Posicion Final Tabla6
+**     Bonos 
+SQL.ADD("Select S.Especie, E.Nombre, S.Mercado, sum(S.Saldo) as VN, S.NrSaldo, EC.Descripcion DescEst, ")
+SQL.ADD(" ISNULL((Select Top(1) PrecioContable From "~DBO~".COTIZACIONES C Where Codigo = S.Especie AND Moneda = '"~VAR('MONELOCA')~"' AND Fecha <= '"~IdxDate(Dialogo.Fecha2-1)~"' Order By Fecha Desc),1) as PrecioARP ")
+SQL.ADD("from "~DBO~".SALDOSDIA S ")
+SQL.ADD("     INNER JOIN  "~DBO~".ESPECIES E WITH (NOLOCK) ON S.Especie=E.Codigo ")
+SQL.ADD("     INNER JOIN "~DBO~".ESTADOSCUSTODIA EC WITH (NOLOCK)  ")
+SQL.ADD("           ON (S.NrSaldo>201 or S.NrSaldo=101) AND (S.NrSaldo not in(121,227)) AND ((S.NrSaldo-100=EC.NrSaldo AND S.NrSaldo>201) or (S.NrSaldo=EC.NrSaldo AND S.NrSaldo=101)) ")
+SQL.ADD("where  S.Cliente = '"~Dialogo.Cliente1~"' AND ")
+SQL.ADD("       S.EnteCustodia = '"~VAR('VEHICULODE')~"' AND ")
+**22-08-2023 AA se igualan estados Nrsaldos a informe SLCUFP "Saldo de Custodia a Fecha Posicion" inner join
+**SQL.ADD("      ((S.NrSaldo = "~Fstr(val(SL:1),0,0)~" AND S.NrSaldo = EC.NrSaldo) OR (S.NrSaldo > "~Fstr(val(SL:1),0,0)~"+100 AND S.NrSaldo-100 = EC.NrSaldo)) AND  " )
+SQL.ADD("      S.Saldo <> 0 AND ")
+SQL.ADD("      S.Especie = E.Codigo AND ")
+SQL.ADD("      S.Fecha = (SELECT MAX(S2.Fecha) ")
+SQL.ADD("                  FROM "~DBO~".SALDOSDIA S2 ")
+SQL.ADD("                  WHERE S2.Cliente = S.Cliente  AND ")
+SQL.ADD("                        S2.Especie = S.Especie  AND ")
+SQL.ADD("                        S2.EnteCustodia = S.EnteCustodia AND ")
+SQL.ADD("                        S2.Mercado = S.Mercado AND ")
+SQL.ADD("                        S2.Fecha <= '"~IdxDate(Dialogo.Fecha2)~"' AND ")
+SQL.ADD("                        S2.Cuenta  = S.Cuenta   AND ")
+SQL.ADD("                        S2.NrSaldo = S.NrSaldo) ")
+**22-08-2023 AA se igualan estados Nrsaldos a informe SLCUFP "Saldo de Custodia a Fecha Posicion" 
+***---Excluyo Saldos Bloqueados por venta
+SQL.ADD(" AND S.NrSaldo <> "~Val(SB:1)~"+100 AND S.NrSaldo <> "~Val(SB:2)~"+100")
+SQL.ADD(" Group by Especie, Nombre, Mercado, S.NrSaldo, EC.Descripcion  ")
+SQL.ADD(" Order by Especie,Mercado, S.NrSaldo ")
+*watch(sql.batch)
+
+IFA   
+ACN(fi13,fac)
+ACN(xy1,0)
+ACN(xy10,1)
+Recorrer SQL
+   if Val(xy1)=0
+   ACT(a:fac, "TITULOS")
+      SetFont(a:fac, 3)
+      ACN(fi13,fac)
+      ifa
+      ACT(a:fac,'Especie')
+      ACT(b:fac,'Nombre')
+      ACT(c:fac,'Custodia')
+      ACT(d:fac,'Estado')
+      ACT(e:fac,'V.N.')
+      ACT(f:fac,'Precio')
+      ACT(g:fac,'Valor ARP')
+      ACT(h:fac,'Valor USD')
+      SetFont(a:fac..h:fac, 2)      
+      ACN(xy1,1)
+      ACN(xy10,1)
+      ifa
+   endif
+   
+   ACT(a:fac,FBN['Especie'])
+   ACT(b:fac,FBN['Nombre'])
+   ACT(c:fac,FBN['Mercado']) 
+   ACT(d:fac,FBN['DescEst']) 
+   ACT(e:fac,PYC(FBN['VN'], 0, 2))
+   *ACT(e:fac,PYC(FBN['PrecioARP'], 0, 5))
+   ACT(f:fac,PYC(FBN['PrecioARP'], 0, 8))
+   ACT(g:fac,PYC((FBN['VN']*FBN['PrecioARP']), 0, 2))
+   ACT(h:fac,PYC((FBN['VN']*FBN['PrecioARP'])/Val(co2), 0, 2))
+   
+Proximo
+ACN(fi14,fac)
+
+** Posicion Final
+**     Derivados 
+ACN(fi15,Val(fi14))
+ACN(fi16,Val(fi15))
+
+** Posicion Final
+**     Monedas 
+ACN(fi17,Val(fi16))
+ACN(fi18,Val(fi17))
+
+IFA
+ACN(fi17,fac)
+ACN(xy1,0)
+
+Recorrer&i 1,Val(mn:1)
+   if Val(xy1)=0
+      ifa
+      ACT(a:fac, "MONEDAS")
+      SetFont(a:fac, 3)
+      ACN(fi5,fac)
+      Ifa
+      ACT(a:fac,'Especie')
+      *#ifdef BACS
+         ACT(b:fac,'Nombre - Mercado')
+         *#else
+         *ACT(b:fac,'Nombre')
+         *#endif
+      ACT(g:fac,'Saldo')
+      SetFont(a:fac..g:fac, 2)      
+      ACN(xy1,1)
+      ACN(xy10,1)
+      ifa
+   endif
+
+   ACT(a:fac,val(ma:&i))
+   ACT(b:fac,BuscarCampo('ESPECIES','Nombre','Codigo',val(ma:&i))~' - '~ BuscarCampo('MERCADOS','Descripcion','Codigo',val(mb:&i)))
+   ACT(g:fac,PYC((val(mc:&i)), 0, 2))
+   ifa
+Proximo
+
+ACN(fi18,fac)
+
+if  val(xy10)> 0
+    ** Tipo cambio Moneda Extranjera (VAR('MONEEXTR')) Tabla7
+
+    ACT(ab2,'Tipo De Cambio')
+    ACT(ac2, PYC(Val(co2), 1, 2))
+else    
+   #ifdef BACS 
+       ACT(ab2,'Sin Tenencia Final')
+   #else 
+       ACT(ab2,'Sin Posicion Final')
+   #endif    
+endif    
+
+
+** Ver incluir MAV
+SQL.ADD("Select FechaOp, FechaOp2 FechaVto, TipoDoc, ContraEspecie, Cantidad, TotalIntereses, TotalBrutoCli1, ImpGastos1,TotalGastos,MAVAdmGtiaVdr,  ")
+SQL.ADD("  ImpGastos2,TotalAux1,MAVAdmGtiaVdrIVA,TotalRetenciones, TotalDerechos,TotalComisiones, TotalIva, TotalNetoCli1, NrOperacion, ")
+SQL.ADD("  Case When Mercado = '"~VAR('MERROFEX')~"' then ObservacDoc else Especie end Especie, ")   
+SQL.ADD("  Case When TipoOp = 'DDC' then 'Dto.Documento Compra' else 'Dto.Documento Venta' end TipoOper,")
+SQL.ADD("  TotalBrutoCli1  SaldoFinal")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E where O.Especie=E.Codigo  ")
+SQL.ADD("and Cliente1 = '"~Dialogo.Cliente1~"' ")
+SQL.ADD("and TipoOp in ('DDC','DDV') ")
+SQL.ADD("and FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("order by Especie,FechaOp ")    
+ACN(fi19,fac)
+ACN(xy1,0)
+watch(sql.batch)
+Recorrer SQL
+   if Val(xy1)=0
+   ACT(a:fac, 'DTO. de DOCUMENTOS')
+      SetFont(a:fac, 3)
+      ACN(fi19,fac)
+      ifa
+      
+         ACT(a:fac,'Fecha Op.')
+         ACT(b:fac,'Fecha Liq.')
+         ACT(c:fac,'Tipo Op.')
+         ACT(d:fac,'Tipo Doc.')
+         ACT(e:fac,'Moneda')
+         ACT(f:fac,'Moneda Liq.')
+         ACT(g:fac,'Capital') 
+         ACT(h:fac,'Intereses/Dto')
+         ACT(i:fac,'Comisiones')
+         ACT(j:fac,'IVA Comisiones')
+         ACT(k:fac,'Derechos')
+         ACT(l:fac,'IVA Derechos')
+         ACT(m:fac,'Nro.Op.')      
+         ACT(n:fac,'Monto') 
+      
+      
+      SetFont(a:fac..1:fac, 2)      
+      ACN(xy1,1)
+      ACN(xy2,1)
+      ACN(xy10,1)      
+      ifa
+   endif
+ 
+   ACT(a:fac,FBN['FechaOp'])
+   ACT(b:fac,FBN['FechaVto'])
+   ACT(c:fac,FBN['TipoOper']) 
+   ACT(d:fac,FBN['TipoDoc'])
+   ACT(e:fac,FBN['Especie'])
+   ACT(f:fac,FBN['ContraEspecie'])
+   ACT(g:fac,PYC(FBN['Cantidad'], 0, 2))
+   ACT(h:fac,PYC(FBN['TotalIntereses'], 0, 2))
+   ACT(i:fac,PYC(FBN['ImpGastos1']+FBN['TotalGastos']+FBN['MAVAdmGtiaVdr'], 0, 2))
+   ACT(j:fac,PYC(FBN['ImpGastos2']+FBN['TotalAux1']+FBN['MAVAdmGtiaVdrIVA']+FBN['TotalRetenciones'], 0, 2))
+   ACT(k:fac,PYC(FBN['TotalDerechos']+FBN['TotalComisiones'], 0, 2))
+   ACT(l:fac,PYC(FBN['TotalIva'], 0, 2))
+   ACT(m:fac, FBN['NrOperacion'])
+   ACT(n:fac,PYC(FBN['SaldoFinal'], 0, 2))
+   
+Proximo
+ACN(fi20,fac)
+If Val(xy1)=0
+   ifa
+   ACN(fi19,fac)
+   ACN(fi20,fac)   
+Endif   
+** Fin incluir MAV
+
+ACT(t1,'fi1 '~Val(fi1))
+ACT(t2,'fi2 '~Val(fi2))
+ACT(t3,'fi3 '~Val(fi3))
+ACT(t4,'fi4 '~Val(fi4))
+ACT(t5,'fi5 '~Val(fi5))
+ACT(t6,'fi6 '~Val(fi6))
+ACT(t7,'fi7 '~Val(fi7))
+ACT(t8,'fi8 '~Val(fi8))
+ACT(t9,'fi9 '~Val(fi9))
+ACT(t10,'fi10 '~Val(fi10))
+ACT(t11,'fi11 '~Val(fi11))
+ACT(t12,'fi12 '~Val(fi12))
+ACT(t13,'fi13 '~Val(fi13))
+ACT(t14,'fi14 '~Val(fi14))
+ACT(t15,'fi15 '~Val(fi15))
+ACT(t16,'fi16 '~Val(fi16))
+ACT(t17,'fi17 '~Val(fi17))    
+ACT(t18,'fi18 '~Val(fi18))    
+ACT(t19,'fi19 '~Val(fi19))    
+ACT(t20,'fi20 '~Val(fi20))    
+
+
+ACT(xy80,Var('PATHRESCT1')~Var('RESCTATEMP'))
+
+ABT(x:10..Z:5, LeerLeyenda('','','','MRESCTAASU'), 1)
+ABT(x:1..Z:4, LeerLeyenda('','','','MRESCTADET'), 1)
+
+If Dialogo.Radio1 = 0
+   #ifdef MLASA
+       **EmitirCartaVisible(val(xy80), "Estado de Cuenta", Cliente=Val(aa1), Comitente=Val(aa2), CUIT=Val(aa3), Fechaini=Val(aa4), Fechafin=Val(aa5), Fechaemi=Val(aa6), Empresa=Val(aa7), Direccion=Val(aa8), CodPostal=Val(aa9), Ciudad=Val(aa10), Pais=Val(aa11), Telefono=Val(aa12), Fax=Val(aa13), Agente=Val(aa14),Registro=Val(aa15), DetaEmpresa1=Val(aa16), DetaEmpresa2=Val(aa17), DetaEmpresa3=Val(aa18), DetaEmpresa4=Val(aa19),Tabla1=a:Val(fi1)..h:Val(fi6), Tabla2=ab1..ac1, Tabla3=a:Val(fi7)..o:Val(fi8), Tabla4=a:Val(fi9)..m:Val(fi10), Tabla5=xx:Val(fi11)..xx:Val(fi12), Tabla6=ab3..ac3,Tabla7=a:Val(fi13)..h:Val(fi18), Tabla8=ab2..ac2,Tabla9=a:Val(fi13)..h:Val(fi18),DetallePieA=Val(pi:1),DetallePieB=Val(pi:2),DetallePieC=Val(pi:3))
+       EmitirCartaVisible(val(xy80), "Estado de Cuenta", Cliente=Val(aa1), Comitente=Val(aa2), CUIT=Val(aa3), Fechaini=Val(aa4), Fechafin=Val(aa5), Fechaemi=Val(aa6), Empresa=Val(aa7), Direccion=Val(aa8), CodPostal=Val(aa9), Ciudad=Val(aa10), Pais=Val(aa11), Telefono=Val(aa12), Fax=Val(aa13), Agente=Val(aa14),Registro=Val(aa15), DetaEmpresa1=Val(aa16), DetaEmpresa2=Val(aa17), DetaEmpresa3=Val(aa18), DetaEmpresa4=Val(aa19),Tabla1=a:Val(fi1)..h:Val(fi6),Tabla2=ab1..ac1,Tabla3=a:Val(fi7)..o:Val(fi8),Tabla4=a:Val(fi19)..n:Val(fi20),Tabla5=a:Val(fi9)..m:Val(fi10),Tabla6=a:Val(fi11)..i:Val(fi12),Tabla7=ab3..ac3,Tabla8=a:Val(fi13)..h:Val(fi18),Tabla9=ab2..ac2,DetallePieA=Val(pi:1),DetallePieB=Val(pi:2),DetallePieC=Val(pi:3))
+   #else
+      **EmitirCartaVisible(val(xy80), "Estado de Cuenta", Cliente=Val(aa1), Comitente=Val(aa2), CUIT=Val(aa3), Fechaini=Val(aa4), Fechafin=Val(aa5), Fechaemi=Val(aa6), Empresa=Val(aa7), Direccion=Val(aa8), CodPostal=Val(aa9), Ciudad=Val(aa10), Pais=Val(aa11), Telefono=Val(aa12), Fax=Val(aa13), Agente=Val(aa14),Registro=Val(aa15), DetaEmpresa1=Val(aa16), DetaEmpresa2=Val(aa17), DetaEmpresa3=Val(aa18), DetaEmpresa4=Val(aa19),Tabla1=a:Val(fi1)..h:Val(fi6), Tabla2=ab1..ac1, Tabla3=a:Val(fi7)..o:Val(fi8), Tabla4=a:Val(fi9)..m:Val(fi10), Tabla5=a:Val(fi11)..i:Val(fi12),Tabla6=ab3..ac3,Tabla7=a:Val(fi13)..h:Val(fi18), Tabla8=ab2..ac2,Tabla9=a:Val(fi13)..h:Val(fi18),DetallePieA=Val(pi:1),DetallePieB=Val(pi:2),DetallePieC=Val(pi:3))
+      ** EmitirCartaVisible(val(xy80), "Estado de Cuenta", Cliente=Val(aa1), Comitente=Val(aa2), CUIT=Val(aa3), Fechaini=Val(aa4), Fechafin=Val(aa5), Fechaemi=Val(aa6), Empresa=Val(aa7), Direccion=Val(aa8), CodPostal=Val(aa9), Ciudad=Val(aa10), Pais=Val(aa11), Telefono=Val(aa12), Fax=Val(aa13), Agente=Val(aa14),Registro=Val(aa15), DetaEmpresa1=Val(aa16), DetaEmpresa2=Val(aa17), DetaEmpresa3=Val(aa18), DetaEmpresa4=Val(aa19),Tabla1=a:Val(fi1)..h:Val(fi6), Tabla9=a:Val(fi19)..n:Val(fi120),Tabla2=ab1..ac1, Tabla3=a:Val(fi7)..o:Val(fi8), Tabla4=a:Val(fi9)..m:Val(fi10), Tabla5=a:Val(fi11)..i:Val(fi12),Tabla6=ab3..ac3,Tabla7=a:Val(fi13)..h:Val(fi18), Tabla8=ab2..ac2,DetallePieA=Val(pi:1),DetallePieB=Val(pi:2),DetallePieC=Val(pi:3))
+      EmitirCartaVisible(val(xy80), "Estado de Cuenta", Cliente=Val(aa1), Comitente=Val(aa2), CUIT=Val(aa3), Fechaini=Val(aa4), Fechafin=Val(aa5), Fechaemi=Val(aa6), Empresa=Val(aa7), Direccion=Val(aa8), CodPostal=Val(aa9), Ciudad=Val(aa10), Pais=Val(aa11), Telefono=Val(aa12), Fax=Val(aa13), Agente=Val(aa14),Registro=Val(aa15), DetaEmpresa1=Val(aa16), DetaEmpresa2=Val(aa17), DetaEmpresa3=Val(aa18), DetaEmpresa4=Val(aa19),Tabla1=a:Val(fi1)..h:Val(fi6),Tabla2=ab1..ac1,Tabla3=a:Val(fi7)..o:Val(fi8),Tabla4=a:Val(fi19)..n:Val(fi20),Tabla5=a:Val(fi9)..m:Val(fi10),Tabla6=a:Val(fi11)..i:Val(fi12),Tabla7=ab3..ac3,Tabla8=a:Val(fi13)..h:Val(fi18),Tabla9=ab2..ac2,DetallePieA=Val(pi:1),DetallePieB=Val(pi:2),DetallePieC=Val(pi:3))
+   #endif
+Else
+   If Dialogo.Radio1 = 1 o Dialogo.Radio1 = 2
+      HojaVisible(NO)
+      BorrarArchivo(val(ar:1))
+      #ifdef MLASA
+          EmitirCarta(val(xy80),val(ar:1), Cliente=Val(aa1), Comitente=Val(aa2), CUIT=Val(aa3), Fechaini=Val(aa4), Fechafin=Val(aa5), Fechaemi=Val(aa6), Empresa=Val(aa7), Direccion=Val(aa8), CodPostal=Val(aa9), Ciudad=Val(aa10), Pais=Val(aa11), Telefono=Val(aa12), Fax=Val(aa13), Agente=Val(aa14),Registro=Val(aa15), DetaEmpresa1=Val(aa16), DetaEmpresa2=Val(aa17), DetaEmpresa3=Val(aa18), DetaEmpresa4=Val(aa19),LugarFecha=&lugarFecha, Tabla1=a:Val(fi1)..h:Val(fi6),Tabla2=ab1..ac1,Tabla3=a:Val(fi7)..o:Val(fi8),Tabla4=a:Val(fi19)..n:Val(fi20),Tabla5=a:Val(fi9)..m:Val(fi10),Tabla6=a:Val(fi11)..i:Val(fi12),Tabla7=ab3..ac3,Tabla8=a:Val(fi13)..h:Val(fi18),Tabla9=ab2..ac2,DetallePieA=Val(pi:1),DetallePieB=Val(pi:2),DetallePieC=Val(pi:3))
+      #else
+          **EmitirCarta(val(xy80),val(ar:1),  Cliente=Val(aa1), Comitente=Val(aa2), CUIT=Val(aa3), Fechaini=Val(aa4), Fechafin=Val(aa5), Fechaemi=Val(aa6), Empresa=Val(aa7), Direccion=Val(aa8), CodPostal=Val(aa9), Ciudad=Val(aa10), Pais=Val(aa11), Telefono=Val(aa12), Fax=Val(aa13), Agente=Val(aa14),Registro=Val(aa15), DetaEmpresa1=Val(aa16), DetaEmpresa2=Val(aa17), DetaEmpresa3=Val(aa18), DetaEmpresa4=Val(aa19),Tabla1=a:Val(fi1)..h:Val(fi6),Tabla2=ab1..ac1,Tabla3=a:Val(fi7)..o:Val(fi8),Tabla4=a:Val(fi19)..n:Val(fi20),Tabla5=a:Val(fi9)..m:Val(fi10),Tabla6=a:Val(fi11)..i:Val(fi12),Tabla7=ab3..ac3,Tabla8=a:Val(fi13)..h:Val(fi18),Tabla9=ab2..ac2,DetallePieA=Val(pi:1),DetallePieB=Val(pi:2),DetallePieC=Val(pi:3))
+          EmitirCarta(val(xy80),val(ar:1), Cliente=Val(aa1), Comitente=Val(aa2), CUIT=Val(aa3), Fechaini=Val(aa4), Fechafin=Val(aa5), Fechaemi=Val(aa6), Empresa=Val(aa7), Direccion=Val(aa8), CodPostal=Val(aa9), Ciudad=Val(aa10), Pais=Val(aa11), Telefono=Val(aa12), Fax=Val(aa13), Agente=Val(aa14),Registro=Val(aa15), DetaEmpresa1=Val(aa16), DetaEmpresa2=Val(aa17), DetaEmpresa3=Val(aa18), DetaEmpresa4=Val(aa19),LugarFecha=&lugarFecha, Tabla1=a:Val(fi1)..h:Val(fi6),Tabla2=ab1..ac1,Tabla3=a:Val(fi7)..o:Val(fi8),Tabla4=a:Val(fi19)..n:Val(fi20),Tabla5=a:Val(fi9)..m:Val(fi10),Tabla6=a:Val(fi11)..i:Val(fi12),Tabla7=ab3..ac3,Tabla8=a:Val(fi13)..h:Val(fi18),Tabla9=ab2..ac2,DetallePieA=Val(pi:1),DetallePieB=Val(pi:2),DetallePieC=Val(pi:3))
+      #endif
+      If Dialogo.Radio1 = 2
+      *SendMail(Val(aa21),'Resumen de Cuenta',Var('RESCTAEMI'),SI,,,val(ar:1))
+      SendMail(Val(aa21), val(x:10), val(x:1),SI,,,val(ar:1),,SI)
+         if OK
+            *MessageBox("mail ok")
+         else
+            *Habria que generar algun testigo/log para los erroneos
+            *MessageBox("mail NO ok")
+         endif
+      Endif
+   Endif 
+Endif
+
+LimitesVision(z:Val(fi18)+5)

@@ -1,0 +1,102 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:       'Fecha'       ; 1;;;;;;;;fsys
+  Lista1:       'Vehiculos'   ; 3;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+message('--- Reversa de Asientos de Resultado ---')
+
+SQL.ADD("select Min(FechaOp) MinFechaOp,Especie,Vehiculo1 from ( ")
+SQL.ADD("select FechaOp,Especie,Vehiculo1 from "~DBO~".OPERACIONES where ")
+SQL.ADD("FechaCargaSys =  '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("AND FechaOp < FechaCargaSys ")
+SQL.ADD("AND TipoOp in ('FCR','FCS','SECS','SEVS') ")
+SQL.ADD("AND (CantImpresiones3 Is Null OR CantImpresiones3 = '' OR CantImpresiones3 = ' ') ")
+SQL.ADD("UNION ")
+SQL.ADD("select FechaOp,Especie,Vehiculo1 from "~DBO~".BOPERACIONES ")
+SQL.ADD("where CONVERT (Char(10), FechaDel, 103) = '"~Fecha(Dialogo.Fecha1,'DD/MM/YYYY')~"' ")
+SQL.ADD("AND FechaOp < '"~IdxDate(Dialogo.Fecha1)~"'")
+SQL.ADD("AND TipoOp in ('FCR','FCS','SECS','SEVS') ")
+SQL.ADD("AND (CantImpresiones3 Is Null OR CantImpresiones3 = '' OR CantImpresiones3 = ' ') ")
+SQL.ADD(") a Group By Vehiculo1, Especie ")
+Recorrer SQL
+    ACT(VH:1, fbn('Vehiculo1'))
+    ACT(ES:1, fbn('Especie'))
+    SQL.ADD(" Select A.FechaValor,A.NrUnicoAsiento from "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1, "~DBO~".MODELOSASIENTO MA where ")
+    SQL.ADD(" A.NrUnicoAsiento = A1.NrUnicoAsiento AND A.Modelo = MA.Codigo ")
+    SQL.ADD(" AND A.FechaValor >= '"~IdxDate(fbn('MinFechaOp'))~"' ")
+    SQL.ADD(" AND A.Vehiculo = '"~fbn('Vehiculo1')~"' AND A.Estado='E' ")
+    SQL.ADD(" AND A1.Alias7 = '"~fbn('Especie')~"' AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIRZ'))~") ")
+    SQL.ADD(" AND (A.NrAsiento Is Null OR A.NrAsiento = '' OR  A.NrAsiento = ' ') ")
+    SQL.ADD(" Group By A.FechaValor,A.NrUnicoAsiento ")
+    Recorrer SQL
+       ***/// Reverso los asientos 
+       EjecutarEvento('CONT46', Fecha1=Dialogo.Fecha1, Fecha2=fbn('FechaValor'),NrUnicoAsiento1=fbn('NrUnicoAsiento'))
+       ***---Marco las operaciones reversadas para que no se tomen en proximas corridas
+       SQL.ADD(" Select NrOperacion, 0 BD1 from "~DBO~".OPERACIONES where ")
+       SQL.ADD(" FechaCargaSys =  '"~IdxDate(Dialogo.Fecha1)~"' ")
+       SQL.ADD(" AND FechaOp < FechaCargaSys ")
+       SQL.ADD(" AND TipoOp in ('FCR','FCS','SECS','SEVS') ")
+       SQL.ADD(" AND (CantImpresiones3 Is Null OR CantImpresiones3 = '' OR CantImpresiones3 = ' ') ")
+       SQL.ADD(" AND Vehiculo1 = '"~Val(VH:1)~"' ")
+       SQL.ADD(" AND Especie = '"~Val(ES:1)~"' ")
+       SQL.ADD(" UNION ")
+       SQL.ADD(" Select NrOperacion, 1 BD1 from "~DBO~".BOPERACIONES ")
+       SQL.ADD(" where CONVERT (Char(10), FechaDel, 103) = '"~Fecha(Dialogo.Fecha1,'DD/MM/YYYY')~"' ")
+       SQL.ADD(" AND FechaOp < '"~IdxDate(Dialogo.Fecha1)~"'")
+       SQL.ADD(" AND TipoOp in ('FCR','FCS','SECS','SEVS') ")
+       SQL.ADD(" AND (CantImpresiones3 Is Null OR CantImpresiones3 = '' OR CantImpresiones3 = ' ') ")
+       SQL.ADD(" AND Vehiculo1 = '"~Val(VH:1)~"' ")
+       SQL.ADD(" AND Especie = '"~Val(ES:1)~"' ")
+       Recorrer SQL
+           IF fbn('BD1') = 0
+               SQL.ADD(" Update "~DBO~".OPERACIONES ")
+           ELSE
+               SQL.ADD(" Update "~DBO~".BOPERACIONES ")
+           ENDIF
+           SQL.ADD(" Set CantImpresiones3 = 1 ")
+           SQL.ADD(" Where NrOperacion = '"~fbn('NrOperacion')~"' ")
+           SQL.NEW
+           SQL.EXEC
+       Proximo
+    Proximo
+   ***Regenero Desde MinFechaOp hasta Ayer
+   *Recorrer&i fbn('MinFechaOp'), Habiles(Dialogo.Fecha1,-1)
+   *   If EsHabil(&i)
+         ***---Anulo asientos de la fecha por si hay no enviados
+  *       EjecutarEvento('ANUASI', Fecha1=&i, Fecha2=&i, Lista2=fbn('Vehiculo1'), Lista3=fbn('Especie'),ListaTabla1='', Lista1=Var('TIPASIRZ'))
+          **--Regeneracion del Asiento
+  *       EjecutarEvento('CONT47', Fecha1=(&i), Lista1= fbn('Vehiculo1'), Lista2= fbn('Especie'))
+  *    EndIf
+   *Proximo
+Proximo
+
+*Liquidaciones de Transacciones, Operaciones, MovEJecutados
+SQL.ADD(" SELECT Min(FechaOp) MinFechaOp,Especie,Vehiculo1 FROM ( ")
+SQL.ADD(" SELECT O.FechaOp , O.Especie Especie, O.Vehiculo1 Vehiculo1")
+SQL.ADD(" FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD(" WHERE T.NrOperacionRef1 = O.NrOperacion ")
+SQL.ADD(" AND   T.Especie NOT IN ("~Pipe2Comillas(Descendientes('ESPECIES', 'MONEDA'))~")  ")
+SQL.ADD(" AND   T.NrTrans     =  M.NrTrans2 ")
+SQL.ADD(" AND O.TipoOp in ('FCR','FCS','SECS','SEVS') ")
+SQL.ADD(" and T.TipoTr2 in ('DEP','RET') ")
+SQL.ADD(" AND M.NrOperacion = O.NrOperacion ")
+SQL.ADD(" AND M.NrSaldo = 1 ")
+SQL.ADD(" AND T.Cantidad1 > 0 ")
+SQL.ADD(" AND T.Vehiculo1 IN ("~Pipe2Comillas(Var('VLIQUIDA')~Var('VLIQUIDA2'))~") ")
+SQL.ADD(" AND T.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' AND T.Fecha2 < '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" ) query Group By Vehiculo1, Especie ")
+Recorrer SQL
+   Recorrer&i fbn('MinFechaOp'), Habiles(Dialogo.Fecha1,-1)
+      If EsHabil(&i)
+         *Anulo asientos de la fecha por si hay no enviados
+         EjecutarEvento('ANUASI', Fecha1=&i, Fecha2=&i, Lista2=fbn('Vehiculo1'), Lista3=fbn('Especie'),ListaTabla1='', Lista1=Var('TIPASIRZ'))
+         *Regeneracion del Asiento
+         EjecutarEvento('CONT47', Fecha1=(&i), Lista1= fbn('Vehiculo1'), Lista2= fbn('Especie'))
+      EndIf
+   Proximo
+Proximo

@@ -1,0 +1,133 @@
+﻿CrearDialogo
+  Fecha1 : 'Fecha';;;;;;;;;FSys
+  Vehiculo1 : 'Vehiculo';;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+FinDialogo
+
+if not Ok 
+  Cancelar
+endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+  else
+   If [SQL("Select Count(*) from "~DBO~".VEHICULOS ") <> SQL("Select Count(*) from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"' ")] y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+endif
+
+ACT(a4, 'Limites de Posicion - Pasivos por contraparte')
+ACT(a5, 'Fecha : '~Dialogo.Fecha1)
+
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(a6, 'Vehiculo: '~Dialogo.Vehiculo1)
+  ACT(z10, Descendientes('Vehiculos', Dialogo.Vehiculo1))
+  if NoVacio(Val(z10))
+    ACT(z11, "'"~Dialogo.Vehiculo1~"',"~Pipe2Comillas(Val(z10)))
+  else
+    ACT(z11, "'"~Dialogo.Vehiculo1~"'")
+  endif
+else
+  ACT(a6, 'Vehiculo: Todos')
+endif
+
+ACT(a8, 'Contraparte')
+ACT(b8, 'Valor(000s)')
+ACT(c8, '% Tot.Grupo')
+ACT(d8, '% Max.T.Grupo')
+ACT(e8, 'Estado')
+AlinearCeldas(b8..d8, 'D')
+
+AgregarMarco(a8..e8,1,0,Exe("COLOR"))
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+SetFont(a1..z8, 1)
+
+SetFilaActual(8)
+
+SQL.ADD("Select NrOperacion, Cliente1, Especie, Cantidad, TipoOp, Vehiculo1 from "~DBO~".OPERACIONES ")
+SQL.ADD(" where FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' and (TipoOp in ('MMFRNP','MMPCL','MMPCLM','MMPLME','MMPCOS','MMPE','MMPEM','MMPI','MMPIM','MMPOSM','MMPSI','MMFIMV','MMSIMV')")
+SQL.ADD(" and FechaVto > '"~IdxDate(Dialogo.Fecha1)~"')")
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("and Vehiculo1 in ("~Val(z11)~")")
+Endif
+SQL.ADD(" Union All ")
+*- Para las ON el limite es contra el mercado
+SQL.ADD("Select NrOperacion, 'MERCADO' as Cliente1, Especie, Cantidad, TipoOp, Vehiculo1 from "~DBO~".OPERACIONES ")
+SQL.ADD(" where FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' and (TipoOp in ('MMON','MMONM')")
+SQL.ADD(" and FechaVto > '"~IdxDate(Dialogo.Fecha1)~"')")
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("and Vehiculo1 in ("~Val(z11)~")")
+Endif
+
+SQL.ADD("order by Cliente1")
+
+
+Recorrer SQL
+
+  dfa
+  if Incluido(fbn('TipoOp'),'MMPIM|MMPEM|MMPOSM|MMPCLM|MMSIMV|MMFIMV|MMONM')
+     ACN(z4, SQL("Select Cantidad2 from "~DBO~".CUOTAS where NrOperacion='"~fbn('NrOperacion')~"' and Fecha1<= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha2>'"~IdxDate(Dialogo.Fecha1)~"'"))
+  else
+     ACN(z4, fbn('Cantidad'))
+  endif
+  if Incluido(fbn('Especie'), 'USD|USB') 
+     ACN(z3, Val(z4)/1000)
+  else
+     ACN(z3, Val(z4)*CotizacionC(fbn('Especie'),,,,FSys,1,SI,'USD')/1000)
+  endif
+  if Not EqStr(fbn('Cliente1'), Val(a:fac)) y Val(z3) > 0
+    ifa
+    ACT(a:fac, fbn('Cliente1'))
+    ACN(d:fac, LimAsignado(fbn('Cliente1'), 'PORPASIVO', 'USD'))
+    if Val(d:fac) = 0
+      ACN(d:fac, LimAsignado('BANCOS', 'PORPASIVO', 'USD'))
+    endif
+    SCN(b:fac, Val(z3))
+    AsignarLink(a:fac, 'DLPOSP', Cliente1 = Val(a:fac),Fecha1=Dialogo.Fecha1,Vehiculo1=Dialogo.Vehiculo1)
+  else
+    SCN(b:fac, Val(z3))
+  endif
+proximo
+
+
+ACT(a:fac+1, 'Total')
+ACN(b:fac+1, sum(b9..b:fac))
+ACN(v1, fac)
+
+ACO(1, 17)
+ACO(2, 10)
+ACO(3, 10)
+ACO(4, 10)
+ACO(5, 10)
+ACO(6, 10)
+ACO(7, 10)
+ACO(8, 10)
+AgregarMarco(a8..a:fac,1)
+AgregarMarco(b8..b:fac,1)
+AgregarMarco(c8..e:fac,1)
+AgregarMarco(d8..d8,1)
+AgregarMarco(a:fac+1..e:fac+1,1,0,Exe('COLOR'))
+
+
+recorrer&i 9, fac
+  ACN(c:&i, Val(b:&i)/Val(b:fac+1)*100)
+  if Val(d:&i) >= 0
+    if Val(c:&i)>Val(d:&i)
+      ACT(e:&i, 'Excedido')
+      ColorCeldas(e:&i,clRED)
+    else
+      ACT(e:&i, 'OK')
+      ColorCeldas(e:&i,clGREEN)
+    endif
+  endif
+proximo
+
+
+SetFont(a9..a:fac+1,1)
+SetFont(b9..z:fac+1,2)
+LimitesVision(f:fac+2)
+Impresion(1,1)

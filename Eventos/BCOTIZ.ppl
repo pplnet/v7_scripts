@@ -1,0 +1,90 @@
+﻿CrearDialogo
+  Fecha1  : 'Fecha'   ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;FSys
+  Check11 : 'Solo Del Dia';;;;;;;;;1;
+  Entero1 : 'Cant Dias(1 a 31)';;;;;Dialogo.Check11=0;Dialogo.Entero1<32 y Dialogo.Entero1 <>0 ;;NO;;1  
+FinDialogo
+
+IF NOT OK
+   Cancelar
+Endif
+
+
+*Inicializo aa:7 con la fecha del dia
+ACT(aa:7,SQL("select convert(varchar(8),Getdate(),112)"))
+
+*Sino existe el directorio muestro el error    
+if NOt ExisteDirectorio(VAR("BMOVCTAS"))
+     MessageBox("No existe el directorio"~VAR("BMOVCTAS"))
+     Cancelar
+endif
+
+if Dialogo.Check11=0 
+    ACN(bb:1,Dialogo.Entero1-1)
+else
+    ACN(bb:1,0)
+endif
+
+
+SQL.ADD(" Select Codigo as CodEsp, Nombre, Cotiza ")
+SQL.ADD(" From DBO.ESPECIES Where Jerarquia like '"~VAR('JERTITULOS')~"%'")
+SQL.ADD(" and  codigo in (select distinct codigo from ")
+SQL.ADD(" (SELECT  DISTINCT codigo FROM [dbo].[COTIZACIONES] ")
+SQL.ADD(" where dateadd(dd,-"~ VAL(bb:1) ~",'"~ Copy(IdxDate(dialogo.fecha1),1,4)~Copy(IdxDate(dialogo.fecha1),6,2)~Copy(IdxDate(dialogo.fecha1),9,2)~"')<= fecha ") 
+SQL.ADD(" UNION ALL")
+SQL.ADD(" SELECT  ESPECIE as codigo FROM [dbo].[COTIZACIONESESP] ")
+SQL.ADD(" where dateadd(dd,-"~ VAL(bb:1) ~",'"~ Copy(IdxDate(dialogo.fecha1),1,4)~Copy(IdxDate(dialogo.fecha1),6,2)~Copy(IdxDate(dialogo.fecha1),9,2)~"')<= fecha) as ESP)") 
+SQL.ADD(" Order by Codigo")
+
+ACT(bb:2,"N")
+ACN(aa:5,0)
+Recorrer SQL
+    
+    ACT(aa:1,fbn('CodEsp'))
+    ACT(aa:8,fbn('Cotiza'))
+    Recorrer&i 0,VAL(bb:1)
+        SQL.ADD("Select Codigo from DBO.BOOKS")
+        SQL.ADD("Where codigo in (select book from dbo.POSICIONES where especie= '"~Val(aa:1)~"'" )
+        SQL.ADD(" and NrSaldo in (171, 172,191,192) and CantidadFin <> 0)") 
+        * Para que tome una sola cotizacion por especie
+        ACT(bb:8,"N")
+        Recorrer SQL
+            if EqStr(Val(bb:8),"N")
+                ACT(bb:3,IdxDate(Habiles(Dialogo.Fecha1,-&i,'ARG',No)))
+                Let &PrecioNIIF CotizacionNIIF(VAL(aa:1), Habiles(Dialogo.Fecha1,-&i,'ARG',No), fbn('Codigo'))
+                if not Vacio(&PrecioNIIF)
+                    * Obtengo la fecha de ultima cotiacion
+                    ACT(aa:6,&PrecioNIIF.FechaUltimaCotizacion)
+                    if not EqStr(Val(aa:6),"")
+                        if EqStr(VAL(bb:3),IdxDate(&PrecioNIIF.FechaUltimaCotizacion))
+                           * Si no abri el archivo
+                           if EqStr(Val(bb:2),"N")
+                                    AbrirASCII(VAR("BMOVCTAS")~"\COTIZAC"~"["~copy(Val(aa:7),1,4)~copy(Val(aa:7),5,2)~copy(Val(aa:7),7,2)~"-"~copy(Hora(SQLAhora),1,2)~copy(Hora(SQLAhora),4,2)~copy(Hora(SQLAhora),7,2)~"]",0)
+                                    EscribirASCII("0"~copy(IdxDate(Dialogo.Fecha1),1,4)~copy(IdxDate(Dialogo.Fecha1),6,2)~copy(IdxDate(Dialogo.Fecha1),9,2))
+                                    * Pongo la bandera en S para saber que ya abri el archivo
+                                    ACT(bb:2,"S")
+                            endif    
+                            * Cantidad de filas generadas
+                            ACN(aa:5,Val(aa:5)+1)
+                            ACT(aa:4,SQL("select codigo4  from DBO.ESPECIES where codigo='"~Val(aa:1)~"'"))
+                            IF EqStr(VAL(aa:8),'ARP')
+                                ACT(aa:2,&PrecioNIIF.PrecioCotizacionDeterminada)
+                            ELSE
+                                * Convierto de dolares a Pesos
+                                ACT(aa:2,&PrecioNIIF.PrecioCotizacionDeterminada*CotizacionC('USD',,,, Habiles(Dialogo.Fecha1,-&i,'ARG',No),25,SI,'ARP'))
+                            ENDIF
+                            if NOT &PrecioNIIF.PrecioCotizacionDeterminada = 0  
+                                ACT(bb:8,"S")
+                                ACN(aa:3,Posicion('.',Val(aa:2), 0))
+                                EscribirASCII("1"~Pad(Val(aa:4),4)~Pad('',35)~Pad0('',11)~Pad('',22)~Pad0('',10)~copy(IdxDate(&PrecioNIIF.FechaUltimaCotizacion),1,4)~copy(IdxDate(&PrecioNIIF.FechaUltimaCotizacion),6,2)~copy(IdxDate(&PrecioNIIF.FechaUltimaCotizacion),9,2)~Pad0('0',30)~Pad0(Copy(Val(aa:2),1,Val(aa:3)-1),7)~Pad(Copy(Val(aa:2),Val(aa:3)+1,8),8,'0')~"99999999"~"1"~"99"~Pad0('1',3)~Pad0('1',2)~Pad0('',21)~"N"~Pad0('',28)~"1"~Pad0('0',45)~"99999999"~"M")
+                            endif
+                        endif
+                    endif
+                endif
+           endif
+       Proximo
+    Proximo
+proximo
+if EqStr(Val(bb:2),"S")
+    EscribirASCII("2"~Pad0(Val(aa:5)+2,18))
+    CerrarASCII
+endif

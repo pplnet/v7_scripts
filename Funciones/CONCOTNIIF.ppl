@@ -1,0 +1,261 @@
+﻿**Cintia 17-2-23 Administracion de partidas - Issue 6089
+*SQL.ADD(" Select Books FROM "~DBO~".MODELOSNEGOCIO Where ValuaCarteraPartida='SI' ")
+(.'BOOKPARTID'.)
+Recorrer SQL
+    let &BValuaPartida &BValuaPartida~fbn('Books')
+Proximo
+*************
+
+****Campos tomados del CONT15****
+let &habilSiguienteHoy Habiles(Dialogo.Fecha1, 1, 'ARG', SI) - 1
+let &finDeMesHoy FinDeMes(Dialogo.Fecha1, SI)
+IF &habilSiguienteHoy > &finDeMesHoy
+    let &fechaDevHoy &finDeMesHoy
+ELSE
+    let &fechaDevHoy &habilSiguienteHoy
+ENDIF
+
+***---Determino Min entre habil siguiente-1 y fin de mes, parado a Ayer
+let &fechaAyer Habiles(Dialogo.Fecha1, -1, 'ARG', SI)
+let &habilSiguienteAyer Habiles(&fechaAyer, 1, 'ARG', SI) - 1
+let &finDeMesAyer FinDeMes(&fechaAyer, SI)
+IF &habilSiguienteAyer > &finDeMesAyer
+    let &fechaDevAyer &finDeMesAyer
+ELSE
+    let &fechaDevAyer &habilSiguienteAyer
+ENDIF
+
+*************
+ACT(VC:1, Var('VEHICON')) 
+ACD(FE:1, Habiles(Dialogo.Fecha1,-Var('FVALORCONT'),'ARG'))
+***---Saldo Contable Lisbre disponibilidad. Falta definir manejo contable de garantias, teniendo en cuenta variable BLOQGARA
+ACN(SL:2, Num(Var('SALDOPOCON')))
+ACD(FE:99, Dialogo.Fecha1)
+
+SQL.ADD("Select * FROM ( ")
+**CONT2 - Liquidacion Titulos
+SQL.ADD(" Select Distinct E.Codigo Especie,O.FechaOp,O.FechaVto, E.Nombre, E.Cotiza, 'LIQ' as TipoAsi, O.TipoOp, 'N/A' Tipo, O.Book1 ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O ")
+SQL.ADD("    INNER JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo ")       
+SQL.ADD("    INNER JOIN "~DBO~".MOVEJECUTADOS M ON O.NrOperacion = M.NrOperacion ")   
+SQL.ADD("    INNER JOIN "~DBO~".TRANSACCIONES2 T ON T.NrTrans = M.NrTrans2 ")
+SQL.ADD("    INNER JOIN "~DBO~".CUENTAS C ON M.Cuenta = C.Codigo ")  
+SQL.ADD("    INNER JOIN "~DBO~".CLIENTES CL ON O.Cliente1 = CL.Codigo ")  
+SQL.ADD("    INNER JOIN "~DBO~".MODELOSASIENTO MA ON MA.TipoOp = O.TipoOp ")
+SQL.ADD("    INNER JOIN "~DBO~".MERCADOS ME ON O.Mercado = ME.Codigo ")
+SQL.ADD(" Where O.NrOperacion = M.NrOperacion ")
+SQL.ADD(" AND (O.PaseCB = '0' OR O.PaseCB Is Null OR O.PaseCB = '' OR O.PaseCB = ' ') ")
+SQL.ADD(" AND T.NrTrans = M.NrTrans2 ")
+SQL.ADD(" AND M.Especie = O.Especie ")
+SQL.ADD(" AND M.NrSaldo = 1 ")
+SQL.ADD(" AND C.Codigo  = M.Cuenta ")
+SQL.ADD(" AND O.TipoOp = MA.TipoOp ")
+SQL.ADD(" AND MA.TipoAsiento = '"~Var('TIPASILT')~"' ")
+SQL.ADD(" AND '|'+RTrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+SQL.ADD(" AND MA.Habilitado = 'SI' ")
+SQL.ADD(" AND T.TipoTr2 in ('RET','DEP','MATCH','COMP') ")
+SQL.ADD("   AND ((T.Fecha2 = '"~IdxDate(Dialogo.Fecha1)~"' AND ME.Netea = 'SI') OR (T.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' AND (ME.Netea Is Null OR ME.Netea = 'NO'))) ")
+SQL.ADD("   AND ((T.Fecha1 >= '"~IdxDate(Val(FE:1))~"' AND ME.Netea = 'SI') OR (T.Fecha2 >= '"~IdxDate(Val(FE:1))~"' AND (ME.Netea Is Null OR ME.Netea = 'NO'))) ")
+SQL.ADD(" AND ((O.TipoOp IN ('TICT','TIDE','TICO','TIPO','TIC','TIV'))) ")
+** FJL 15/05/25 - Issue EXTBACS-8157 - Especies vencidas
+SQL.ADD(" AND     E.Fecha > '"~IdxDate(Dialogo.Fecha1)~"' ")
+************************
+SQl.ADD(" UNION ALL ")
+
+**CONT4 - Pases y Prestamo
+SQL.ADD(" Select Distinct E.Codigo Especie,O.FechaOp,O.FechaVto, E.Nombre, E.Cotiza, 'REV' as TipoAsi, O.TipoOp, 'N/A' Tipo, O.Book1  ")
+SQL.ADD("FROM "~DBO~".OPERACIONES O ")  
+SQL.ADD("      INNER JOIN "~DBO~".MODELOSASIENTO MA ON O.TipoOp = MA.TipoOp ")    
+SQL.ADD("      INNER JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo ")
+SQL.ADD("      INNER JOIN "~DBO~".OPERACIONESBITS B ON O.NrOperacion = B.NrOperacion ")   
+SQL.ADD("      INNER JOIN "~DBO~".CLIENTES CL ON O.Cliente1 = CL.Codigo ")  
+SQL.ADD(" Where B.Valor = 1 AND B.NrBit Not IN (1, 30, 31) ")
+SQL.ADD(" AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASRETID'))~") ")
+SQL.ADD(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+SQL.ADD(" AND MA.Habilitado = 'SI' ")
+SQL.ADD(" AND O.TipoOp IN ('TIPP','TIPA','TICT','TIDE','TIPO','TICO') ")
+SQL.ADD(" AND O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND '"~IdxDate(Dialogo.Fecha1)~"' >= '"~IdxDate(Val(FE:1))~"' ")
+** FJL 15/05/25 - Issue EXTBACS-8157 - Especies vencidas
+SQL.ADD(" AND     E.Fecha > '"~IdxDate(Dialogo.Fecha1)~"' ")
+************************
+SQL.ADD(" UNION ALL ")
+
+**CONT4 - Operaciones Vigentes o pendientes de liquidar
+***---Operaciones Vigentes
+ACD(FV:1, Dialogo.Fecha1)
+ACT(TA:1, Var('TIPASIRETO'))
+SQL.ADD(" Select Distinct E.Codigo Especie,O.FechaOp,O.FechaVto, E.Nombre, E.Cotiza, 'OPVIG' as TipoAsi, O.TipoOp, 'N/A' Tipo, O.Book1 ")
+SQL.ADD("FROM "~DBO~".OPERACIONES O ")  
+SQL.ADD("      INNER JOIN "~DBO~".MODELOSASIENTO MA ON MA.TipoAsiento = '"~Val(TA:1)~"' AND MA.TipoOp = O.TipoOp ")    
+SQL.ADD("      INNER JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo ")
+SQL.ADD("      INNER JOIN "~DBO~".OPERACIONESBITS B ON O.NrOperacion = B.NrOperacion ")   
+SQL.ADD(" Where B.Valor = 1 AND B.NrBit Not IN (1, 30, 31) ")
+SQL.ADD(" AND MA.TipoAsiento = '"~Val(TA:1)~"' ")
+SQL.ADD(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+SQL.ADD(" AND MA.Habilitado = 'SI' ")
+SQL.ADD(" AND O.TipoOp IN ('TIC','TIV') ")   
+SQL.ADD(" AND O.FechaVto > '"~IdxDate(Val(FV:1))~"' ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Val(FV:1))~"' ")
+**CarteraPropia
+SQL.ADD(" AND (O.CB4 <> 1 OR O.CB4 is null OR O.CB4 = '' OR O.CB4 = ' ') ")
+SQL.ADD(" AND '"~IdxDate(Val(FV:1))~"' >= '"~IdxDate(Val(FE:1))~"' ")
+SQL.ADD(" AND (O.PaseCB = '0' OR O.PaseCB Is Null OR O.PaseCB = '' OR O.PaseCB = ' ') ") 
+**Cintia 17-2-23 Administracion de partidas - Issue 6089
+SQL.ADD(" AND O.Book1 Not IN ("~Pipe2Comillas(&BValuaPartida)~") ")
+*******************
+** FJL 15/05/25 - Issue EXTBACS-8157 - Especies vencidas
+SQL.ADD(" AND     E.Fecha > '"~IdxDate(Dialogo.Fecha1)~"' ")
+************************
+SQL.ADD(" UNION ALL ")
+***---Operaciones Vencidas pero no liquidadas
+SQL.ADD(" Select Distinct E.Codigo Especie,O.FechaOp,O.FechaVto, E.Nombre, E.Cotiza, 'OPVIG' as TipoAsi, O.TipoOp, 'N/A' Tipo, O.Book1 ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O ")  
+SQL.ADD("       INNER JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo ")   
+SQL.ADD("       INNER JOIN "~DBO~".MODELOSASIENTO MA ON MA.TipoAsiento = '"~Val(TA:1)~"' AND MA.TipoOp = O.TipoOp ")
+SQL.ADD("       INNER JOIN "~DBO~".OPERACIONESBITS B ON O.NrOperacion = B.NrOperacion ")       
+SQL.ADD("       INNER JOIN "~DBO~".MOVPENDIENTES M ON O.NrOperacion = M.NrOperacion AND O.Especie = M.Especie ")           
+SQL.ADD(" Where B.Valor = 1 AND B.NrBit Not IN (1, 30, 31) ")
+SQL.ADD(" AND M.NrSaldo = 1 ")
+SQL.ADD(" AND MA.TipoAsiento = '"~Val(TA:1)~"' ")
+SQL.ADD(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+SQL.ADD(" AND MA.Habilitado = 'SI' ")
+SQL.ADD(" AND O.TipoOp IN ('TIC','TIV') ")  
+SQL.ADD(" AND O.FechaVto <= '"~IdxDate(Val(FV:1))~"' ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Val(FV:1))~"' ")
+**CarteraPropia
+SQL.ADD(" AND (O.CB4 <> 1 OR O.CB4 is null OR O.CB4 = '' OR O.CB4 = ' ') ")
+SQL.ADD(" AND '"~IdxDate(Val(FV:1))~"' >= '"~IdxDate(Val(FE:1))~"' ")
+SQL.ADD(" AND (O.PaseCB = '0' OR O.PaseCB Is Null OR O.PaseCB = '' OR O.PaseCB = ' ') ")
+**Cintia 17-2-23 Administracion de partidas - Issue 6089
+SQL.ADD(" AND O.Book1 Not IN ("~Pipe2Comillas(&BValuaPartida)~") ")
+*******************
+** FJL 15/05/25 - Issue EXTBACS-8157 - Especies vencidas
+SQL.ADD(" AND     E.Fecha > '"~IdxDate(Dialogo.Fecha1)~"' ")
+************************
+SQL.ADD(" UNION ALL ")
+*****DEJAMOS DE LEVANTAR CONTROL DE RESULTADOS PARA HACERLO DESDE POSICIONES
+
+*SQL.ADD(" Select Distinct E.Codigo Especie,R.Fecha FechaOp,R.Fecha FechaVto, E.Nombre, E.Cotiza, 'REVPOS' as TipoAsi, '' TipoOp, 'N/A' Tipo, R.Book Book1  ")
+*SQL.ADD(" From "~DBO~".RESULTADOS R, "~DBO~".ESPECIES E ")
+*SQL.ADD(" Where E.Codigo = R.Especie ")
+*SQL.ADD(" AND R.NrSaldo   =  "~Fstr(Val(SL:2), 0, 0)~" ")
+*SQL.ADD(" AND R.Fecha = '"~IdxDate(Val(FE:99))~"' ")
+*SQL.ADD(" AND R.TipoResultado IN ('REVCON') ")
+*SQL.ADD(" AND E.EsCupon <> 'SI' ")
+SQL.ADD(" SELECT Distinct P.Especie Especie, '"~IdxDate(Val(FE:99))~"' FechaOp, '"~IdxDate(Val(FE:99))~"' FechaVto, E.Nombre, E.Cotiza, 'REVPOS' as TipoAsi, '' TipoOp, 'N/A' Tipo, P.Book Book1 ") 
+SQL.ADD(" FROM "~DBO~".POSICIONES P, "~DBO~".ESPECIES E ")
+SQL.ADD(" where E.Codigo = P.Especie ")
+SQL.ADD("    AND E.EsCupon <> 'SI' ")
+SQL.ADD("    AND P.Book not IN ("~Pipe2Comillas(&BValuaPartida)~") ")
+SQL.ADD("    AND P.Fecha      <= "~IDXDATE2(Val(FE:99))~" ")
+SQL.ADD("    AND ((P.Fecha="~IDXDATE2(Val(FE:99))~" and (Round(P.CantidadFin,2) <> 0 OR Round(P.CantidadIni,2)<>0 OR Round(P.Cantidad1,2)<>0 OR Round(P.Cantidad2,2)<>0 ))")
+SQL.ADD("        OR  (P.Fecha<"~IDXDATE2(Val(FE:99))~" and (Round(P.CantidadFin,2) <> 0 ))")
+SQL.ADD("        )")
+SQL.ADD("    AND P.NrSaldo = "~Fstr(Val(SL:2), 0, 0)~" ")
+*******************
+** FJL 15/05/25 - Issue EXTBACS-8157 - Especies vencidas
+SQL.ADD(" AND     E.Fecha > '"~IdxDate(Dialogo.Fecha1)~"' ")
+************************
+SQL.ADD("    AND P.Fecha IN (SELECT MAX(Fecha) from "~DBO~".POSICIONES ")
+SQL.ADD("                   WHERE  Especie  = P.Especie  ")
+SQL.ADD("                   AND    Vehiculo = P.Vehiculo ")
+SQL.ADD("                   AND    NrSaldo  = P.NrSaldo  ")
+SQL.ADD("                   AND    Cliente  = P.Cliente  ")
+SQL.ADD("                   AND    Book     = P.Book     ")
+SQL.ADD("                   and   IsNull(Unidad,'')       = IsNull(P.Unidad,'') ")
+SQL.ADD("                   and   IsNull(Centro,'')       = IsNull(P.Centro,'') ")
+SQL.ADD("                   and   IsNull(Sector,'')       = IsNull(P.Sector,'') ")
+SQL.ADD("                   and   IsNull(Sucursal,'')     = IsNull(P.Sucursal,'') ")
+SQL.ADD("                   and   IsNull(PrecioEj,0)      = IsNull(P.PrecioEj,0) ")
+SQL.ADD("                   and   IsNull(FechaEj,0)       = IsNull(P.FechaEj,0) ")
+SQL.ADD("                   and   IsNull(CallPut,'')      = IsNull(P.CallPut,'') ")
+SQL.ADD("                   and   IsNull(Estrategia,'')   = IsNull(P.Estrategia,'') ")
+SQL.ADD("                   and   IsNull(Cartera,'')      = IsNull(P.Cartera,'') ")
+SQL.ADD("                   and   IsNull(Trader,'')       = IsNull(P.Trader,'') ")
+SQL.ADD("                   and   IsNull(TipoNegocio,'')  = IsNull(P.TipoNegocio,'') ")
+SQL.ADD("                   and   IsNull(Cupon,'')        = IsNull(P.Cupon,'') ")
+SQL.ADD("                   and   IsNull(Responsable,'')  = IsNull(P.Responsable,'') ")
+SQL.ADD("                   and   IsNull(TipoPosicion,'') = IsNull(P.TipoPosicion,'') ")
+SQL.ADD("                   and   IsNull(Producto,'')     = IsNull(P.Producto,'') ")
+SQL.ADD("                   and   IsNull(GrupoEspecie,'') = IsNull(P.GrupoEspecie,'') ")
+SQL.ADD("                   and   IsNull(CarteraBCRA,'')  = IsNull(P.CarteraBCRA,'') ")
+SQL.ADD("                   AND   Fecha     <= "~idxdate2(Val(FE:99))~") ")
+*SQL.ADD(" UNION ")
+*SQL.ADD(" Select Distinct E.Codigo Especie,O.FechaOp,O.FechaVto, E.Nombre, E.Cotiza, 'REVPOS' as TipoAsi, O.TipoOp, 'N/A' Tipo, O.Book1   ")
+*SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".ESPECIES E, "~DBO~".CUOTAS C")
+*SQL.ADD(" Where E.Codigo = O.Especie AND O.NrOperacion=C.NrOperacion ")
+*SQL.ADD(" AND Round(C.Cantidad1, 0, 2) <> 0 ")
+*SQL.ADD(" AND C.Fecha1= '"~IdxDate(Val(FE:99))~"'")
+*SQL.ADD(" AND O.TipoOp='PARTID' ")
+SQL.ADD(" UNION ALL ")
+
+**CONT15 -- Devengados Diarios de Prestamos y Depositos
+SQL.ADD(" Select Distinct E.Codigo Especie,O.FechaOp,O.FechaVto, E.Nombre, E.Cotiza, 'DEV' as TipoAsi, O.TipoOp, 'Hoy' Tipo, O.Book1 ")
+SQL.ADD("FROM "~DBO~".OPERACIONES O ")  
+SQL.ADD("      INNER JOIN "~DBO~".MODELOSASIENTO MA ON O.TipoOp = MA.TipoOp ")    
+SQL.ADD("      INNER JOIN "~DBO~".MOVDEVENGADOS M ON M.NrOperacion = O.NrOperacion ")
+SQL.ADD("      INNER JOIN "~DBO~".OPERACIONESBITS B ON O.NrOperacion = B.NrOperacion ")   
+SQL.ADD("      INNER JOIN "~DBO~".CLIENTES C ON C.Codigo = O.Cliente1 ") 
+SQL.ADD("      INNER JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo  ")  
+SQL.ADD(" Where B.Valor = 1 AND B.NrBit Not IN (1, 30, 31) ")
+SQL.ADD(" AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASDEV'))~") ")
+SQL.ADD(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+SQL.ADD(" AND MA.Habilitado = 'SI' ")
+SQL.ADD(" AND M.NrSaldo = 140 ")    
+SQL.ADD(" AND O.TipoOp IN ('TIDE','TICT','TICO','TIPO') ")
+SQL.ADD(" And M.TipoDevengado = 'TIDEV' ")    
+SQL.ADD(" AND O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND '"~IdxDate(Dialogo.Fecha1)~"' >= '"~IdxDate(Val(FE:1))~"' ")
+SQL.ADD(" AND M.Fecha <= '"~IdxDate(&fechaDevHoy)~"' ") 
+SQL.ADD(" UNION ")
+SQL.ADD(" Select Distinct E.Codigo Especie,O.FechaOp,O.FechaVto, E.Nombre, E.Cotiza, 'DEV' as TipoAsi, O.TipoOp, 'Ayer' Tipo, O.Book1 ")
+SQL.ADD("FROM "~DBO~".OPERACIONES O ")  
+SQL.ADD("      INNER JOIN "~DBO~".MODELOSASIENTO MA ON O.TipoOp = MA.TipoOp ")    
+SQL.ADD("      INNER JOIN "~DBO~".MOVDEVENGADOS M ON M.NrOperacion = O.NrOperacion ")
+SQL.ADD("      INNER JOIN "~DBO~".OPERACIONESBITS B ON O.NrOperacion = B.NrOperacion ")   
+SQL.ADD("      INNER JOIN "~DBO~".CLIENTES C ON C.Codigo = O.Cliente1 ") 
+SQL.ADD("      INNER JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo  ")  
+SQL.ADD(" Where B.Valor = 1 AND B.NrBit Not IN (1, 30, 31) ")
+SQL.ADD(" AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASDEV'))~") ")
+SQL.ADD(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+SQL.ADD(" AND MA.Habilitado = 'SI' ")
+SQL.ADD(" AND M.NrSaldo = 140 ")    
+SQL.ADD(" AND O.TipoOp IN ('TIDE','TICT','TICO','TIPO') ")
+SQL.ADD(" And M.TipoDevengado = 'TIDEV' ")    
+SQL.ADD(" AND O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND '"~IdxDate(Dialogo.Fecha1)~"' >= '"~IdxDate(Val(FE:1))~"' ")
+SQL.ADD(" AND M.Fecha <= '"~IdxDate(&fechaDevAyer)~"' ") 
+*******************
+** FJL 15/05/25 - Issue EXTBACS-8157 - Especies vencidas
+SQL.ADD(" AND     E.Fecha > '"~IdxDate(Dialogo.Fecha1)~"' ")
+************************
+SQL.ADD(" UNION ALL ")
+
+**CONT16 -- Vencimiento
+SQL.ADD(" SELECT Distinct E.Codigo Especie,O.FechaVto FechaOp,O.FechaVto, E.Nombre, E.Cotiza, 'VTO' as TipoAsi, O.TipoOp, 'N/A' Tipo, O.Book1 ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O ")
+SQL.ADD("       INNER JOIN "~DBO~".MODELOSASIENTO MA ON O.TipoOp = MA.TipoOp ") 
+SQL.ADD("       INNER JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo ")
+SQL.ADD("       INNER JOIN "~DBO~".OPERACIONESBITS B ON O.NrOperacion = B.NrOperacion ") 
+SQL.ADD("       INNER JOIN "~DBO~".CLIENTES C ON O.Cliente1 = C.Codigo ") 
+SQL.ADD(" Where B.Valor = 1 AND B.NrBit Not IN (1, 30, 31) ")
+SQL.ADD(" AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIVTO'))~") ")
+SQL.ADD(" AND '|'+rtrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+SQL.ADD(" AND MA.Habilitado = 'SI' ")
+SQL.ADD(" AND O.FechaVto >= '"~IdxDate(val(FE:1))~"' ")
+SQL.ADD(" AND ((O.FechaVto >= O.FechaCargaSys AND O.FechaVto = '"~IdxDate(Dialogo.fecha1)~"') ")
+SQL.ADD("       OR (O.FechaVto < O.FechaCargaSys AND O.FechaCargaSys = '"~IdxDate(Dialogo.fecha1)~"' )) ")
+*SQL.ADD(" AND O.TipoOp IN ('TIPA','TIPP','FXCF','FXVF') ")
+**Eliana 22-10-24 - Futuros no usa CotizacionNiif al vencimiento
+SQL.ADD(" AND O.TipoOp IN ('TIPA','TIPP') ")
+*******************
+** FJL 15/05/25 - Issue EXTBACS-8157 - Especies vencidas
+SQL.ADD(" AND     E.Fecha > '"~IdxDate(Dialogo.Fecha1)~"' ")
+************************
+
+SQL.ADD(" ) a ")
+SQL.ADD(" ORDER By Especie,FechaOp,FechaVto,Book1 ")

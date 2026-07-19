@@ -1,0 +1,373 @@
+﻿HojaVisible(SI)
+ModoReproceso(SinDialogo)
+CrearDialogo
+  NrOperacion1: 'Operacion' ;;;;;;;;;;
+  Fecha1      : 'Fecha'     ;;;;;;;;;Fsys
+  NrOperacion2: 'NrCarta'   ;;;;;NO;
+  Check1      : 'del evento';;;;;NO;
+  Radio1      : 'Tipo|Clasico|Intermed.' ;;;;;NO;;;;0;;;
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+CrearFont(1, "Arial,10,")
+CrearFont(2, "Arial,10,B")
+CrearFont(3, "Arial,8,")
+CrearFont(4, "Arial,8,B")
+CrearFont(5, "Arial,6,")
+
+*- Cuentas cuyos movimientos no salen en la liquidacion
+ACT(cn1,Pipe2Comillas(VAR('CTANOCAR')) )
+
+ACT(aa:1,'Enero')
+ACT(aa:2,'Febrero')
+ACT(aa:3,'Marzo')
+ACT(aa:4,'Abril')
+ACT(aa:5,'Mayo')
+ACT(aa:6,'Junio')
+ACT(aa:7,'julio')
+ACT(aa:8,'Agosto')
+ACT(aa:9,'Septiembre')
+ACT(aa:10,'Octubre')
+ACT(aa:11,'Noviembre')
+ACT(aa:12,'Diciembre')
+
+SQL.ADD("Select * from "~DBO~".OPERACIONES")
+SQL.ADD(" WHERE NrOperacion = '"~Dialogo.NrOperacion1~"'")
+
+Recorrer SQL  
+
+  DFA
+  SetFilaActual(6)
+
+  ACT(e:FAC+5, 'Buenos Aires, '~FStr(Dia(Dialogo.Fecha1),1,0)~' de '~Val(aa:Mes(Dialogo.Fecha1))~' de '~FStr(Anio(Dialogo.Fecha1),4,0)~'.')
+
+  AlinearCeldas(e:FAC+5,'D')
+  ACT(a:FAC+7, 'Sres.')
+  ACT(a:FAC+8, BuscarCampo('CLIENTES','RazonSocial','Codigo',fbn['Cliente1']))
+  ACT(a:FAC+9, Copy(BuscarCampo('CLIENTES','Direccion','Codigo',fbn['Cliente1']),1,30)~' '~Copy(BuscarCampo('CLIENTES','Localidad','Codigo',fbn['Cliente1']),1,18)~' ('~BuscarCampo('CLIENTES','CodigoPostal','Codigo',fbn['Cliente1'])~')' ) 
+  ACT(a:FAC+10, 'PRESENTE')
+  ACT(a:FAC+11, 'REF: Nuestro Nro. Operacion '~fbn['NrOperacion']~' / '~Dialogo.NrOperacion2)
+
+  SetFont(a:FAC..e:FAC+11,1)
+  SetFilaActual(fac+13)
+
+  ACT(a:FAC, 'De nuestra mayor consideracion:')
+  ACT(a:FAC+2, 'Por medio de la presente confirmamos haber realizado con Uds. la operacion de referencia, con los datos ')
+  ACT(a:FAC+3, 'indicados a continuacion.')
+  SetFont(a:FAC..e:FAC+3,1)
+
+  SetFilaActual(fac+5)
+  ACN(y3,FAC)
+  ACT(a:FAC, 'Tipo de Operacion:')
+  ACT(b:FAC, BuscarCampo('TIPOSOPERACION','Nombre','Codigo',fbn['TipoOp']))
+  IFA
+  ACN(z1, SQL("Select Fecha2 from "~DBO~".TRANSACCIONES2 where NrOperacionRef1 = '"~Dialogo.NrOperacion1~"' and NrOperacionRef2 = '"~Dialogo.NrOperacion2~"' "))
+  ACT(a:FAC, 'Momento de Liq.:')
+  if Val(z1)=fbn['FechaOp']
+    ACT(b:FAC, 'Origen')
+  else
+    ACT(b:FAC, 'Vencimiento')
+  endif
+  IFA
+  ACT(a:FAC, 'En:')
+  ACT(b:FAC, BuscarCampo('ESPECIES','Nombre','Codigo',fbn['Especie']))
+  IFA
+  ACT(a:FAC, 'Por:')
+  ACT(b:FAC, PYC(fbn['Cantidad'],1,2))
+  IFA
+  ACT(a:FAC, 'Concertada el:')
+  ACT(b:FAC, fbn['FechaOp2'])
+  IFA
+  ACT(a:FAC, 'Fecha de Vto.:')
+  ACT(b:FAC, fbn['FechaVto'])
+  IFA
+  ACT(a:FAC, 'Plazo:')
+  ACT(b:FAC, FStr(fbn['Plazo'],1,0))
+  IFA
+  ACT(a:FAC, 'Tipo Tasa:')
+  ACT(b:FAC, fbn['TipoTasa'])
+  IFA
+  ACT(a:FAC, 'Tasa:')
+  ACT(b:FAC, FStr(fbn['Precio1'],1,7))
+  SetFont(a:Val(y3)..a:FAC,2)
+  SetFont(b:Val(y3)..b:FAC,1)
+    
+  SetFilaActual(FAC+2)
+  ACT(a:FAC+1, 'A tal efecto, informamos los movimientos que se realizaran por la liquidacion de la misma:')
+  SetFont(a:FAC..a:FAC+1,1)
+
+  SetFilaActual(FAC+2)
+
+  SQL.ADD("Select DISTINCT T.* from "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS B, "~DBO~".MOVEJECUTADOS M  ")
+  SQL.ADD("where T.NrTrans = B.NrOperacion AND T.NrTrans=M.NrTrans2 ")
+  SQL.ADD("and T.NrOperacionRef1 = '"~Dialogo.NrOperacion1~"' ")
+  SQL.ADD("and T.NrOperacionRef2 = '"~Dialogo.NrOperacion2~"' ")
+  SQL.ADD("and M.Cuenta Not In ("~val(cn1)~") ") 
+  if Dialogo.Check1=1
+    SQL.ADD("and B.NrBit = 2 ")
+  else
+    SQL.ADD("and B.NrBit in (2,3,4,5,10,20)")
+  endif
+  SQL.ADD("and B.Valor ='1' ")
+  SQL.ADD("order by TipoTr2")
+
+  ACT(ab1 ,'')  
+  ACT(ab11,'')  
+
+  recorrer SQL  
+
+    *- Si la transaccion es de compensacion -> Imprimo las Observaciones
+    If Vacio(val(ab1))
+       ACT(ab1,FBN['Observaciones'])
+    Else
+       If Vacio(val(ab11))
+          ACT(ab11,FBN['Observaciones'])
+       EndIf
+    EndIf
+
+    ACT(ab2,'')
+
+    if EqStr(FBN['TipoTr2'],'DEP')
+      if Val(x1)=0
+        IFA
+        ACT(a:FAC, 'A nuestro favor:')
+        SetFont(a:FAC,1)
+        IFA
+        ACT(a:FAC, 'Concepto')
+        ACT(b:FAC, 'Especie')
+        ACT(c:FAC, 'Valor Nominal')
+        ACT(d:FAC, 'Fecha Valor')
+        ACT(e:FAC, 'Forma de Liquidacion')
+        AlinearCeldas(a:FAC..e:FAC,'C')
+        AgregarMarco(a:FAC..e:FAC,2,2)
+        SetFont(a:FAC..e:FAC,1)
+
+        IFA
+        ACN(x1,1)
+      endif
+
+      ACT(j:FAC, FBN['NrTrans'])
+      ACT(k:FAC, FBN['Cuenta1'])
+      ACT(l:FAC, FBN['Cuenta2'])
+
+      *- Recupero Datos de la Cuenta
+      SQL.ADD(" SELECT * FROM "~DBO~".CUENTAS WHERE Codigo='"~Val(l:FAC)~"' ")
+      Recorrer SQL
+         dfa 
+         ACT(al1,FBN['Alias1'])
+         ACT(al2,FBN['Alias2'])
+         ACT(al4,FBN['Alias4'])
+         ACT(nu1,FBN['Numero'])
+         ACT(co1,FBN['Comitente'])
+         ACT(cl1,FBN['Cliente'])
+         ACT(ch1,FBN['ABA']~'/'~FBN['CHIPS'])
+      Proximo
+
+      ACT(b:FAC, Copy(BuscarCampo('ESPECIES','Nombre','Codigo',fbn['Especie']),1,15))
+      ACN(c:FAC, FBN['Cantidad1'])
+      ACT(d:FAC, FBN['Fecha2'])
+      SQL.ADD("Select NrOperacion, Leyenda, Cuenta, Transaccion from "~DBO~".MOVEJECUTADOS ")
+      SQL.ADD("where NrTrans2 = '"~Val(j:FAC)~"' ")
+      SQL.ADD("Union ")
+      SQL.ADD("Select NrOperacion, Leyenda, Cuenta, Transaccion from "~DBO~".MOVPENDIENTES ")
+      SQL.ADD("where NrTrans2 = '"~Val(j:FAC)~"' ")
+
+      Recorrer SQL  
+        DFA
+        if EqStr(FBN['NrOperacion'],Val(j:FAC))
+           ACT(m:FAC, FBN['Cuenta'])
+           ACT(n:FAC, FBN['Transaccion'])
+        else
+           ACT(a:FAC, FBN['Leyenda'])
+           SetFont(a:FAC,5)
+        endif
+      Proximo
+
+      ACN(y1, FAC)
+
+      If Incluido(Val(n:FAC),'COMP')
+         ACT(ab2,'COMP')
+         ACT(e:FAC, val(al1))
+         IFA
+         ACT(e:FAC, val(al2))
+      Endif
+
+      If EqStr(Val(n:FAC),'CREDIT')
+         ACT(e:FAC, 'Credito en Cuenta Nr. '~val(nu1))
+         If Dialogo.Radio1=1
+            ACT(e:FAC+1,'Banco:'~val(co1))
+            ACT(e:FAC+2,'Sucursal:'~val(al1))
+            ACT(e:FAC+3,'Beneficiario:'~val(cl1))
+            ACT(e:FAC+4,'Swift (ABA,CHIPS):'~val(ch1))
+            SetFilaActual(fac+4)
+         EndIf
+      Endif
+
+      If EqStr(Val(n:FAC),'TRANSF')
+         ACT(e:FAC, 'Transferencia a Cuenta Nr. '~BuscarCampo('CUENTAS','Numero','Codigo',Val(l:FAC)))
+         IFA
+         ACT(e:FAC, 'del '~BuscarCampo('CLIENTES','RazonSocial','Codigo',BuscarCampo('CUENTAS','Comitente','Codigo',Val(l:Val(y1))))~'.')
+         IFA
+         ACT(e:FAC, BuscarCampo('CUENTAS','Alias4','Codigo',Val(l:FAC-2)))
+      Endif
+
+      If EqStr(Val(n:FAC),'CHEQUE')
+         ACT(e:FAC, 'Emision de Cheque a nuestro favor.')
+      Endif
+
+      AlinearCeldas(b:Val(y1)..b:FAC,'C')
+      AlinearCeldas(d:Val(y1)..d:FAC,'C')
+      AgregarMarco(a:Val(y1)..e:FAC,1,2)
+      SetFont(b:Val(y1)..e:FAC,1)
+
+*** +++ era a:
+      SetFont(j:Val(y1)..p:FAC,3)
+    endif
+    if EqStr(FBN['TipoTr2'],'RET')
+      if Val(x2)=0
+        IFA
+        ACT(a:FAC, 'A su favor:')
+        SetFont(a:FAC,1)
+        IFA
+        ACT(a:FAC, 'Concepto')
+        ACT(b:FAC, 'Especie')
+        ACT(c:FAC, 'Valor Nominal')
+        ACT(d:FAC, 'Fecha Valor')
+        ACT(e:FAC, 'Forma de Liquidacion')
+        AlinearCeldas(a:FAC..e:FAC,'C')
+        AgregarMarco(a:FAC..e:FAC,2,2)
+        SetFont(a:FAC..e:FAC,1)
+        IFA
+        ACN(x2,1)
+      endif
+      ACT(j:FAC, FBN['NrTrans'])
+      ACT(k:FAC, FBN['Cuenta1'])
+      ACT(l:FAC, FBN['Cuenta2'])
+
+      *- Recupero Datos de la Cuenta
+      SQL.ADD(" SELECT * FROM "~DBO~".CUENTAS WHERE Codigo='"~Val(l:FAC)~"' ")
+      Recorrer SQL
+         dfa 
+         ACT(al1,FBN['Alias1'])
+         ACT(al2,FBN['Alias2'])
+         ACT(al4,FBN['Alias4'])
+         ACT(nu1,FBN['Numero'])
+         ACT(co1,FBN['Comitente'])
+         ACT(cl1,FBN['Cliente'])
+         ACT(ch1,FBN['ABA']~'/'~FBN['CHIPS'])
+      Proximo
+
+      ACT(b:FAC, Copy(BuscarCampo('ESPECIES','Nombre','Codigo',fbn['Especie']),1,15))
+      ACN(c:FAC, FBN['Cantidad1'])
+      ACT(d:FAC, FBN['Fecha2'])
+      SQL.ADD("Select NrOperacion, Leyenda, Cuenta, Transaccion from "~DBO~".MOVEJECUTADOS ")
+      SQL.ADD("where NrTrans2 = '"~Val(j:FAC)~"'  AND Cuenta Not In ("~val(cn1)~")  ")
+      SQL.ADD("Union ")
+      SQL.ADD("Select NrOperacion, Leyenda, Cuenta, Transaccion from "~DBO~".MOVPENDIENTES ")
+      SQL.ADD("where NrTrans2 = '"~Val(j:FAC)~"'  AND Cuenta Not In ("~val(cn1)~")  ")
+
+      recorrer SQL  
+        DFA
+        if EqStr(FBN['NrOperacion'],Val(j:FAC))
+          ACT(m:FAC, FBN['Cuenta'])
+          ACT(n:FAC, FBN['Transaccion'])
+        else
+          ACT(a:FAC, FBN['Leyenda'])
+          SetFont(a:FAC,5)
+        endif
+      proximo
+
+      ACN(y2, FAC)
+
+      if Incluido(Val(n:FAC),'COMP')
+         ACT(ab2,'COMP')
+         *- Tomo de Alias1 y Alias2 la Leyenda de la Compensacion
+         ACT(e:FAC, val(al1))
+         IFA
+         ACT(e:FAC, val(al2))
+      endif
+
+      *- Recupero Datos de la Cuenta
+      SQL.ADD(" SELECT * FROM "~DBO~".CUENTAS WHERE Codigo='"~Val(m:FAC)~"' ")
+      Recorrer SQL
+         dfa 
+         ACT(al1,FBN['Alias1'])
+         ACT(al2,FBN['Alias2'])
+         ACT(al4,FBN['Alias4'])
+         ACT(nu1,FBN['Numero'])
+         ACT(co1,FBN['Comitente'])
+         ACT(cl1,FBN['Cliente'])
+         ACT(ch1,FBN['ABA']~'/'~FBN['CHIPS'])
+      Proximo
+
+
+      If EqStr(Val(n:FAC),'DEBITO')
+         ACT(e:FAC, 'Debito en Cuenta Nr. '~val(nu1))
+         If Dialogo.Radio1=1
+            ACT(e:FAC+1,'Banco:'~val(co1))
+            ACT(e:FAC+2,'Sucursal:'~val(al1))
+            ACT(e:FAC+3,'Beneficiario:'~val(cl1))
+            ACT(e:FAC+4,'Swift (ABA,CHIPS):'~val(ch1))
+            SetFilaActual(fac+4)
+         EndIf
+      Endif
+
+      if EqStr(Val(n:FAC),'TRANSF')
+        ACT(e:FAC, 'Transferencia a Cuenta Nr. '~BuscarCampo('CUENTAS','Numero','Codigo',Val(k:FAC)))
+        IFA
+        ACT(e:FAC, 'del '~BuscarCampo('CUENTAS','Nombre','Codigo',Val(k:Val(y2)))~'.')
+        IFA
+        ACT(e:FAC, BuscarCampo('CUENTAS','Alias4','Codigo',Val(k:FAC-2)))
+      endif
+      if EqStr(Val(n:FAC),'EMI_CH')
+        ACT(e:FAC, 'Emision de Cheque a su favor.')
+      endif
+      AlinearCeldas(b:Val(y2)..b:FAC,'C')
+      AlinearCeldas(d:Val(y2)..d:FAC,'C')
+      AgregarMarco(a:Val(y2)..e:FAC,1,2)
+      SetFont(b:Val(y2)..e:FAC,1)
+      SetFont(j:Val(y2)..p:FAC,3)
+    endif
+  proximo
+
+  IFA
+
+  If [NoVacio(val(ab1)) o NoVacio(val(ab11))] y EqStr(val(ab2),'COMP') 
+     IFA
+     ACT(a:FAC  , val(ab1))
+     SetFont(a:fac..a:fac,4)
+     IFA
+     ACT(a:FAC, val(ab11))
+     SetFont(a:fac..a:fac,4)
+     IFA
+  Else 
+     SQL.ADD("Select * from "~DBO~".LEYENDAS ")
+     SQL.ADD("where Vehiculo = '"~fbn['Vehiculo1']~"' ")
+     SQL.ADD("and TipoOp = '"~fbn['TipoOp']~"' ")
+     SQL.ADD("order by Cliente DESC")
+     recorrer SQL  
+       ABT(a:FAC..e:FAC+3, LeerLeyenda(fbn['Cliente'],fbn['TipoOp'],fbn['Vehiculo']),1)
+       SetFilaActual(FAC+4)
+     proximo
+  EndIf
+
+  IFA
+  ACT(a:FAC, 'Sin otro particular saludamos muy atentamente.')
+  SetFont(a:FAC,1)
+proximo
+
+ACO(1,18)
+ACO(2,12)
+ACO(3,10)
+ACO(4,8)
+ACO(5,30)
+
+SetPrintFit(3,85)
+LimitesVision(e:FAC+1)
+SetFont(x:1..z:3,3)
+SetFont(aa:1..aa:12,3)
+
+*ImprimirHoja

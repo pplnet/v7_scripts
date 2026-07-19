@@ -1,0 +1,260 @@
+﻿* TOMA SOLO LAS OPERACIONES DE TITULOS Y SI SON VENTAS O COMPRAS(PARA ESTE CASO CON CLIENTES 
+* QUE NO SON AGENTES DEL MAE) LLEVA LAS OPERACIONES A LA INST. INFORMAR AL MAE, EL RESTO
+* DE LAS COMPRAS VAN A LA INSTANCIA CONFIRMAR DEL MAE. -- SI LA ESPECIE NO SE NEGOCIA EN EL MAE
+* ENTONCES SE PASA LA OPERACION A LA INSTANCIA DE AGREGAR NRO BOLETO Y DE AHI IRA A TERMINAL.
+*HojaVisible(SI)
+SQL.ADD(" Select * from "~DBO~".OPERACIONESBITS Where ( NrBit = 50 ) and ( Valor = '1' ) ")
+SQL.ADD(" Order by NrOperacion ")
+
+Recorrer SQL
+
+  BorrarCeldas(A1..B2)
+  BorrarCeldas(a3..a3)
+  BorrarCeldas(a4..a4)
+  ACT(a:1,BuscarCampo('Operaciones', 'TipoOp', 'NrOperacion', FBN['NrOperacion']))
+  * CB7 = No MAE
+  ACT(a:3,BuscarCampo('Operaciones', 'CB7', 'NrOperacion', FBN['NrOperacion']))
+  * CB5 = Oferta
+  ACT(a:4,BuscarCampo('Operaciones', 'CB5', 'NrOperacion', FBN['NrOperacion']))
+  if Incluido(Val(A:1),'TIC|TIV|TIFC|TIFV|TIPP|TIPA|TCOPRI')
+    *--- Si es una Oferta que bajo del MAE (CB5=1) o es TCOPRI, no va a MAE(50), va a Confirmacion(80) ---
+* FJL 10/03/21 - Agrego Ops Futuras. Las estaba informando igual aunque eran de ofertas.
+*    if [Incluido(Val(A:1),'TIC|TIV') y Eqstr(Val(a:4),'1')] o Incluido(Val(A:1),'TCOPRI')
+    if [Incluido(Val(A:1),'TIC|TIV|TIFC|TIFV') y Eqstr(Val(a:4),'1')] o Incluido(Val(A:1),'TCOPRI')
+* FJL 10/04/18 - Reemplazo por evento que deja log
+*      SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='1' where NrBit=71 and NrOperacion='"~FBN['NrOperacion']~"'")
+*      SQL.NEW
+*      SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='0' where NrBit=50 and NrOperacion='"~FBN['NrOperacion']~"'")
+*      SQL.NEW
+*      SQL.EXEC
+      EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=0, Radio2=2, Entero1=50, Entero2=71)
+      * asignar nro. de boleto automaticamente
+      EJECUTAREVENTO('ASIBOL',Radio1=1,NrOperacion1=FBN['NrOperacion'])
+*      SQL.ADD("Update "~DBO~".OPERACIONESBITS set Valor='1' where NrBit=70 and NrOperacion='"~FBN['NrOperacion']~"'")
+*      SQL.NEW
+*      SQL.EXEC
+    Else
+      BorrarCeldas(Y1..y2)
+      ACT(Y1,SQL("Select CodMAEContado From "~DBO~".ESPECIES Where Codigo='"~BuscarCampo('Operaciones', 'Especie', 'NrOperacion', FBN['NrOperacion'])~"' "))
+      If CeldaVacia(Y1) o Incluido(Val(a3), '1')
+        * SI ES UNA ESPECIE QUE NO SE NEGOCIA EN EL MAE (o es una operacion que no se informa) ENTONCES MANDAR A AGREGAR NRO BOLETO
+* FJL 10/04/18 - Reemplazo por evento que deja log
+*        SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS ")
+*        SQL.ADD(" SET Valor = '1' ")
+*        SQL.ADD(" Where  NrBit=71 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+*        SQL.NEW
+*        SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '0' ")
+*        SQL.ADD(" Where (NrBit = 50 ) and (NrOperacion = '"~FBN['NrOperacion']~"') ")
+*        SQL.NEW
+*        SQL.EXEC
+*        * asignar nro. de boleto automaticamente
+*        EJECUTAREVENTO('ASIBOL',NrOperacion1=FBN['NrOperacion'])
+        EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=0, Radio2=2, Entero1=50, Entero2=71)
+        * asignar nro. de boleto automaticamente
+        EJECUTAREVENTO('ASIBOL',Radio1=1,NrOperacion1=FBN['NrOperacion'])
+      Else
+        If Incluido(Val(A1),'TIPP|TIPA')
+          ACN(Y2, SQL("Select Count(*) From "~DBO~".OPERACIONES Where OperacionRef = '"~FBN['NrOperacion']~"' "))
+          if Val(y2)=2
+            * INST. AUXILIAR ALTA PASES
+            SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '1' ")
+            SQL.ADD(" Where  NrBit=73 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+            SQL.NEW
+            SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '0' ")
+            SQL.ADD(" Where (NrBit = 50 ) and (NrOperacion = '"~FBN['NrOperacion']~"') ")
+            SQL.NEW
+            SQL.EXEC
+          EndIf
+        else
+          ACT(B1, BuscarCampo('Operaciones', 'Cliente1', 'NrOperacion', FBN['NrOperacion']))
+*19/07/2005        ACN(A2, Num(BuscarCampo('Clientes', 'NrMAE', 'Codigo', Val(B1))))
+          ACT(A2, BuscarCampo('Clientes', 'NrMAE', 'Codigo', Val(B1)) )
+          ACT(p1,SQLAhora)
+*19/07/2005        If [Incluido(Val(A1),'TIC|TIFC') y Val(A2)=0] O [Incluido(Val(A1),'TIV|TIFV')]
+          If [Incluido(Val(A1),'TIC|TIFC|TCOPRI') y Vacio(Val(A2))] o [Incluido(Val(A1),'TIV|TIFV')]
+            * INST. INFORMAR AL MAE
+            SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '1' ")
+            SQL.ADD(" Where  NrBit=60 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+            SQL.NEW
+          Else 
+            SQL.ADD(" UPDATE "~DBO~".OPERACIONES ")
+            SQL.ADD(" SET FechaEnvioMAE = "~Val(p1)~" ")
+            SQL.ADD(" Where NrOperacion= '"~FBN['NrOperacion']~"' ")
+            SQL.NEW
+            * INST. CONFIRMAR AL MAE
+            SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '1' ")
+            SQL.ADD(" Where  NrBit=61 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+            SQL.NEW
+          EndIf
+          SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '0' ")
+          SQL.ADD(" Where NrBit = 50 and NrOperacion = '"~FBN['NrOperacion']~"' ")
+          SQL.NEW
+          SQL.EXEC
+        EndIf
+      EndIf
+    Endif 
+  EndIf
+Proximo
+
+*********************************************
+**** Operaciones esperando Confirmacion *****
+*********************************************
+SQL.ADD(" Select NrOperacion from "~DBO~".OPERACIONESBITS Where ( NrBit = 61 ) and ( Valor = '1' ) ")
+SQL.ADD(" Order by NrOperacion ")
+Recorrer SQL
+  SQL.ADD(" Select NrOperacion,TipoOp,FechaEnvioMAE,Cliente1  from "~DBO~".OPERACIONES Where NrOperacion = '"~FBN['NrOperacion']~"' ")
+  Recorrer SQL
+*19/07/2005    If incluido(FBN['TipoOp'],'TIC|TIFC') y BuscarCampo('CLIENTES','NrMAE','Codigo',FBN['Cliente1']) > 0
+    If incluido(FBN['TipoOp'],'TIC|TIFC|TCOPRI') y NOVACIO(BuscarCampo('CLIENTES','NrMAE','Codigo',FBN['Cliente1']))
+      ACT(b1, Hora(FBN['FechaEnvioMAE']))
+      If  Num(Copy(Hora(SQLAhora),1,2))*3600+Num(Copy(Hora(SQLAhora),4,2))*60+Num(Copy(Hora(SQLAhora),7,2))>Num(Copy(Val(b1),1,2))*3600+Num(Copy(Val(b1),4,2))*60+Num(Copy(Val(b1),7,2))+(Var('ESPERA')*60)
+        SQL.ADD(" Insert into "~DBO~".EXCEPCIONES ")
+        SQL.ADD(" (NrOperacion, Fecha, Tipo, Descripcion ) Values ")
+        SQL.ADD(" ('"~FBN['NrOperacion']~"', '"~IdxDate(FSYS)~"' , 'ERRORALTA','MAE no solicito confirmacion ALTA' ) ")
+        SQL.NEW
+        SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '0' ")
+        SQL.ADD(" Where  NrBit=61 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+        SQL.NEW
+        SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '1' ")
+        SQL.ADD(" Where  NrBit=69 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+        SQL.NEW
+        SQL.EXEC
+      endif
+    endif
+  proximo
+proximo
+
+
+******************************************
+**** Auxiliar para dar de Alta Pases *****
+******************************************
+SQL.ADD(" Select NrOperacion from "~DBO~".OPERACIONESBITS Where ( NrBit = 73 ) and ( Valor = '1' ) ")
+SQL.ADD(" Order by NrOperacion ")
+Recorrer SQL
+  Message(FBN['NrOperacion']~'   9')
+  SQL.ADD(" Select NrOperacion,TipoOp  from "~DBO~".OPERACIONES Where NrOperacion = '"~FBN['NrOperacion']~"' ")
+  Recorrer SQL
+    BorrarCeldas(v1..w2)
+    If Incluido(FBN['TipoOp'],'TIPP|TIPA')
+      Message('----- Buscando Patas de Op '~FBN['NrOperacion'])
+      SQL.ADD(" Select * from "~DBO~".OPERACIONES ")
+      SQL.ADD(" Where OperacionRef = '"~FBN['NrOperacion']~"' ")
+      SQL.ADD(" and PaseCB = '1' ")
+      Recorrer SQL
+*fo 12/10/2005        ACT(v1, SQL("Select 1 from "~DBO~".OPERACIONESBITS O where O.NrOperacion = '"~FBN['NrOperacion']~"' and O.Valor='1' and  (O.NrBit=70 or O.NrBit =10) "))
+        ACT(v1, SQL("Select 1 from "~DBO~".OPERACIONESBITS O where O.NrOperacion = '"~FBN['NrOperacion']~"' and O.Valor='1' and  (O.NrBit=70 or O.NrBit =10 or O.NrBit=7) "))
+        if EqStr(Val(v1),'1')
+           if Incluido(FBN['TipoOp'],'TIC|TIV|TCOPRI')
+              ACN(w1,1)
+           else
+              ACN(w2,1)
+           endif
+        endif
+      proximo
+      if Val(w1)=1 y Val(w2)=1
+        Message('Pasando Pases a Terminal')
+        SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '1' ")
+        SQL.ADD(" Where  NrBit=70 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+        SQL.NEW
+        SQL.ADD(" UPDATE "~DBO~".OPERACIONES ")
+        SQL.ADD(" SET NroBajaMAE = '0   0   ' ")
+        SQL.ADD(" Where NrOperacion= '"~FBN['NrOperacion']~"' ")
+        SQL.NEW
+        SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '0' ")
+        SQL.ADD(" Where  NrBit=73 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+        SQL.NEW
+        SQL.EXEC
+      else
+        Message("Las patas del pase no estan aun en Terminal(i70)")
+*        if Val(w1)=0
+*          SQL.ADD(" Insert into "~DBO~".EXCEPCIONES ")
+*          SQL.ADD(" (NrOperacion, Fecha, Tipo, Descripcion ) Values ")
+*          SQL.ADD(" ('"~FBN['NrOperacion']~"', '"~IdxDate(FSYS)~"' , 'ERRORALTA','Error en Alta Operacion Contado' ) ")
+*          SQL.NEW
+*        endif
+*        if Val(w2)=0
+*          SQL.ADD(" Insert into "~DBO~".EXCEPCIONES ")
+*          SQL.ADD(" (NrOperacion, Fecha, Tipo, Descripcion ) Values ")
+*          SQL.ADD(" ('"~FBN['NrOperacion']~"', '"~IdxDate(FSYS)~"' , 'ERRORALTA','Error en Alta Operacion Futuro' ) ")
+*          SQL.NEW
+*        endif
+*        SQL.EXEC
+      endif
+    endif
+  proximo
+proximo
+
+******************************************
+**** Auxiliar para dar de Baja Pases *****
+******************************************
+SQL.ADD(" Select NrOperacion from "~DBO~".OPERACIONESBITS Where ( NrBit = 74 ) and ( Valor = '1' ) ")
+SQL.ADD(" Order by NrOperacion ")
+Recorrer SQL
+***MessageBox(FBN['NrOperacion']~'  10')
+  SQL.ADD(" Select NrOperacion,TipoOp from "~DBO~".OPERACIONES Where NrOperacion = '"~FBN['NrOperacion']~"' ")
+  Recorrer SQL
+    BorrarCeldas(v1..w3)
+    If Incluido(FBN['TipoOp'],'TIPP|TIPA')
+      Message('----- Buscando Patas de Op '~FBN['NrOperacion'])
+      SQL.ADD(" Select * from "~DBO~".OPERACIONES ")
+      SQL.ADD(" Where OperacionRef = '"~FBN['NrOperacion']~"' ")
+      SQL.ADD(" and PaseCB = '1' ")
+      Recorrer SQL
+        SCN(v:2, 1)
+        ACT(v1, SQL("Select Count(*) from "~DBO~".OPERACIONESBITS where NrOperacion = '"~FBN['NrOperacion']~"' and Valor='1' and NrBit =30 "))
+        if EqStr(Val(v1),'1')
+          if Incluido(FBN['TipoOp'],'TIC|TIV')
+            ACN(w1,1)
+          else
+            ACN(w2,1)
+          endif
+        endif
+      proximo
+** FJL 17/03/20 - No pasaba la operacion si las operaciones ya se habian anulado     
+      if Val(v:2)<>2
+        * Si no hay dos patas busco en BOperaciones
+        SQL.ADD("Select TipoOp from "~DBO~".BOPERACIONES ")
+        SQL.ADD(" Where OperacionRef = '"~FBN['NrOperacion']~"' ")
+        SQL.ADD("   and PaseCB = '1' ")
+        Recorrer SQL
+          SCN(v:3, 1)
+          if Incluido(FBN['TipoOp'],'TIC|TIV')
+            ACN(w1,1)
+          else
+            ACN(w2,1)
+          endif
+        proximo
+      endif
+      if Val(w1)=1 y Val(w2)=1
+** FJL 17/03/20 - No tiene sentido 
+*        SQL.ADD(" UPDATE "~DBO~".OPERACIONES ")
+*        SQL.ADD(" SET NroAltaMAE = '0   0   ' ")
+*        SQL.ADD(" Where NrOperacion= '"~FBN['NrOperacion']~"' ")
+*        SQL.NEW
+        SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '1' ")
+        SQL.ADD(" Where  NrBit=30 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+        SQL.NEW
+        SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS SET Valor = '0' ")
+        SQL.ADD(" Where  NrBit=74 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+        SQL.NEW
+        SQL.EXEC
+      else
+        Message("Las patas del pase no tienen la baja confirmada.")
+** FJL 17/03/20 - Generaba excepciones cada vuelta 
+*        if Val(w1)=0
+*          SQL.ADD(" Insert into "~DBO~".EXCEPCIONES ")
+*          SQL.ADD(" (NrOperacion, Fecha, Tipo, Descripcion ) Values ")
+*          SQL.ADD(" ('"~FBN['NrOperacion']~"', '"~IdxDate(FSYS)~"' , 'ERRORBAJA','Error en Baja Operacion Contado' ) ")
+*          SQL.NEW
+*        endif
+*        if Val(w2)=0
+*          SQL.ADD(" Insert into "~DBO~".EXCEPCIONES ")
+*          SQL.ADD(" (NrOperacion, Fecha, Tipo, Descripcion ) Values ")
+*          SQL.ADD(" ('"~FBN['NrOperacion']~"', '"~IdxDate(FSYS)~"' , 'ERRORBAJA','Error en Baja Operacion Futuro' ) ")
+*          SQL.NEW
+*        endif
+*        SQL.EXEC
+      endif
+    endif
+  proximo
+proximo

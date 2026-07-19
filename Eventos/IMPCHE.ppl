@@ -1,0 +1,357 @@
+﻿MostrarCuadrodeMensajes
+**Hojavisible(SI)
+DialogoVisible(SI)
+CrearDialogo
+  Archivo1 : 'Archivo'        ;1;1;;;;;;;Var('PATHXLSMAV');;;;'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
+  Check1   : 'Control Duplic.'; ; ;;NO;NO;;;;1
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+* Lineas a levantar del archivo y despues recorrer
+ImportarXLS(a:2..az:1000, ba:1..cz:1000, Dialogo.Archivo1)
+
+If Not Ok
+  Cancelar('Error al cargar el archivo '~Dialogo.Archivo1)
+EndIf
+
+* validar que no haya operaciones para esa fecha de concertacion... si las hay avisar y pedir confirmacion.
+* como se si hay operaciones para esa fecha? tomo el primer renglon  (BH:1) y pregunto si hay operaciones con FechaOp igual a eso..
+
+*If SQL("Select 1 From "~DBO~".OPERACIONES where TipoOp='DTODOC' ")>0
+*   SQL.ADD("Delete From "~DBO~".OPERACIONES ")
+*   SQL.ADD(" Where TipoOp='DTODOC' ")
+*   SQL.NEW
+*   SQL.EXEC
+*EndIf
+*
+Let &TotalProcesados 0
+Let &TotalAgregados 0
+Let &TotalNoAgregados 0
+Let &TotalDuplicados 0
+
+
+Recorrer&i 1,1000
+  
+  If Vacio(Val(ba:&i))
+     Break
+  EndIf
+  
+  Let &TotalProcesados &TotalProcesados+1
+  
+  if Dialogo.Check1=1 y SQL("Select 1 from "~DBO~".OPERACIONES where FechaOp='"~IdxDate(Val(bh:&i))~"' and NrOperacion2='"~FStr(Val(ba:&i),0,0)~"' and NrOperacion3='"~FStr(Val(bj:&i),0,0)~"' and NrOperacion4='"~FStr(Val(bk:&i),0,0)~"' and CodComitente='"~FStr(Val(bs:&i),0,0)~"'")>0
+    Let &TotalDuplicados &TotalDuplicados+1
+    Message('Operacion duplicada')
+  else
+  
+      ** Numerador
+    *  ACN(NU:1,BuscarCampo('VEHICULOS','Alias1','Alias5',Val(bt:&i)))
+      
+      **NrOperacion
+    *  ACT(NR:1,GetNumerador(32))
+
+      let &Vehiculo var('VEHICULODE')
+
+      let &Numerador GetNumerador(32)
+    *  usamos numerador 32 para las operaciones de DD
+      
+      If EqStr(Trim(Mirt(Val(bb:&i))),'Avalado')
+        let &cb1 1
+      else
+        let &cb1 0
+      end
+
+      ** Especie
+      If EqStr(Trim(Mirt(Val(bc:&i))),'$')
+    *     ACT(ES:1,VAR('MONELOCA'))
+        let &Especie VAR('MONELOCA')
+      Else
+    *     ACT(ES:1,VAR('MONEEXTR'))
+        let &Especie VAR('MONEEXTR')
+      EndIf
+      
+      ** RB1
+      If EqStr(Trim(Mirt(Val(bd:&i))),'C')
+    *     ACN(RB:1,0)
+         let &TipoOp 'DDC'
+      Else
+    *     ACN(RB:1,1)
+         let &TipoOp 'DDV'
+      EndIf
+      
+    *aca es donde tengo que buscar al cliente si no es cartera propia  
+      let &Cliente1 SQL("SELECT Cliente from "~DBO~".VEHICULOS WHERE Codigo='"~Var('VEHICULODE')~"' ")
+
+      * si no es del comitente del Vehiculo tengo que buscar en la tabla de Clientes con ese Numero de Comitente ()
+    * en el caso de las compras podria agregar el CUIT porque viene en el archivo, por ahora no se hace, siendo asimetrico no le veo sentido
+
+      if NO
+        let &Cliente1 BuscarCampo('CLIENTES','Codigo','CodComitente',FStr(Val(bs:&i),0,0))  
+        if Vacio(&Cliente1)
+          SQL.ADD("INSERT INTO "~DBO~".CLIENTES ( ")
+          SQL.ADD("Jerarquia, Codigo, CodComitente, RazonSocial")
+          SQL.ADD("")
+          SQL.ADD("   ) VALUES (")
+          SQL.ADD("'"~GenerarJerarquiaporCodigo('CLIENTES','CLIENTES',SI)~"','C"~FStr(Val(bs:&i),0,0)~"',"~FStr(Val(bs:&i),0,0)~",'Comitente Nro."~FStr(Val(bs:&i),0,0)~"'")
+          SQL.ADD("")
+          SQL.ADD(")")
+          SQL.NEW
+          SQL.EXEC
+          let &Cliente1 'C'~FStr(Val(bs:&i),0,0)
+      *    EnviarMensajeOp('Se agrega Cliente no encontrado: '~&Cliente1, &Numerador)
+          Message('Se agrega Cliente no encontrado: '~&Cliente1)
+        end
+      else
+         let &Cliente1 SQL("SELECT Cliente FROM "~DBO~".CUENTAS WHERE NrDepositante='"~FStr(Val(bs:&i),0,0)~"' ")
+      endif
+
+      ** Cliente2
+      let &Cliente2 BuscarCampo('CLIENTES','Codigo','CodigoMAV',FStr(Val(bf:&i),0,0))
+      
+      if Vacio(&Cliente2)
+*        SQL.ADD("INSERT INTO "~DBO~".CLIENTES ( ")
+*        SQL.ADD("Jerarquia, Codigo, CodigoMAV, RazonSocial")
+*        SQL.ADD("")
+*        SQL.ADD("   ) VALUES (")
+*        SQL.ADD("'"~GenerarJerarquiaporCodigo('CLIENTES',"AGENTES",SI)~"','A"~FStr(Val(bf:&i),0,0)~"',"~FStr(Val(bf:&i),0,0)~",'Agente Nro."~FStr(Val(bf:&i),0,0)~"'")
+*        SQL.ADD("")
+*        SQL.ADD(")")
+*        SQL.NEW
+*        SQL.EXEC
+*        let &Cliente2 'A'~FStr(Val(bf:&i),0,0)
+*        *    EnviarMensajeOp('Se agrega Agente no encontrado: '~&Cliente2, &Numerador)
+*        Message('Se agrega Agente no encontrado: '~&Cliente2)
+         Messagebox('Debe agregar el Agente con CodigoMAV '~FStr(Val(bf:&i),0,0))
+       Endif    
+      
+      ** Cliente3
+      let &Cliente3 BuscarCampo('CLIENTES','Codigo','CodigoBCRA',FStr(Val(bl:&i),0,0))
+      if Vacio(&Cliente3)
+*        SQL.ADD("INSERT INTO "~DBO~".CLIENTES ( ")
+*        SQL.ADD("Jerarquia, Codigo, CodigoBCRA, RazonSocial")
+*        SQL.ADD("")
+*        SQL.ADD("   ) VALUES (")
+*        SQL.ADD("'"~GenerarJerarquiaporCodigo('CLIENTES',"BLOCAL",SI)~"','B"~FStr(Val(bl:&i),0,0)~"',"~FStr(Val(bl:&i),0,0)~",'Banco "~Val(cd:&i)~"'")
+*        SQL.ADD("")
+*        SQL.ADD(")")
+*        SQL.NEW
+*        SQL.EXEC
+*        let &Cliente3 'B'~FStr(Val(bl:&i),0,0)
+*    *    EnviarMensajeOp('Se agrega Banco no encontrado: '~&Cliente3, &Numerador)
+*        Message('Se agrega Banco no encontrado: '~&Cliente3)
+         Messagebox('Debe agregar el Banco con CodigoBCRA '~FStr(Val(bl:&i),0,0))
+      endif  
+
+       
+    ** Cliente4
+    let &Cliente4 BuscarCampo('MERCADOS','Cliente1','Codigo',VAR('MERNEGMAV'))
+    if Vacio(&Cliente4)
+*           SQL.ADD("INSERT INTO "~DBO~".CLIENTES ( ")
+*           SQL.ADD("Jerarquia, Codigo, RazonSocial")
+*           SQL.ADD("")
+*           SQL.ADD("   ) VALUES (")
+*           SQL.ADD("'"~GenerarJerarquiaporCodigo('CLIENTES',"OTROS",SI)~"','MAV','MAV'")
+*           SQL.ADD("")
+*           SQL.ADD(")")
+*           SQL.NEW
+*           SQL.EXEC
+*           let &Cliente4 'MAV'
+*           Message('Se agrega Cliente MAV ')
+        Messagebox('Debe configurar el mercado MAV '~VAR('MERNEGMAV'))
+    endif  
+     let &Mercado4 VAR('MERNEGMAV')
+     let &Mercado  VAR('MERLIQMAVC')
+     if Eqstr(&Vehiculo,&Cliente1)
+        if Eqstr(&Especie,VAR('MONELOCA')) 
+           let &Mercado2 VAR('MERCBCRA')
+        else
+           let &Mercado2 VAR('MERSWIFT')
+        endif   
+     else
+        let &Mercado2 VAR('MERLIQMAV')
+     endif
+     let &cb8 1
+
+      *Cuenta1
+      Let &Cuenta1  SQL("Select Top(1) Codigo from "~DBO~".CUENTAS where Cliente='"~&Cliente4~"'  and (Especies Like '%"~&Especie~"|%' OR Especies LIKE '%MONEDA%') AND Estado='HAB' AND TipoCuenta In ('CC','CA','CUS','VIS','OTR') AND Mercado='"~&Mercado~"' and (TiposOperacion is NULL or TiposOperacion like '%"~&TipoOp~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC")   
+      If Vacio(&Cuenta1)
+        Messagebox('Debe agregar la Cuenta contraparte central para el mercado '~&Mercado )
+      endif
+      
+      *Cuenta4         
+*      Let &Cuenta4  SQL("Select Top(1) Codigo from "~DBO~".CUENTAS where Cliente='"~&Cliente1~"'  and (Especies Like '%"~&Especie~"|%' OR Especies LIKE '%MONEDA%') AND Estado='HAB' AND TipoCuenta In ('CC','CA','CUS','VIS','OTR') AND Mercado='"~&Mercado2~"' and (TiposOperacion is NULL or TiposOperacion like '%"~&TipoOp~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC")   
+      Let &Cuenta4  SQL("Select Top(1) Codigo from "~DBO~".CUENTAS where Cliente='"~&Cliente1~"'  and (Especies Like '%"~&Especie~"%' OR Especies LIKE '%MONEDA%') AND Estado='HAB' AND TipoCuenta In ('CC','CA','CUS','VIS','OTR') AND Mercado='"~&Mercado2~"' and (TiposOperacion is NULL or TiposOperacion like '%"~&TipoOp~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC")   
+      If Vacio(&Cuenta4)
+        Messagebox('Debe agregar la Cuenta moneda de cliente '~&Cliente1~' y comitente '~FStr(Val(bs:&i),0,0) )
+      endif
+      
+      *Cuenta5         
+*      Let &Cuenta5  SQL("Select Top(1) Codigo from "~DBO~".CUENTAS where Cliente='"~&Cliente1~"'  and (Especies Like '%"~&Especie~"|%' OR Especies LIKE '%MONEDA%') AND Estado='HAB' AND TipoCuenta In ('CC','CA','CUS','VIS','OTR') AND Mercado='"~&Mercado2~"' and (TiposOperacion is NULL or TiposOperacion like '%"~&TipoOp~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC")   
+      Let &Cuenta5  SQL("Select Top(1) Codigo from "~DBO~".CUENTAS where Cliente='"~&Cliente1~"'  and (Especies Like '%"~&Especie~"%' OR Especies LIKE '%MONEDA%') AND Estado='HAB' AND TipoCuenta In ('CC','CA','CUS','VIS','OTR') AND Mercado='"~&Mercado2~"' and (TiposOperacion is NULL or TiposOperacion like '%"~&TipoOp~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC")   
+      If Vacio(&Cuenta5)
+        Messagebox('Debe agregar la Cuenta comision de cliente '~&Cliente1~' y comitente '~FStr(Val(bs:&i),0,0) )
+      endif
+      
+      *Cuenta3         
+      Let &Cuenta3  SQL("Select Top(1) Codigo from "~DBO~".CUENTAS where Cliente='"~&Vehiculo~"'  and (Especies Like '%"~&Especie~"|%' OR Especies LIKE '%MONEDA%') AND Estado='HAB' AND TipoCuenta In ('CC','CA','CUS','VIS','OTR') AND (UPPER(Alias1) like '%TER%' or UPPER(Alias1) like '%CP%') AND Mercado='"~IIF(Incluido(&Mercado2,Var('MERNOVEHI')),IIF(Eqstr(&Especie,Var('MONELOCA')),Var('MERCBCRA'),Var('MERSWIFT')),&Mercado2)~"' and (TiposOperacion is NULL or TiposOperacion like '%"~&TipoOp~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC")
+      If Vacio(&Cuenta3) 
+        Messagebox('Debe agregar la Cuenta moneda del vehiculo para el mercado '~IIF(Incluido(&Mercado2,Var('MERNOVEHI')),IIF(Eqstr(&Especie,Var('MONELOCA')),Var('MERCBCRA'),Var('MERSWIFT')),&Mercado2) )
+      endif
+      
+           
+      ** Plazo2
+      let &Plazo2 Fecha(Val(bi:&i)) - Fecha(Val(bh:&i))
+
+      * Sin Recurso'
+      If Incluido(Trim(Val(ca:&i)),'No|NO')
+        let &CB2 0
+      Else
+        let &CB2 1
+      EndIf
+      
+      
+      ** a la orden
+      If EqStr(Trim(Val(cc:&i)),'No') o EqStr(Trim(Val(cc:&i)),'NO')
+        let &CB3 0
+      Else
+        let &CB3 1
+      EndIf
+      
+      ** Plazo
+      * lo tomo entre fecha de liquidacion y fecha de acreditacion, opinable.
+      let &Plazo Fecha(Val(bn:&i)) - Fecha(Val(bi:&i))
+      
+      ** CB4
+      If EqStr(Trim(Val(cf:&i)),'No') o EqStr(Trim(Val(cf:&i)),'NO')
+        let &CB4 0
+      Else
+        let &CB4 1
+      EndIf
+      
+      ** CB5
+      If EqStr(Trim(Val(cg:&i)),'No') o EqStr(Trim(Val(cg:&i)),'NO')
+        let &CB5 0
+      Else
+        let &CB5 1
+      EndIf
+
+
+      ** MB2
+      If EqStr(Trim(Mirt(Val(bw:&i))),'EX') 
+        let &MB2 0
+      Else
+        If EqStr(Trim(Mirt(Val(bw:&i))),'RI') 
+          let &MB2 1
+        else
+          let &MB2 2
+        endif
+      EndIf
+
+      
+      ** RB5
+    *  If EqStr(Trim(Val(cu:&i)),'ECHEQ')
+    *    let &RB5 0
+    *  Else
+    *     If EqStr(Trim(Val(cu:&i)),'CPD')
+    *       let &RB5 1
+    *     Else
+    *       let &RB5 2
+    *     EndIf
+    *  EndIf
+    *  
+      ** Cantidad, ver si la calculo distinto segun sea compra o venta, creo que no...
+      if EqStr(&TipoOp,'DDC')
+        let &Cantidad Val(bo:&i) - Val(bp:&i)
+      else
+        let &Cantidad Val(bo:&i) - Val(bp:&i)
+      endif
+    
+      
+    let &TotalBrutoCli1 Val(bo:&i)
+    if Not Eqstr(&Cliente1,&Vehiculo)
+     *let &TotalArancel &Cantidad*MontoArancelC(&TipoOp,&Cliente1,&Especie,&Vehiculo,'DTODOC',0,4,,,,,&Mercado4)*&Plazo/365/100
+      let &TotalArancel &TotalBrutoCli1*MontoArancelC(&TipoOp,&Cliente1,&Especie,&Vehiculo,'DTODOC',0,4,,,,,&Mercado4)*&Plazo/365/100
+    else
+      let &TotalArancel 0
+    endif
+    If NoVacio(&Cuenta1) y NoVacio(&Cuenta4) y NoVacio(&Cuenta5) y NoVacio(&Cuenta3)
+        let &Haycuentas 1
+    else
+        let &Haycuentas 0
+    endif
+  
+      **
+    ** AA 13/03/2026 Nuevos campos  MAVAdmGtiaVdr, MAVAdmGtiaVdrIVA
+    if Val(cy:&i) <> 0
+       let &MAVAdmGtiaVdr Val(cy:&i)
+       let &MAVAdmGtiaVdrIVA Val(cz:&i)   
+    else
+       let &MAVAdmGtiaVdr 0
+       let &MAVAdmGtiaVdrIVA 0
+    Endif
+       
+      If NoVacio(&Cliente1) y NoVacio(&Cliente2) y NoVacio(&Cliente3) y NoVacio(&Cliente4) y &Haycuentas = 1
+          Message('Agregando operacion '~&Numerador)
+      
+          SQL.ADD("INSERT INTO "~DBO~".OPERACIONES ( ")
+          SQL.ADD("   TipoOp,          NrOperacion,    NrOperacion2,    CB1,   Especie, ")
+          SQL.ADD("   RB1,             Precio1,        Cliente1,        FechaOp,       FechaVto, ")
+          SQL.ADD("   Plazo2,          NrOperacion3,   NrOperacion4,    Cliente2,      Cliente3,        TotalAux4,")
+          SQL.ADD("   FechaVto2,       TotalBrutoCli1, TotalIntereses,  TotalDerechos, TotalComisiones, TotalIVA,   Vehiculo1, ")
+          SQL.ADD("   ObservacDoc,     ContraEspecie,  TipoCambio,      CB3,           FechaOp2, ")
+          SQL.ADD("   Plazo,           Sucursal,       CB4,             CB5,           UsrInput, ")
+          SQL.ADD("   FechaCarga,      FechaCargaSys,  Numerador,       Cantidad,      Operador, CB8, ")
+          SQL.ADD("   Cliente4,        Mercado4,       Mercado,         Mercado2, ")
+          SQL.ADD("   DiasAnio,        Observac2,      CodComitente,    Plaza1,        ImpGastos1,       ImpGastos2,")
+          SQL.ADD("   Book1,           OperacionRef,   MB2,             CB2,           Observac3,        MensajeChequeo,")
+          SQL.ADD("   TipoDoc,         Hora1,          Hora2,           CB6,           CB7,              FechaPago,     FechaPrecan,")
+          SQL.ADD("   MAVAdmGtiaVdr,   MAVAdmGtiaVdrIVA ")
+          *,         TotalIVA,       TotalNetoCli2 ")
+          SQL.ADD("   ) VALUES (")
+          SQL.ADD("   '"~&TipoOp~"','"~&Numerador~"', '"~FStr(Val(ba:&i),0,0)~"', "~FStr(&CB1,0,0)~", '"~&Especie~"', ")
+          SQL.ADD("   "~Fstr(&RB1,0,0)~",   "~FStr(Val(be:&i),1,8)~", '"~&Cliente1~"', '"~IdxDate(Val(bh:&i))~"', '"~IdxDate(Val(cc:&i))~"', ")
+          SQL.ADD("   "~Fstr(&Plazo2,0,0)~",   '"~FStr(Val(bj:&i),0,0)~"', '"~FStr(Val(bk:&i),0,0)~"', '"~&Cliente2~"','"~&Cliente3~"',           "~FStr(Val(bn:&i),0,0)~", ")
+          SQL.ADD("   '"~IdxDate(Val(bn:&i))~"', "~FStr(Val(bo:&i),0,2)~", "~FStr(Val(bp:&i),0,2)~", "~FStr(Val(bq:&i),0,2)~", "~FStr(Val(br:&i),0,2)~", "~FStr(Val(cm:&i),0,2)~", '"~&Vehiculo~"', ")
+          SQL.ADD("   '"~Val(bx:&i)~"',          '"~VAR('MONELOCA')~"',    "~FStr(Val(bz:&i),0,2)~", "~FStr(&CB3,0,0)~",   '"~IdxDate(Val(bi:&i))~"', ")
+          SQL.ADD("   "~Fstr(&Plazo,0,0)~",   '"~FStr(Val(ce:&i),0,0)~"', "~FStr(&CB4,0,0)~",  "~FStr(&CB5,0,0)~",   '"~USUARIOACTIVO~"', ")
+          SQL.ADD("   "~IdxDate2(SQLAhora)~",  "~IdxDate2(FSys)~",       "~FStr(32,0,0)~",  "~FStr(&Cantidad,0,2)~",   '"~USUARIOACTIVO~"', "~FStr(&CB8,1,0)~", ")
+          SQL.ADD("   '"~&Cliente4~"', '"~&Mercado4~"',  '"~&Mercado~"',  '"~&Mercado2~"', ")
+          SQL.ADD("   1,  '"~Val(cj:&i)~"',   '"~FStr(Val(bs:&i),0,0)~"',    '"~FStr(Val(ck:&i),0,0)~"', "~FStr(&TotalArancel,0,2)~","~FStr(&TotalArancel*Var('IVA')/100,0,2)~", ")
+          SQL.ADD("   '"~Var('BOOKDD')~"',    '"~Fstr(Val(bk:&i),0,0)~"',  "~FStr(&MB2,0,0)~", "~FStr(&CB2,0,0)~", '"~Val(cn:&i)~"', '"~Val(bt:&i)~"',")
+          SQL.ADD("   '"~Val(ch:&i)~"', '"~Hora(Val(bg:&i))~"', '"~Hora(Val(bu:&i))~"', 0, 0, '"~IdxDate(Val(bi:&i))~"', '"~IdxDate(Val(bn:&i))~"', ")
+          SQL.ADD("   "~FStr(&MAVAdmGtiaVdr,0,0)~", "~FStr(&MAVAdmGtiaVdrIVA,0,0)~" ")
+          *,   "~FStr(Val(co:&i),0,2)~", "~FStr(Val(ct:&i),0,2)~" ")
+          SQL.ADD("   )")
+          SQL.NEW
+          SQL.ADD("INSERT INTO "~DBO~".OPERACIONESBITS (NrOperacion,NrBit,Valor) Values ('"~&Numerador~"', 67, '0')")
+          SQL.NEW
+          SQL.ADD("INSERT INTO "~DBO~".OPERACIONESBITS (NrOperacion,NrBit,Valor) Values ('"~&Numerador~"', 10, '0')")
+          SQL.NEW
+          SQL.ADD("INSERT INTO "~DBO~".OPERACIONESBITS (NrOperacion,NrBit,Valor) Values ('"~&Numerador~"', 70, '0')")
+          SQL.NEW
+          SQL.ADD("INSERT INTO "~DBO~".OPERACIONESBITS (NrOperacion,NrBit,Valor) Values ('"~&Numerador~"', 71, '1')")
+          SQL.NEW
+          SQL.EXEC
+      
+
+          SQL.ActualizarMovimientos3(&Numerador,NO,NO,NO,NO,SI)
+          SQL.EXEC
+          ModificarOperacion(&Numerador,0,NO,SI,SI,NO,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO,SI,NO,SI,NO,0,NO,NO)
+          EjecutarEvento('GENBDD',Check3=0)
+          Let &TotalAgregados &TotalAgregados+1
+      else
+         if Vacio(&Cliente1)
+            Messagebox('Debe agregar el cliente '~FStr(Val(bs:&i),0,0))
+         endif   
+         Let &TotalNoAgregados &TotalNoAgregados+1
+      endif    
+  endif 
+  
+  
+Proximo
+
+*EnviarMensaje('Evento Importacion de Cheques Finalizado Correctamente. Procesados:'~Fstr(&TotalProcesados,0,0)~' Agregados:'~Fstr(&TotalAgregados,0,0)~' Duplicados:'~Fstr(&TotalDuplicados,0,0),0)
+Messagebox('Evento Importacion de Cheques Finalizado Correctamente. Procesados:'~Fstr(&TotalProcesados,0,0)~' Agregados:'~Fstr(&TotalAgregados,0,0)~' Problemas Datos:'~Fstr(&TotalNoAgregados,0,0)~' Duplicados:'~Fstr(&TotalDuplicados,0,0),0)
+

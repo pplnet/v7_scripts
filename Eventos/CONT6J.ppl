@@ -1,0 +1,70 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:   'Fecha'      ;;;;;;;;;Fsys
+  Lista1:  'Vehiculos'   ;3;1;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS"), SQLSet(" Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"'"))
+  Check1:  'Contab.Procesada' ;;;;NO;NO;
+FinDialogo
+
+If Not OK
+   Cancelar
+Endif
+message('--- Asientos por Ingresos de Gastos ---')
+
+SQL.ADD(" SELECT Codigo FROM "~DBO~".MODELOSASIENTO MA WHERE TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIGAS'))~") AND Habilitado = 'SI' AND Entorno = '"~SIGLA~"' ")
+If NoVAcio(Dialogo.Lista1)
+    SQL.ADD(" AND (( ")
+   Recorrer&i 1,Elementos(Dialogo.Lista1)
+   SQL.ADD(" '|'+rtrim(MA.Vehiculo)+'|' like '%|"~ItemLista(Dialogo.Lista1,&i)~"|%' ")
+        If NOT Elementos(Dialogo.Lista1)=&i
+            SQL.ADD(" OR ")
+        EndIf
+   proximo
+   SQL.ADD(") OR MA.Vehiculo is null OR MA.Vehiculo = '' OR MA.Vehiculo = ' ' )")    
+Endif
+
+Recorrer SQL
+  dfa
+  ACT(la:1, Val(la:1)~fbn('Codigo')~'|')
+Proximo
+
+ACD(FE:2, Habiles(PriDeMes(Dialogo.Fecha1,SI), -1, 'ARG'))
+
+SQL.ADD(" SELECT T.Especie, T.Especie Moneda, T.Fecha1, T.Vehiculo1,  T.NrTrans, T.Cantidad1 Cantidad, V.Valor1, V.Valor2, ")
+SQL.ADD(" E.Codigo, E.Cotiza, T.TipoTr2, T.Cuenta1, T.Cliente1, V.Alias4 MonLocalVeh, T.Cantidad2 TotalIVA, T.NrTrans NrOperacion, T.Book1 Book ")
+SQL.ADD(" FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".VEHICULOS V, "~DBO~".ESPECIES E ")
+SQL.ADD(" WHERE T.Vehiculo1 = V.Codigo ") 
+SQL.ADD(" AND E.Codigo = T.Especie ")
+SQL.ADD(" AND T.TipoTr2   IN ('INGGAS') ")
+SQL.ADD(" AND T.FechaCargaSys = "~Idxdate2(Dialogo.Fecha1)~"   ")
+SQL.ADD(" AND   T.Vehiculo1 Not IN ("~Pipe2Comillas(Var('VLIQUIDAA'))~") ")
+If NoVAcio(Dialogo.Lista1)
+   SQL.ADD(" AND (T.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") OR T.Vehiculo1 is null OR T.Vehiculo1 = '' OR T.Vehiculo1 = ' ' )")  
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      SQL.ADD(" AND T.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+   Endif
+Endif
+SQL.ADD("  ORDER BY T.NrTrans ")
+Watch(SQL.Batch)
+Recorrer SQL
+    message(fbn('NrTrans'))
+    Recorrer&i 1, Elementos(Val(la:1)) 
+        ACD(FV:1, fbn('Fecha1'))
+        ACT(VH:1, fbn('Vehiculo1'))
+        (.'FECHAVALOR'.)
+        ACN(CK:1, 0)
+        IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+           ACN(CK:1, 1)
+           IF Vacio(SQL(" Select A.NrUnicoAsiento From "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1 Where A.NrUnicoAsiento = A1.NrUnicoAsiento AND A1.Alias7 = '"~fbn('Especie')~"' AND A.Modelo = '"~ItemLista(Val(la:1),&i)~"' AND A.NrTrans2 = '"~fbn('NrTrans')~"' AND A.Estado = 'E' AND (A.NrAsiento Is Null OR A.NrAsiento = '' OR A.NrAsiento = ' ') AND A.FechaValor = '"~IdxDate(Val(FV:1))~"' AND A.Vehiculo = '"~fbn('Vehiculo1')~"' "))
+              ACN(CK:1, 0)
+           ENDIF
+        ENDIF
+        IF Val(CK:1) = 0
+            Message('Modelo: '~ItemLista(Val(la:1),&i) ~' - '~fbn('NrTrans'))
+            let &modeloContable ItemLista(Val(la:1),&i)
+            SQL.GenerarAsientoOp(ItemLista(Val(la:1),&i),'','','',810,Val(FV:1),fbn('Vehiculo1'),,,,,,,,fbn('NrTrans'),,,,,fsys,Dialogo.Fecha1)
+            SQL.EXEC
+        ENDIF
+    Proximo
+Proximo
+

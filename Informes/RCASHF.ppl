@@ -1,0 +1,475 @@
+﻿CrearDialogo
+   Fecha1   : 'Fecha'                             ;;;;;;;;;FSys;
+   Radio1   : 'Vehc. Consol |Si |No'              ;;;;;;;;;0;
+   Vehiculo1: 'Vehiculo'                          ;;;;;
+   Radio2   : "Cuad. Consol |Pesos |Dolares"      ;;;;;;;;;0;
+   Radio10  : "Tasa Simulad |Si |No"              ;;;;;NO;;;;0;
+   Radio3   : "Minutas |Reales |Reales-Simuladas" ;;;;;NO;;;;0;
+FinDialogo
+
+If Not Ok
+   Cancelar
+EndIf
+
+CrearFont(1, "Arial, 8,")
+CrearFont(2, "Arial, 8,B")
+CrearFont(3, "Arial, 9,")
+CrearFont(4, "Arial, 9,B")
+CrearFont(5, "Arial, 10,B")
+CrearFont(6, "Arial, 12,BU")
+
+ACT(ML:1, Var('MONELOCA'))
+ACT(ME:1, Var('MONEEXTR'))
+ACT(MU:1, Var('MONEEURO'))
+
+*--> Variable MONELOCA en JDE
+ACT(ML:2, BuscarCampo('ESPECIES', 'Alias5', 'Codigo', Var('MONELOCA')) )
+ACT(ML:3, BuscarCampo('ESPECIES', 'Alias6', 'Codigo', Var('MONELOCA')) )
+
+*--> Variable MONEEXTR en JDE
+ACT(ME:2, BuscarCampo('ESPECIES', 'Alias5', 'Codigo', Var('MONEEXTR')) )
+ACT(ME:3, BuscarCampo('ESPECIES', 'Alias6', 'Codigo', Var('MONEEXTR')) )
+
+***---Fecha en Juliano
+ACT(FJ:1, FechaJul(Dialogo.Fecha1))
+
+IF Dialogo.Radio1 = 1
+    ***---Obtengo Vehiculo JDE
+    ACT(VH:1, Pad0(BuscarCampo('VEHICULOS', 'Valor5', 'Codigo', Dialogo.Vehiculo1), 5))
+ENDIF
+
+SetFilaActual(1)
+ACT(E:fac, 'Informe de CashFlow')
+SetFont(E:fac, 6)
+
+SetFilaActual(fac+2)
+ACN(fa:1, fac)
+ACT(a:fac, 'Fecha: '~Dialogo.Fecha1)
+
+ifa
+If Vacio(Dialogo.Vehiculo1)
+   ACT(a:fac, 'Vehiculo: Todos')
+Else
+   ACT(a:fac, 'Vehiculo: '~Dialogo.Vehiculo1)
+EndIf
+
+ifa
+IF Dialogo.Radio1 = 0
+   ACT(A:fac, 'Consolidado: SI')
+ELSE
+   ACT(A:fac, 'Consolidado: NO')
+ENDIF
+
+ifa
+ACT(a:fac, 'Cuadro Consolidado: '~IIF(Dialogo.Radio2=0, 'Pesos', 'Dolares') )
+
+SetFont(a:Val(fa:1)..j:fac, 4)
+ACN(fl:2, fac)
+
+*--> Para acumular el total
+ACN(kk:1, 1551)
+
+*--> Columna donde empieza el seteo de las fechas
+ACN(vt:1, 4)
+
+***---LM:1-1 = Ultima Columna diaria
+***---LM:2-1 = ultima Columna mensual
+
+***---Seteo de Cotizaciones
+(.'SETCOTCF'.)
+***---Cuadro en ARP
+ACN(CZ:2, 0)
+***---JDE
+(.'RCASHF1'.)
+***---Fila Fechas Cuandro ARP
+ACN(FX:1, Val(FI:1))
+***---Activos Financieros
+(.'RCASHF2'.)
+***---Pasivos Financieros
+(.'RCASHF3'.)
+ACN(PF:1, fac)
+ACT(A:Val(PF:1), 'TOTAL')
+ACT(CX:Val(PF:1), '9T+')
+Recorrer&k 4, Val(LM:2)
+    ACN(&k:Val(PF:1), Val(TX:&k) + Val(&k:Val(H:2000)) - Val(&k:Val(I:2000)))
+IF &k=4
+*MessageBox(Val(TX:&k))
+*MessageBox(Val(&k:Val(H:2000)))
+*MessageBox(Val(&k:Val(I:2000)))
+ENDIF
+Proximo
+ifa
+Recorrer&k 1, Val(RX:1)
+    ***---Busco Cotizacion del USD la moneda para cuadro Consolidado
+    IF Eqstr(Val(YX:&k), 'CON')
+        ACN(TZ:1, Val(YZ:&k))
+    ELSE
+        ACT(LS:1, Val(LS:1)~Val(YY:&k)~'|')
+        ACT(LS:2, Val(LS:2)~Fstr(Val(YZ:&k), 0, 8)~'|')
+    ENDIF
+Proximo
+ACT(A:fac, 'Posicion Bancaria')
+ACL(A:fac, 'APBCAS', Fecha1=Dialogo.Fecha1, Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1, Radio2=Dialogo.Radio2, Radio10=0, Radio3=0, Radio4=0, Especie1=Val(ML:1), Precio1=Val(TZ:1), Lista1=Val(LS:1), Lista2=Val(LS:2))
+***---Fila Posicion Bancaria ARP
+ACN(PB:1, fac)
+ifa
+ACT(A:fac, 'Saldos Fin del Dia')
+***---Fila Saldo Fin del dia ARP
+ACN(SF:1, fac)
+ifa
+ACT(A:fac, 'SALDOS ACUMULADOS FIN DEL DIA')
+***---Fila Saldos Acumulados ARP
+ACN(SA:1, fac)
+LinkearHoja('APBCAS', 1, Fecha1=Dialogo.Fecha1, Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1, Radio2=Dialogo.Radio2, Radio10=0, Radio3=0, Radio4=0, Especie1=Val(ML:1), Precio1=Val(TZ:1), Lista1=Val(LS:1), Lista2=Val(LS:2))
+Recorrer&k 4, Val(LM:2)
+    ACN(&k:Val(PB:1), LinkH(1, &k:5000))
+    ***---Saldo Fin del dia
+    ACN(&k:Val(SF:1), Val(&k:Val(PF:1)) + Val(&k:Val(PB:1)))
+    ***---Saldo Acumulado
+    IF &k = 4
+        ACN(&k:Val(SA:1), Val(&k:Val(SF:1)))
+    ELSE
+        ACN(&k:Val(SA:1), Val(&k-1:Val(SA:1)) + Val(&k:Val(SF:1)))
+    ENDIF
+Proximo
+CerrarHoja('APBCAS', 1)
+ACN(FL:2, fac)
+
+SetFilaActual(fac+2)
+
+***---Cuadro en USD
+ACN(CZ:2, 1)
+***---JDE
+(.'RCASHF1'.)
+***---Fila Fechas Cuandro USD
+ACN(FX:2, Val(FI:1))
+***---Activos Financieros
+(.'RCASHF2'.)
+***---Pasivos Financieros
+(.'RCASHF3'.)
+ACN(DF:1, fac)
+ACT(A:Val(DF:1), 'TOTAL')
+ACT(CX:Val(DF:1), '9T+')
+Recorrer&k 4, Val(LM:2)
+    ACN(&k:Val(DF:1), Val(TX:&k) + Val(&k:Val(H:2000)) - Val(&k:Val(I:2000)))
+Proximo
+ifa
+ACT(A:fac, 'Posicion Bancaria')
+ACL(A:fac, 'APBCAS', Fecha1=Dialogo.Fecha1, Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1, Radio2=Dialogo.Radio2, Radio10=0, Radio3=0, Radio4=0, Especie1=Val(ME:1), Precio1=Val(TZ:1), Lista1=Val(LS:1), Lista2=Val(LS:2))
+***---Fila Posicion Bancaria USD
+ACN(PB:2, fac)
+ifa
+ACT(A:fac, 'Saldos Fin del Dia')
+***---Fila Saldo Fin del dia USD
+ACN(SF:2, fac)
+ifa
+ACT(A:fac, 'SALDOS ACUMULADOS FIN DEL DIA')
+***---Fila Saldos Acumulados ARP
+ACN(SA:2, fac)
+LinkearHoja('APBCAS', 2, Fecha1=Dialogo.Fecha1, Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1, Radio2=Dialogo.Radio2, Radio10=0, Radio3=0, Radio4=0, Especie1=Val(ME:1), Precio1=Val(TZ:1), Lista1=Val(LS:1), Lista2=Val(LS:2))
+Recorrer&k 4, Val(LM:2)
+    ACN(&k:Val(PB:2), LinkH(2, &k:5001))
+    ***---Saldo Fin del dia
+    ACN(&k:Val(SF:2), Val(&k:Val(DF:1)) + Val(&k:Val(PB:2)))
+    ***---Saldo Acumulado
+    IF &k = 4
+        ACN(&k:Val(SA:2), Val(&k:Val(SF:2)))
+    ELSE
+    ACN(&k:Val(SA:2), Val(&k-1:Val(SA:2)) + Val(&k:Val(SF:2)))
+    ENDIF
+Proximo
+CerrarHoja('APBCAS', 2)
+ACN(FL:2, fac)
+***---Cuadro Consolidado
+ACN(CZ:2, 2)
+(.'RCABCUADRO'.)
+***---Fila Fechas Cuandro ARP
+ACN(FX:3, Val(XX:2000))
+ifa
+***---Busco Cotizacio USD para el cuadro Consolidado
+Recorrer&k 1, Val(RX:1)
+    IF Eqstr(Val(YX:&k), 'CON')
+        ACN(TC:2, Val(YZ:&k))
+        Break
+    ENDIF
+Proximo
+***---Fila Inicial Consolidado
+ACN(FI:10, fac)
+
+*MessageBox(Val(LM:2))
+*MessageBox(Val(PF:1))
+
+***---Recorro Cuadro en ARP y lo pego, con la fila TOTAL
+***---Recorrer&k Val(PI:1), Val(PF:1)-1
+Recorrer&k Val(PI:1), Val(PF:1)
+    Recorrer&j 1, Val(LM:2)
+        IF &j <=3
+            ACT(&j:fac, Val(&j:&k))
+        ELSE
+            IF Dialogo.Radio2 = 0
+                ACN(&j:fac, Val(&j:&k))
+            ELSE
+                ACN(&j:fac, Val(&j:&k) / Val(TC:2))
+            ENDIF
+        ENDIF
+    Proximo
+    ACT(CX:fac, Val(CX:&k))
+    ifa
+Proximo
+***---Fila Final Consolidado
+ACN(FF:10, fac)
+ACN(EC:1, 0)
+ACN(ES:1, 0)
+ACN(EO:1, 0)
+*MessageBox(Val(PI:1))
+*MessageBox(Val(PF:1))
+*MessageBox(Val(DI:1))
+*MessageBox(Val(DF:1))
+
+IF Not CeldaVacia(DI:1)
+Recorrer&k Val(DI:1), Val(DF:1)
+    ***---Recorro Cuadro en USD y lo sumo al Consolidado
+    IF Not CeldaVacia(A:&k) Y Not CeldaVacia(UC:1) Y Not Eqstr(Val(UC:1), Val(A:&k))
+        ACN(EC:1, 0)
+    ENDIF
+    IF Not CeldaVacia(B:&k) Y Not CeldaVacia(US:1) Y Not Eqstr(Val(US:1), Val(B:&k))
+        ACN(ES:1, 0)
+    ENDIF
+    IF Not CeldaVacia(C:&k) Y Not CeldaVacia(UO:1) Y Not Eqstr(Val(UO:1), Val(C:&k))
+        ACN(EO:1, 0)
+    ENDIF
+    IF Not CeldaVacia(A:&k)
+        ***---Busco si existe el concepto
+        Recorrer&i Val(FI:10), Val(FF:10)
+            IF Eqstr(Val(A:&k), Val(A:&i))
+                ***---Existe el Concepto
+                ACN(EC:1, 1)
+                ***---Ultimo Concepto Encontrado
+                ACT(UC:1, Val(A:&k))
+                ***---Fila donde encuentro el Concepto
+                ACN(FC:1, &i)
+                Recorrer&j 4, Val(LM:2)
+                    ***---Sumo Totales Concepto
+                    IF Dialogo.Radio2 = 0
+                        SCN(&j:&i, Val(&j:&k) * Val(TC:2))
+                    ELSE
+                        SCN(&j:&i, Val(&j:&k))
+                    ENDIF
+                Proximo
+                Break
+            ELSE
+                ACN(EC:1, 0)
+            ENDIF
+        Proximo
+        IF Val(EC:1) = 0
+            ***---Si no encuentra el concepto, lo inserto
+            ***---Debo encontrar en que fila lo inserto, segun el orden que le corresponde
+            SCN(FF:10, 1)
+            Recorrer&i Val(FI:10), Val(FF:10)
+                ACN(CW:1, Val(FF:10))
+                IF Not CeldaVacia(A:&i)
+                    IF Num(Copy(Val(CX:&i), 1, 1)) > Num(Copy(Val(CX:&k), 1, 1))
+                        ***---Esta es la fila a insertar
+                        ACN(CW:1, &i)
+                        Break
+                    ENDIF
+                ENDIF
+            Proximo
+            InsertarFila(Val(CW:1))
+            ACT(A:Val(CW:1), Val(A:&k))
+            ACT(CX:Val(CW:1), Val(CX:&k))
+            ACN(EC:1, 1)
+            ACN(FC:1, Val(CW:1))
+            Recorrer&j 4, Val(LM:2)
+                ***---Sumo Totales Concepto
+                IF Dialogo.Radio2 = 0
+                    SCN(&j:Val(FC:1), Val(&j:&k) * Val(TC:2))
+                ELSE
+                    SCN(&j:Val(FC:1), Val(&j:&k))
+                ENDIF
+            Proximo
+            ifa
+        ENDIF
+    ELSE
+        IF Not CeldaVacia(B:&k)
+            ***---Busco si existe el SubConcepto desde el Concepto encontrado/insertado
+            Recorrer&i Val(FC:1)+1, Val(FF:10)
+                IF CeldaVacia(A:&k) Y CeldaVacia(A:&i)
+                    IF Eqstr(Val(B:&k), Val(B:&i))
+                        ***---Existe el SubConcepto
+                        ACN(ES:1, 1)
+                        ***---Ultimo SubConcepto Encontrado
+                        ACT(US:1, Val(B:&k))
+                        ***---Fila donde encuentro el SubConcepto
+                        ACN(FS:1, &i)
+                        Recorrer&j 4, Val(LM:2)
+                            ***---Sumo Totales SubConcepto
+                            IF Dialogo.Radio2 = 0
+                                SCN(&j:&i, Val(&j:&k) * Val(TC:2))
+                            ELSE
+                                SCN(&j:&i, Val(&j:&k))
+                            ENDIF
+                        Proximo
+                        Break
+                    ELSE
+                        ACN(ES:1, 0)
+                    ENDIF
+                ELSE
+                    ***---Si viene un concepto => no existe el subconcepto en el concepto que corresponde
+                    Break
+                ENDIF
+            Proximo
+            IF Val(ES:1) = 0
+                ***---Si no encuentro el subconcepto, lo inserto despues del ultimo concepto
+                ACN(XX:1, Val(FC:1)+1)
+                InsertarFila(Val(XX:1))
+                ACT(B:Val(XX:1), Val(B:&k))
+                ACN(FS:1, Val(XX:1))
+                ACN(ES:1, 1)
+                SCN(FF:10, 1)
+                Recorrer&j 4, Val(LM:2)
+                    ***---Sumo Totales SubConcepto
+                    IF Dialogo.Radio2 = 0
+                        SCN(&j:Val(XX:1), Val(&j:&k) * Val(TC:2))
+                    ELSE
+                        SCN(&j:Val(XX:1), Val(&j:&k))
+                    ENDIF
+                Proximo
+                ifa
+            ENDIF
+        ELSE
+            IF Not CeldaVacia(C:&k)
+                ***---Busco si existe la operacion desde el ultimo SubConcepto encontrado/insertado
+                Recorrer&i Val(FS:1)+1, Val(FF:10)
+                    IF CeldaVacia(A:&k) Y CeldaVacia(B:&k)
+                        IF CeldaVacia(B:&i) Y CeldaVacia(A:&i)
+                            IF Eqstr(Val(C:&k), Val(C:&i))
+                                ***---Existe la Operacion
+                                ACN(EO:1, 1)
+                                ***---Ultima Operacion Encontrada
+                                ACT(UO:1, Val(C:&k))
+                                ***---Fila donde encuentro la Operacion
+                                ACN(FO:1, &i)
+                                Recorrer&j 4, Val(LM:2)
+                                    IF Dialogo.Radio2 = 0
+                                        SCN(&j:&i, Val(&j:&k) * Val(TC:2))
+                                    ELSE
+                                        SCN(&j:&i, Val(&j:&k))
+                                    ENDIF
+                                Proximo
+                                Break
+                            ELSE
+                                ACN(EO:1, 0)
+                            ENDIF
+                        ELSE
+                            ACN(EO:1, 0)
+                            ***---Si viene un concepto en el cuadro consolidado => no existe la operacion
+                            Break
+                        ENDIF
+                    ELSE
+                        ***---Si viene un concepto o un subconcepto => no existe la operacion en el ultimo subconcepto
+                        Break
+                    ENDIF
+                Proximo
+                IF Val(EO:1) = 0
+                    ***---Si no encuentro la Operacion, la inserto despues del ultimo SubConcepto
+                    InsertarFila(Val(FS:1)+1)
+                    ACT(C:Val(FS:1)+1, Val(C:&k))
+                    Recorrer&j 4, Val(LM:2)
+                        IF Dialogo.Radio2 = 0
+                            SCN(&j:Val(FS:1)+1, Val(&j:&k) * Val(TC:2))
+                        ELSE
+                            SCN(&j:Val(FS:1)+1, Val(&j:&k))
+                        ENDIF
+                    Proximo
+                    ACN(FO:1, Val(FS:1)+1)
+                    ACN(EO:1, 1)
+                    SCN(FF:10, 1)
+                ENDIF
+            ENDIF
+        ENDIF
+    ENDIF
+Proximo
+*aca
+ENDIF
+***---Seteo Formatos en los 3 Cuadros
+Recorrer&k Val(PI:1), Val(FF:10)
+    IF Not CeldaVacia(A:&k) O Not CeldaVacia(B:&k)
+        SetFont(A:&k..Val(LM:2):&k, 2)
+    ELSE
+        SetFont(A:&k..Val(LM:2):&k, 1)
+    ENDIF
+    IF Not CeldaVacia(A:&k)
+        AgregarMarco(A:&k..Val(LM:2):&k, 0, 0, Exe('COLOR6'))
+    ELSE
+        IF Not CeldaVacia(B:&k)
+            AgregarMarco(B:&k..Val(LM:2):&k, 0, 0, Exe('COLOR8'))
+        ENDIF
+    ENDIF
+    IF &k <> Val(FX:1) Y &k <> Val(FX:2) Y &k <> Val(FX:3)
+        FormatoCeldas(D:&k..Val(LM:2):&k, Exe('F2'))
+    ENDIF
+Proximo
+
+SetFilaActual(Val(FF:10))
+ACT(A:fac, 'Posicion Bancaria')
+ACL(A:fac, 'APBCAS', Fecha1=Dialogo.Fecha1, Radio1=Dialogo.Radio1, Vehiculo1=Dialogo.Vehiculo1, Radio2=Dialogo.Radio2, Radio10=0, Radio3=0, Radio4=0, Especie1='', Precio1=Val(TZ:1), Lista1=Val(LS:1), Lista2=Val(LS:2))
+***---Fila Posicion Bancaria Consolidado
+ACN(PB:3, fac)
+ifa
+ACT(A:fac, 'Saldos Fin del Dia')
+***---Fila Saldo Final Consolidado
+ACN(SF:3, fac)
+ifa
+ACT(A:fac, 'SALDOS ACUMULADOS FIN DEL DIA')
+***---Fila Saldo Acumulado Consolidado
+ACN(SA:3, fac)
+Recorrer&k 4, Val(LM:2)
+    IF Dialogo.Radio2 = 0
+        ***---No estoy linkeando la posicion bancaria porque deberia ser igual que la suma de ARP + USD. Si hiciera falta esta en la fila 5002 de APBCAS.
+        ACN(&k:Val(PB:3), Val(&k:Val(PB:1)) + Val(&k:Val(PB:2)) * Val(TC:2))
+        ACN(&k:Val(SF:3), Val(&k:Val(SF:1)) + Val(&k:Val(SF:2)) * Val(TC:2))
+        ACN(&k:Val(SA:3), Val(&k:Val(SA:1)) + Val(&k:Val(SA:2)) * Val(TC:2))
+    ELSE
+        ACN(&k:Val(PB:3), Val(&k:Val(PB:1)) / Val(TC:2) + Val(&k:Val(PB:2)))
+        ACN(&k:Val(SF:3), Val(&k:Val(SF:1)) / Val(TC:2) + Val(&k:Val(SF:2)))
+        ACN(&k:Val(SA:3), Val(&k:Val(SA:1)) / Val(TC:2) + Val(&k:Val(SA:2)))
+    ENDIF
+Proximo
+
+SetFont(A:Val(PB:3)..Val(LM:2):Val(SA:3), 2)
+FormatoCeldas(A:Val(PB:3)..Val(LM:2):Val(SA:3), Exe('F2'))
+AgregarMarco(A:Val(PB:3)..Val(LM:2):Val(SA:3), 0, 1, Exe('COLOR6'))
+SetFilaActual(fac+4)
+ACT(C:fac, 'COTIZACIONES')
+ACN(FI:1, fac)
+ifa
+ACT(A:fac, 'Cuadro')
+ACT(B:fac, 'Moneda')
+ACT(C:fac, 'Cotizacion')
+AgregarMarco(A:fac-1..C:fac, 0, 0, Exe('COLOR'))
+Recorrer&k 1, Val(RX:1)
+    ifa
+    ACT(A:fac, Val(YX:&k))
+    ACT(B:fac, Val(YY:&k))
+    ACN(C:fac, Val(YZ:&k))
+Proximo
+AlinearCeldas(A:Val(FI:1)+1..C:fac, 'C')
+SetFont(A:Val(FI:1)..C:fac, 2)
+FormatoCeldas(C:Val(FI:1)+2..C:fac, Exe('F8'))
+AgregarMarco(A:Val(FI:1)+2..C:fac, 0, 0)
+SetFilaActual(fac+4)
+ACT(a:fac, 'Fin del Informe')
+SetFont(a:fac, 4)
+
+FijarCol(3)
+*FijarFila(11)
+
+ACO(1, 7)
+ACO(2, 7)
+ACO(3, 25)
+
+SetPrintFit(3,70)
+Impresion(1,2)
+RangoTitulo(a:1..Val(lm:2):fac,10)
+LimitesVision(Val(lm:2)+1:fac+2)

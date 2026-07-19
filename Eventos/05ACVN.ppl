@@ -1,0 +1,105 @@
+﻿MostrarCuadroDeMensajes
+
+CrearDialogo
+   Fecha1            : 'Fecha Confir'          ;;;;;;;;;FSYS
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+Message('Generando datos de confirmacion')
+SQL.ADD("SELECT T.Cliente1, T.Mercado1, T.TipoTr2, T.Especie, T.Especie1,              ")
+SQL.ADD("       T.Cantidad1, T.Cantidad2, T.NrTrans, T.Fecha2, T.Fecha1                ") 
+SQL.ADD("FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS  OB                    ") 
+SQL.ADD("Where OB.NrOperacion = T.NrTrans                                              ")
+SQL.ADD("  and T.Fecha2 = '"~IdxDate(Dialogo.Fecha1)~"'                                ")
+SQL.ADD("  and ( OB.NrBit in ('70') AND OB.Valor = 1 )                                 ")
+SQL.ADD("  and T.CB9 = 1                                                               ")
+SQL.ADD("  and T.TipoTr2 IN ('DEP','RET','COMP','MATCH')                               ")
+SQL.ADD("  and T.Mercado1 not in("~Pipe2Comillas(VAR('MERCAACMC'))~")                  ")
+SQL.ADD("  Order By T.NrTrans                                                          ")
+
+
+Recorrer SQL
+
+  ACN(ok1,1)
+  ACT(a:FAC, FBN['Cliente1'])
+  ACT(b:FAC, FBN['Mercado1'])
+  ACN(l:FAC, 0 )
+
+  if EqStr(FBN['TipoTr2'],'MATCH')
+    ACT(d:FAC, 'Matcheo')
+    ACT(e:FAC, FBN['Especie']~'/'~FBN['Especie1'])
+    ACN(f:FAC, -FBN['Cantidad1'])
+    ACN(g:FAC, -FBN['Cantidad2'])
+
+  else
+    if Incluido(FBN['TipoTr2'],'DEP|RET')
+       ACT(e:FAC, FBN['Especie'])
+       if EqStr(FBN['TipoTr2'],'DEP')
+          ACT(d:FAC, 'Cobro')
+          if DesciendeDeEspecie(FBN['Especie'],'TITULO')
+             ACN(f:FAC, FBN['Cantidad1'])
+             ACN(g:FAC, 0)
+          else
+             ACN(f:FAC, 0)
+             ACN(g:FAC, FBN['Cantidad1'])
+          endif
+       else
+          ACT(d:FAC, 'Pago')
+          if DesciendeDeEspecie(FBN['Especie'],'TITULO')
+             ACN(f:FAC, -FBN['Cantidad1'])
+             ACN(g:FAC, 0)
+          else
+             ACN(f:FAC, 0)
+             ACN(g:FAC, -FBN['Cantidad1'])
+          endif
+       endif
+    else
+      ACT(d:FAC, '   ')
+    endif
+  endif
+
+  ACT(i:FAC, FBN['NrTrans'])
+  ACD(j:FAC, FBN['Fecha2'])
+  ACD(k:FAC, FBN['Fecha1'])
+
+
+Proximo
+
+IF Val(ok1) = 0
+   Cancelar(' No existen Vouchers CONFIRMADOS para anular en esta Fecha ')
+ENDIF
+
+
+CrearListBox ; 'Arial,8,';'Anulacion Manual de VOUCHERS CONFIRMADOS para la fecha '~Dialogo.Fecha1
+
+   'OK'                 ;l:1..l:Fac   ;SI;;;40 ;CHECK;
+   'Cliente '           ;a:1..a:Fac   ;NO;;;80 ;STRING;;
+   'Mercado '           ;b:1..b:Fac   ;NO;;;70 ;STRING;;
+    '        '          ;d:1..d:Fac   ;NO;;;70 ;STRING;;
+   'Especie '           ;e:1..e:Fac   ;NO;;;70 ;STRING;;
+   'Titulos '           ;f:1..f:Fac   ;NO;;;100;NUMERO;'###,###,###,###.##'
+   'Moneda  '           ;g:1..g:Fac   ;NO;;;100;NUMERO;'###,###,###,###.##'
+   'Voucher '           ;i:1..i:Fac   ;NO;;;70 ;STRING;;
+   'Fecha ingreso '     ;k:1..k:Fac   ;NO;;;80 ;FECHA;;
+   'Fecha Cob/Pag '     ;j:1..j:Fac   ;NO;;;80 ;FECHA;;
+
+FinListBox
+
+
+IF NOT OK 
+   Cancelar
+ENDIF
+
+Message('Procesando datos')
+Recorrer&j 1,Fac
+
+  if Val(l:&j) = 1 
+      Message(' Anulando Voucher CONFIRMADO '~Val(i:&j)  )
+      EjecutarEvento('05ACVT',NrTrans1=Val(i:&j) ) 
+  Endif
+
+Proximo
+

@@ -1,0 +1,363 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Vehiculo1  : "Veh¡culo"    ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Vehiculo2  : "ContraParte" ;;;;;;;;;;;
+  Especie1   : "Especie"     ;;;
+  Fecha1     : 'F.Desde'     ;;;;;;NoVacio(Dialogo.Fecha1);'Debe Ingresar Fecha Desde';NO;FSys-Dia(FSys)-Dia(FSys-Dia(FSys))+1
+  Fecha2     : 'F.Hasta'     ;;;;;;NoVacio(Dialogo.Fecha2);'Debe Ingresar Fecha Hasta';NO;FSys-Dia(FSys)
+  Precio1    : 'Tasa'        ;;;;NO;NO;;;;0;
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(4)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,1)
+
+ACT(a:FAC, "Intereses e IVA entre Vinculadas")
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(5)
+ACN(w1,FAC)
+
+* Vehiculos permitidos por el usuario
+ACT(zz6,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+
+if NoVacio(Dialogo.Vehiculo1)
+   ACT(a:FAC+1, 'Veh¡culo : '~Dialogo.Vehiculo1~'  '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+else
+   if Vacio(UsrVehiculos(UsuarioActivo))
+      ACT(a:FAC+1, 'Veh¡culo : Todos')
+   else   
+      ACT(a:FAC+1, 'Veh¡culo : '~val(zz6))
+   endif
+endif
+
+if NoVacio(Dialogo.Vehiculo2)
+  ACT(a:FAC+2, 'Vehiculo 2 : '~Dialogo.Vehiculo2~'  '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo2))
+else
+  ACT(a:FAC+2, 'Vehiculo 2 : Todos')
+endif
+
+if NoVacio(Dialogo.Especie1)
+  ACT(a:FAC+3, 'Especie : '~Dialogo.Especie1~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie1))
+else
+  ACT(a:FAC+3, 'Especie : Todos')
+endif
+
+ACD(ad1,HABILES(Dialogo.Fecha1,-1, VAR('FERIADODEF')))
+
+ACT(a:FAC+4, 'Fecha Desde: '~VAL(ad1))
+ACT(a:FAC+5, 'Fecha Hasta: '~Dialogo.Fecha2)
+SetFont(a:fac..N:FAC+5,2)
+
+SetFilaActual(FAC+7)
+
+ACT(a:FAC  , 'Cond.IVA')
+ACT(b:FAC  , 'Vehiculo 1')
+ACT(c:FAC  , 'Vehiculo 2')
+ACT(d:FAC  , 'Especie')
+ACT(e:FAC  , 'Intereses a Cobrar')
+ACT(f:FAC  , 'Intereses a Pagar')
+ACT(g:FAC  , 'IVA %')
+ACT(h:FAC  , 'Importe IVA')
+ACT(i:FAC  , 'Ret.'~VAR('IVARETEN'))
+ACT(j:FAC  , 'Percep.'~VAR('RG3337'))
+ACT(k:FAC  , 'IVA Neto')
+ACT(l:FAC  , 'Ret.Gan '~VAR('RETINSC'))
+ACT(m:FAC  , 'Cond.Ganancias')
+ACT(n:FAC  , 'Monto Cap.')
+
+AlinearCeldas(a:FAC..e:FAC,'I')
+AlinearCeldas(g:FAC..g:FAC,'C')
+SetFont(a:fac..n:FAC,2)
+AgregarMarco(a:FAC..n:FAC,2,1,Exe('COLOR'))
+SetFilaActual(FAC+2)
+
+SQL.ADD("Select O.Vehiculo1, O.Vehiculo2, O.Especie,O.MB3, ")
+SQL.ADD(" Sum(CASE O.MB3 WHEN '0' THEN O.TotalIntereses ELSE -O.TotalIntereses END) Cant ")
+SQL.ADD("from "~DBO~".OPERACIONES  O ")
+SQL.ADD("where (TipoOp='VIMIND' or TipoOp='VIMINM') ")
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD(" and O.Vehiculo1='"~Dialogo.Vehiculo1~"' ")
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      SQL.ADD(" and O.Vehiculo1 IN ("~Pipe2Comillas(val(zz6))~") ")
+   EndIf
+EndIf
+if NoVacio(Dialogo.Vehiculo2)
+   SQL.ADD(" and O.Vehiculo2 = '"~Dialogo.Vehiculo2~"'")
+endif
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+
+SQL.ADD(" and  ( ")
+SQL.ADD(" (O.FechaOp  >= '"~IdxDate(VAL(AD1))~"' and O.FechaOp<='"~IdxDate(Dialogo.Fecha2)~"' ) ")
+SQL.ADD(" or ")
+SQL.ADD(" (TipoOp='VIMIND' and (FechaOp-FechaCarga)>0 and FechaVto>='"~IdxDate(val(AD1))~"' and FechaVto<='"~IdxDate(Dialogo.Fecha2)~"') ")
+SQL.ADD(" ) ")
+If Vacio(Dialogo.Vehiculo1) y Vacio(Dialogo.Vehiculo2)
+   SQL.ADD(" and  Vehiculo1||Vehiculo2  <= Vehiculo2||Vehiculo1 ")
+EndIf
+SQL.ADD("group by O.Vehiculo1, O.Vehiculo2, O.Especie,O.MB3")
+SQL.ADD("order by O.Vehiculo1, O.Vehiculo2, O.Especie,O.MB3")
+
+ACN(X1,0)
+ACT(X3,' ')
+ACT(X4,' ')
+acn(x2,0)
+acn(x5,0)
+
+Recorrer SQL
+
+  If Not EqStr(val(aa1)~val(ab1)~val(ac1),fbn['Vehiculo1']~fbn['Vehiculo2']~fbn['Especie'])
+     If Val(x1)=1
+        dfa
+
+        * Cambia Clave, Calculo los valores de la misma
+        *-- Obtengo el Nro de Caso para la Minuta Vinculada AB6: Caso
+
+        ACT(AV1,val(aa1))
+        ACT(AV2,val(ab1))
+
+        *-- Z7: MB3
+        ACT(Z7,IIF(VAL(Z11)<0,'1','0') )
+
+        IF VAL(Z11)<0
+           ACN(Z11,-VAL(Z11))
+           ACT(AV1,val(ab1))
+           ACT(AV2,val(aa1))      
+        ENDIF
+
+        (."CASOVINCU".)    
+
+         Message('Calculando los Impuestos para Operacion Directa ')
+ 
+         ACT(AV1,val(aa1))
+         ACT(AV2,val(ab1))
+
+         (."IMPVIN".)
+
+         * Retencion Reforma Impositiva
+         (."VINREFIMPO".)
+
+        *-- y6: Alicuota Iva  y4: Imp.Iva y5: Retencion y13: Percepcion
+        *-- y16: IvaNeto y42+y41: Retencion Ganancias.
+
+        If Round(val(z11),2)<>0
+           ACN(g:fac,VAL(Y6))
+        Else 
+           ACN(g:fac,0)
+        EndIf
+
+        ACN(h:fac,VAL(Y4))
+        ACN(i:fac,VAL(y5))
+        ACN(j:fac,VAL(Y13))
+        ACN(k:fac,VAL(Y16))
+        ACN(l:fac,VAL(y42))
+        ACN(n:fac,VAL(y20))
+
+        *-- Condiciones de Iva   
+        If Incluido(Ascendientes('VEHICULOS',VAL(av1)),Ascendientes('VEHICULOS',VAL(av2)),1) y EqStr(BuscarCampo('VEHICULOS','TipoVehiculo','Codigo',VAL(av1)),'DIV') y EqStr(BuscarCampo('VEHICULOS','TipoVehiculo','Codigo',VAL(av2)),'DIV')
+           ACT(m:fac,'DIVISIONES')
+        Else 
+           If Not EqStr('ARG',BuscarCampo('Clientes','PaisDir','Codigo',VAL(AV2)) )
+              ACT(m:fac,'EXTERIOR')
+           Else 
+              BorrarCeldas(y50..y53)
+              ACT(y50,BuscarCampo('CLIENTES','NrDNRP','Codigo',VAL(av1) ))
+              ACT(y51,BuscarCampo('CLIENTES','NrDNRP','Codigo',VAL(av2) ))
+
+              If EqStr(VAL(y50),'AUTORET') 
+                 ACT(m:fac,'ARet')              
+              Else
+                 ACT(m:fac,'NARet')              
+              EndIf
+
+              If EqStr(VAL(y51),'AUTORET')
+                 ACT(m:fac,val(m:fac)~' -ARet')              
+              Else
+                 ACT(m:fac,val(m:fac)~' -NARet')              
+              EndIf
+
+              * y52: Condicion Certificados de Retencion V1
+              * y53: Condicion Certificados de Retencion V2
+              ACT(y52,BuscarCampo('CLIENTES','ImpuestosInternos','Codigo',VAL(av1) ))
+              ACT(y53,BuscarCampo('CLIENTES','ImpuestosInternos','Codigo',VAL(av2) ))
+
+              If EqStr(VAL(y52),'CERTIF')
+                 ACT(m:fac,val(m:fac)~' Certif1')              
+              EndIf
+
+              If EqStr(VAL(y53),'CERTIF')
+                 ACT(m:fac,val(m:fac)~' Certif2')              
+              EndIf
+           EndIf
+        EndIf       
+
+        SetFont(a:FAC..n:FAC,1)
+        FormatoCeldas(e:fac..n:fac,Exe('F2'))
+        ifa
+     EndIf
+     
+     ACN(Z11,0)
+     ACT(AV1,FBN['Vehiculo1'])
+     ACT(AV2,FBN['Vehiculo2'])
+
+     ACT(aa1, fbn['Vehiculo1'])
+     ACT(ab1, fbn['Vehiculo2'])
+     ACT(ac1, fbn['Especie'])
+
+     * Condicion de Iva
+     ACT(A1,BuscarCampo('CLIENTES','Res3337','Codigo',BuscarCampo('VEHICULOS','Cliente','Codigo',VAL(AV1))))
+
+     If EqStr(VAL(a1),'SI')
+        ACT(a:FAC, 'Ag')
+     Else 
+        ACT(a:FAC, 'N/Ag')
+     EndIf
+    
+     ACT(A2,BuscarCampo('CLIENTES','Res3337','Codigo',BuscarCampo('VEHICULOS','Cliente','Codigo',VAL(AV2))))
+
+     If EqStr(VAL(a2),'SI')
+        ACT(a:FAC, Val(a:fac)~' - Ag')
+     Else 
+        ACT(a:FAC, Val(a:fac)~' - N/Ag')
+     EndIf
+
+     ACT(b:FAC, fbn['Vehiculo1'])
+     ACT(c:FAC, fbn['Vehiculo2'])
+     ACT(d:FAC, fbn['Especie'])   
+  Else 
+     dfa
+  EndIf
+
+  ACN(x1,1)
+  ACN(Z11,VAL(Z11)+FBN['Cant'])   
+
+  if fbn['Cant'] > 0
+     acn(e:fac,fbn['Cant'])
+  else
+     acn(f:fac,fbn['Cant'])
+  endif 
+
+  SetFont(a:FAC..n:FAC,1)
+  FormatoCeldas(e:fac..n:fac,Exe('F2'))
+proximo
+
+
+ACT(AV1,val(aa1))
+ACT(AV2,val(ab1))
+
+*-- Z7: MB3
+ACT(Z7,IIF(VAL(Z11)<0,'1','0') )
+
+IF VAL(Z11)<0
+   ACN(Z11,-VAL(Z11))
+   ACT(AV1,val(ab1))
+   ACT(AV2,val(aa1))      
+ENDIF
+
+*-- Obtengo el Nro de Caso para la Minuta Vinculada AB6: Caso
+(."CASOVINCU".)    
+
+ACT(AV1,val(aa1))
+ACT(AV2,val(ab1))
+
+Message('Calculando los Impuestos para Operacion Directa ')
+(."IMPVIN".)
+
+* Retencion Reforma Impositiva
+(."VINREFIMPO".)
+
+*-- y6: Alicuota Iva  y4: Imp.Iva y5: Retencion y13: Percepcion
+*-- y16: IvaNeto y42+y41: Retencion Ganancias.
+If Round(val(z11),2)<>0
+   ACN(g:fac,VAL(Y6))
+Else 
+   ACN(g:fac,0)
+EndIf
+
+ACN(h:fac,VAL(Y4))
+ACN(i:fac,VAL(y5))
+ACN(j:fac,VAL(Y13))
+ACN(k:fac,VAL(Y16))
+ACN(l:fac,VAL(y42))
+ACN(n:fac,VAL(y20))
+
+*-- Condiciones de Iva   
+If Incluido(Ascendientes('VEHICULOS',VAL(av1)),Ascendientes('VEHICULOS',VAL(av2)),1) y EqStr(BuscarCampo('VEHICULOS','TipoVehiculo','Codigo',VAL(av1)),'DIV') y EqStr(BuscarCampo('VEHICULOS','TipoVehiculo','Codigo',VAL(av2)),'DIV')
+   ACT(m:fac,'DIVISIONES')
+Else 
+   If Not EqStr('ARG',BuscarCampo('Clientes','PaisDir','Codigo',VAL(AV2)) )
+      ACT(m:fac,'EXTERIOR')
+   Else 
+      BorrarCeldas(y50..y53)
+      ACT(y50,BuscarCampo('CLIENTES','NrDNRP','Codigo',VAL(av1) ))
+      ACT(y51,BuscarCampo('CLIENTES','NrDNRP','Codigo',VAL(av2) ))
+      If EqStr(VAL(y50),'AUTORET') 
+         ACT(m:fac,'ARet')              
+      Else
+         ACT(m:fac,'NARet')              
+      EndIf
+      If EqStr(VAL(y51),'AUTORET')
+         ACT(m:fac,val(m:fac)~' -ARet')              
+      Else
+         ACT(m:fac,val(m:fac)~' -NARet')              
+      EndIf
+      * y52: Condicion Certificados de Retencion V1
+      * y53: Condicion Certificados de Retencion V2
+      ACT(y52,BuscarCampo('CLIENTES','ImpuestosInternos','Codigo',VAL(av1) ))
+      ACT(y53,BuscarCampo('CLIENTES','ImpuestosInternos','Codigo',VAL(av2) ))
+
+      If EqStr(VAL(y52),'CERTIF')
+         ACT(m:fac,val(m:fac)~' Certif1')              
+      EndIf
+      If EqStr(VAL(y53),'CERTIF')
+         ACT(m:fac,val(m:fac)~' Certif2')              
+      EndIf
+   EndIf
+EndIf       
+SetFont(a:FAC..n:FAC,1)
+FormatoCeldas(e:fac..n:fac,Exe('F2'))
+ifa
+SetFilaActual(FAC+2)
+
+ACO(1,8)
+ACO(2,8)
+ACO(3,8)
+ACO(4,8)
+ACO(5,12)
+ACO(6,12)
+ACO(7,9)
+ACO(8,9)
+ACO(9,9)
+ACO(10,9)
+ACO(11,9)
+ACO(12,9)
+ACO(13,15)
+ACO(14,12)
+
+BorrarCeldas(a1..a2)
+BorrarCeldas(i1..i2)
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(n:FAC)
+

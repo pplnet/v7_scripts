@@ -1,0 +1,208 @@
+﻿Recorrer&i 1,val(da:1)
+  *************
+  ** DueFrom **
+  *************
+  ACN(dv:1,0)
+  ACN(dv:2,0)
+  SQL.ADD("Select L.Commited,L.Sublimite,L.Especie,L.PlazoDesde,L.PlazoHasta,L.MontoOperativo,L.Tenor, ")
+  SQL.ADD("L.Vehiculo ")
+  SQL.ADD("from "~DBO~".LIMASIGNADOS L ")
+  SQL.ADD("where L.Cliente='"~val(db:&i)~"' ")
+  if NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("and   L.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+  endif
+  SQL.ADD("and L.Limite='DFROM' ")
+  SQL.ADD("and L.FAsignacion <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+  SQL.ADD("and  (L.PlazoDesde in (1,31,91,181,366,731) and L.PlazoHasta in (30,90,180,365,730,10000)) ")
+  SQL.ADD("Union ")
+  SQL.ADD("Select LL.Commited,LL.Sublimite,LL.Especie,LL.PlazoDesde,LL.PlazoHasta,0 as MontoOperativo,0 as Tenor, ")
+  SQL.ADD("LL.Vehiculo ")   
+  SQL.ADD("from "~DBO~".LIMCONSUMIDOS LL ")
+  SQL.ADD("where LL.Cliente='"~val(db:&i)~"' ")
+  if NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("and   LL.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+  endif
+  SQL.ADD("and   LL.Limite='DFVN' ")
+  SQL.ADD("and   LL.Monto > 0 ")
+  SQL.ADD("and   LL.Commited in ('SI','NO') ")
+  SQL.ADD("and  (LL.PlazoDesde in (1,31,91,181,366,731) and LL.PlazoHasta in (30,90,180,365,730,10000)) ")
+  SQL.ADD("and   Not Exists (Select Monto from "~DBO~".LIMASIGNADOS M")
+  SQL.ADD("                where  M.Cliente   = '"~val(db:&i)~"' ")
+  if NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("                and   M.Vehiculo  = '"~Dialogo.Vehiculo1~"'")
+  endif
+  SQL.ADD("                and   (M.PlazoDesde in (1,31,91,181,366,731) and M.PlazoHasta in (30,90,180,365,730,10000)) ")
+  SQL.ADD("                and    M.Limite    = 'DFROM' ")
+  SQL.ADD("                and    M.FAsignacion <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+  SQL.ADD("                and    M.Especie   = LL.Especie ")
+  SQL.ADD("                and    M.PlazoDesde= LL.PlazoDesde ")
+  SQL.ADD("                and    M.PlazoHasta= LL.PlazoHasta ")
+  SQL.ADD("                and    M.Commited  = LL.Commited ")
+  SQL.ADD("                and    M.Sublimite = LL.Sublimite) ")
+  SQL.ADD("order by 8,1,2,3,4,5")
+
+  Recorrer SQL
+    if Vacio(FBN['Sublimite']) y FBN['PlazoHasta']=30
+      SCN(sa:2, FBN['MontoOperativo'])
+      ACN(dc:&i, LimConsumido(val(db:&i),'DFROM',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,FBN['PlazoDesde'],,,,FBN['Commited']))
+      if Eqstr(FBN['Especie'],'USD')
+        SCN(dd:&i, Val(dc:fac))
+      else
+        SCN(dd:&i, Val(dc:fac)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      endif
+      SCN(sb:2, Val(dd:&i))
+      if Eqstr(FBN['Commited'],'SI')
+        ACN(dv:1,1)
+      else
+        ACN(dv:2,1)
+      endif
+    endif
+    if val(dv:1)=0 y NoVacio(FBN['Sublimite']) y Eqstr(FBN['Commited'],'SI')
+      ACN(de:&i, LimConsumido(val(db:&i),'DFVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,1,,,FBN['Sublimite'],FBN['Commited']))
+      if Eqstr(FBN['Especie'],'USD')
+        SCN(df:&i, Val(de:fac))
+      else
+        SCN(df:&i, Val(de:fac)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      endif
+      SCN(sb:2, Val(df:&i))
+      ACN(dv:1,1)
+    endif    
+    if val(dv:2)=0 y NoVacio(FBN['Sublimite']) y Eqstr(FBN['Commited'],'NO')
+      ACN(dg:&i, LimConsumido(val(db:&i),'DFVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,1,,,FBN['Sublimite'],FBN['Commited']))
+      if Eqstr(FBN['Especie'],'USD')
+        SCN(dh:&i, Val(dg:&i))
+      else
+        SCN(dh:&i, Val(dg:&i)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      endif
+      SCN(sb:2, Val(dh:&i))
+      ACN(dv:2,1)
+    endif    
+  Proximo
+IF NO
+  Recorrer&i 1,5
+    ACN(pm:1, LimOperativo(val(db:&i),'SECDF','USD',Dialogo.Vehiculo1,,,,,,,,,,num(val(pa:&i))))
+    ACN(pm:2, LimConsumido(val(db:&i),'SECDF','USD',0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,num(val(pa:&i))))
+    if val(pm:1)>0 o val(pm:2)>0
+      SCN(sa:2,val(pm:1))
+      SCN(sb:2,val(pm:2))
+    endif
+  Proximo
+ENDIF
+  *******************
+  ** PreSettlement **
+  *******************
+IF NO
+  Recorrer&i 1,5
+    ACN(pm:1, LimOperativo(val(db:&i),'PRESETTLEM','USD',Dialogo.Vehiculo1,,,,,,,,,,num(val(pa:&i))))
+    ACN(pm:2, LimConsumido(val(db:&i),'PRESETTLEM','USD',0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,num(val(pa:&i))))
+    if val(pm:1)>0 o val(pm:2)>0
+      SCN(sa:2,val(pm:1))
+      SCN(sb:2,val(pm:2))
+    endif
+  Proximo
+  Recorrer&i 1,5
+    ACN(pm:1, LimOperativo(val(db:&i),'PRESETREPO','USD',Dialogo.Vehiculo1,,,,,,,,,,num(val(pa:&i))))
+    ACN(pm:2, LimConsumido(val(db:&i),'PRESETREPO','USD',0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,num(val(pa:&i))))
+    if val(pm:1)>0 o val(pm:2)>0
+      SCN(sa:2,val(pm:1))
+      SCN(sb:2,val(pm:2))
+    endif
+  Proximo
+ENDIF
+  ACN(dv:1,0)
+  ACN(dv:2,0)
+  SQL.ADD("Select L.Commited,L.Sublimite,L.Especie,L.PlazoDesde,L.PlazoHasta,L.MontoOperativo,L.Tenor, ")
+  SQL.ADD("L.Vehiculo ")
+  SQL.ADD("from "~DBO~".LIMASIGNADOS L ")
+  SQL.ADD("where L.Cliente='"~val(db:&i)~"' ")
+  if NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("and   L.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+  endif
+  SQL.ADD("and L.Limite='PRESETTLEM' ")
+  SQL.ADD("and L.FAsignacion <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+  SQL.ADD("and  (L.PlazoDesde in (1,31,91,181,366,731) and L.PlazoHasta in (30,90,180,365,730,10000)) ")
+  SQL.ADD("Union ")
+  SQL.ADD("Select LL.Commited,LL.Sublimite,LL.Especie,LL.PlazoDesde,LL.PlazoHasta,0 as MontoOperativo,0 as Tenor, ")
+  SQL.ADD("LL.Vehiculo ")   
+  SQL.ADD("from "~DBO~".LIMCONSUMIDOS LL ")
+  SQL.ADD("where LL.Cliente='"~val(db:&i)~"' ")
+  if NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("and   LL.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+  endif
+  SQL.ADD("and   LL.Limite='PSVN' ")
+  SQL.ADD("and   LL.Monto > 0 ")
+  SQL.ADD("and   LL.Commited in ('SI','NO') ")
+  SQL.ADD("and  (LL.PlazoDesde in (1,31,91,181,366,731) and LL.PlazoHasta in (30,90,180,365,730,10000)) ")
+  SQL.ADD("and   Not Exists (Select Monto from "~DBO~".LIMASIGNADOS M")
+  SQL.ADD("                where  M.Cliente   = '"~val(db:&i)~"' ")
+  if NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("                and   M.Vehiculo  = '"~Dialogo.Vehiculo1~"'")
+  endif
+  SQL.ADD("                and   (M.PlazoDesde in (1,31,91,181,366,731) and M.PlazoHasta in (30,90,180,365,730,10000)) ")
+  SQL.ADD("                and    M.Limite    = 'PRESETTLEM' ")
+  SQL.ADD("                and    M.FAsignacion <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+  SQL.ADD("                and    M.Especie   = LL.Especie ")
+  SQL.ADD("                and    M.PlazoDesde= LL.PlazoDesde ")
+  SQL.ADD("                and    M.PlazoHasta= LL.PlazoHasta ")
+  SQL.ADD("                and    M.Commited  = LL.Commited ")
+  SQL.ADD("                and    M.Sublimite = LL.Sublimite) ")
+  SQL.ADD("order by 8,1,2,3,4,5")
+
+  Recorrer SQL
+    if Vacio(FBN['Sublimite']) y FBN['PlazoHasta']=30
+      SCN(sa:2, FBN['MontoOperativo'])
+      ACN(di:&i, LimConsumido(val(db:&i),'PRESETTLEM',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,FBN['PlazoDesde'],,,,FBN['Commited']))
+      if Eqstr(FBN['Especie'],'USD')
+        SCN(dj:&i, Val(di:&i))
+      else
+        SCN(dj:&i, Val(di:&i)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      endif
+      SCN(sb:2, Val(dj:&i))
+      if Eqstr(FBN['Commited'],'SI')
+        ACN(dv:1,1)
+      else
+        ACN(dv:2,1)
+      endif
+    endif
+    if val(dv:1)=0 y NoVacio(FBN['Sublimite']) y Eqstr(FBN['Commited'],'SI')
+      ACN(dk:&i, LimConsumido(val(db:&i),'PSVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,1,,,FBN['Sublimite'],FBN['Commited']))
+      if Eqstr(FBN['Especie'],'USD')
+        SCN(dl:&i, Val(dk:&i))
+      else
+        SCN(dl:&i, Val(dk:&i)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      endif
+      SCN(sb:2, Val(dl:&i))
+      ACN(dv:1,1)
+    endif    
+    if val(dv:2)=0 y NoVacio(FBN['Sublimite']) y Eqstr(FBN['Commited'],'NO')
+      ACN(dm:&i, LimConsumido(val(db:&i),'PSVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,1,,,FBN['Sublimite'],FBN['Commited']))
+      if Eqstr(FBN['Especie'],'USD')
+        SCN(dn:&i, Val(dm:&i))
+      else
+        SCN(dn:&i, Val(dm:&i)*CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      endif
+      SCN(sb:2, Val(dn:&i))
+      ACN(dv:2,1)
+    endif    
+  proximo
+  ****************
+  ** Settlement **
+  ****************
+  SCN(sa:2, LimOperativo(val(db:&i), 'SETTLEMENT','USD',Dialogo.Vehiculo1))
+
+  ACN(do:&i, LimSumado(val(db:&i),'SETTLEMENT',Dialogo.Fecha1,Dialogo.Vehiculo1))
+  SCN(do:&i, LimConsumido(val(db:&i),'SETCRE','USD',0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1))
+  SCN(sb:2,  Val(do:&i))
+
+  ACN(dp:&i, LimSumado(val(db:&i),'SETTLEMENT',Habiles(Dialogo.Fecha1,1,'ARG',SI),Dialogo.Vehiculo1))
+  SCN(dp:&i, LimConsumido(val(db:&i),'SETCRE','USD',0,Dialogo.Vehiculo1,,,,Habiles(Dialogo.Fecha1,1,'ARG',SI)))
+  SCN(sb:2,  Val(dp:&i))
+
+  ACN(dq:&i, LimSumado(val(db:&i),'SETTLEMENT',Habiles(Dialogo.Fecha1,2,'ARG',SI),Dialogo.Vehiculo1))
+  SCN(dq:&i, LimConsumido(val(db:&i),'SETCRE','USD',0,Dialogo.Vehiculo1,,,,Habiles(Dialogo.Fecha1,2,'ARG',SI)))
+  SCN(sb:2,  Val(dq:&i))
+
+  ACN(dr:&i, LimSumado(val(db:&i),'SETTLEMENT',Habiles(Dialogo.Fecha1,3,'ARG',SI),Dialogo.Vehiculo1))
+  SCN(dr:&i, LimConsumido(val(db:&i),'SETCRE','USD',0,Dialogo.Vehiculo1,,,,Habiles(Dialogo.Fecha1,3,'ARG',SI)))
+  SCN(sb:2,  Val(dr:&i))
+Proximo

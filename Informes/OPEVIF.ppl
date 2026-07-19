@@ -1,0 +1,243 @@
+﻿MostrarCuadroDeMensajes
+ModoReproceso(ConDialogo)
+CrearDialogo
+  Vehiculo1  : "Vehiculo" ; ; ;;;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar el Vehiculo';NO;VAR('VEHICULODE')
+  Fecha1     : "Fecha"    ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;FSys
+  Especie1   : "Especie"  ;;;;;;Vacio(Dialogo.Especie1) o [DesciendeDeEspecie(Dialogo.Especie1,'MONEDA') y EsTerminal(Dialogo.Especie1, Especie)];'Debe ingresar una moneda';NO;;;;;;" Status='HAB' and Jerarquia Like '"~Jerarquia('ESPECIES','MONEDA')~"%' "
+  Mercado1   : 'Mercado'  ;3;2;;;;Vacio(Dialogo.Mercado1) o Incluido('FM',BuscarCampo('MERCADOS','TipoNegocio','Codigo',Dialogo.Mercado1));'Debe ingresar un Mercado de Futuros de Moneda';NO;;;;;;" TipoNegocio Like '%FM%' "  
+  Cliente1   : "Cliente"  ;;1
+  Lista1     : "Tipo Op"  ;;;;;;;;;;;SQLSET("SELECT Codigo FROM "~DBO~".TIPOSOPERACION where TipoNegocio Like '%FM%' ORDER BY Codigo");;;;
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+AgregarBMP(a:1,EXE('LOGO'),EXE('ESCALOGO'))
+
+ACT(k:2,'Fecha : '~Var('FECHASYS'))
+SetFont(k:2..k:2,1)
+
+ACT(f:2, "Operaciones Vigentes Futuros de Moneda")
+SetFont(f:2..f:2,3)
+
+SetFilaActual(4)
+ACN(w1,FAC)
+ACN(zx1,99)
+
+ACT(a:FAC+1, 'Vehiculo : '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+ACT(a:FAC+2, 'Fecha: '~Dialogo.Fecha1)
+if NoVacio(Dialogo.Especie1)
+  ACT(a:FAC+3, 'Especie : '~Dialogo.Especie1)
+else
+  ACT(a:FAC+3, 'Especies : Todas')
+endif
+if NoVacio(Dialogo.Mercado1)
+  ACT(c:FAC+3, 'Mercado : '~Dialogo.Mercado1)
+else
+  ACT(c:FAC+3, 'Mercados : Todos')
+endif
+if NoVacio(Dialogo.Cliente1)
+  ACT(a:FAC+4, 'Cliente : '~Dialogo.Cliente1)
+else
+  ACT(a:FAC+4, 'Cliente : Todos')
+endif
+if NoVacio(Dialogo.Lista1)
+  ACT(A:FAC+5, 'Tipo Op. : '~Dialogo.Lista1)
+else
+  ACT(A:FAC+5, 'Tipo Op. : Todas')
+endif
+
+SetFilaActual(FAC+7)
+
+ACT(A:FAC, "FechaVto")
+ACT(B:FAC, "Especie")
+ACT(C:FAC, "Mercado")
+ACT(D:FAC, "Cliente")
+ACT(E:FAC, "Cantidad")
+ACT(F:FAC, "Precio")
+ACT(G:FAC, "Moneda")
+ACT(H:FAC, "Monto")
+ACT(I:FAC, "Total en Pesos")
+ACT(J:FAC, "MTM del Dia")
+ACT(K:FAC, "MTM Acum. Ant.")
+ACT(L:FAC, "MTM Acum. Act.")
+ACT(M:FAC, "Numero")
+ACT(N:FAC, "F.Operacion")
+ACT(O:FAC, "Operador")
+
+ACN(ha1, fac)
+ACN(Z4, Cotizacion('USD',,,,FSYS,1))
+ACT(G:9,'Cotizacion USD: '~val(z4))
+
+AlinearCeldas(a:FAC..D:FAC,'I')
+AlinearCeldas(E:FAC..L:FAC,'D')
+AlinearCeldas(g:FAC..g:FAC,'I')
+SetFont(a:Val(w1)..o:FAC,2)
+AgregarMarco(a:FAC..o:FAC,1,0,Exe('COLOR6'))
+
+SetFilaActual(FAC)
+
+SQL.ADD(" Select * from ")
+SQL.ADD(" (SELECT Distinct O.TipoOp, O.Mercado, O.NrOperacion, O.Especie, O.ContraEspecie, O.Cantidad, O.Precio1, O.TotalBrutoCli1, O.Operador, O.FechaOp, O.FechaVto, O.Cliente1, T.Nombre, C.RazonSocial, E.TamanioLote, ")
+SQL.ADD("  O.FechaEj, O.PrecioEj, O.Vehiculo1, O.Mercado4 MercNeg, ")
+SQL.ADD("  (Select sum(MTM) from "~DBO~".MTMDIARIO MD Where MD.NrOperacion = O.NrOperacion and MD.TipoMTM = 'MTM' and MD.Fecha = '"~IdxDate(Dialogo.Fecha1)~"') as MTMDia, ")
+SQL.ADD("  (Select sum(MTM) from "~DBO~".MTMDIARIO MD Where MD.NrOperacion = O.NrOperacion and MD.TipoMTM = 'MTM' and MD.Fecha < '"~IdxDate(Dialogo.Fecha1)~"') as MTMAnt, ")
+SQL.ADD("  (Select sum(MTM) from "~DBO~".MTMDIARIO MD Where MD.NrOperacion = O.NrOperacion and MD.TipoMTM = 'MTM' ) as MTMTotal ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O")
+SQL.ADD("join "~DBO~".OPERACIONESBITS B on O.NrOperacion = B.NrOperacion")
+SQL.ADD("join "~DBO~".TIPOSOPERACION T on o.TipoOp = T.Codigo")
+SQL.ADD("join "~DBO~".ESPECIES E on O.Especie = E.Codigo")
+SQL.ADD("join "~DBO~".CLIENTES C on O.Cliente1 = C.Codigo")
+SQL.ADD(" WHERE O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+
+IF NoVacio(Dialogo.Especie1)
+   SQL.ADD("and O.Especie = '"~Dialogo.Especie1~"' ")
+ENDIF
+IF NoVacio(Dialogo.Cliente1)
+  SQL.ADD("and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("and O.TipoOp IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE 
+SQL.ADD("and O.TipoOp IN ('FXCF','FXVF') ")
+ENDIF
+SQL.ADD("and O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("and O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("and B.NrOperacion = O.NrOperacion ")
+SQL.ADD("and B.Valor = '1' ")
+SQL.ADD("and B.NrBit not in (30,31) ")
+SQL.ADD(" ) as Aux")
+*-Mercado
+If NoVacio(Dialogo.Mercado1)
+   SQL.ADD(" Where MercNeg = '"~Dialogo.Mercado1~"' ")
+EndIf
+SQL.ADD("ORDER BY TipoOp, MercNeg, FechaVto, Especie, Cliente1")
+Watch(sql.Batch)
+recorrer SQL
+  
+  IF Not EqStr(FBN['TipoOp']~FBN['MercNeg'], Val(Z2))
+     If Val(zx1)=99
+        ACN(zx1,0)
+     Else 
+        ACT(c:fac,'TOTALES') 
+        ACN(E:fac,Val(TO:1))
+        ACN(H:fac,Val(TO:2))
+        ACN(I:fac,Val(TO:3))
+        ACN(J:fac,Val(TO:4))
+        ACN(K:fac,Val(TO:5))
+        ACN(L:fac,Val(TO:6))
+        SetFont(a:FAC..p:FAC,2)
+        
+        ACN(TO:1,0)
+        ACN(TO:2,0)
+        ACN(TO:3,0)
+        ACN(TO:4,0)
+        ACN(TO:5,0)
+        ACN(TO:6,0)
+        IFA
+     Endif
+     IFA
+     ACT(a:FAC, FBN['TipoOp'])
+     ACT(b:fac, fbn("Nombre"))
+     ACT(c:fac, 'Mercado')
+     ACT(d:fac, FBN['MercNeg'])
+     message(Val(a:fac)~' - '~fbn("Nombre"))
+     AgregarMarco(a:FAC..o:FAC,1,0, Exe('COLOR6'))
+     SetFont(a:FAC..o:FAC,2)
+     IFA
+     ACT(Z2,FBN['TipoOp']~FBN['MercNeg'])
+  ENDIF
+
+  message(fbn('NrOperacion'))
+  ACT(A:FAC, FBN['FechaVto'])
+  ACT(B:FAC, FBN['Especie']~' '~FBN['FechaEj']~' '~FBN['PrecioEj'])
+  ACT(C:FAC, FBN['MercNeg'])
+  ACT(D:FAC, Copy(fbn('RazonSocial'),1,25))
+
+  IF Incluido(FBN['TipoOp'],'FXCTC|FXCF')
+     ACN(E:FAC, FBN['Cantidad'])
+  ELSE
+     ACN(E:FAC, FBN['Cantidad']*(-1))
+  ENDIF
+
+  If Incluido(fbn('TipoOp'), 'FXCTC|FXVTC|')  
+     ACN(E:FAC, Val(E:FAC) * fbn('TamanioLote') )
+  ENDIF
+
+  IF Incluido(FBN['TipoOp'],'FXCTC|FXCF')
+    ACN(z5, -1)
+  else
+    ACN(z5, 1)
+  endif
+
+  ACN(F:fac, FBN['Precio1'])
+  ACT(G:FAC, FBN['Contraespecie'])
+  ACN(H:fac, FBN['TotalBrutoCli1']*Val(z:5))
+
+  if EqStr(fbn('ContraEspecie'),'ARP')
+     ACN(I:fac, FBN['TotalBrutoCli1']*Val(z:5))
+  else
+     ACN(I:fac, FBN['TotalBrutoCli1']*Cotizacion(fbn('ContraEspecie'),,,,FSYS,1)*Val(z:5))
+  endif
+  ACN(J:FAC, FBN['MTMDia'])
+  ACN(K:FAC, FBN['MTMAnt'])
+  ACN(L:FAC, FBN['MTMTotal'])
+  ACT(M:FAC, FBN['NrOperacion'])
+  ACLO(M:fac, fbn('NrOperacion'))
+  ACT(N:FAC, FBN['FechaOp'])
+  ACT(O:FAC, FBN['Operador'])
+  
+  SCN(TO:1,Val(E:fac))
+  SCN(TO:2,Val(H:fac))
+  SCN(TO:3,Val(I:fac))
+  SCN(TO:4,Val(J:fac))
+  SCN(TO:5,Val(K:fac))
+  SCN(TO:6,Val(L:fac))
+  
+  AlinearCeldas(a:FAC..a:FAC,'D')
+  AlinearCeldas(N:FAC..N:FAC,'D')
+proximo
+  IFA
+  ACT(c:fac,'TOTALES') 
+  ACN(E:fac,Val(TO:1))
+  ACN(H:fac,Val(TO:2))
+  ACN(I:fac,Val(TO:3))
+  ACN(J:fac,Val(TO:4))
+  ACN(K:fac,Val(TO:5))
+  ACN(L:fac,Val(TO:6))
+  SetFont(a:FAC..p:FAC,2)
+        
+FormatoCeldas(e:Val(w1)+3..e:FAC+4,Exe('F2')) 
+FormatoCeldas(h:Val(w1)+3..l:FAC+4,Exe('F2')) 
+*SetFont(a:Val(w1)+9..p:FAC,1)
+
+ACO(1,6)
+ACO(2,10)
+ACO(3,9)
+ACO(4,16)
+ACO(5,8)
+ACO(6,6)
+ACO(7,8)
+ACO(8,10)
+ACO(9,10)
+ACO(10,10)
+ACO(11,10)
+ACO(12,10)
+ACO(13,8)
+ACO(14,7)
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Fin del Informe.')
+SetFont(a:FAC,2)
+ifa
+ACT(a:FAC, USUARIOACTIVO)
+SetMargins(0,0,0,2)
+LimitesVision(O:FAC)
+RangoTitulo(a:1..o:FAC, Val(ha1))
+SetPrintFit(3,82)

@@ -1,0 +1,55 @@
+﻿*-- HojaVisible(SI)
+CrearDialogo
+  NrOperacion1: 'Operacion'  ;;;;;;NoVacio(Dialogo.NrOperacion1);'Debe Ingresar una Operacion';NO;;
+  Precio1     : 'Precio'     ;;;;;;Dialogo.Precio1>0;'El Precio debe ser Positivo';NO;;
+FinDialogo
+if Not Ok
+   Cancelar
+endif
+
+* Vehiculos permitidos por el usuario
+ACT(z2,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"'"))
+
+acn(z1,0)
+
+SQL.ADD("Select NrOperacion, TipoOp, Precio1 FROM "~DBO~".OPERACIONES ")
+SQL.ADD("where  NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Recorrer SQL
+  SCN(z1,1)
+  act(a:1, fbn['NrOperacion'])   
+  act(a:2, fbn['TipoOp'])   
+  acn(a:3, fbn['Precio1'])   
+Proximo
+if Val(z1)=0
+   Cancelar('Operacion No encontrada')
+endif
+if Not Incluido(Val(a:2),'FCS|FCR')
+   Cancelar('Tipo Operacion Incorrecto')
+endif
+if Dialogo.Precio1=Val(a:3)
+   Cancelar('Precio igual al de la operacion')
+endif
+
+SQL.ADD("Select * FROM "~DBO~".OPERACIONES ")
+SQL.ADD("where  NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Recorrer SQL
+  SQL.ADD("Update "~DBO~".OPERACIONES ")
+  SQL.ADD("Set Precio1 = "~Fstr(Dialogo.Precio1,0,10)~", ")
+  if fbn['RB7']=0
+    *** actualiza el efectivo ***
+    SQL.ADD(" TotalNetoCli1 = "~Fstr(fbn['Cantidad']*Dialogo.Precio1,0,2)~" ")
+  else
+      *** actualiza la cuotaparte ***
+      SQL.ADD(" Cantidad = "~Fstr(fbn['TotalNetoCli1']/Dialogo.Precio1,0,6)~" ")
+  endif
+  SQL.ADD("Where NrOperacion = '"~fbn['NrOperacion']~"' ")
+  SQL.NEW
+  SQL.EXEC
+
+  *** Graba los movimientos de la operacion ***
+  SQL.ActualizarMovimientos2(FBN['NrOperacion'],SI,NO,NO,SI)
+  SQL.EXEC
+
+  EjecutarEvento('REGPOS',Fecha1=FBN['FechaOp'],Fecha2=FBN['FechaOp'],Vehiculo1=FBN['Vehiculo1'],Especie1=FBN['Especie'])
+proximo
+

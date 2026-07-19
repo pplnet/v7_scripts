@@ -1,0 +1,76 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+   Radio1         : 'Desmarca |Asiento|Contrasiento';;;;;;;;;;0  
+   NrUnicoAsiento1: 'Numero' ;;;;;;;;;;;;;;iif(Dialogo.Radio1=0 , " Estado IN ('E')" , " Estado IN ('COE')" )   
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+ACN (B:1,0)
+
+IF NoVacio(Dialogo.NrUnicoAsiento1)
+* ----------------------------- Cambio el estado de un asiento O UN CONTRASIENTO (PUNTUAL) 
+   ACN(BD:1, 1)
+   SQL.ADD(" Select  NrUnicoAsiento,NrOperacion, Estado  ")
+   SQL.ADD(" From  "~DBO~".ASIENTOSCON ")
+   SQL.ADD(" Where NrUnicoAsiento = '"~Dialogo.NrUnicoAsiento1~"' AND ")
+   if Dialogo.Radio1=0  
+      SQL.ADD("   Estado = 'E'  ")
+   ELSE
+      SQL.ADD("   Estado = 'COE'  ")
+   ENDIF
+   SQL.ADD(" order by NrUnicoAsiento ")
+   Recorrer SQL 
+      ACN(BD:1, 0)        
+      If Eqstr(fbn('Estado'), 'COE')
+         ACT(A:FAC, 'COT')
+      Else      
+         ACT(A:FAC, fbn('Estado'))  
+      ENDIF
+      SQL.ADD(" Update "~DBO~".ASIENTOSCON ")
+      If Eqstr(fbn('Estado'), 'E')
+         SQL.ADD(" Set Estado = Null ")
+      Else
+         SQL.ADD(" Set Estado = '"~Val(A:fAC)~"' ")       
+      Endif
+      SQL.ADD(" Where NrUnicoAsiento = '"~fbn('NrUnicoAsiento')~"' ")
+      SQL.NEW
+      SQL.EXEC 
+   Proximo      
+   IF Val(BD:1) = 0
+      MessageBox('Asiento '~Dialogo.NrUnicoAsiento1~' esta Desmarcado')
+   ELSE
+      MessageBox('El Asiento '~Dialogo.NrUnicoAsiento1~' No Fue Enviado')
+   ENDIF 
+ELSE
+* ----------------------------- Radio1 = 0 Cambio el estado todos los asientos con codigo = E 
+* ----------------------------- Radio1 = 1 Cambio el estado todos los asientos con codigo = COE
+   SQL.ADD(" Select  NrUnicoAsiento,NrOperacion, Estado  ")
+   SQL.ADD(" From  "~DBO~".ASIENTOSCON ")
+   SQL.ADD(" Where  ")
+   If Dialogo.Radio1=0   
+      SQL.ADD("   Estado = 'E'  ")
+   ELSE 
+      SQL.ADD("  Estado = 'COE' ")
+   ENDIF   
+   SQL.ADD(" order by NrUnicoAsiento ")
+   Recorrer SQL 
+      If Eqstr(fbn('Estado'), 'COE')
+         ACT(A:FAC, 'COT')
+      ENDIF
+***---Marco el asiento
+      SQL.ADD(" Update "~DBO~".ASIENTOSCON ")
+      If Dialogo.Radio1=0      
+         SQL.ADD(" Set Estado = Null ")       
+      Else
+         SQL.ADD(" Set Estado = '"~Val(A:fAC)~"' ")         
+      Endif
+      SQL.ADD(" Where NrUnicoAsiento = '"~fbn('NrUnicoAsiento')~"' ")
+      SQL.NEW
+      SQL.EXEC 
+      Message  ('Modificacion Total:   Asiento: ' ~fbn('NrUnicoAsiento')~ 'ESTADO: ' ~fbn('Estado')  )
+      SCN (B:1,1)
+      Proximo 
+      MessageBox('Se Modificaron  '~Val(B:1)~' Asientos')
+endif

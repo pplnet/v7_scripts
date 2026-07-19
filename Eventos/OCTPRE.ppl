@@ -1,0 +1,146 @@
+﻿*/***********************************************
+*/Evento que interpreta los Registros 4427
+*/y Completa la tabla COTIZACIONES_TEMPORAL
+*/***********************************************
+
+*/Actualizo el Archivo OCT
+ACT(z2, Var('PATHSIOPEL'))
+
+*/Restablecer lo que esta comentado aca...
+*/AbrirASCII(Val(z2)~'\OCTCOTIZ.TXT',0)
+*/EscribirASCII(Val(A:2))
+*/CerrarASCII
+
+*/Proceso el contenido.
+
+AbrirASCII(Val(z2)~'\OCTCOTIZ.TXT',0)
+
+Repetir
+ACT(ln1, LeerAscii)
+if Vacio(Val(ln1))
+   CerrarASCII
+   break
+endif
+
+**********************************************************
+*/0160000000040823170704911724427O              FA00000000030124000020040823O              FE00000000030254000020040823999999999999999                            
+*/0160000000040914162442866004427O              FA00000000029975000020040914O              FE00000000029978000020040914999999999999999                            
+**********************************************************
+  acn(de1,32)
+
+  Repetir
+    Act(ln2,Copy(val(ln1),val(de1),43))
+    Message(val(ln2))
+
+    */Completo la Tabla
+       If Eqstr(trim(Copy(val(ln2),1,1)),'O')
+
+          act(s:1,'TipoNegocio')
+          act(t:1,trim(Copy(val(ln2),1,1)))
+          message(val(s1)~' '~val(t1))
+
+          act(s:5,'TipoPrecio')
+          act(t:5,Copy(val(ln2),16,1))
+          message(val(s5)~' '~val(t5))
+
+          act(s:6,'Metodo')
+          act(t:6,Copy(val(ln2),17,1))
+          message(val(s6)~' '~val(t6))
+
+          act(s:10,'Fecha Precio')
+          Act(t:10, Copy(Val(ln2),42,2)~'/'~Copy(Val(ln2),40,2)~'/'~Copy(Val(ln2),36,4))
+          Acn(t:10, Fecha(Copy(Val(ln2),42,2)~'/'~Copy(Val(ln2),40,2)~'/'~Copy(Val(ln2),36,4)))
+          act(s:11,'Precio') 
+
+          acn(t:11,Num(Copy(val(ln2),18,10)) +(Num(Copy(val(ln2),28,8))/100000000 ))
+
+
+          if Eqstr(Val(t5),'O')
+
+             */Precio MTM
+ 
+             act(s:2,'Especie')
+             act(t:2,trim(Copy(val(ln2),2,5)))
+             ACT(t:2,SQL("Select EspecieDestino1 From "~DBO~".EQUIVALENCIA_ESPECIES Where EspecieOrigen = '"~Val(t2)~"' and TipoNegociacion = '"~Val(t1)~"' "))  
+
+             act(s:7,'Variable')
+             act(t:7,Copy(val(ln2),7,7))
+             message(val(s7)~' '~val(t7))
+
+             act(s:8,'Especie 2')
+             act(t:8,trim(Copy(val(ln2),2,5)))
+             ACT(t:8,SQL("Select EspecieDestino2 From "~DBO~".EQUIVALENCIA_ESPECIES Where EspecieOrigen = '"~Val(t8)~"' and TipoNegociacion = '"~Val(t1)~"' "))  
+            
+
+             act(s:9,'Fecha')
+             if NoVacio(val(t2)) y NoVacio(val(t1)) y NoVacio(val(t7))
+                ACN(t:9, SQL("Select Fecha from  "~DBO~".PLAZOSOCT Where rtrim(ltrim(Especie))=rtrim(ltrim('"~val(t2)~"')) and rtrim(ltrim(TipoNegociacion)) = rtrim(ltrim('"~val(t1)~"')) and rtrim(ltrim(Variable))= rtrim(ltrim('"~val(t7)~"')) "))
+             else
+                ACT(t:9, '')
+             endif
+
+             acn(nu1,0)
+             SQL.ADD("Select Count('*') as Cuenta from  "~DBO~".COTIZACIONES_TEMPORAL Where")
+             SQL.ADD(" Codigo  = '"~val(t8)~"' and Fecha = '"~IdxDate(Val(t10))~"'  and CallPut = 'FUT' and  FechaEj ='"~IdxDate(Val(t9))~"'  ")  
+             Recorrer SQL 
+                acn(nu1,FBN('Cuenta'))
+             Proximo 
+
+             */Actualizo la Tabla 
+             if val(nu1) <> 0
+                SQL.ADD(" Update "~DBO~".COTIZACIONES_TEMPORAL  Set Precio1 = "~val(t11)~" ")
+                SQL.ADD(" Where  Codigo  = '"~val(t8)~"'   and  ")
+                SQL.ADD(" Fecha = '"~IdxDate(Val(t10))~"'  and  ")
+                SQL.ADD(" CallPut = 'FUT' and  FechaEj ='"~IdxDate(Val(t9))~"'  ")  
+                SQL.NEW         
+                SQL.EXEC
+             else
+                SQL.ADD("Insert into "~DBO~".COTIZACIONES_TEMPORAL ")
+                SQL.ADD("(Codigo, Fecha, CallPut, FechaEj,Precio1 )")
+                SQL.ADD(" Values ")
+                SQL.ADD(" ('"~val(t8)~"', '"~IdxDate(Val(t10))~"' , 'FUT', '"~IdxDate(Val(t9))~"',"~val(t11)~")")
+                SQL.NEW         
+                SQL.EXEC
+             endif
+
+
+          else
+             */Precio Fixing
+             act(s:2,'Especie')
+             ACT(t:2,SQL("Select EspecieDestino2 From "~DBO~".EQUIVALENCIA_ESPECIES Where EspecieOrigen is NULL and TipoNegociacion = '"~Val(t1)~"' and TipoCotizacion =  '"~Val(t5)~"'  and Metodo =  '"~Val(t6)~"' " ))  
+
+             acn(nu1,0)
+
+             SQL.ADD(" Select Count('*') as Cuenta from  "~DBO~".COTIZACIONES_TEMPORAL Where")
+             SQL.ADD(" Codigo  = '"~val(t2)~"' and Fecha = '"~IdxDate(Val(t10))~"'  and CallPut = 'CON'   ")  
+             Recorrer SQL 
+               acn(nu1,fbn('Cuenta'))
+             Proximo 
+
+             if val(nu1) <> 0
+                SQL.ADD(" Update "~DBO~".COTIZACIONES_TEMPORAL  Set Precio1 = "~val(t11)~" ")
+                SQL.ADD(" Where  Codigo  = '"~val(t2)~"'   and  ")
+                SQL.ADD(" Fecha = '"~IdxDate(Val(t10))~"'  and  ")
+                SQL.ADD(" CallPut = 'CON'   ")  
+                SQL.NEW         
+                SQL.EXEC
+             else
+                 */Actualizo la Tabla
+                SQL.ADD("Insert into "~DBO~".COTIZACIONES_TEMPORAL ")
+                SQL.ADD("(Codigo, Fecha, CallPut, Precio1 )")
+                SQL.ADD(" Values ")
+                SQL.ADD(" ('"~val(t2)~"', '"~IdxDate(Val(t10))~"' , 'CON',"~val(t11)~" )")
+                SQL.NEW         
+                SQL.EXEC
+             endif
+           endif
+   endif
+
+   scn(de1,43) 
+    if Eqstr(trim(Val(ln2)),'999999999999999')
+       Break
+    endif
+  Proximo
+
+Proximo
+

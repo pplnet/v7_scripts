@@ -1,0 +1,127 @@
+﻿ModoReproceso(SinDialogo)
+#ifdef MLASA
+    CrearDialogo
+      Fecha1     : "Fecha Desde"  ;;;;;;Dialogo.Fecha1 <>0;'Debe Ingresar una Fecha Valida';NO;Hoy-90;
+      Fecha2     : "Fecha Hasta"  ;;;;;;Dialogo.Fecha2 <>0 y Dialogo.Fecha2 >= Dialogo.Fecha1;'Debe Ingresar una Fecha Valida';NO;Fsys;
+      Check2     : 'Exporta PDF'  ;;;;NO;NO;;;;0;
+    FinDialogo
+#else    
+   CrearDialogo
+      Check2     : 'Exporta PDF'  ;;;;NO;NO;;;;0;
+    FinDialogo 
+#endif
+if Not Ok
+      Cancelar
+    endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,10,")
+
+AgregarBMP(a:1,EXE('LOGO'),EXE('ESCALOGO'))
+
+ACT(d:2, 'Usuarios Deshabilitados Inactividad > 90 Dias')
+AlinearCeldas(d:2, 'D')
+SetFont(d:2, 3)
+ACT(f:1, 'CONFIDENCIAL')
+SetFont(f:fac, 4)
+SetFilaActual(4)
+ACT(a:fac, 'FPA V6')
+
+SetFilaActual(fac+1)
+ACD(VX2, FSYS-90)
+ACN(wx3,0)
+#ifdef MLASA
+    ACT(a:FAC+1, 'Desde Fecha : '~Dialogo.Fecha1)
+    ACT(a:FAC+2, 'Hasta Fecha : '~Dialogo.Fecha2)
+#else
+    ACT(a:FAC+1, 'Fecha : '~val(VX2))
+#endif
+
+ACT(a:FAC+4, 'Codigo')
+ACT(b:FAC+4, 'Nombre')
+ACT(c:FAC+4, 'F.Ult.Acceso')
+ACT(d:FAC+4, 'Estado')
+ACT(e:FAC+4, 'F.Deshab.')
+ACT(f:FAC+4, 'Usuario')
+AgregarMarco(a:FAC+4..f:FAC+4,2,0,Exe('COLOR'))
+
+SetFont(a:FAC..g:FAC+4,2)
+SetFilaActual(FAC+4)
+ACN(VX1,fac)
+
+#ifdef MLASA
+    SQL.ADD(" Select U.Nombre,U.FAcceso,U.FDeshabilitacion,U.Codigo, U.status from "~DBO~".USUARIOS U ")
+    SQL.ADD(" where U.Status = 1 and FDeshabilitacion >= '"~IdxDate(Dialogo.Fecha1)~"' and FDeshabilitacion <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+#else
+    SQL.ADD(" Select U.Nombre,U.FAcceso,U.FDeshabilitacion,U.Codigo, U.status from "~DBO~".USUARIOS U ")
+    SQL.ADD(" where (U.Status = 1 and FDeshabilitacion <= '"~IdxDate(val(VX2))~"') or FAcceso is null or (FAcceso<='"~IdxDate(val(VX2))~"') ")
+#endif
+Recorrer SQL
+
+    ACN(wx3,1)
+    ACT(b:fac, fbn['Nombre'])
+    ACT(c:fac, fbn['FAcceso'])
+    
+    if fbn("status")= 1
+        ACT(d:fac, 'Deshab.')
+    else
+        if fbn("Facceso")= null
+            ACT(d:fac, 'Sin Acceso')
+        else
+            ACT(d:fac, 'Inactivo')
+        end
+    end
+    ACT(e:fac, fbn['FDeshabilitacion'])
+    ACD(ae:fac, fbn['FDeshabilitacion'])
+    
+
+    SQL.ADD(" Select Codigo,Operador from "~DBO~".PMAUDIT ")
+    SQL.ADD(" where Codigo = '"~fbn['Codigo']~"'and Tabla = 'USUARIOS' and Campo = 'FDeshabilitacion' ")
+    *    SQL.ADD("   and Fecha > '"~IdxDate(fbn['FDeshabilitacion'])~"'  ")
+    SQL.ADD("   and Fecha > '"~IdxDate(val(ae:fac))~"'  ")
+    SQL.ADD(" Group by Codigo,Operador,Fecha ")
+    acn(xx1,fac) 
+    Recorrer SQL
+       ACT(a:val(xx1), fbn['Codigo'])
+       ACT(f:val(xx1), fbn['Operador'])
+    proximo
+    SetFilaActual(val(xx1))
+proximo
+
+if val(wx3) = 0
+    ifa
+    ifa
+    ACT(d:fac,'N I L')
+    SetFont(d:fac, 4)
+endif
+
+SetFont(a:Val(w1)+5..g:FAC, 1)
+
+ACO(1,12)
+ACO(2,25)
+ACO(3,15)
+ACO(4,10)
+ACO(5,15)
+ACO(6,10)
+
+
+Impresion(1,2)
+Impresion(4,1)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+act(ar:1,VAR('PATHLOGAUD')~'Log_de_usuarios_deshabilitados_'~Fecha(FECHASYS,'YYYYMMDD')~'.pdf')
+
+LimitesVision(g:FAC)
+
+RangoTitulo(a:1..g:fac+1, val(vx1))
+
+if Dialogo.Check2=1
+   HojaVisible(NO)
+   *act(ho:1,Hora(AHORA))
+   *act(ho:2,Copy(val(ho:1),1,2)~Copy(val(ho:1),4,2)~Copy(val(ho:1),7,2))
+   *   act(ar:1,VAR('PATHLOGAUD')~'Log_de_usuarios_deshabilitados_'~Fecha(FECHASYS,'YYYYMMDD')~'.pdf')
+   BorrarArchivo(val(ar:1))
+   ExportarPdf(val(ar:1))
+endif

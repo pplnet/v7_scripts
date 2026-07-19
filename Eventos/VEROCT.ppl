@@ -1,0 +1,204 @@
+﻿  CrearDialogo
+    Fecha1    : 'Fecha'  ;1;1;;NO;;;;;FSys;
+    Lista1    : 'TiposOp';2;1;;;;;;;;;'FXOCTC|FXOCTV'
+    String1   : 'NroSec. Dde';3;1;;;;;;;SQLSet("Select Min(Secuencia) from "~DBO~".OPSIOPEL where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ");;;;'#####'
+    String2   : 'NroSec. Hta';3;2;;;;;;;SQLSet("Select Max(Secuencia) from "~DBO~".OPSIOPEL where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ");;;;'#####'
+    Especie1  : 'Moneda' ;4;1
+    Cliente1  : 'Cliente'      ;4;2
+    Cantidad1 : 'Cantidad Dde.';5;1
+    Cantidad2 : 'Cantidad Hta.';5;2;;;;;;;999999999;;
+  FinDialogo
+  if not ok
+    Cancelar
+  endif
+  
+  CrearFont(1, "Arial,8,")
+  CrearFont(2, "Arial,8,B")
+  CrearFont(3, "Arial,12,B")
+  SetFilaActual(0)
+  
+  act(aa1,Copy(GetNumerador(890),4,5))
+  
+  *** selecciona las Operaciones en instancia cARGA tRADER (ANTES 6) (1) marca con AA1 ***
+
+  SQL.ADD("UPDATE "~DBO~".OPERACIONES  Set NrOrden = '"~val(aa1)~"' ")
+  SQL.ADD("where NrOperacion In                                     ")
+  SQL.ADD("   (Select O.NrOperacion")
+  SQL.ADD("    from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B ")
+  SQL.ADD("    where O.NrOperacion = B.NrOperacion ")
+  SQL.ADD("    and   O.RB6 = '2'   ")
+  SQL.ADD("    and   O.MB6 = '4'   ")
+  SQL.ADD("    and   B.NrBit = 1  ")
+  SQL.ADD("    and   B.Valor = '1' ")
+  SQL.ADD("    and ((O.NroAltaMAE between '"~Dialogo.String1~"' and '"~Dialogo.String2~"') ")
+  SQL.ADD("        or O.NroAltaMAE is Null) ")
+  SQL.ADD("    and   (O.NrOrden = ' ' or O.NrOrden is Null) ")
+  if NoVacio(Dialogo.Lista1)
+    SQL.ADD("   and   O.TipoOp In ("~Pipe2Comillas(Dialogo.Lista1)~")")
+  endif       
+  if NoVacio(Dialogo.Especie1)
+    SQL.ADD("   and   O.Especie = '"~Dialogo.Especie1~"' ")
+  endif
+  if NoVacio(Dialogo.Cliente1)
+    SQL.ADD("and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+  endif
+  if Dialogo.Cantidad1 <> 0
+    SQL.ADD("   and   O.Cantidad >= "~Dialogo.Cantidad1~" ")    
+  endif
+  if Dialogo.Cantidad2 <> 0
+    SQL.ADD("   and   O.Cantidad <= "~Dialogo.Cantidad2~" ")    
+  endif
+  SQL.ADD("   )")
+  SQL.NEW
+  SQL.EXEC
+  
+  ACN(zz1, 0)
+  act(az1, '')
+
+  *** traigo las operaciones marcadas
+  SQL.ADD("Select  ")
+  SQL.ADD(" O.TipoOp, O.Especie, O.NrOperacion,O.Cliente1, O.Cantidad,O.Puesto, O.Plazo4, O.Plazo, ")
+  SQL.ADD(" O.Mercado2, O.PrecioMer,O.NroAltaMAE,O.Cotizacion2,O.TipoCambio3,O.Precio2,O.TotalBrutoCli1, ")
+  SQL.ADD(" O.Book1,O.FormaLiquidacion1, O.OficialCuenta, O.Vehiculo1, O.Precio1, O.FechaVto, O.MB1, ")
+  SQL.ADD(" E.Descripcion, O.CB7, O.NrOperacion2 ")
+  *-i
+  SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B, "~DBO~".EXCEPCIONES E ")
+  * SQL.ADD("from "~DBO~".OPERACIONES O LEFT OUTLER INNER JOIN "~DBO~".EXCEPCIONES E  ON  O.NrOperacion = E.NrOperacion ")
+  * SQL.ADD(","~DBO~".OPERACIONESBITS B")
+   *-f
+  SQL.ADD("where  O.NrOperacion = B.NrOperacion ")
+  *-i
+  SQL.ADD("       and   O.NrOperacion *= E.NrOperacion ")
+  *-f
+  SQL.ADD("       and   O.RB6 = '2' ")
+  SQL.ADD("       and   O.MB6 = '4'   ")
+  SQL.ADD("       and   B.NrBit = 1 ")
+  SQL.ADD("       and   B.Valor = '1' ")
+  SQL.ADD("       and   O.NrOrden = '"~val(aa1)~"'")
+  SQL.ADD("Order by O.NrOperacion, O.NroAltaMAE, Cantidad, TipoOp, Especie  ")
+  Recorrer SQL
+    if not eqstr(val(az1),FBN['NrOperacion'])
+      ACN(zz1, 1)
+      ACN(A:fac, 0)
+      ACT(B:fac, FBN['TipoOp'])
+      ACT(C:fac, FBN['Especie'])
+      ACT(D:fac, FBN['NrOperacion'])
+      ACT(E:fac, FBN['Cliente1'])
+      ACT(F:fac, Pyc(FBN['Cantidad'],1,2))
+      ACT(I:fac, Fstr(FBN['Plazo'],0,0))
+      ACT(J:fac, FBN['Mercado2'])    
+      ACT(N:fac, Pyc(FBN['Precio1'],1,7))
+      ACT(O:fac, Pyc(FBN['TotalBrutoCli1'],1,2))
+      ACT(P:fac,FBN['Book1'])
+      ACT(R:fac,FBN['OficialCuenta'])
+      ACT(S:fac,FBN['Vehiculo1'])
+      ACT(T:fac,FBN['NroAltaMAE'])
+      ACD(U:fac,FBN['FechaVto'])
+      ACT(v:fac,FBN['MB1'])
+      if EqStr(FBN['MB1'],'0')
+        act(w:fac, 'EMTA')
+      else
+        if EqStr(FBN['MB1'],'1')
+          act(w:fac, 'A 3500')
+        else
+          act(w:fac, 'Otro')
+        endif
+      endif
+      if EqStr(FBN['CB7'],'1')
+        act(y:fac, 'Manual')
+      else
+        act(y:fac, 'Siopel')
+      endif
+      act(az1, FBN['NrOperacion'])
+    endif
+    ACT(x:fac,FBN['Descripcion'])
+    ACT(ab:fac,FBN['NrOperacion2'])
+  Proximo
+  
+  if val(zz1) = 0
+    MessageBox('NO hay Operaciones OCT desde SIOPEL')
+    Cancelar
+  endif
+
+  CrearListBox         ;'Times New Roman,9,';'Operaciones Informadas desde SIOPEL'
+    'TipoOp'             ;B:1..B:FAC    ;NO;;;60;STRING;;Exe('COLOR9');
+    'Moneda'             ;C:1..C:FAC    ;NO;;;40;STRING;;Exe('COLOR9');
+    'Secuencia'          ;T:1..T:FAC    ;NO;;;55;STRING;;Exe('COLOR9');
+    'Cliente'            ;E:1..E:FAC    ;NO;;;80;STRING;;Exe('COLOR9');
+    'Cantidad'           ;F:1..F:FAC    ;NO;;;90;STRING;;Exe('COLOR9');
+    'Plazo'              ;i:1..i:FAC    ;NO;;;30;STRING;;Exe('COLOR9');
+    'Precio'             ;N:1..N:FAC    ;NO;;;95;STRING;;Exe('COLOR9');   
+    'Origen'             ;y:1..y:FAC    ;NO;;;70;STRING;;Exe('COLOR9');
+    'Ok'                 ;A:1..A:FAC    ;NoVacio(val(d:FLB));;;30;CHECK;;;;;;;NO;;
+    'Monto $'            ;O:1..O:FAC    ;NO;;;90;STRING;;Exe('COLOR9');
+    'Book'               ;P:1..P:FAC    ;NoVacio(val(d:FLB));;;55;TABLA;'Books';'Codigo';'Codigo,Descripcion';;;;
+    'Responsable'        ;r:1..r:FAC    ;NO;;;70;STRING;;Exe('COLOR9');
+    'NrOperacion'        ;D:1..D:FAC    ;NO;;;70;STRING;;Exe('COLOR9');
+    'F.Vencimiento'      ;u:1..u:FAC    ;NO;;;70;STRING;;Exe('COLOR9');
+    'Fixing'             ;w:1..w:FAC    ;NO;;;70;STRING;;Exe('COLOR9');
+    'Excepciones'        ;x:1..x:FAC    ;NO;;;150;STRING;;Exe('COLOR9');
+    'Mercado'            ;J:1..J:FAC    ;NO;;;55;STRING;;Exe('COLOR9');
+    'Observaciones'      ;OB:1..OB:FAC  ;NoVacio(val(d:FLB));;;150;STRING;250;;      
+  FinListBox
+
+****   'Cantidad'           ;F:1..F:FAC    ;NO;;;90;NUMERO;'###,###,###,###,###.##';Exe('COLOR9');
+****   'Plazo'              ;i:1..i:FAC    ;NO;;;30;NUMERO;'#####';Exe('COLOR9');
+****   'Precio'             ;N:1..N:FAC    ;NO;;;95;NUMERO;'###.##########';Exe('COLOR9');   
+****   'Monto $'            ;O:1..O:FAC    ;NO;;;90;NUMERO;'###,###,###,###,###.##';Exe('COLOR9');
+  if Not Ok
+    *** Desmarco las Operaciones ***
+    SQL.ADD("Update "~DBO~".OPERACIONES     ")
+    SQL.ADD("   Set NrOrden = Null           ")
+    SQL.ADD(" where NrOrden = '"~val(aa1)~"' ")
+    SQL.NEW
+    SQL.EXEC
+    Cancelar
+  endif
+
+  Recorrer&i 1, fac 
+    if val(A:&i) = 1 
+      if [SQL("Select Count(*) from "~DBO~".OPERACIONESBITS where NrOperacion = '"~val(D:&i)~"' and NrBit = 1 and Valor = '1' ") <> 0]    
+        SQL.ADD("Update "~DBO~".OPERACIONES set")
+        
+        SQL.ADD(" Book1 = '"~val(P:&i)~"',")
+        SQL.ADD(" Observaciones = '"~val(OB:&i)~"'")
+        SQL.ADD("  where NrOperacion = '"~val(D:&i)~"'  ")
+        SQL.NEW
+        
+        SQL.ADD("Update "~DBO~".OPERACIONES                                 ")
+        SQL.ADD("   Set Direccion = 2                                        ")
+        SQL.ADD(" where NrOperacion = '"~val(D:&i)~"'                        ")
+        SQL.NEW
+                
+        SQL.ADD("Update "~DBO~".OPERACIONESBITS ")
+        SQL.ADD("   Set Valor = '0' ")
+        SQL.ADD(" where NrOperacion = '"~val(D:&i)~"' ")
+        SQL.NEW
+                  
+        if Vacio(val(ab:&i)) o EqStr(val(ab:&i),'') o EqStr(val(ab:&i),' ') o EqStr(val(ab:&i),'00000')
+          SQL.ADD("Update "~DBO~".OPERACIONESBITS ")
+          SQL.ADD("   Set Valor = '1' ")
+          SQL.ADD(" where NrOperacion = '"~val(D:&i)~"' ")
+          SQL.ADD(" and NrBit = 80 ")
+        else
+          SQL.ADD("Update "~DBO~".OPERACIONESBITS ")
+          SQL.ADD("   Set Valor = '1' ")
+          SQL.ADD(" where NrOperacion = '"~val(D:&i)~"' ")
+          SQL.ADD(" and NrBit = 80 ")
+        endif
+        SQL.NEW
+        SQL.EXEC
+      else
+        Messagebox('La Operacion '~val(D:&i)~' no se encuentra en la instancia Alta SIOPEL')
+      endif
+    endif
+    
+  Proximo
+  
+  *** Desmarco las Operaciones ***
+  SQL.ADD("Update "~DBO~".OPERACIONES     ")
+  SQL.ADD("   Set NrOrden = Null           ")
+  SQL.ADD(" where NrOrden = '"~val(aa1)~"' ")
+  SQL.NEW
+  SQL.EXEC
+  BorrarCeldas(a:1..zz:fac)

@@ -1,0 +1,179 @@
+﻿*DTEJMM: Ejercicio de OPciones Multiple Vto. Vin
+CrearDialogo
+  Fecha1       : "F Real Ej."                 ;1;1;;;;Dialogo.Fecha1>=SQL("Select Fecha1 from "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(Dialogo.Entero1,2,0)~" ") y Dialogo.Fecha1<=SQL("Select Fecha2 from "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(Dialogo.Entero1,2,0)~" ");'FECHA EJERCICIO REAL TIENE QUE ESTAR EN EL PLAZO DEL PERIODO A EJERCER';NO;Fsys
+  NrOperacion1 : "Operacion"                  ;;;;;;EqStr(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'DTOMV');'DEBE INGRESAR UNA OPERACION DE TIPO DTC';NO;;;SQLSET("Select NrOperacion from "~DBO~".OPERACIONES where TipoOp = 'DTOMV' ")
+  Entero1      : "Nro. Settlement"            ;;;;;;Dialogo.Entero1>0;'Debe Indicar el Nro. de Settlement';NO;0;
+  Precio2      : "Precio_Ref"                 ;;;;;;Dialogo.Precio2<=VAR('RTASA2') Y Dialogo.Precio2>=VAR('RTASA1');'Tasa Fuera de Rango:'~VAR('RTASA1')~" Y "~VAR('RTASA2');SI;0
+  Fecha3       : "F Settlement"               ;;;;;;Dialogo.Fecha3>=Dialogo.Fecha4;'La Fecha de Settlement debe ser mayor o igual a la Fecha de Fin de Settlement';NO;;SQL("Select Fecha3 from "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(Dialogo.Entero1,2,0)~" ")  
+  Radio1       : "Opcion|Europea|Americana|Asiatica" ;1;2;;NO;;;;;;BuscarCampo('Operaciones','TipoOpcion','NrOperacion',Dialogo.NrOperacion1)
+  Radio2       : "Tipo|Call|Put"              ;;;;NO;;;;;;BuscarCampo('Operaciones','MB1','NrOperacion',Dialogo.NrOperacion1)
+  Radio3       : "Operacion de|Compra|/Venta" ;;;;NO;;;;;;BuscarCampo('Operaciones','MB3','NrOperacion',Dialogo.NrOperacion1)
+  Cantidad1    : "Notional"                   ;;;;NO;;;;;;SQL("Select Cantidad1  from "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(Dialogo.Entero1,2,0)~" ")
+  Fecha4       : "Fecha Fin Opcion"           ;;;;NO;;;;;;SQL("Select Fecha2  from "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(Dialogo.Entero1,2,0)~" ")
+  Precio3      : "Precio Ej"                  ;;;;NO;;;;;;SQL("Select Precio1 from "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrCuota="~Fstr(Dialogo.Entero1,2,0)~" ")
+  NrOperacion2 : "Op Cpte"                    ;;;;NO;;;;;;BuscarCampo('Operaciones','NrOperacion2','NrOperacion',Dialogo.NrOperacion1)
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+*- Control de vehiculo habilitado para el usuario
+*- vh1: vehiculo de la operacion o transaccion
+*- Cancela si el vehiculo no esta habilitado para el usuario activo
+
+ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1))
+
+(.'CONTROLVH'.)
+
+If Not Incluido(BuscarCampo('Operaciones','TipoOp','NrOperacion',Dialogo.NrOperacion1),'DTOMV|')
+   Cancelar('La operacion N# '~Dialogo.NrOperacion1~' No es una Opcion MV')
+endif
+
+
+If BuscarCampo('Operaciones','CB6','NrOperacion',Dialogo.NrOperacion1)=0
+   Cancelar('La operacion N# '~Dialogo.NrOperacion1~' No es la operacion Original')
+endif
+
+* Verifico que se encuentre en Back Office o Terminal
+ACN(X1,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion1~"' AND Valor='1'") )
+ACN(X2,SQL("Select NrBit FROM "~DBO~".OPERACIONESBITS  Where NrOperacion='"~Dialogo.NrOperacion2~"' AND Valor='1'") )
+
+If VAL(X1)<>20 y VAL(X1)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Original Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X1),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+
+if BuscarCampo('Operaciones','MB4','NrOperacion',Dialogo.NrOperacion1) = 0
+If VAL(X2)<>20 y VAL(X2)<>50
+   *-- Busco la instancia actual
+   Cancelar('La Operacion Vinculada Debe estar en BackOffice o Terminal. Instancia Actual='~SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(VAL(X2),0,0)~" AND Tabla='OPERACIONES'") )
+EndIf
+endif
+
+If Ok
+   * X1: Recupero la Operacion
+   acn(x1,0)
+
+   SQL.ADD("Select C.*,O.FechaOp2,O.Plazo2,O.RB8,O.MB1,O.MB3,")
+   SQL.ADD("O.TablaFeriados1,O.Cliente1,O.ContraEspecie,O.Vehiculo1,O.Especie ")
+   SQL.ADD("from "~DBO~".CUOTAS C, "~DBO~".OPERACIONES O ")
+   SQL.ADD("where C.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   SQL.ADD("and C.NrCuota = "~Fstr(Dialogo.Entero1,2,0)~" ")
+   SQL.ADD("and C.Precio2=0 ")
+   SQL.ADD("and C.NrOperacion=O.NrOperacion ")
+
+   Recorrer SQL
+     * Verifico la Fecha de Ejercicio
+     IF Dialogo.Radio1=1 Y [Dialogo.Fecha1<FBN['Fecha1'] o Dialogo.Fecha1>FBN['Fecha2']]
+        MessageBox('NO SE PUEDE EJERCER EN ESTA FECHA PARA UNA OPCION AMERICANA')        
+        Break
+     ENDIF
+
+     IF Dialogo.Radio1<>1 Y Dialogo.Fecha1<>FBN['Fecha2']
+        MessageBox('NO SE PUEDE EJERCER EN ESTA FECHA PARA UNA OPCION EUROPEA O ASIATICA')        
+        Break
+     ENDIF
+
+     ACN(X1,1)     
+
+     Message('Verificando Fecha de Settlement .... ')                  
+
+     *-- Verifico que la Fecha de Settlement 
+     *-- sea habil en la tabla de feriados de la operacion
+     IF [NOT ESHABIL(Dialogo.Fecha3,FBN['TablaFeriados1'])]          
+        MESSAGEBOX('La Fecha de Settlement NO ES Dia Habil en la Tabla de Feriados '~FBN['TablaFeriados1'] )        
+        Break
+     ENDIF
+
+     acn(x1,1)
+     
+     *** Calculo el Resultado      
+     ACN (z20, 0)
+     ACD (z10, FBN['FechaOp2']+FBN['Plazo2'])
+     ACN (Z11, FBN['RB8'])
+     ACN (Z11, VAL(Z11)+1)
+
+     *** Call Compra
+     if EqStr(fbn['MB1'],'0') y EqStr(fbn['MB3'],'0')
+        if Dialogo.Precio3>=Dialogo.Precio2
+          ACN (z20, 0)
+        else
+          ACN (Z20, ((FBN['Cantidad1']*(Dialogo.Precio2-Dialogo.Precio3))/100)*FACTORDIAS(FBN['Fecha5'],FBN['Fecha6'],VAL(Z11)))
+        endif
+     endif
+
+     *** Call Venta
+     if EqStr(fbn['MB1'],'0') y EqStr(fbn['MB3'],'1')
+        if Dialogo.Precio3>=Dialogo.Precio2 
+          ACN (z20, 0)
+        else
+          ACN(z20, ((FBN['Cantidad1']*(Dialogo.Precio3-Dialogo.Precio2))/100)*FACTORDIAS(FBN['Fecha5'],FBN['Fecha6'],VAL(z11)))
+        endif
+     endif
+
+     *** Put Compra
+     if EqStr(fbn['MB1'],'1') y EqStr(fbn['MB3'],'0')
+        if Dialogo.Precio3<=Dialogo.Precio2 
+          ACN (z20, 0)
+        else
+          ACN (z20, ((FBN['Cantidad1']*(Dialogo.Precio3-Dialogo.Precio2))/100)*FACTORDIAS(FBN['Fecha5'],FBN['Fecha6'],val(z11)))
+        endif
+     endif
+
+     *** Put Venta
+     if EqStr(fbn['MB1'],'1') y EqStr(fbn['MB3'],'1')
+        if Dialogo.Precio3<=Dialogo.Precio2 
+          ACN (z20, 0)
+        else
+          acn (z20, ((FBN['Cantidad1']*(Dialogo.Precio2-Dialogo.Precio3))/100)*FACTORDIAS(FBN['Fecha5'],FBN['Fecha6'],val(z11)))
+        endif
+     endif
+
+     *** Marca la operacion como ejercida ***
+     SQL.ADD("Update "~DBO~".CUOTAS ")
+     SQL.ADD("Set ")
+     SQL.ADD("Total1 = "~Fstr(VAL(Z20),0,5)~", ")
+     SQL.ADD("Fecha3 ='"~IdxDate(Dialogo.Fecha3)~"', ")
+     SQL.ADD("Precio2="~Fstr(Dialogo.Precio2,0,5)~", ")
+     SQL.ADD("Fecha4 ='"~IdxDate(Dialogo.Fecha1)~"' ")
+     SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+     SQL.ADD("and NrCuota = "~Fstr(Dialogo.Entero1,2,0)~" ")
+     SQL.NEW
+     SQL.EXEC
+
+     * Actualizo la Instancia de la Operacion a Supervision
+     (.'MODIINSTAN'.)      
+
+     *** Actualiza movimientos y limites ****
+     SQL.ActualizarMovimientos(Dialogo.NrOperacion1,SI)
+     SQL.EXEC
+
+     *** Marca la operacion vin como ejercida ***
+     SQL.ADD("Update "~DBO~".CUOTAS ")
+     SQL.ADD("Set ")
+     SQL.ADD("Total1 = "~Fstr(-VAL(Z20),0,5)~", ")
+     SQL.ADD("Fecha3 ='"~IdxDate(Dialogo.Fecha3)~"', ")
+     SQL.ADD("Precio2="~Fstr(Dialogo.Precio2,0,5)~", ")
+     SQL.ADD("Fecha4 ='"~IdxDate(Dialogo.Fecha1)~"' ")
+     SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion2~"' ")
+     SQL.ADD("and NrCuota = "~Fstr(Dialogo.Entero1,2,0)~" ")
+     SQL.NEW
+     SQL.EXEC
+
+     * Actualizo la Instancia de la Operacion a Supervision
+
+     act(i3, Dialogo.NrOperacion2)
+     (.'MODIINSTAN'.)      
+
+     *** Actualiza movimientos y limites ****
+     SQL.ActualizarMovimientos(Dialogo.NrOperacion2,SI)
+     SQL.EXEC
+   proximo
+
+   If Val(x1)=0
+      Cancelar('La operacion N# '~Dialogo.NrOperacion1~' No puede ser Ejercida')
+   endif
+
+endif
+

@@ -1,0 +1,124 @@
+﻿MostrarCuadroDeMensajes
+ModoReproceso(ConDialogo)
+ACT(VH:1, SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') AND Codigo in ("~Pipe2Comillas(Var('VLIQUIDA')~'|'~Var('VLIQUIDA2'))~") "))
+ACT(VH:2, SQLSet(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') AND V.Codigo in ("~Pipe2Comillas(Var('VLIQUIDA')~'|'~Var('VLIQUIDA2'))~") "))
+ACT(X1,'')
+CrearDialogo
+  Fecha1:   'Fecha'        ;1; ;;;;;;;fsys
+  Fecha2   : "F.Desde"     ; ;;;;;Vacio(Dialogo.Fecha2) o Dialogo.Fecha2<=Dialogo.Fecha1;'Fecha Desde Vacia o Inferior a Fecha Hasta';NO;;
+  Especie1: 'Especie'      ; ;2;
+  Cliente1 : "Entidad"     ;;;;;;
+  * Lista2   : 'Tipo Op.'  ;;2;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo IN ('MMPCCM','MMPCCV','MMPCL','MMPCLM','MMPCOS','MMPE','MMPEM','MMPI','MMPIM','MMPIMO','MMPOSM') ");
+  Lista2   : 'Tipo Op.'    ;;2;;;;;;;;;SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo IN ('MMPCCM') ");
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+ACT(LS:2, 'MMPCCM|MMPCCV|MMPCL|MMPCLM|MMPCOS|MMPE|MMPEM|MMPI|MMPIM|MMPIMO|MMPOSM')
+acn (X:2, 0) 
+* ------------------------------------------------------------------------
+
+***---Query con movimientos sin partidas asociadas
+SQL.ADD("SELECT /*+ RULE */ M.NrOperacion, M.FechaMov, M.Cliente, M.Especie, M.Cupon, M.Cantidad, ")
+SQL.ADD(" M.Transaccion, M.Cuenta, M.Leyenda, M.NrMov, O.TipoOp, M.EnteCustodia Vehiculo, M.NrLiq ")
+SQL.ADD(" FROM "~DBO~".MOVPENDIENTES M, "~DBO~".OPERACIONESBITS B, "~DBO~".OPERACIONES O        ")
+SQL.ADD(" Where O.NrOperacion = B.NrOperacion ")
+SQL.ADD("       and M.NrOperacion = B.NrOperacion ")
+SQL.ADD("       and M.FechaMov <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+* SQL.ADD("       and M.EnteCustodia in ("~Pipe2Comillas(Val(VH:1))~") ")`
+SQL.ADD("       and M.EnteCustodia = '"~Dialogo.Cliente1~"'  ")
+SQL.ADD("       and M.Bits = 'MV' ")
+If Dialogo.Fecha2>0
+   SQL.ADD("       and M.FechaMov >= '"~IdxDate(Dialogo.Fecha2)~"' ")
+EndIf
+
+SQL.ADD(" AND M.NrSaldo = 1 ")
+
+If Novacio(Dialogo.Lista2)
+   SQL.ADD("       and O.TipoOp IN ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+Endif
+SQL.ADD("       and ((B.NrBit = 20 and B.Valor = '1') or (B.NrBit = 50 and B.Valor = '1')) ")
+SQL.ADD(" ORDER BY 1, 2, 3, 4 ")
+Recorrer SQL
+* Cargar datos ---------------------------------------------------
+          Message(" Operacion Nro. "~FBN['NrOperacion'])
+           scn (X:2, 1) 
+
+           ACT(a:fac, FBN['NrOperacion'])
+           ACD(b:fac, FBN['FechaMov'])
+           ACT(c:fac, FBN['Cliente'])
+           ACT(d:fac, FBN['Especie']~' '~FBN['Cupon'])
+           ACN(e:fac, -FBN['Cantidad'])
+           ACT(g:fac, FBN['Transaccion'])
+           ACT(f:fac, FBN['Cuenta'])
+           ACT(i:fac, FBN['Leyenda'])
+           ACN(k:fac, 0)         
+           ACT(u:fac, FBN['Cuenta'])
+           ACT(VL:fac, FBN['Vehiculo'])
+                              ACT(YY:fac, Var('VIAPAGODEF'))    ************ Viernes **********
+           ACN(p:fac, FBN['NrMov'])
+           ACT(r:fac, FBN['Especie'])
+           ACT(s:fac, FBN['Cupon'])      
+           ACT(TP:fac, fbn('TipoOp'))
+           ACN(aa:fac, FBN('NrLiq'))          
+           ACT(h:fac, BuscarCampo('CUENTAS','TipoCuenta','Codigo', fbn('Cuenta')))
+Proximo
+
+MESSAGEBOX ('Antes del ListBox K  '~ Val(k:fac)~ '  VL:FLB  '~Val(VL:FLB)     )
+
+
+  * Recorrer&j 1,FAC
+      CrearListBox;'Arial,8,B'
+         'Liquida'                  ; k1..k:fac; SI; SI;;60; COMBO; 'Si|No|'
+         '# Operacion'              ; a1..a:fac; NO; SI;;80; STRING
+         'Fecha'                    ; b1..b:fac; NO; SI;;70; FECHA
+         'Vehiculo'                 ; vl1..vl:fac; NO; SI;;70; STRING
+         'Entidad'                  ; c1..c:fac; NO; SI;;70; STRING
+         'Especie'                  ; d1..d:fac; NO; SI;;70; STRING
+         'Cantidad'                 ; e1..e:fac; NO; SI;;100; NUMERO;'###,###,###,###.##p'
+ *        'Cuenta '~Val(VL:FLB)      ; f1..f:fac; No; [NoVacio(Val(CLB:FLB)) o Val(k:FLB)=1; "Error Cuenta "~Val(VL:FLB); 90; TABLA; 'Cuentas';'Codigo';'Codigo;Nombre';
+ *        'Cuenta '                  ; f1..f:fac; No;  Val(k:FLB)=0; "Error Cuenta "~Val(VL:FLB); 90; TABLA; 'Cuentas';'Codigo';'Codigo;Nombre';
+         'Cuenta '~Val(VL:FLB);      f1..f:fac; SI; [NoVacio(Val(CLB:FLB)) y [EqStr(Val(VL:FLB),BuscarCampo('CUENTAS','Cliente','Codigo',Val(CLB:FLB)))]] o Val(k:FLB)=1; "Error Cuenta "~Val(VL:FLB); 90; TABLA; 'Cuentas';'Codigo';'Codigo;Nombre';        
+
+         'Transaccion'              ; g1..g:fac; No;  ;        ; 90; TABLA; 'TiposTransaccion';'Codigo';'Codigo;Descripcion';         
+         'VIASPAGO'                 ; YY1..YY:fac; Val(k:FLB)=0; [NOVACIO(Val(YY:flb)) y Eqstr(BUSCARCAMPO('VIASPAGO','Codigo','Codigo',Val(YY:flb) )  ,  Val(YY:FLB)   )]   O Val(k:FLB)=1   ;"VIAS DE PAGO INVALIDO" ;70; STRING;RGB(255,255,193)
+         'Cuenta Entidad'           ; h1..h:fac; SI ; ; ;30;CHECK ;
+         'Leyenda'                  ; i1..i:fac; NO; SI;;00; STRING
+         'Cta Movimiento'           ; u1..u:fac; NO; SI;;92; STRING
+         'Observaciones'            ; w1..w:fac; SI; SI;;350; STRING;57
+*        'TipoMov'                  ;j:1..j:Dialogo.Entero1+1;SI          ;[NOVACIO(Val(j:flb)) y Eqstr(BUSCARCAMPO('CODIGOSDATANET','Entidad','Codigo',Val(j:flb)),Dialogo.Cliente2)]  o flb=Dialogo.Entero1+1;'Tipo de Movimiento Invalido.';70;TABLA ; 'CodigosDatanet'  ;'Codigo';'Codigo;Descripcion;Tipo';" Entidad = '"~Dialogo.Cliente2~"' ";RGB(232,232,232);
+      FinListBox
+
+mESSAGEbOX('Fin Lstbox  '~ Dialogo.Fecha1 )
+ SQL.ActualizarMovimientos3(VAL(a:fac),SI,NO,NO,SI,SI)
+*     Recorrer&j 1,FAC 
+*          If Val(k:&j)=0         
+*             ACT(t:&j,GetNumerador(BuscarCampo('VEHICULOS','Alias3','Codigo',Val(VL:&j))))
+*          Endif
+*          ACT(XX:&j, Copy(Val(W:&j), 1, 200))
+*          MESSAGEBOX ('Procesando campo VIASPAGO'~ Val(YY:&J)~ 'NroTrans'~ Val(t:&J)     )
+*     Proximo
+
+*     Recorrer&i 1,FAC  
+*       If Val(k:&i)=0 
+*          (.'LIQUIDTEST'.)          *******************************
+*           SQL.EXEC
+*           scn (X:3, 1)
+*       Endif
+*     Proximo
+
+      ** CONDICIONES PARA PODER LIQUIDAR **
+      * FILA F: La cuenta no vacia y vehiculo= Cliente de la cuenta y ( transaccion <> CREDIT|DEBIT  o entidad=Comitente de la cuenta)
+      * FILA G: Transaccion no vacia
+      * FILA H: ( Transaccion=DEBITO|CREDIT|EMI_CH|COMP y cuenta vacia ) o ( Transaccion=TRANSF|C_4090 y ( (cantidad<0 y no vacia la cuenta y entidad=Cliente de la 
+
+******************
+* Tool Test05
+****************** 
+MESSAGEBOX ('Test05: Fin de Proceso - Total leido  '~ Val(X:2)~ 'Total Grabado  '~ Val(X:3))
+
+*MESSAGEBOX ('x:2  '~ Val(X:2))
+*MESSAGEBOX ('Dialogo.Fecha1  '~ Dialogo.Fecha1 )
+
+

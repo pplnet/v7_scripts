@@ -1,0 +1,129 @@
+﻿* CUOTASFRN - Calculo de CUOTAS de FRN y Sindicados Para cuotas.  
+
+SQL.ADD("SELECT O.TipoOp,O.RB8,O.Cantidad,O.ImpGastos2,O.TotalAux1,O.TasaImp1,O.RB7,O.RB9,O.CB10,C.* FROM "~DBO~".OPERACIONES O,"~DBO~".CUOTAS C ")
+SQL.ADD(" where O.NrOperacion=C.NrOperacion ")
+SQL.ADD("  and "~val(z2)~" ")
+
+ACN(z3,0)
+Recorrer SQL
+  Message("Cuota Nro "~Fstr(FBN['NrCuota'],0,0)~" Operacion Nro "~FBN['NrOperacion']~" ...")
+
+  If val(z3)=0
+     ACN(z3,1)
+     If FBN['NrCuota']=1
+        *-- Vn del periodo
+        ACN (aa3,FBN['Cantidad'])
+     Else 
+        *-- Vn del periodo
+        ACN (aa3,FBN['Cantidad2'])
+     EndIf
+
+     *-- TASA IVA A20 WH A21  Imp.Interes A40
+     ACN (aa20,FBN['ImpGastos2'])
+     ACN (aa21,FBN['TotalAux1'])
+     ACN (aa40,FBN['TasaImp1'])
+
+     *-- UT IVA A24 WH A25  
+     ACT (aa24,FBN['RB7'])
+     ACT (aa25,FBN['RB9'])
+
+     *-- LOCAL O EXTRANJERO
+     ACT (aa26,FBN['CB10'])
+  EndIf
+
+  *-- Calculo CUOTAS
+  * AA4 es el interes
+  * AA11 es el interes total
+  * AA5 es el monto
+  * AA6 es el monto total
+  * AA7 es el importe iva
+  * AA8 es el importe wh
+  * AA9 es el importe de amortizacion del per¦odo
+  * AA30 Y 31 360 O 365 PARA IVA Y WH
+  * AA41 : Importe de Impuesto Interes 
+  acn(aa41,0)
+
+  If Incluido(FBN['TipoOp'],'MMFIMV|MMSIMV')
+     ACN(aa7,0)
+     ACN(aa8,0)
+
+     * PARA LOCAL O EXTRANJERO
+     IF VAL(aa20)<>0
+        * Si la Tasa de IVA ES Positiva 
+        * PARA UT
+        IF EQSTR(VAL(aa24),'0')
+           ACN(aa30,360)
+        ELSE
+           ACN(aa30,365)
+        ENDIF
+        ACN (aa7, ((val(aa3)*FBN['Tasa2']/100)*FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],FBN['RB8']+1)) * (VAL(aa20)/100))
+     EndIf
+
+     * Extranjero
+     IF EQSTR (val(aa26), '1')
+        IF EQSTR(VAL(aa25),'0')
+           ACN(aa31,360)
+        ELSE
+           ACN(aa31,365)
+        ENDIF
+        ACN (aa8, ((val(aa3)*FBN['Total6']/100)*FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],FBN['RB8']+1)) * (VAL(aa21)/100))
+     ENDIF
+  EndIf
+
+  *** calcula el importe de amortizacion del periodo
+  acn(aa9,FBN['Cantidad']* FBN['Tasa1']/100)
+
+  *-- INTERES
+  If val(a15)<>1
+     *- Calcula el Importe de Interes 
+     acn (aa4, val(aa3) * ((FBN['Precio2']+FBN['Precio4'])/100) * FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],FBN['RB8']+1))
+  Else 
+     acn (aa4,FBN['Cantidad3'])
+  EndIf
+
+  *-- MONTO
+  ACN (aa5, val(aa9) +VAL(aa4))
+
+  If Incluido(FBN['TipoOp'],'MMFIMV|MMSIMV')
+     IF VAL(aa40)<>0 
+        * Si la Tasa de Impuesto Extranjero es >0
+        ACN (aa41, val(aa4)*(VAL(aa40)/100) )
+     EndIf
+
+     *-- INTERES TOTAL
+     acn (aa11, val(aa4) + val(aa8) + val(aa41) )
+
+     *-- MONTO TOTAL
+     ACN (aa6, val(aa9) +VAL(aa11))
+  EndIf
+
+  SQL.ADD("Update "~DBO~".CUOTAS SET ")
+  SQL.ADD(" Cantidad3= "~Fstr(VAL(aa4),0,2)~", ")
+
+  If Incluido(FBN['TipoOp'],'MMFIMV|MMSIMV')
+     SQL.ADD(" Cantidad4= "~Fstr(VAL(aa9),0,2)~", ")
+  Else  
+      SQL.ADD(" Cantidad1= "~Fstr(VAL(aa9),0,2)~", ")
+  EndIf
+
+  If Incluido(FBN['TipoOp'],'MMFIMV|MMSIMV')  
+     SQL.ADD(" Cantidad5= "~Fstr(VAL(aa11),0,2)~", ")
+     SQL.ADD(" Precio1= "~Fstr(VAL(aa7),0,2)~", ")
+     SQL.ADD(" Precio6= "~Fstr(VAL(aa7),0,2)~", ")
+     SQL.ADD(" Precio3= "~Fstr(VAL(aa8),0,2)~", ")
+     SQL.ADD(" Precio7= "~Fstr(VAL(aa8),0,2)~", ")  
+     SQL.ADD(" Total9= "~Fstr(VAL(aa41),0,2)~", ")
+     SQL.ADD(" Total1= "~Fstr(VAL(aa6),0,2)~", ")  
+  EndIf
+
+  SQL.ADD(" Total2= "~Fstr(VAL(aa5),0,2)~" ")
+  SQL.ADD(" WHERE NrOperacion='"~FBN['NrOperacion']~"' ")
+  SQL.ADD(" AND NrCuota="~FStr(FBN['NrCuota'],0,0)~" ")
+  SQL.NEW
+  SQL.EXEC
+
+  *-- amortiza
+  ACN(aa3, val(aa3)-VAL(aa9))
+Proximo
+
+

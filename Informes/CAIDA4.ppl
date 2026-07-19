@@ -1,0 +1,303 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Cliente1   : "Entidad"           ;;;
+  Vehiculo1  : "Vehiculo" ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Especie1   : "Especie"           ;;;
+  TipoOp1    : "Tipo Op."          ;;;
+  Radio1     : "Expresado|ARP|USD" ;;;;;;;;;0
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   else
+      ACT(zz6,Dialogo.Vehiculo1~"|")
+   endif
+else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+   EndIf
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+
+SetFilaActual(4)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,1)
+
+ACT(a:FAC,"Caida Abierta por Banco")
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(5)
+ACN(w1,FAC)
+
+if NoVacio(Dialogo.Cliente1)
+  ACT(a:FAC+1, 'Entidad : '~Dialogo.Cliente1~'  '~BuscarCampo('Clientes','RazonSocial','Codigo',Dialogo.Cliente1))
+else
+  ACT(a:FAC+1, 'Entidad : Todos')
+endif
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(a:FAC+2, 'Vehiculo : '~Dialogo.Vehiculo1~'  '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+else
+  ACT(a:FAC+2, 'Vehiculo : Todos')
+endif
+if NoVacio(Dialogo.Especie1)
+  ACT(a:FAC+3, 'Especie : '~Dialogo.Especie1~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie1))
+ else
+  ACT(a:FAC+3, 'Especie : Todos')
+endif
+if NoVacio(Dialogo.TipoOp1)
+  ACT(a:FAC+4, 'Tipo Op.: '~Dialogo.TipoOp1~'  '~BuscarCampo('TiposOperacion','Nombre','Codigo',Dialogo.TipoOp1))
+ else
+  ACT(a:FAC+4, 'Tipo Op.: Todos')
+endif
+act(a:fac+5,'Expresado en '~iif(Dialogo.Radio1=0,'ARP','USD'))
+SetFont(a:fac..N:FAC+6,2)
+
+SetFilaActual(FAC+7)
+act(a:fac,'Totales')
+
+SetFilaActual(FAC+1)
+
+act(a:fac,'Fecha')
+act(b:fac,'Plazo')
+
+SetFont(a:FAC..c:FAC,2)
+acn(c:400,fac)
+
+SetFilaActual(FAC+1)
+
+*** Arma la tabla de dias ***
+Recorrer&i 1, 365
+   if EsHabil(Fsys+&i-1)
+      acd(a:fac+&i-1, Fsys+&i-1)
+      acn(b:fac+&i-1, &i-1)
+      FormatoCeldas(b:fac+&i-1..b:fac+&i-1, Exe('F0'))
+   else
+      AgregarMarco(a:fac+&i-1..a:fac+&i-1,2,0)
+   endif
+Proximo
+
+acn(d:400,fac)
+
+SQL.ADD("Select O.Cliente1, O.Especie, ")
+SQL.ADD(" C.Fecha3 Vto,  ")
+SQL.ADD(" C.Total1 Cant, O.NrOperacion, 'CUO' as Tipo ")
+SQL.ADD(" from "~DBO~".CUOTAS C, "~DBO~".OPERACIONES  O ")
+SQL.ADD("where O.NrOperacion = C.NrOperacion ")
+
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" and O.Cliente1 = '"~Dialogo.Cliente1~"'")
+endif
+
+SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+
+if NoVacio(Dialogo.TipoOp1)
+   SQL.ADD(" and O.TipoOp = '"~Dialogo.TipoOp1~"'")
+else
+   SQL.ADD(" and O.TipoOp In ('MMON','MMONM','MMFIMV','MMFRNP') ")
+endif
+
+SQL.ADD(" and C.Fecha3 >= '"~IdxDate(Fsys)~"' ")
+SQL.ADD(" and C.Fecha3 <= '"~IdxDate(Fsys+365)~"' ")
+SQL.ADD(" Union ")
+*-----------------------------------------------------------------------------
+
+SQL.ADD("Select O.Cliente1, O.Especie, ")
+SQL.ADD(" C.Fecha2 Vto,  ")
+SQL.ADD(" C.Total1 Cant, O.NrOperacion, 'CUO' as Tipo ")
+SQL.ADD(" from "~DBO~".CUOTAS C, "~DBO~".OPERACIONES  O ")
+SQL.ADD("where O.NrOperacion = C.NrOperacion ")
+
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" and O.Cliente1 = '"~Dialogo.Cliente1~"'")
+endif
+
+SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+
+if NoVacio(Dialogo.TipoOp1)
+   SQL.ADD(" and O.TipoOp = '"~Dialogo.TipoOp1~"'")
+else
+   SQL.ADD(" and O.TipoOp In ('MMPCL','MMPCLM','MMPCOS','MMPE','MMPEM','MMPI','MMPIM','MMPOSM','MMPLME','MMPSI','MMSIMV','MMLEAS') ")
+endif
+SQL.ADD(" and C.Fecha2 >= '"~IdxDate(Fsys)~"' ")
+SQL.ADD(" and C.Fecha2 <= '"~IdxDate(Fsys+365)~"' ")
+SQL.ADD(" Union ")
+*-----------------------------------------------------------------------------
+* Operaciones con FechaVto y TotalNetoCli1
+* 
+SQL.ADD("Select O.Cliente1, O.Especie, ")
+SQL.ADD(" O.FechaVto2 Vto,  ")
+SQL.ADD(" O.TotalNetoCli1 Cant, O.NrOperacion, 'OPE' as Tipo ")
+SQL.ADD(" from "~DBO~".OPERACIONES  O ")
+SQL.ADD("where O.TipoOp In ('MMON','MMFRNP') ")
+
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" and O.Cliente1 = '"~Dialogo.Cliente1~"'")
+endif
+SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+if NoVacio(Dialogo.TipoOp1)
+   SQL.ADD(" and O.TipoOp = '"~Dialogo.TipoOp1~"'")
+endif
+SQL.ADD(" and O.FechaVto2 >= '"~IdxDate(Fsys)~"' ")
+SQL.ADD(" and O.FechaVto2 <= '"~IdxDate(Fsys+365)~"' ")
+SQL.ADD(" Union ")
+*-----------------------------------------------------------------------------
+* Operaciones con FechaVto y TotalNetoCli1
+* 
+SQL.ADD("Select O.Cliente1, O.Especie, ")
+SQL.ADD(" O.FechaVto Vto,  ")
+SQL.ADD(" O.TotalNetoCli1 Cant, O.NrOperacion, 'OPE' as Tipo ")
+SQL.ADD(" from "~DBO~".OPERACIONES  O ")
+SQL.ADD("where O.TipoOp In ('MMPCL','MMPCOS','MMPE','MMPI','MMPSI') ")
+
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" and O.Cliente1 = '"~Dialogo.Cliente1~"'")
+endif
+SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+if NoVacio(Dialogo.TipoOp1)
+   SQL.ADD(" and O.TipoOp = '"~Dialogo.TipoOp1~"'")
+endif
+SQL.ADD(" and O.FechaVto >= '"~IdxDate(Fsys)~"' ")
+SQL.ADD(" and O.FechaVto <= '"~IdxDate(Fsys+365)~"' ")
+SQL.ADD(" Union ")
+*-----------------------------------------------------------------------------
+* Operaciones con FechaVto y TotalBrutoCli1
+* 
+SQL.ADD("Select O.Cliente1, O.Especie, ")
+SQL.ADD("O.FechaVto Vto,  ")
+SQL.ADD("O.TotalBrutoCli1 Cant, O.NrOperacion, 'OPE' as Tipo ")
+SQL.ADD(" from "~DBO~".OPERACIONES  O ")
+SQL.ADD("where O.TipoOp In ('MMPLME') ")
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" and O.Cliente1 = '"~Dialogo.Cliente1~"'")
+endif
+SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+if NoVacio(Dialogo.TipoOp1)
+   SQL.ADD(" and O.TipoOp = '"~Dialogo.TipoOp1~"'")
+endif
+SQL.ADD(" and O.FechaVto >= '"~IdxDate(Fsys)~"' ")
+SQL.ADD(" and O.FechaVto <= '"~IdxDate(Fsys+365)~"' ")
+SQL.ADD(" Union ")
+SQL.ADD("Select O.Cliente1, O.Especie, ")
+SQL.ADD("C.Fecha1 Vto,  ")
+SQL.ADD("C.Importe4 Cant, O.NrOperacion,Tipo  ")
+SQL.ADD(" from "~DBO~".COMISIONES2 C, "~DBO~".OPERACIONES  O ")
+SQL.ADD("where O.NrOperacion = C.NrOperacion ")
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" and O.Cliente1 = '"~Dialogo.Cliente1~"'")
+endif
+SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+if NoVacio(Dialogo.TipoOp1)
+   SQL.ADD(" and O.TipoOp = '"~Dialogo.TipoOp1~"'")
+else
+   SQL.ADD(" and ( O.TipoOp In ('MMON','MMONM','MMPCL','MMPCLM','MMPCOS','MMPE','MMPEM','MMPI','MMPIM','MMPOSM','MMPLME','MMPSI','MMSIMV','MMFRNP','MMFIMV','MMLEAS') ")
+   SQL.ADD(" or ( O.TipoOp In ('MMP') and Tipo='4')) ")
+endif
+SQL.ADD(" and  C.Fecha1 >= '"~IdxDate(Fsys)~"' ")
+SQL.ADD(" and  C.Fecha1 <= '"~IdxDate(Fsys+365)~"' ")
+SQL.ADD("order by 1, 3 ")
+
+*** b:400 valor de la columna ***
+acn(b:400,2)
+ACT(X:400,' ')
+
+Recorrer SQL
+  Message(fbn['Cliente1']~' '~fbn['Vto']~'  '~fbn['Cant']~' '~fbn['NrOperacion'])
+
+  if Not EqStr(val(x:400),fbn['Cliente1'])
+     scn(b:400,1)
+     act(x:400,fbn['Cliente1'])
+     act(val(b:400):val(c:400),fbn['Cliente1'])
+     SetFont(val(b:400):val(c:400)..val(b:400):val(c:400),2)
+     AgregarMarco(val(b:400):val(c:400)..val(b:400):val(c:400),2,0,Exe('COLOR'))
+  endif
+
+  if Dialogo.Radio1 = 0
+     if EqStr(fbn['Especie'],'ARP')
+        acn(e:400,fbn['Cant'])
+     else
+        acn(e:400,fbn['Cant']*CotizacionC(fbn['Especie'],,,,Fsys,1,SI,'ARP'))
+     endif
+  else
+     if EqStr(fbn['Especie'],'USD')
+        acn(e:400,fbn['Cant'])
+     else
+        acn(e:400,fbn['Cant']*CotizacionC(fbn['Especie'],,,,Fsys,1,SI,'USD'))
+     endif
+  endif
+
+  scn(val(b:400):val(d:400)+fbn['Vto']-Fsys,val(e:400)/1000)
+  * MessageBox(fbn['Cliente1']~' '~fbn['Vto']~'  '~fbn['Cant']~' '~val(val(b:400):val(d:400)+fbn['Vto']-Fsys))
+  acl(val(b:400):val(d:400)+fbn['Vto']-Fsys,'CAIDO2',Cliente1=Val(val(b:400):val(c:400)),Vehiculo1=Dialogo.Vehiculo1,Especie1=Dialogo.Especie1,TipoOp1=Dialogo.TipoOp1,Fecha1=val(a:val(d:400)+fbn['Vto']-Fsys),Especie2=iif(Dialogo.Radio1=0,'ARP','USD') )
+proximo
+
+act(val(b:400)+1:val(d:400)-1,'Total')
+SetFont(val(b:400)+1:val(d:400)-1..val(b:400)+1:val(d:400)-1,2)
+AgregarMarco(a:val(d:400)-1..val(b:400)+1:val(d:400)-1,2,0,Exe('COLOR'))
+
+Recorrer&i 1, 365
+   if EsHabil(Fsys+&i-1)
+      Recorrer&j 3, val(b:400)
+         scn(val(b:400)+1:val(d:400)+&i-1,val(&j:val(d:400)+&i-1))
+
+         * Total por Banco
+         scn(&j:val(c:400)-1,val(&j:val(d:400)+&i-1))
+      Proximo
+   EndIf
+Proximo
+
+Recorrer&i 3, val(b:400)+1
+  ACO(&i,12)
+Proximo
+
+Recorrer&i 1, 365
+   * Total Genera
+   scn(val(b:400)+1:val(c:400)-1,val(val(b:400)+1:val(d:400)+&i-1) )
+Proximo
+
+SetFont(a:val(d:400)..val(b:400)+1:val(d:400)+365,1)
+SetFont(a:val(c:400)-1..val(b:400)+1:val(c:400)-1,2)
+
+ACO(1,15)
+ACO(2,3)
+FijarCol(3)
+FijarFila(val(d:400))
+Impresion(1,2)
+
+SetFilaActual(val(d:400)+365+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(val(b:400)+1:FAC)
+*RangoTitulo(a1..k:8,36)
+RangoTitulo(a1..val(b:400)+1:FAC, 13)

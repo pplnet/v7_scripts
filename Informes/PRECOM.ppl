@@ -1,0 +1,215 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Vehiculo1  : "Vehiculo"                          ;1;1;;NO;;;;;VAR('VEHICULODE')
+  Radio1     : "Tipo Cliente|"~VAR('LABEL')~"|Caja|Todos" ;2;1;;NO;NO;;;;2;
+  Entero1    : "Trimestre"                         ;4;1;;Dialogo.Radio2=0;Dialogo.Radio2=0;Dialogo.Entero1>=1 y Dialogo.Entero1<=4;'Nro. de Trimestre Incorrecto';NO;IIf(Trunc2(Mes(Fsys)/3.1)=0,4,Trunc2(Mes(Fsys)/3.1))
+  Entero4    : "Mes"                               ;4;1;;Dialogo.Radio2=1;Dialogo.Radio2=1;Dialogo.Entero4>=1 y Dialogo.Entero4<=12;'Nro. de Mes Incorrecto';NO;Mes(Fsys)
+  Entero2    : "Anio"                              ;4;2;;;;Dialogo.Entero1>=0;'Anio Incorrecto !!!';NO;IIf(Trunc2(Mes(Fsys)/3.1)=0,Anio(Fsys)-1,Anio(Fsys))
+  Fecha2     : "F.Hasta"                           ;5;1;;;;Dialogo.Fecha2<=Habiles(FSys,1);"Fecha Hasta Incorrecta";NO;;IIf(Dialogo.Radio2=0,IIf(Dialogo.Entero1<>Trunc2(Dialogo.Entero4/3.1)+1,FinDeMes(Fecha('01/'~Pad0(Fstr(Dialogo.Entero1*3,0,0),2)~'/'~Fstr(Dialogo.Entero2,4,0)),SI),IIF(Fsys=FinDeMes(Fsys),FinDeMes(Fsys,SI),Fsys)),IIF(Mes(Fsys)<>Dialogo.Entero4 o Anio(Fsys)<>Dialogo.Entero2,FinDeMes(Fecha('01/'~Pad0(Fstr(Dialogo.Entero4,0,0),2)~'/'~Fstr(Dialogo.Entero2,4,0)),SI),Fsys))
+  Radio2     : "Tipo|Trimestral|Mensual|"          ;;;;NO;;;;;1
+** FJL 15/11/21 - Da error - REVISAR
+  *  ListaTabla1: 'Clientes'                          ;7;1;;;;;;;;;;;;IIF(Dialogo.Radio1<>2," "~IIF(Dialogo.Radio1=0," TipoCliente='"~VAR('CLISUD')~"' or TipoCliente Is Null"," TipoCliente='"~VAR('CLICAJA')~"' ")),"1=1" );'Codigo' ; 'Codigo;RazonSocial' ; 'vCLIENTES01'
+FinDialogo
+
+If Not OK
+   Cancelar
+Endif
+
+If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+  Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+Endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(4)
+
+ACT(a:FAC, "PreLiquidacion de Comisiones sobre Saldos ")
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(5)
+
+ACT(a:fac+1, 'Vehiculo : '~Dialogo.Vehiculo1)
+ACT(a:fac+2, IIF(Dialogo.Radio2=0,'Trimestre: '~Fstr(Dialogo.Entero1,0,0),'Mes: '~Fstr(Dialogo.Entero4,0,0))~'  '~'Fecha Hasta : '~Dialogo.Fecha2)
+If Dialogo.Radio1=0
+   ACT(a:fac+3, 'Tipo Cliente: '~VAR('LABEL') )
+Else
+   If Dialogo.Radio1=1
+      ACT(a:fac+3, 'Tipo Cliente: CAJA')
+   Else
+      ACT(a:fac+3, 'Tipo Cliente: TODOS')
+   EndIf
+EndIf
+ 
+SetFont(a:fac+1..i:fac+4,2)
+SetFilaActual(FAC+6)
+
+ACT(a:FAC, "Cliente")
+ACT(b:FAC, "Razon Social")
+ACT(c:FAC, "Sucursal")
+ACT(d:FAC, "Oficial")
+ACT(e:FAC, "Nombre")
+ACT(f:FAC, "Cuenta")
+ACT(g:FAC, "Moneda")
+ACT(h:FAC, "Comision")
+ACT(i:FAC, "Porc. Iva")
+ACT(j:FAC, "Iva")
+ACT(k:FAC, "Total")
+ACT(l:FAC, "NrTrans")
+ACT(m:FAC, "Estado")
+
+AgregarMarco(a:fac..l:fac,2,0,Exe('COLOR6'))
+SetFont(a:fac..l:fac,2)
+AlinearCeldas(a:fac..l:fac,'C') 
+
+*-Seleccion de tipos de transacciones 'CUSSAl' segun un cliente y un oficial. 
+SQL.ADD("SELECT DISTINCT T.* , 'PENDIENTE' Estado, C.RazonSocial, C.Sucursal, O.Descripcion FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVPENDIENTES M, "~DBO~".OFICIALESCUENTA O, "~DBO~".CLIENTES C  " )
+SQL.ADD("WHERE T.TipoTr2='CUSSAL' ")
+If Dialogo.Radio2=0
+   SQL.ADD("and T.Precio1="~Fstr(Dialogo.Entero1,0,0)~"  ")
+Else
+   SQL.ADD("and T.Precio1="~Fstr(Dialogo.Entero4,0,0)~"  ")
+EndIf
+SQL.ADD("and T.Precio2="~Fstr(Dialogo.Entero2,0,0)~" ")
+SQL.ADD("and (T.Fecha1='"~IdxDate(Dialogo.Fecha2)~"' or T.CB1='1' ) ")
+SQL.ADD("and T.NrTrans = M.NrOperacion ")
+** FJL 16/11/21 - El =* da error - Ver como reemplazarlo
+*SQL.ADD("and O.Codigo=*T.Ley1 ")
+SQL.ADD("and O.Codigo=T.Ley1 ")
+SQL.ADD("and T.Cliente1=C.Codigo ")
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("and T.Vehiculo1='"~Dialogo.Vehiculo1~"' ")
+EndIf
+If NoVacio(Dialogo.Listatabla1)
+   SQL.ADD("and T.Cliente1 in ("~Pipe2Comillas(Dialogo.Listatabla1)~") ")
+EndIf
+IF Dialogo.Radio1 = 0
+   *- Solamente Clientes SUDAMERIS
+   SQL.ADD("and   (C.TipoCliente = '"~VAR('CLISUD')~"' or ")
+   SQL.ADD("    C.TipoCliente IS NULL or ")
+   SQL.ADD("    C.TipoCliente = '      ')")
+EndIf
+IF Dialogo.Radio1 = 1
+   *- Solamente Clientes CAJA
+   SQL.ADD(" and C.TipoCliente = '"~VAR('CLICAJA')~"'")
+EndIf
+SQL.ADD("UNION ALL ")
+SQL.ADD("SELECT DISTINCT T.*, 'EJECUTADO' Estado, C.RazonSocial, C.Sucursal, O.Descripcion FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVEJECUTADOS M, "~DBO~".OFICIALESCUENTA O, "~DBO~".CLIENTES C ")
+SQL.ADD("WHERE T.TipoTr2='CUSSAL' ")
+If Dialogo.Radio2=0
+   SQL.ADD("and T.Precio1="~Fstr(Dialogo.Entero1,0,0)~"  ")
+Else
+   SQL.ADD("and T.Precio1="~Fstr(Dialogo.Entero4,0,0)~"  ")
+EndIf
+SQL.ADD("and T.Precio2="~Fstr(Dialogo.Entero2,0,0)~" ")
+SQL.ADD("and (T.Fecha1='"~IdxDate(Dialogo.Fecha2)~"' or T.CB1='1' ) ")
+SQL.ADD("and T.NrTrans = M.NrOperacion ")
+** FJL 16/11/21 - El =* da error - Ver como reemplazarlo
+*SQL.ADD("and O.Codigo=*T.Ley1 ")
+SQL.ADD("and O.Codigo=T.Ley1 ")
+SQL.ADD("and T.Cliente1=C.Codigo ")
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("and T.Vehiculo1='"~Dialogo.Vehiculo1~"' ")
+EndIf
+*- Para un cliente dado
+If NoVacio(Dialogo.Listatabla1)
+   SQL.ADD("and T.Cliente1 in ("~Pipe2Comillas(Dialogo.Listatabla1)~") ")
+EndIf
+IF Dialogo.Radio1 = 0
+   *- Solamente Clientes SUDAMERIS
+   SQL.ADD(" and  (C.TipoCliente = '"~VAR('CLISUD')~"' or ")
+   SQL.ADD("    C.TipoCliente IS NULL or ")
+   SQL.ADD("    C.TipoCliente = '      ')")
+EndIf
+IF Dialogo.Radio1 = 1
+   *- Solamente Clientes CAJA
+   SQL.ADD("and C.TipoCliente = '"~VAR('CLICAJA')~"' ")
+EndIf
+SQL.ADD(" ORDER BY T.Ley1,T.Especie,T.Cliente1")
+
+
+Recorrer SQL
+
+*- Contenido de celdas:
+*-                     z2 = Total por IVA 
+*-                     z3 = Total por Comision
+*-                     z4 = Flags 
+*-                     z5 = Iva+Comision
+      
+If Val(z4)<0
+   ACT(a:FAC,"Total General ")
+   ACN(e:FAC,Val(z3))
+   ACN(e:FAC,Val(z2))
+   SetFont(a:fac..o:fac,2)
+   ACN(z2,0)
+   ACN(z3,0)
+   IFA
+else
+   ACN(z4,1)
+EndIf
+             
+ACT(a:fac,FBN['Cliente1'])
+ACT(b:fac,FBN['RazonSocial'])
+ACT(c:fac,FBN['Sucursal'])
+ACT(d:fac,FBN['Ley1'])
+ACT(e:fac,FBN['Descripcion'])
+ACT(f:fac,FBN['Cuenta1'])
+ACT(g:fac,FBN['Especie'])
+ACN(h:fac,FBN['Cantidad6'])
+ACN(z5,FBN['Cantidad6'])
+ACN(i:fac,FBN['Cambio5'])
+ACN(j:fac,FBN['Cantidad3'])
+ACN(z6,FBN['Cantidad3'])
+SCN(z5,Val(z:6))
+ACN(k:fac,Val(z:5))
+ACT(l:fac,FBN['NrTrans'])
+aclt(l:fac,FBN['NrTrans'])
+ACT(m:fac,FBN['Estado'])      
+ACN(z5,0)
+ACN(z6,0)
+    
+SetFont(a:fac..l:fac,1)
+AlinearCeldas(a:fac..a:fac,'C')
+AlinearCeldas(c:fac..d:fac,'C')    
+AlinearCeldas(f:fac..g:fac,'C')
+AlinearCeldas(l:fac..l:fac,'C')
+
+*- Sumatoria del Total por IVA
+    SCN(z2,val(j:fac)) 
+
+*- Sumatoria del Total de Comisi:n
+    SCN(z3,Val(h:fac))
+       
+Proximo
+
+IFA
+ACT(a:FAC,"Total General ")
+ACN(h:FAC,Val(z3))
+ACN(j:FAC,Val(z2))
+SetFont(a:fac..l:fac,2)
+ACN(z2,0)
+ACN(z3,0)
+SetFont(a:fac..l:fac,2)
+IFA
+
+ACO(1,10)
+ACO(2,23)
+ACO(3,5)
+ACO(4,5)
+ACO(5,15)
+ACO(6,9)
+ACO(7,7)
+ACO(8,7)
+ACO(9,7)
+ACO(10,7)
+ACO(11,7)
+ACO(12,7)
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:FAC,2)
+LimitesVision(l:fac)
+SetPrintFit(3,90)
+

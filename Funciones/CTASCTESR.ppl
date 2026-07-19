@@ -1,0 +1,128 @@
+﻿ACN(fa1, Val(fi2)+4)
+ACN(fa2, Val(fi4))
+
+***---AA:1 = Capital $
+***---AA:2 = Intereses Devengados $
+***---AA:3 = Total $
+***---AA:4 = Capital U$S
+***---AA:5 = Intereses Devengados U$S
+***---AA:6 = Total U$S
+
+Recorrer&k 1, 15
+    ACN(AA:&k, 0)
+Proximo
+
+
+*- Inicializo 
+ACT(es1, '')
+ACN(fo1, 0)
+ACN(fo2, 0)
+ACN(fo3, 0)
+ACN(fo4, 0)
+ACN(fo5, 0)
+ACN(fo6, 0)
+ACN(fo7, 0)
+
+
+SQL.ADD("SELECT O.Especie, O.Cantidad ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES  O ")
+SQL.ADD("WHERE  O.FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and  O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and  O.TipoOp In ('MMCCR') ")
+SQL.ADD("       and  O.Vehiculo1 In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+IF Dialogo.Radio2 = 0
+    SQL.ADD(" AND O.FechaVto <= '"~IdxDate(Dialogo.Fecha1+365)~"' ")
+ENDIF
+IF Dialogo.Radio2 = 1
+    SQL.ADD(" AND O.FechaVto > '"~IdxDate(Dialogo.Fecha1+365)~"' ")
+ENDIF
+If Dialogo.Radio2=0
+   SQL.ADD("UNION ALL")
+   SQL.ADD("SELECT O.Especie, 0 Cantidad ")
+   SQL.ADD("FROM   "~DBO~".OPERACIONES  O ")
+   SQL.ADD("WHERE  O.FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+   SQL.ADD("       and  O.FechaVto > '"~IdxDate(Dialogo.Fecha1)~"' ")
+   SQL.ADD("       and  O.TipoOp In ('MMCCR') ")
+   SQL.ADD("       and  O.Vehiculo1 In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+SQL.ADD(" Order By 1 ")
+
+Recorrer SQL
+   *- Impresion de totales por especie
+   IF Not EqStr(val(es1),FBN['Especie']) y NoVacio(val(es1))
+      (.'TOTALRESUA'.)
+      ACN(fo1,0)
+   EndIf
+
+   *- Corte de Control Por Especie para invocar al Informe
+   IF Not EqStr(val(es1),FBN['Especie'])
+      ACT(es1,FBN['Especie'])
+
+      ACN(ra2,IIf(Not EqStr(VAR('MONELOCA'),FBN['Especie']),1,0))
+      ACN(pr1,1)
+
+      If Not EqStr(VAR('MONELOCA'),FBN['Especie']) y Not EqStr(VAR('MONEEXTR'),FBN['Especie'])
+         ACN(pr1,CotizacionC(FBN['Especie'],,,, Dialogo.Fecha1, 1, SI, Var('MONEEXTR')) )
+      EndIf
+
+      *- Los intereses devengados los muestra solamente en el Corto
+      If Dialogo.Radio2<>1 
+         LinkearHoja('CCREMA', 1, Fecha1 = PriDeMes(PriDeMes(PriDeMes(Dialogo.Fecha1,SI)-1,SI)-1,SI), Fecha2 = Dialogo.Fecha1, Especie1 = FBN['Especie'], Cliente1 = '', Radio4 = Dialogo.Radio1, Vehiculo1 = '', Precio1 = 1, Lista1 = Dialogo.Lista1, Radio1 = Val(ra2))
+         
+         *- fo2: Intereses
+         ACN(fo2,LinkH(1,fo2))
+
+         *CerrarHoja('CCREMA', 1, Fecha1 = PriDeMes(PriDeMes(PriDeMes(Dialogo.Fecha1,SI)-1,SI)-1,SI), Fecha2 = Dialogo.Fecha1, Especie1 = FBN['Especie'], Cliente1 = '', Radio4 = Dialogo.Radio1, Vehiculo1 = '', Precio1 = 1, Lista1 = Dialogo.Lista1, Radio1 = Val(ra2))
+      Endif
+
+      ACN(fo3,0)
+      ACN(fo4,0)
+         
+      *- La Tasa y el Plazo Promedio solamente se muestran en el Corto+Largo 
+      If Dialogo.Radio2 = 2   
+         LinkearHoja('INVFO1', 1, Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, Especie1=FBN['Especie'], Radio2=val(ra2),Precio1=val(pr1), Especie2=IIF(val(ra2)=0,'ARP','USD'), Radio3=4, Lista2 = 'MMCCR')
+            
+         *- fo3:Tasa Promedio fo4:Plazo Promedio 
+                     
+         ACN(fo3,LinkH(1,fo1)*LinkH(1,fo3))
+         ACN(fo4,LinkH(1,fo1)*LinkH(1,fo4))
+
+         CerrarHoja('INVFO1', 1, Fecha1=Dialogo.Fecha1, Lista1=Dialogo.Lista1, Especie1=FBN['Especie'], Radio2=val(ra2),Precio1=val(pr1), Especie2=IIF(val(ra2)=0,'ARP','USD'), Radio3=4, Lista2 = 'MMCCR')
+      Endif
+   EndIf
+
+   SCN(fo1,FBN['Cantidad']*Val(pr1))
+Proximo
+
+If NoVacio(val(es1))
+   (.'TOTALRESUA'.)
+   ACN(fo1,0)
+
+   (.'TOTALRES2A'.)
+EndIf
+
+
+SetFont(b:Val(fa1)..q:Val(fa1), 1)
+FormatoCeldas(e:Val(fa1), Exe('F5'))
+FormatoCeldas(j:Val(fa1), Exe('F5'))
+FormatoCeldas(f:Val(fa1), Exe('F2'))
+FormatoCeldas(k:Val(fa1), Exe('F2'))
+FormatoCeldas(b:Val(fa1)..d:Val(fa1), Exe('F2'))
+FormatoCeldas(g:Val(fa1)..i:Val(fa1), Exe('F2'))
+FormatoCeldas(l:Val(fa1)..q:Val(fa1), Exe('F2'))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

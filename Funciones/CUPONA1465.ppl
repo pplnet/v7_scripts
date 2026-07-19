@@ -1,0 +1,205 @@
+﻿ACN(FI:1, 1)
+SQL.ADD(" Select O.NrOperacion, O.TipoOp, O.Cantidad, O.Cliente1, O.Cuenta1, O.FechaOp, ")
+SQL.ADD(" O.FechaVto, O.Mercado, O.Vehiculo1,O.Precio1, O.DiasAnio  ")
+SQL.ADD(" From "~DBO~".OPERACIONES O ")
+SQL.ADD(" Where O.TipoOp IN ('TIDE','TIPO','TICO','TICT') ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" AND O.FechaVto > '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" AND O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND O.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD(" AND O.Cupon1 = '"~Fstr(Dialogo.Entero1, 0, 0)~"'  ")
+***---Que ya no se hayan procesado
+SQL.ADD(" AND O.Cupon1 = (Select Distinct M.Cupon From "~DBO~".MOVPENDIENTES M ")
+SQL.ADD("                 Where O.NrOperacion = M.NrOperacion  ")
+SQL.ADD("                 AND M.Especie = O.Especie) ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD(" AND O.Cliente1 IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+Recorrer SQL
+    DFA
+    ACT(UA:Val(FI:1), fbn('NrOperacion'))
+    ACT(UB:Val(FI:1), fbn('TipoOp'))
+    ACD(UC:Val(FI:1), fbn('FechaOp'))
+    ACD(UD:Val(FI:1), fbn('FechaVto'))
+    ACT(UE:Val(FI:1), fbn('Cliente1'))
+    ACT(UF:Val(FI:1), fbn('Cuenta1'))
+    if Incluido(fbn('TipoOp'),'TIDE|TICT')
+       ACN(UG:Val(FI:1), fbn('Cantidad'))
+    else
+       ACN(UG:Val(FI:1), fbn('Cantidad')*(-1))
+    endif
+    ACN(UH:Val(FI:1), 1)
+    ACT(UI:Val(FI:1), fbn('Mercado'))
+    ACN(UJ:Val(FI:1), val(ug:val(fi:1)) * Val(AA:5))
+    ACT(UK:Val(FI:1), fbn('Vehiculo1'))
+
+    ACN(UM:Val(FI:1), fbn('Precio1'))
+
+    IF fbn['DiasAnio'] = 0 
+       ACN(UN:Val(FI:1),36000)
+    else 
+       ACN(UN:Val(FI:1),36500)
+    Endif
+
+    ACN(UO:Val(FI:1), fbn('Cantidad') )
+
+    SQL.ADD(" Select Cliente, Alias1, Estado From "~DBO~".CUENTAS ")
+    SQL.ADD(" Where Codigo = '"~fbn('Cuenta1')~"' ")
+    Recorrer SQL
+        DFA
+        ACT(CL:Val(FI:1), fbn('Cliente'))
+        ACT(AL:Val(FI:1), fbn('Alias1'))
+        ACT(UL:Val(FI:1), fbn('Estado'))
+    Proximo
+    SCN(FI:1, 1)
+Proximo
+
+IF Val(FI:1) > 1
+    SCN(FI:1, -1)
+  If Dialogo.Radio2=0  
+    CrearListBox ; 'Arial,8,';'Operaciones de A-1465'
+       'OK'              ;UH:1..UH:Val(FI:1);SI;;;40;CHECK;Exe('COLOR9')
+       'NrOperacion'     ;UA:1..UA:Val(FI:1);NO;;;80;STRING;;Exe('COLOR10')
+       'TipoOp'          ;UB:1..UB:Val(FI:1);NO;;;50;STRING;;Exe('COLOR10')
+       'FechaOp'         ;UC:1..UC:Val(FI:1);NO;;;60;STRING;;Exe('COLOR10')
+       'FechaVto'        ;UD:1..UD:Val(FI:1);NO;;;60;STRING;;Exe('COLOR10')
+       'Cliente'         ;UE:1..UE:Val(FI:1);NO;;;60;STRING;;Exe('COLOR10')
+       'Cuenta'          ;UF:1..UF:Val(FI:1);NO;;;60;STRING;;Exe('COLOR10')
+       'Mercado'         ;UI:1..UI:Val(FI:1);NO;;;60;STRING;;Exe('COLOR10')
+       'Vehiculo'        ;UK:1..UK:Val(FI:1);NO;;;60;STRING;;Exe('COLOR10')
+       'Cantidad'        ;UG:1..UG:Val(FI:1);NO;;;100;NUMERO;'##,###,###.##';Exe('COLOR10')
+       'Monto'           ;UJ:1..UJ:Val(FI:1);NO;;;100;NUMERO;'##,###,###.##';Exe('COLOR10')
+       'Estado'          ;UL:1..UL:Val(FI:1);NO;;;60;STRING;;Exe('COLOR10')
+    FinListBox
+
+    IF Not OK
+        Cancelar
+    ENDIF
+  ENDIF
+  
+    Recorrer&k 1, Val(FI:1)
+        IF Val(UH:&k) = 1
+            IF CeldaVacia(Y:1)
+                ***---Si no se genero una CUPON, la genero
+                (.'GENCUPON'.)
+            ENDIF
+            ***---Actualizo NrCupon en movpendientes
+            SQL.ADD(" Update "~DBO~".MOVPENDIENTES ")
+            SQL.ADD(" Set Cupon = '"~Fstr(Val(C:3), 0, 0)~"', ")
+            SQL.ADD(" Book = '"~Val(Y:1)~"' ")
+            SQL.ADD(" Where NrOperacion = '"~Val(UA:&k)~"' ")
+            SQL.ADD(" AND Especie = '"~Dialogo.Especie1~"' ")
+            SQL.NEW
+
+            SQL.ADD(" Update "~DBO~".MOVPOSPEN ")
+            SQL.ADD(" Set Cupon = '"~Fstr(Val(C:3), 0, 0)~"' ")
+            SQL.ADD(" Where NrOperacion = '"~Val(UA:&k)~"' ")
+            SQL.ADD(" AND Especie = '"~Dialogo.Especie1~"' ")
+            SQL.NEW
+            SQL.EXEC
+
+            If val(jo1)=6 y EqStr(val(ul:&k),'HAB')
+                *- lb: Cuenta Efectivo lc:Precio ld: Monto en Efectivo
+                *- Seleccion de la cuenta de efectivo
+                ACT(lb:fac,'')
+
+                SQL.ADD("SELECT Codigo,Especies FROM "~DBO~".CUENTAS ")
+                SQL.ADD(" WHERE Cliente= '"~Val(UE:&k)~"' ")
+                SQL.ADD("   AND TipoCuenta IN ('CC', 'CA') ")
+                SQL.ADD("   AND Estado='HAB'  ")     
+
+                Recorrer SQL
+                  dfa
+                  If Vacio(val(lb:val(w1))) y [Incluido(FBN['Especies'],Dialogo.Especie2) o Incluido(FBN['Especies'],'MONEDA') ] 
+                     ACT(lb:val(w1),FBN['Codigo'])
+                  EndIf
+                Proximo
+
+                If Vacio(val(lb:&k)) 
+                    ACT(lb:&k,Val(dz3))
+                EndIf
+
+                ACN(ld:&k, Val(UG:&k) * Val(AA:5))
+                ACT(le:&k, Dialogo.Especie2)
+                IF Eqstr(Val(CL:&k), Val(UK:&k)) Y Incluido(Val(AL:&k), Exe('LISTACONC'))
+                    ***---Cartera Propia y Custodia => genera movimiento moneda sin cuenta.
+                    BorrarCeldas(LB:&k..LB:&k)
+                ENDIF
+                ACN(BD:&k, 0)
+                IF Eqstr(Val(CL:&k), Val(UK:&k)) Y Not Incluido(Val(AL:&k), Exe('LISTACONC'))
+                    ***---Cartera Propia pero no Custodia => no genera movimiento moneda
+                    ACN(BD:&k, 1)
+                ENDIF
+                * --- Genera la Transaccion de Liquidacion Cupon 
+                *- Parametros para llamar a la funcion
+                *- b4: Especie Cupon c2: Nro. Cupon h4: Fecha Proximo Corte 
+                *- m1: Moneda k2: % Amortizacion l2: % Renta m2: Interes Capitalizados j2: Vehiculo  
+                ACT(lb4,val(b4))
+                ACN(lc2,val(c2))
+                ACD(lh4,Dialogo.Fecha2)
+                ***---La transaccion LCUPON debe generarse con la moneda de la especie Cupon y
+                ***---NO con la de la especie.
+                ACT(LM:1, CotizaEn(Val(B:4)))
+                ***---Moneda de Pago
+                ACT(MP:1, Dialogo.Especie2)
+                ACN(lk2,val(k2))
+** FJL 01/08/20 - Ingreso de TNA
+                ACN(ls:2,val(s:2))
+*****
+                ACN(ll2,val(l2))
+                ACN(lm2,val(m2))
+                ACT(lj2,val(j2))
+
+                IF CeldaVacia(Y:2)
+                   (."GENLCUPON".)
+                   ACT(rx:1, Val(y2))
+                endif
+            *FO20/10/2005 --------- *
+            Else
+               ACT(y2,val(y1))
+            * --------------------- *
+            EndIf
+
+            ***---Genero CUOTAS en COMISIONES2 por interes 
+            (.'CUPMO1465C'.)
+
+            ***---Genero movimientos
+            (.'CUPMOV1465'.)
+
+
+            *FO 20/10/2005  ------------------------------------------------------------------ *
+            *- Inserto los datos en la operacion futuro para generar
+            *- el movimiento por la moneda a liquidarse desde fecha corte a fecha de vto. operacion
+
+            SQL.ADD(" Update "~DBO~".OPERACIONES SET ")
+            SQL.ADD(" NrOperacion2 = '"~Val(Y:2)~"' ")
+            SQL.ADD(" Where NrOperacion = '"~Val(UA:&k)~"' ")
+            SQL.NEW
+
+            *- Calculo el nro. de cuota a guardar 
+            ACN(nc1,SQL(" SELECT Max(NrCuota) AS NrCuota FROM "~DBO~".CUOTAS Where NrOperacion='"~Val(UA:&k)~"' "))
+            SCN(nc1,1)
+
+            SQL.ADD(" INSERT "~DBO~".CUOTAS ")
+            SQL.ADD(" (NrOperacion,NrCuota,Vehiculo2,Fecha2,Total1,Especie1,Check1) ")
+            SQL.ADD(" Values ")
+            SQL.ADD(" ('"~Val(ua:&k)~"',"~Fstr(val(nc1),0,0)~",'"~Val(y2)~"',"~IdxDate2(Dialogo.Fecha1)~","~Fstr(val(uj:&k),0,2)~",'"~Dialogo.Especie2~"','1') ")
+            SQL.NEW
+            SQL.EXEC                    
+
+            *** Actualiza movimientos, limites y posiciones ****
+            SQL.ActualizarMovimientos4(val(ua:&k),SI,NO,NO,NO,NO,NO)
+            SQL.EXEC
+
+            SQL.ADD(" Update "~DBO~".MOVPENDIENTES ")
+            SQL.ADD(" SET Book = '"~Val(Y:2)~"' ")
+            SQL.ADD(" Where NrOperacion = '"~Val(UA:&k)~"' ")
+            SQL.ADD(" AND Especie = '"~Dialogo.Especie1~"' ")
+            SQL.NEW
+            SQL.EXEC
+            * HASTA ACA FO20/10--------------------------------------------------------------- *
+        ENDIF
+    Proximo
+ELSE
+    Message('No hay Operaciones A-1465 para Cortar')
+ENDIF

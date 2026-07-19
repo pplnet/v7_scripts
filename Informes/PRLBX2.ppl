@@ -1,0 +1,89 @@
+﻿* =====================================================================
+* TEST 1: ListBox con columna Editable que depende de un campo del Dialogo
+* TEST 2: Recalculos (AutoRecalc, ModRecalc, RecalcFull, RecalcFila, ResetCols)
+* =====================================================================
+
+* --- Datos iniciales en grilla (3 filas) ---
+ACT(a1,'Lapiz')   ACN(b1, 10)  ACN(c1, 5)   ACN(d1, 0)   ACN(e1, 0)
+ACT(a2,'Goma')    ACN(b2, 3)   ACN(c2, 7)   ACN(d2, 0)   ACN(e2, 0)
+ACT(a3,'Cuaderno') ACN(b3, 1)  ACN(c3, 100) ACN(d3, 0)   ACN(e3, 0)
+
+* --- Nombres de columnas (variables Val()) ---
+ACT(z1,'Producto')  ACT(z2,'Cantidad')  ACT(z3,'Precio')
+ACT(z4,'Subtotal')  ACT(z5,'ConIVA')
+
+DialogoVisible NO
+
+* =====================================================================
+* CrearDialogo - el ListBox va EMBEDDED al final
+* =====================================================================
+CrearDialogo
+   Check1  : 'Habilitar edicion'  ;;;;;;;;;NO
+   Cantidad1        : 'IVA %'              ;;;;;;;;;21
+   Check2: 'Forzar recalc full' ;;;;;;;;;NO
+FinDialogo
+
+* =====================================================================
+* CrearListBox - embedded justo despues del dialogo
+* Layout posicional (ver ListboxFixture.cs):
+*   [0]Prompt [1]Range [2]Editable [3]Valida [4]MsgErr [5]Ancho [6]Tipo
+*   --- segun tipo ---
+*   STRING:  [7]MaxChars
+*   NUMERO:  [7]Mascara
+*   --- desde aca igual para todos ---
+*   [+0]Color [+1]Formula [+2]AutoRecalc [+3]ModRecalc [+4]ResetCols
+*   [+5]ResDefault [+6]RecalcFull [+7]ModModi [+8]RecalcFila
+* =====================================================================
+CrearListBox; 'Arial, 8'; 'Test ListBox'
+   * (1) STRING - Producto - solo lectura
+   Val(z1) ;a1..a3;NO              ;NO;;100;STRING;15;;;;;;;;;
+
+   * (2) NUMERO - Cantidad - Editable depende del campo "habilitar" del dialogo
+   *                       - AutoRecalc=SI: si modifico Cantidad, se dispara recalc de columnas dependientes
+   *                       - ResetCols='4;5': fuerza recalc de cols 4 (Subtotal) y 5 (ConIVA)
+   Val(z2) ;b1..b3;Dialogo.Check1;NO;;60;NUMERO;'###'   ;;;SI;NO;'4;5';;;;
+
+   * (3) NUMERO - Precio - Editable cuando habilitar=SI Y iva > 0
+   *                     - ModRecalc=SI: si lo modifico a mano, NO se recalcula (preserva valor)
+   *                     - ResetCols='4;5': pero igual fuerza recalc de Subtotal/ConIVA
+   Val(z3) ;c1..c3;Dialogo.Check1 y Dialogo.Cantidad1 > 0;NO;;60;NUMERO;'###.##';;;SI;SI;'4;5';;;;
+
+   * (4) NUMERO - Subtotal - calculada (Cantidad * Precio en la fila actual)
+   *                       - FormulaDeRecalculo usa flb (fila actual del listbox, base 1)
+   *                       - AutoRecalc=SI dispara cuando Cantidad/Precio cambia (via ResetCols arriba)
+   *                       - RecalcFila=SI: solo recalcula la fila modificada (no el listbox completo)
+   Val(z4) ;d1..d3;NO;NO;;80;NUMERO;'###,###.##';;Val('b':flb) * Val('c':flb);SI;;;;;;SI
+
+   * (5) NUMERO - Total con IVA - depende del campo "iva" del dialogo
+   *                            - RecalcFull=SI: cuando se modifica iva, recalcula TODAS las filas
+   Val(z5) ;e1..e3;NO;NO;;90;NUMERO;'###,###.##';;Val('d':flb) * (1 + Dialogo.iva / 100);SI;;;;SI;;
+FinListBox
+
+* =====================================================================
+* Asserts / triggers para ver el comportamiento
+* =====================================================================
+
+* --- A) Verificar Editable inicial: con habilitar=NO, Cantidad NO debe ser editable ---
+get('lbox')
+
+* --- B) Habilitar edicion -> dispara recalculo del Editable de Cantidad/Precio ---
+setf('habilitar', SI, SI)
+get('lbox')
+
+* --- C) Modificar Cantidad de fila 1: por AutoRecalc + ResetCols='4;5'
+*        deben recalcularse Subtotal (col 4) y ConIVA (col 5) SOLO en la fila 1 (RecalcFila=SI) ---
+ACN(b1, 20)
+* Esperado: d1 = 20*5 = 100, e1 = 100 * 1.21 = 121
+* Las filas 2 y 3 NO deben recalcular Subtotal porque RecalcFila=SI
+
+* --- D) Modificar Precio a mano. Como ModRecalc=NO en Cantidad pero SI en Precio:
+*        si fuerzo recalculo del Precio por formula, NO se sobreescribe el valor a mano ---
+ACN(c1, 99)
+* (el flag de ModModi controla si se marca como modificado a mano)
+
+* --- E) Cambiar IVA del dialogo -> por RecalcFull=SI en col 5,
+*        debe recalcular ConIVA en TODAS las filas, no solo la activa ---
+setf('iva', 10, SI)
+* Esperado: e1 = d1 * 1.10, e2 = d2 * 1.10, e3 = d3 * 1.10
+
+get('lbox')

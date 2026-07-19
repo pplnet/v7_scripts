@@ -1,0 +1,115 @@
+﻿CrearDialogo
+   Lista1       : 'Vehiculos'            ;;;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+   Fecha1       : 'F.Desde'              ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;FSys
+   Fecha2       : 'F.Hasta'              ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar la Fecha';NO;FSys
+   NrOperacion1 : 'Nr.Operacion'         ; 
+   TipoOp1      : 'Tipo Op'              ;;;
+   Radio1       : 'Grupo|FX|DP|DT|MM|SE' ;;;;;;;;;;;
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+
+If NoVacio(Dialogo.NrOperacion1)
+   *- Control de vehiculo habilitado para el usuario
+   *- vh1: vehiculo de la operacion o transaccion
+   *- Cancela si el vehiculo no esta habilitado para el usuario activo
+    
+   ACT(vh1, BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion', Dialogo.NrOperacion1)) 
+    
+   (.'CONTROLVH'.)
+
+   ACT(X1, "O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+Else
+   If NOVACIO(Dialogo.TipoOp1)
+      ACT(X1, "O.TipoOp = '"~Dialogo.TipoOp1~"' ")
+   Else
+      ACT(X1, "FechaOp Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"'")
+      If NoVacio(Dialogo.Lista1)
+         ACT(x1, Val(X1)~" and Vehiculo1 in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+      Else
+         * Vehiculos permitidos por el usuario
+         ACT(z1,SQLSET(" Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+      
+         If NoVacio(UsrVehiculos(UsuarioActivo))
+            ACT(x1, Val(X1)~" and Vehiculo1 in  ("~Pipe2Comillas(Val(z1))~") ")
+         EndIf
+      Endif
+   Endif
+Endif
+
+IF Dialogo.Radio1=0
+   ACT(x1, Val(X1)~" and TipoOp LIKE 'FX%' ")   
+EndIf
+IF Dialogo.Radio1=1
+   ACT(x1, Val(X1)~" and TipoOp LIKE 'DP%' ")
+EndIf
+IF Dialogo.Radio1=2
+   ACT(x1, Val(X1)~" and TipoOp LIKE 'DT%' ")   
+EndIf
+IF Dialogo.Radio1=3
+   ACT(x1, Val(X1)~" and TipoOp LIKE 'MM%' ")   
+EndIf
+IF Dialogo.Radio1=4
+   ACT(x1, Val(X1)~" and TipoOp LIKE 'SE%' ")   
+EndIf
+
+SQL.ADD("Select * from "~DBO~".OPERACIONES O Where "~VAL(X1)~" Order By TipoOp,NrOperacion ")
+
+Recorrer SQL    
+     Message(FBN['TipoOp']~' '~FBN['NrOperacion'])
+
+     Message('Actualizando Mov. de Limites ')
+     SQL.ADD("DELETE from "~DBO~".MOVLIMITES ")
+     SQL.ADD("Where NrOperacion = '"~FBN['NrOperacion']~"' ")
+     SQL.NEW
+
+     SQL.ActualizarMovimientos3(FBN['NrOperacion'],NO,SI,NO,NO,NO)
+     SQL.NEW
+     SQL.EXEC
+proximo
+
+IF NO
+*HojaVisible(SI)
+
+SQL.ADD("SELECT * from "~DBO~".OPERACIONES  ")
+SQL.ADD("where TipoOp in ('FXCS','FXVS','FXCT','FXVT','FXAS','FXAT','FXREPO','SECS','SECT','SEVS','SEVT','SERA','SERP')")
+*SQL.ADD("and FechaVto >= '"~IdxDate(FSys)~"'")
+recorrer SQL
+  ACT(a:FAC, FBN['NrOperacion'])
+  ACT(b:FAC, FBN['TipoOp'])
+  ACT(c:FAC, FBN['Especie'])
+  ACT(d:FAC, FBN['Cliente1'])
+  ACD(e:FAC, FBN['FechaOp'])
+  ACD(f:FAC, FBN['FechaVto'])
+  ACD(g:FAC, FBN['FechaPago'])
+
+  Message('Actualizando Mov. de Limites ')
+  SQL.ADD("DELETE from "~DBO~".MOVLIMITES ")
+  SQL.ADD("Where NrOperacion = '"~FBN['NrOperacion']~"' ")
+  SQL.ADD("and Not Limite = 'CONTRACT' ")
+  SQL.NEW
+
+  SQL.ADD("DELETE from "~DBO~".MOVLIMITES ")
+  SQL.ADD("Where NrOperacion = '"~FBN['NrOperacion']~"' ")
+  SQL.ADD("and Limite = 'CONTRACT' ")
+  SQL.ADD("and Monto > 0 ")
+  SQL.NEW
+
+  if Not Incluido(FBN['Vehiculo1'],Var('VLIQUIDA') ~Var('VLIQUIDA2'))
+    SQL.ADD("DELETE from "~DBO~".MOVLIMITES ")
+    SQL.ADD("Where NrOperacion = '"~FBN['NrOperacion']~"' ")
+    SQL.ADD("and Limite = 'CONTRACT' ")
+    SQl.ADD("and Monto < 0 ")
+    SQL.NEW
+  endif
+  SQL.EXEC
+
+  Message('Ejecutando Actualizar Movimientos ')
+  SQL.ActualizarMovimientos3(FBN['NrOperacion'],NO,SI,NO,NO,NO)
+  SQL.NEW
+  SQL.EXEC
+proximo
+ENDIF

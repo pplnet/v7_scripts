@@ -1,0 +1,136 @@
+﻿ACD(FV:1, Dialogo.Fecha1)
+ACT(VC:1, Dialogo.Vehiculo1)
+
+let &valorContableValuado 0
+let &valorContable 0
+let &nrOperacion ''
+let &tipoRegistro 'A'
+let &importeAcumuladoAsiento 0
+
+SQL.ADD("Select A1.DebitoCredito, A1.Valor2 CantidadOperacion, A1.Cantidad1 ImporteAsiento, A1.Alias1 Especie, ")
+SQL.ADD("A1.Alias2 Book, A.FechaValor, A.NrOperacion, A1.Cuenta, A1.Especie1 MonedaAsiento, ")
+SQL.ADD("A1.TablaRC tipoCuenta, A.Modelo, O.TipoOp TipoOp, O.Cuenta1, O.Cuenta2 ")
+SQL.ADD("FROM "~DBO~".ASIENTOSCON A  ")
+SQL.ADD("       JOIN "~DBO~".ASIENTOSCON1 A1 ON A.NrUnicoAsiento = A1.NrUnicoAsiento ")
+SQL.ADD("       JOIN "~DBO~".OPERACIONES O ON A.NrOperacion = O.NrOperacion ")
+SQL.ADD("where O.FechaVto > A.FechaValor ")
+***Asientos generados hoy
+SQL.ADD("and A.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+If NoVacio(&TipoOp)
+    SQL.ADD("and O.TipoOp IN ("~Pipe2Comillas(&TipoOp)~")")
+EndIf
+SQL.ADD("and NOT (A1.TablaRc = '' AND A1.TablaRc = ' ' AND A1.TablaRc IS NULL) ")
+SQL.ADD("Order by A.FechaValor, A1.Cuenta, O.NrOperacion ")
+watch(sql.batch)
+
+let &primerRegistro 0
+let &seInforma 0 
+let &importeAsientoAnterior 0
+
+Recorrer SQL
+    **-Controlo si el TipoCuenta/Modelo está para informar-**
+    let &tipoCuenta fbn('tipoCuenta')
+    let &modelo fbn('Modelo')
+    
+    if &primerRegistro = 0
+        ACD(FV:1, fbn('FechaValor'))
+        
+        let &nrOperacion fbn('NrOperacion')       
+        
+        **-CUENTA CONTABLE-**   
+        let &cuentaContable fbn('Cuenta')
+        
+        let &primerRegistro 1
+    EndIf
+    
+    If val(FV:1) <> fbn('FechaValor') OR NOT EqStr(&nrOperacion,fbn('NrOperacion')) OR &cuentaContable <> fbn('Cuenta')   
+        **-Si cambiaron los datos del corte de control inserto valores anteriores en DETITOFIN si se tiene que informar la cuenta-**
+        If &seInforma = 1
+            **-Campos-**
+            (.'CAMPTITOFI'.)
+            
+            **-Inserto datos-**
+            (.'INSREGINFO'.) 
+            
+            **-Reinicio Valores del corte-**
+            ACD(FV:1, fbn('FechaValor'))
+
+            let &nrOperacion fbn('NrOperacion')       
+
+            **-CUENTA CONTABLE-**   
+            let &cuentaContable fbn('Cuenta')
+
+            let &importeAcumuladoAsiento 0 
+            
+            let &seInforma 0 
+            
+            let &importeAsientoAnterior 0
+        EndIf
+    EndIf
+    
+    **-Si el modelo está configurado para informarse a guardo los datos y acumulo importe asiento-**
+    If Incluido(&modelo,SQLSet("SELECT "~&campoParaModelos~" from "~DBO~".TIPOCTACONT where Codigo = '"~&tipoCuenta~"' AND "~&campoMarcaInforma~"='SI' "))
+       let &seInforma 1
+       
+       ACD(FV:1, fbn('FechaValor'))
+       
+       let &nrOperacion fbn('NrOperacion')       
+       
+       **-CUENTA CONTABLE-**   
+       let &cuentaContable fbn('Cuenta')
+                
+       If EqStr(fbn('DebitoCredito'),'DEB')
+           let &importeAsiento fbn('ImporteAsiento') 
+       Else
+           let &importeAsiento fbn('ImporteAsiento') *-1
+       EndIf
+       
+       let &importeAcumuladoAsiento &importeAcumuladoAsiento+&importeAsiento
+       
+       **Si es una cuenta de interes informo en 0
+       If EqStr(BuscarCampo('TIPOCTACONT','EsDeInteres','Codigo',&tipoCuenta),'SI')
+           let &cantidadDeOperacion 0
+       Else
+           If (Vacio(fbn('CantidadOperacion')) OR fbn('CantidadOperacion') = 0) AND NoVacio(&nrOperacion)
+               let &cantidadDeOperacion BuscarCampo('OPERACIONES','Cantidad','NrOperacion',&nrOperacion)
+           Else
+               let &cantidadDeOperacion fbn('CantidadOperacion')
+           EndIf
+       EndIf
+       
+       let &especie fbn('Especie') 
+       
+       let &monedaAsiento fbn('MonedaAsiento')
+       
+       let &book fbn('Book')
+       
+       let &tipoOp fbn('TipoOp')
+       
+       **Cuenta Contable
+       If EqStr(&tablaInformada,'EFECTIVOMINIMOPF')
+            let &cuentaCustodia fbn('Cuenta2')
+       Else
+            let &cuentaCustodia ''
+       EndIf
+
+       **-Se informa la fecha de incorporacion-**
+       let &informaFecInc 'SI'
+
+       If EqStr(&tipoOp,'TIPO') Y Incluido (&tipoCuenta,'DIFCOT|DEUDFINOT|')
+           let &informaFecInc 'NO'
+       EndIf
+
+       If Incluido(&tipoOp,'TICT|TIDE|') Y Incluido (&tipoCuenta,'TITREC|DEUDFINOT|')
+           let &informaFecInc 'NO'
+       EndIf       
+    EndIf    
+Proximo
+
+**-Inserto datos del ultimo registro procesado-**
+If &seInforma = 1
+    **-Campos-**
+    (.'CAMPTITOFI'.)
+    
+    **-Inserto datos-**    
+    (.'INSREGINFO'.)  
+EndIf

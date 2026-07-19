@@ -1,0 +1,357 @@
+﻿CrearDialogo
+  Radio1   : 'Tipo Op.|Sec|FX|MMkts|D.Tasa|D.Comod|MR|Todas' ;1;1;;;;;;;6
+  Cliente1 : 'Cliente'    ;3;1;;;;;;;
+  Fecha1   : 'Fec. Desde' ;4;1;;;;;;;FSys
+  Fecha2   : 'Fec. Hasta' ;4;2;;;;;;;FSys
+  Lista1   : 'Vehiculo'   ;6;1;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Lista2   : 'Instancia'  ;0;2;;;;;;;;;SQLSET("Select Nombre from "~DBO~".INSTANCIAS Where Tabla='OPERACIONES' Order By Nombre ")
+FinDialogo
+
+If Not Ok
+  Cancelar
+EndIf
+
+*-- Veo solamente los tipos seleccionados
+SetListaClaves(2)
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+   ACT(zz6,Dialogo.Lista1)
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+   EndIf
+EndIf
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,1)
+
+
+ACT(a3, 'Vencimientos del dia')
+ACT(a4, 'Fecha Desde : '~Dialogo.Fecha1)
+ACT(c4, 'Fecha Hasta : '~Dialogo.Fecha2)
+
+If NoVacio(Val(zz6))
+   ACT(a5, 'Vehiculo : '~val(zz6))
+Else
+   ACT(a5, 'Vehiculo : Todos')
+EndIf
+
+if Vacio(Dialogo.Cliente1)
+   ACT(a6, 'Cliente : Todos')
+else
+   ACT(a6, 'Cliente : '~Dialogo.Cliente1)
+endif
+
+If NoVacio(Dialogo.Lista2)
+   ACT(a8, 'Instancias: '~Dialogo.Lista2 )
+Else
+   ACT(a8, 'Cualquier Instancia')
+EndIf
+
+ACT(aa1, '')
+
+SetFilaActual(8)
+
+SQL.ADD("Select O.TipoOp, M.Cantidad, O.Vehiculo1, O.NrOperacion, M.Especie, M.Cliente, ")
+SQL.ADD(" FechaOp, FechaVto, Operador,O.FechaEj,O.FechaEx4,M.NrMov,O.FechaVto2,O.Plazo2,M.Leyenda,'Pend' Estado,I.Nombre ")
+SQL.ADD("From "~DBO~".OPERACIONES O, "~DBO~".MOVPENDIENTES M,"~DBO~".OPERACIONESBITS B, "~DBO~".INSTANCIAS I ")
+SQL.ADD("Where M.FechaMov Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" and M.NrSaldo=1 and M.NrOperacion=O.NrOperacion ")
+SQL.ADD(" and O.NrOperacion=B.NrOperacion and Valor='1' ")
+SQL.ADD(" and Tabla='OPERACIONES' and I.NrInstancia=B.NrBit ")
+If NoVacio(Dialogo.Lista2)
+   SQL.ADD(" and Nombre In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+EndIf
+If NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+Endif
+If Dialogo.Radio1 = 0
+  SQL.ADD("and TipoOp like 'SE%'")
+  ACT(a7, 'Tipo Op. : Securities')
+Endif
+if Dialogo.Radio1 = 1
+  SQL.ADD("and TipoOp like 'FX%'")
+  ACT(a7, 'Tipo Op. : Foreign Exchange')
+endif
+if Dialogo.Radio1 = 2
+  SQL.ADD("and TipoOp like 'MM%'")
+  SQL.ADD("and M.FechaMov > O.FechaOp")
+  ACT(a7, 'Tipo Op. : Money Markets')
+endif
+if Dialogo.Radio1 = 3
+  SQL.ADD("and TipoOp like 'DT%'")
+  ACT(a7, 'Tipo Op. : Derivados Tasa')
+endif
+if Dialogo.Radio1 = 4
+  SQL.ADD("and TipoOp like 'DP%'")
+  ACT(a7, 'Tipo Op. : Derivados Commodities')
+endif
+
+if Dialogo.Radio1 = 5
+  SQL.ADD("and TipoOp Like 'MR%'")
+  ACT(a7, 'Tipo Op. : Mercado Regulado ')
+endif
+
+if Dialogo.Radio1 = 6
+  SQL.ADD("and TipoOp not in ('POSOPE')")
+  SQL.ADD("and not (TipoOp like 'MM%' and M.FechaMov <= O.FechaOp)")
+  ACT(a7, 'Tipo Op. : Todos')
+endif
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD("and O.Cliente1 = '"~Dialogo.Cliente1~"'")
+endif
+
+SQL.ADD("Union")
+
+SQL.ADD("Select O.TipoOp, M.Cantidad, O.Vehiculo1, O.NrOperacion, ")
+SQL.ADD(" M.Especie, M.Cliente, FechaOp, FechaVto, Operador,O.FechaEj,O.FechaEx4, M.NrMov,O.FechaVto2,O.Plazo2,M.Leyenda,'Ejec' Estado,I.Nombre  ")
+SQL.ADD("From "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M,"~DBO~".OPERACIONESBITS B, "~DBO~".INSTANCIAS I ")
+SQL.ADD("Where M.FechaMov Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD(" and M.NrSaldo=1 and M.NrOperacion=O.NrOperacion")
+SQL.ADD(" and O.NrOperacion=B.NrOperacion and Valor='1' ")
+SQL.ADD(" and Tabla='OPERACIONES' and I.NrInstancia=B.NrBit ")
+If NoVacio(Dialogo.Lista2)
+   SQL.ADD(" and Nombre In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+EndIf
+If NoVacio(VAL(zz6))
+   SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+Endif
+If Dialogo.Radio1 = 0
+  SQL.ADD("and TipoOp like 'SE%'")
+  ACT(a7, 'Tipo Op. : Securities')
+Endif
+If Dialogo.Radio1 = 1
+  SQL.ADD("and TipoOp like 'FX%'")
+  ACT(a7, 'Tipo Op. : Foreign Exchange')
+Endif
+if Dialogo.Radio1 = 2
+  SQL.ADD("and TipoOp like 'MM%'")
+  SQL.ADD("and M.FechaMov > O.FechaOp")
+  ACT(a7, 'Tipo Op. : Money Markets')
+endif
+if Dialogo.Radio1 = 3
+  SQL.ADD("and TipoOp like 'DT%'")
+  ACT(a7, 'Tipo Op. : Derivados Tasa')
+endif
+if Dialogo.Radio1 = 4
+  SQL.ADD("and TipoOp like 'DP%'")
+  ACT(a7, 'Tipo Op. : Derivados Commodities')
+endif
+if Dialogo.Radio1 = 5
+  SQL.ADD("and TipoOp Like 'MR%'")
+  ACT(a7, 'Tipo Op. : Mercado Regulado ')
+endif
+if Dialogo.Radio1 = 6
+  SQL.ADD("and TipoOp not in  ('POSOPE','VIMD','TEMD')")
+  SQL.ADD("and not (TipoOp like 'MM%' and M.FechaMov <= O.FechaOp) ")
+  ACT(a7, 'Tipo Op. : Todos')
+endif
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD("and O.Cliente1 = '"~Dialogo.Cliente1~"'")
+endif
+
+if Dialogo.Radio1 = 2 o Dialogo.Radio1 = 6
+   SQL.ADD("Union")
+   
+   SQL.ADD("Select O.TipoOp, -O.Cantidad, O.Vehiculo1, O.NrOperacion, ")
+   SQL.ADD(" O.Especie, Cliente1 as Cliente, FechaOp, FechaVto, Operador, ")
+   SQL.ADD(" O.FechaOp,O.FechaEx4,0 as NrMov,O.FechaVto2,O.Plazo2,O.TipoOp as Leyenda,'Eje' Estado,I.Nombre")
+   SQL.ADD("From "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS B, "~DBO~".INSTANCIAS I ")
+   SQL.ADD("Where O.FechaVto Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' ")
+   SQL.ADD(" and O.NrOperacion=B.NrOperacion and Valor='1' ")
+   SQL.ADD(" and Tabla='OPERACIONES' and I.NrInstancia=B.NrBit ")
+   If NoVacio(Dialogo.Lista2)
+      SQL.ADD(" and Nombre In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+   EndIf
+   If NoVacio(VAL(zz6))
+      SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+   Endif
+   SQL.ADD("and TipoOp In ('VIMIND','TEMIND') ")
+   SQL.ADD("and MB3 = '0' ")
+   if NoVacio(Dialogo.Cliente1)
+      SQL.ADD("and O.Cliente1 = '"~Dialogo.Cliente1~"'")
+   endif
+   
+   SQL.ADD("Union")
+   
+   SQL.ADD("Select O.TipoOp, O.Cantidad, O.Vehiculo1, O.NrOperacion, ")
+   SQL.ADD(" O.Especie, Cliente1 as Cliente, FechaOp, FechaVto, Operador, ")
+   SQL.ADD(" O.FechaOp,O.FechaEx4, 0 as NrMov,O.FechaVto2,O.Plazo2,O.TipoOp as Leyenda,'Eje' Estado,I.Nombre ")
+   SQL.ADD("From "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS B, "~DBO~".INSTANCIAS I")
+   SQL.ADD("Where O.FechaVto Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' ")
+   SQL.ADD(" and O.NrOperacion=B.NrOperacion and Valor='1' ")
+   SQL.ADD(" and Tabla='OPERACIONES' and I.NrInstancia=B.NrBit ")
+   If NoVacio(Dialogo.Lista2)
+      SQL.ADD(" and Nombre In ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+   EndIf
+   If NoVacio(VAL(zz6))
+      SQL.ADD(" and O.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+   Endif
+
+   SQL.ADD("and TipoOp In ('VIMIND','TEMIND') ")
+   SQL.ADD("and MB3 = '1' ")
+   if NoVacio(Dialogo.Cliente1)
+      SQL.ADD("and O.Cliente1 = '"~Dialogo.Cliente1~"'")
+   endif
+   if Dialogo.Radio1 = 2 
+      ACT(a7, 'Tipo Op. : Money Markets')
+     else
+      ACT(a7, 'Tipo Op. : Todas')
+   endif
+endif
+SQL.ADD("order by 3, 6, 5, 4 ")
+
+Recorrer SQL
+
+  Message(fbn('NrOperacion')~' '~fbn('Cantidad'))
+
+  if [not EqStr(Val(z1), fbn('Vehiculo1')) o not EqStr(Val(z2), fbn('Cliente')) o not EqStr(Val(z3), fbn('Especie'))] y NoVacio(Val(z3))
+    ACT(a:fac, 'Total '~Val(z3))
+    ACN(c:fac, Val(z6))    
+    SetFont(a:fac..z:fac, 1)
+    AgregarMarco(a:fac..i:fac, 1)
+    ifa
+  endif  
+
+  if not EqStr(Val(z1), fbn('Vehiculo1'))
+    ACT(z1, fbn('Vehiculo1'))
+    ACT(z2, ' ')
+    ACT(z3, ' ')
+    ifa
+    ifa
+    ACT(a:fac, fbn('Vehiculo1'))
+    SetFont(a:fac..z:fac, 1)
+    AgregarMarco(a:fac..i:fac, 1, 0, Exe('COLOR'))
+    ifa
+  endif
+
+  if not EqStr(Val(z2), fbn('Cliente'))
+    ACT(z2, fbn('Cliente'))
+    ACT(z3, ' ')
+    ifa
+    ACT(a:fac, fbn('Cliente'))
+    ACN(z5, fac)
+    SetFont(a:fac..z:fac, 1)
+    ifa
+  endif
+
+  if not EqStr(Val(z3), fbn('Especie'))
+    ACT(z3, fbn('Especie'))
+    ACT(a:fac, fbn('Especie'))
+    SetFont(a:fac..z:fac, 1)
+    ifa
+    ACT(a:fac, 'Tipo Op.')
+    ACT(b:fac, 'Nr.Oper.')
+    ACT(c:fac, 'Cantidad')
+    ACT(d:fac, 'Fecha Op.')
+    ACT(e:fac, 'Fecha Vto')
+    ACT(f:fac, 'Operador')
+    ACT(g:fac, 'Leyenda')
+    ACT(h:fac, 'Estado')
+    ACT(i:fac, 'Instancia')
+
+    AlinearCeldas(c:fac..e:fac, 'D')
+    AgregarMarco(a:fac..i:fac, 1)
+    SetFont(a:fac-1..z:fac, 1)
+    ACN(z6, 0)
+    ifa
+  endif
+
+*  if EqStr(fbn('NrOperacion'), Val(b:fac-1))
+*    dfa
+*  endif
+
+  ACT(a:fac, fbn('TipoOp'))
+
+  ACT(b:fac, fbn('NrOperacion'))
+  ACLO(b:fac, fbn('NrOperacion'))
+  SCN(c:fac, -fbn('Cantidad'))
+  SCN(z6, -fbn('Cantidad'))
+  ACD(d:fac, fbn('FechaOp'))
+ 
+  ACD(e:fac, fbn('FechaVto'))
+
+  * Fechas de Vencimiento -> DP:FechaEj
+  IF EqStr(Copy(FBN['TipoOp'],1,2),'DP')
+     ACD(e:fac, fbn('FechaEj'))
+  EndIf
+
+  * Fechas de Vencimiento -> MR: FechaEx4
+  IF EqStr(Copy(FBN['TipoOp'],1,2),'MR')
+     ACD(e:fac, fbn('FechaEx4'))
+  EndIf
+
+  IF EqStr(FBN['TipoOp'],'MMCDP') y FBN['Plazo2']<>0
+     ACD(e:fac, fbn('FechaVto2'))
+  EndIf
+
+  * Por Cada Movimiento Ejecutado verifico  si hay ajustes
+  If FBN['NrMov']<>0 
+
+     SQL.ADD("Select * from "~DBO~".MOVAJUSTE where ")
+     SQL.ADD("NrOperacion='"~fbn('NrOperacion')~"' and NrMov="~Fstr(FBN['NrMov'],0,0)~" Order By FechaValor ")
+     Recorrer SQL
+       DFA
+       SCN(c:fac, -fbn('Cantidad'))
+       SCN(z6, -fbn('Cantidad'))
+*      ACD(d:fac, fbn('FechaGen'))
+*      ACD(e:fac, fbn('FechaValor'))
+       SetFont(a:fac..z:fac, 2)
+     Proximo 
+  EndIf
+
+  ACT(f:fac, FBN['Operador'])
+  ACT(g:fac, FBN['Leyenda'])
+  ACT(h:fac, FBN['Estado'])
+  ACT(i:fac, FBN['Nombre'])
+ 
+  If Eqstr(VAL(h:fac), 'Pend')
+      ColorCeldas(h:fac..h:fac,clGreen) 
+   Else
+     ColorCeldas(h:fac..h:FAC,clRed) 
+  EndIf
+
+FormatoCeldas(h:1..h:FAC,Exe('F2')) 
+
+  SetFont(a:fac..z:fac, 2)
+proximo
+
+If NoVacio(Val(z3))
+  ifa
+  ACT(a:fac, 'Total '~Val(z3))
+  ACN(c:fac, Val(z6))
+  SetFont(a:fac..z:fac, 1)
+  AgregarMarco(a:fac..i:fac, 1)
+EndIf  
+
+FormatoCeldas(c:1..c:FAC,Exe('F2')) 
+
+*LimitesVision(i:fac+1)
+ACO(1,10)
+ACO(2,10)
+ACO(3,7)
+ACO(4,7)
+ACO(5,7)
+ACO(6,6)
+ACO(7,15)
+ACO(8,10)
+ACO(9,10)
+SetFont(a1..z8,1)
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC,'FIN DEL LISTADO')
+SetFont(a:FAC,1)
+
+LimitesVision(i:fac+1)
+
+*
+*    Esto es lo que agrega Silvia
+*
+
+RangoTitulo(a:1..i:fac+1, 9)

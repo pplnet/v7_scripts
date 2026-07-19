@@ -1,0 +1,57 @@
+﻿*** DIPELIQ
+*** Toma todas las operaciones pendientes de liquidacion que sean futuros 
+*** Se incluyen los Ejercicios
+*** Estas operaciones vencen despues de hoy ***
+*** Se modifican los precios pero no se generan cupones ***
+*-- SQL.ADD("where O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+
+Message('Procesando Pendientes de Liquidacion ...')
+
+SQL.ADD("SELECT O.* ")
+SQL.ADD("from  "~DBO~".OPERACIONES O ")
+SQL.ADD("Where O.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD("and O.TipoOp In ('SECT','SECTV','SEVT','SEVTV') ")
+SQL.ADD("and O.FechaOp <'"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD("and O.FechaVto >='"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD("and (O.PaseCB is Null or O.PaseCB = '0')  ")
+SQL.ADD("order by O.TipoOp, O.Especie ")
+
+Recorrer SQL
+   Message('Pendientes de Liquidacion :'~FBN['TipoOp']~' '~FBN['NrOperacion'])   
+
+   act(a:fac,fbn['Cliente1'])
+   act(b:fac,fbn['TipoOp'])
+   act(c:fac,fbn['NrOperacion'])
+   acn(d:fac,fbn['Cantidad'] )
+   act(k:fac,fbn['Vehiculo1'] )
+
+   * e: Monto en Efectivo f: Monto en Acciones g: Precio Nuevo 
+   if val(d:fac) <> 0
+
+      * g: Precio h:TotalBrutoCli2 i: TotalNetoCli2
+
+      * Calculo el Precio del Dividendo en Efectivo si Liquida
+      acn(e:fac,FBN['Cantidad']*(Dialogo.Precio1/100))    
+      acn(g:fac,FBN['Precio1']-(Dialogo.Precio1/100))    
+
+      acn(h:fac,FBN['Cantidad']*VAL(g:fac))    
+
+      * Calculo el Importe a Liquidar Futuro
+      acn(i:fac,VAL(h:fac)+FBN['TotalIntereses']+FBN['ImpGastos1']+IIF(FBN['RB7']=0,FBN['ImpComCor1'],0))
+
+      IF Incluido(FBN['TipoOp'],'SEVT|SEVTV')
+         acn(i:fac,VAL(h:fac)+FBN['TotalIntereses']-FBN['ImpGastos1']-IIF(FBN['RB7']=0,FBN['ImpComCor1'],0))
+      EndIf
+
+      * Calculo el Dividendo en Acciones.
+      acn(f:fac,FBN['Cantidad']*(Dialogo.Precio2/100))
+
+      * Calculo el Nuevo Precio
+      acn(g:fac,VAL(h:fac)/(FBN['Cantidad']+VAL(f:fac)))       
+
+      *** Calcula importes de dividendos ***
+      (.'CALCDIVI2'.)
+   else 
+     dfa
+   endif
+Proximo

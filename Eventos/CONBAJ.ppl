@@ -1,0 +1,492 @@
+﻿* Lee los mensajes para confirmar al MAE, se invoca desde Recibir Mensajes del MAE 
+* debe ejecutarse tambien periodicamente para procesar los mensajes que no 
+* encontro con anterioridad (tener en cuenta que plazo para contestar esta en 6 min.)
+
+CrearDialogo
+  Check1: 'Procesa';1;2; ;SI;SI;;;;0;
+FinDialogo
+if Not OK
+  Cancelar
+endif
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+ACT(aa:1, 'Codigo')
+ACT(aa:2, 'FechaMAE')
+ACT(aa:3, 'HoraMAE')
+ACT(aa:4, 'Secuencia')
+ACT(aa:5, 'CodigoMAE')
+ACT(aa:6, 'Estado')
+
+ACT(A5,'Cliente')
+ACT(B5,'TipoOp')
+ACT(C5,'FechaOp')
+ACT(D5,'FechaVto')
+ACT(E5,'Plazo')
+ACT(F5,'Especie')
+ACT(G5,'AgenteContra')
+ACT(H5,'Oper.Contra')
+ACT(I5,'Cantidad')
+ACT(J5,'Precio')
+ACT(K5,'Interes')
+ACT(L5,'Pase')
+ACT(M5,'Aforado')
+ACT(N5,'Spot')
+ACT(O5,'Futuro')
+ACT(P5,'Mercado')
+ACT(R5,'Operacion')
+
+SQL.ADD("Select * from "~DBO~".MENSAJESMAE ")
+SQL.ADD(" where Codigo ='CONBAJ' ")
+SQL.ADD("   and Estado ='PEN' ")
+Recorrer SQL
+  BorrarCeldas(A1..T4)
+  BorrarCeldas(A6..T8)
+  ACT(ab:1, fbn('Codigo'))
+  ACT(ab:2, fbn('FechaMAE'))
+  ACT(ab:3, fbn('HoraMAE'))
+  ACT(ab:4, fbn('Secuencia'))
+  ACT(ab:5, fbn('CodigoMAE'))
+  ACT(ab:6, fbn('Estado'))
+
+  Message('Preparando Informacion de Busqueda de Ops. (Bajas)')
+  ACT(a2, fbn('Mensaje1'))
+  if NoVacio(fbn('Mensaje2'))
+    ACT(a2, Val(a2)~fbn('Mensaje2'))
+  endif
+  if NoVacio(fbn('Mensaje3'))
+    ACT(a2, Val(a2)~fbn('Mensaje3'))
+  endif
+
+  *- Calcula el dia en que se recibio el mensaje
+  ACD(K1, Fecha(Copy(Val(A2),15,2)~'/'~Copy(Val(A2),13,2)~'/'~Copy(Val(A2),11,2)))
+  
+  *- Prepara informacion para buscar operacion -*
+  *- Pase
+  ACT(L6, '0')
+  *- Pase Aforado
+  ACT(M6, '0')
+  if Incluido(Copy(Val(A:2),32,1),'5|7')
+    *- Es un Pase
+    ACT(L6, '1')
+    if EqStr(Copy(Val(A:2),32,1),'7')
+      *- Es un Pase Aforado
+      ACT(M6, '1')
+    endif
+  else
+    *- NO es un Pase
+    ACT(L6, '0')
+    if Incluido(Copy(Val(A:2),32,1),'1|C|8')
+      *- Es Spot
+      ACN(N6, 1)
+    endif
+    if Incluido(Copy(Val(A:2),32,1),'9')
+      *- Es Futuro
+      ACN(O6, 1)
+    endif
+  endif
+  *- Fecha de Operacion
+  if Incluido(Copy(Val(A:2),99,2),'02')
+    ACD(C6, FSYS)
+  else
+    ACD(C6, Fecha(Copy(Val(a:2),111,2)~'/'~Copy(Val(a:2),109,2)~'/20'~Copy(Val(a:2),107,2)))
+  endif
+       
+  *- Fecha de Vencimiento para operaciones que no son pase
+  if Eqstr(Val(L6),'0')
+    *- NO es un Pase
+    if Val(N6)=1
+      *- Spot
+      if Incluido(Copy(Val(A:2),99,2),'02')
+        ACD(D6, Habiles(FSYS,Num(Copy(Val(A:2),42,3)),'ARG'))
+      else
+        ACD(D6, Habiles(Val(C6),Num(Copy(Val(A:2),42,3)),'ARG'))
+      endif
+    endif
+    if Val(O6)=1
+      *- Futuro
+      if Incluido(Copy(Val(A:2),99,2),'02')
+        ACD(D6, FSYS+Num(Copy(Val(A:2),42,3)))
+      else
+        ACD(D6, Val(C6)+Num(Copy(Val(A:2),42,3)))
+      endif
+    endif
+    *- Plazo
+    if Val(N6)=1
+      *- Spot
+* FJL 06-09-2018
+*      ACN(E6, Num(Copy(Val(A:2),42,3)))
+      ACN(E6, Num(Copy(Val(A:2),42,3))*24)
+    endif
+    if Val(O6)=1
+      *- Futuro
+*      ACN(E6, DifDias(Val(c6)+Num(Copy(Val(A:2),42,3)),Val(c6),'ARG')*24)
+      ACN(E6, DifDias(Val(c6)+Num(Copy(Val(A:2),42,3)),Val(c6),'ARG'))
+    endif
+  else
+    *- Es un Pase
+    *- plazos si la operacion es pase expresados en horas y en dias
+    *- si es la operacion Spot, el mae informa los dias corridos y Banco los tiene habiles
+    * => pasar a dias habiles 
+    if Incluido(Copy(Val(A:2),99,2),'02')
+      ACD(D6, FSYS+Num(Copy(Val(A:2),42,3)))
+    else
+      ACD(D6, Val(C6)+Num(Copy(Val(A:2),42,3)))
+    endif
+    ACN(x2, DifDias(Val(c6), Val(d6),'ARG',SI))
+*    ACN(E7, Val(x2)*24)
+    ACN(E7, Val(x2))
+    ACN(E8, Num(Copy(Val(A:2),42,3)))
+  endif
+  *- Especie                                         
+  ACT(F6, Copy(Val(A:2),33,5))
+  ACT(F6, SQL("Select Codigo From "~DBO~".ESPECIES Where CodMAEContado='"~Val(F6)~"' "))
+  *- Agente Contra                    
+  ACT(G6, Copy(Val(A:2),48,3))
+  if EqStr(Val(G6),'000') o EqStr(Val(G6),Var('AGESIOP'))
+    * Operacion con Tercero
+    ACN(x1,0)
+    ACN(z1, Num(Copy(Val(A:2),47,1)))
+  else
+    * Operacion con Agente
+    ACN(x1,1)
+    *- Operador Contra
+    ACT(H6, Copy(Val(A:2),51,2))
+    *- Codigo Mercado
+    ACN(z1, Num(Copy(Val(A:2),47,1)))
+    *- Codigo Cliente
+    if Val(z1)=VAR('MERSIOP')
+      *- Es un agente de mae
+      ACT(A6, SQL("Select Codigo From "~DBO~".CLIENTES Where NrMAE = '"~Val(G6)~"' "))
+    endif
+    if Val(z1)=5
+      *- Es un agente de bolsa
+      ACN(x1,0)
+      ACT(A6, SQL("Select Codigo From "~DBO~".CLIENTES Where NrAgenteBolsa = '"~FStr(Val(G6),1,0)~"' "))
+    endif
+  endif
+  *- Cantidad (4 decimales)
+  ACN(I6, Num(Copy(Val(A:2),53,18))/10000)
+  *- Precio (8 decimales)
+  ACN(J6, Num(Copy(Val(A:2),71,18))/100000000)
+  *- Interes (2 decimales)
+  ACN(K6, Num(Copy(Val(A:2),128,18))/100)
+  *- Ente Liquidador
+
+  if Incluido(Copy(Val(A:2),91,1),'1|D|T|B')
+    ACT(P6, 'AC')
+  endif
+  if EqStr(Copy(Val(A:2),91,1),'2')
+    ACT(P6, 'CRYL')
+  endif
+  if EqStr(Copy(Val(A:2),91,1),'3')
+    ACT(P6, 'CE')
+  endif
+  if EqStr(Copy(Val(A:2),91,1),'4')
+    ACT(P6, 'EU')
+  endif
+  if Incluido(Copy(Val(A:2),91,1),'5|6|8|9')
+    ACT(P6, 'CV')
+  endif
+*  if EqStr(Copy(Val(A:2),91,1),'6')
+*    ACT(P6, 'EPU')
+*  endif
+  if Incluido(Copy(Val(A:2),91,1),'G|F|U|C|W')
+** FJL 17/07/25 - Issue EXTBOFA-8175 Por nuevo Mercado liquidacion A3C
+*    ACT(P6, 'MC')
+    ACT(P6, VAR('ENTELIQA3'))
+  endif
+  *- Tipo de Operacion para las operaciones que no son pase
+  if EqStr(Val(L6),'0')
+    *- NO es un Pase
+    if Val(N6)=1
+      *- Spot
+      if Val(x1)=1
+        * Operacion con Agente
+        if Incluido(Copy(Val(A:2),97,2),'03')
+          ACT(B6, 'TIC')
+        else
+          ACT(B6, 'TIV')
+        endif
+      else
+        * Operacion con terceros
+        if Incluido(Copy(Val(A:2),97,2),'03')
+          ACT(B6, 'TIV')
+        else
+          ACT(B6, 'TIC')
+        endif
+      endif
+    endif
+    if Val(O6)=1
+      *- Futuro
+      if Val(x1)=1
+        * Operacion con Agente
+        if Incluido(Copy(Val(A:2),97,2),'03')
+          ACT(B6, 'TIFC')
+        else
+          ACT(B6, 'TIFV')
+        endif
+      else
+        * Operacion con terceros
+        if Incluido(Copy(Val(A:2),97,2),'03')
+          ACT(B6, 'TIFV')
+        else
+          ACT(B6, 'TIFC')
+        endif
+      endif
+    endif
+  else
+    *- Es un Pase
+    *- Tipo de Operacion para las operaciones que son pase
+    if Val(x1)=1
+      * Operacion con Agente
+      if Incluido(Copy(Val(A:2),97,2),'03')
+        ACT(B7, 'TIC')
+        ACT(B8, 'TIFC')
+      else
+        ACT(B7, 'TIV')
+        ACT(B8, 'TIFV')
+      endif
+    else
+      * Operacion con terceros
+      if Incluido(Copy(Val(A:2),97,2),'03')
+        ACT(B7, 'TIV')
+        ACT(B8, 'TIFV')
+      else
+        ACT(B7, 'TIC')
+        ACT(B8, 'TIFC')
+      endif
+    endif
+  endif
+  
+  *************** Informacion Adicional para Ejecutar Evento ******************
+  *- Fecha a confirmar
+  ACT(P1, Copy(Val(A2),11,6))
+  *- Secuencia a confirmar
+  ACT(P2, Copy(Val(A2),23,5))
+   
+  *************************** Buscar operacion ********************************
+  BorrarCeldas(N1..N2)
+  ACN(N1,0)
+  ACN(N2,0)
+
+  Message('FechaOp : '~Fecha(Val(c6))~' - FechaVto : '~Fecha(Val(d6))~' - Plazo : '~fstr(Val(e6),20,5))
+  Message('Cliente : '~Val(a6)~' - Especie : '~Val(f6))
+  Message('cantidad : '~PyC(Val(i6),0,2)~' - Precio : '~Fstr(Val(j6),0,8))
+  
+  ********************************************************
+  *- Busca operacion que coincida con los datos calculados
+  ********************************************************
+  SQL.ADD("Select O.Especie,        O.ContraEspecie,     O.FechaOp,           O.TotalIntereses , ")
+  SQL.ADD("       O.Precio1,        O.FechaVto,          O.Cantidad,          O.TipoOp,         ")
+  SQL.ADD("       O.Mercado,        O.FormaLiquidacion1, O.FormaLiquidacion2, O.TablaFeriados1, ")
+  SQL.ADD("       O.TotalBrutoCli1, O.NrOperacion,       O.NroBajaMAE,        O.OperacionRef,   ")
+*  SQL.ADD("       O.Precio3,        O.Precio4,           O.InteresMAE         ")
+  SQL.ADD("       O.Precio3,        O.Precio4            ")
+  SQL.ADD("  from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB  ")
+  SQL.ADD(" where O.FechaOp           = '"~IdxDate(Val(C6))~"' ")
+  SQL.ADD("   and O.Especie           = '"~Val(F6)~"' ")
+  SQL.ADD("   and Round(O.Cantidad,4) = "~FStr(Val(I6),1,4)~" ")
+  *- Si la especie se informo al MAE clean
+  if Eqstr(BuscarCampo('ESPECIES','CotizaMAE','Codigo',Val(f6)),'CLE')
+** FJL 04-09-18 - Pongo precio Precio1 - Verificar
+*    SQL.ADD("   and Round(O.Precio3,8)     = ROUND(convert(float,"~FStr(Val(J6),1,8)~"),8) ")
+    SQL.ADD("   and Round(O.Precio1,8)     = ROUND(convert(float,"~FStr(Val(J6),1,8)~"),8) ")
+  else
+    *- Si la especie se informo al MAE dirty
+** FJL 04-09-18 - Es Precio1
+*    SQL.ADD("   and Round(O.Precio4,8)     = ROUND(convert(float,"~FStr(Val(J6),1,8)~"),8) ")
+    SQL.ADD("   and Round(O.Precio1,8)     = ROUND(convert(float,"~FStr(Val(J6),1,8)~"),8) ")
+  endif
+* Se saco control de Intereses FJL 08/05/06
+*  SQL.ADD("   and Round(O.InteresMAE,2)  = "~FStr(Val(K6),1,2)~" ")
+  if EqStr(Val(L6),'1')
+    SQL.ADD("   and O.PaseCB = '"~Val(L6)~"' ")
+  endif 
+  if Val(x1)=1
+    * Operacion con Agente
+    SQL.ADD("   and O.Cliente1 = '"~Val(A6)~"' ")
+  endif
+  if EqStr(Val(L6),'0')
+    *- NO es un pase
+    SQL.ADD("   and O.TipoOp   = '"~Val(B6)~"' ")
+*    SQL.ADD("   and O.FechaVto = '"~IdxDate(Val(D6))~"' ")
+    if Val(N6)=1
+      *- Spot
+      SQL.ADD("   and O.Plazo    = "~FStr(Val(E6), 1, 0)~" ")
+    endif
+    if Val(O6)=1
+      *- Futuro
+      SQL.ADD("   and O.PlazoGracia = "~FStr(Val(E6), 1, 0)~" ")
+    endif
+  else
+    *- Es un pase
+    SQL.ADD(" and ((O.TipoOp = '"~Val(B7)~"' and O.Plazo = "~FStr(Val(E7), 1, 0)~") ")
+    SQL.ADD("      or ")
+    SQL.ADD("      (O.TipoOp = '"~Val(B8)~"' and O.Plazo = "~FStr(Val(E8), 1, 0)~") ")
+    SQL.ADD("     ) ")
+  endif
+  SQL.ADD("   and O.NroAltaMAE            = '"~Copy(Val(A:2),113,5)~"' ")
+  SQL.ADD("   and IsNull(O.NroBajaMAE,'') = '' ")
+  SQL.ADD("   and O.NrOperacion           = OB.NrOperacion ")
+  SQL.ADD("   and OB.Valor                = '1' ")
+  if Val(x1)=1
+    * Operacion con Agente
+*    SQL.ADD(" and OB.NrBit                in (70,71,67,68,80,10,2,3) ")
+*    SQL.ADD(" and OB.NrBit                in (70,69) ")
+** FJL 10/10/19 - Por pedido de GGonzalez en pruebas Raiden II
+** Buscar en todas las instancias mennos terminal (xq estarian liquidadas)
+** Se busca en las instancias que no sean auxiliares del MAE
+*    SQL.ADD(" and OB.NrBit                in (3,70,69) ")
+    SQL.ADD(" and OB.NrBit                in (1,2,3,8,10,69) ")
+  else
+    * Operacion con Tercero
+    SQL.ADD(" and OB.NrBit                in (61,69) ")
+  endif
+watch(SQL.Batch)
+  Recorrer SQL
+    if Num(FBN['NroBajaMAE'])=0
+      if EqStr(fbn('Mercado'),Val(P6)) o [Incluido(fbn('Mercado'),'CE|EU') y Incluido(Val(p6),'CE|EU')] o [EqStr(Val(p6),'EPU') y Incluido(fbn('Mercado'),'CV|EU|CE') y EqStr(fbn('TablaFeriados1'),'USA')] o SI
+        ACT(R6, FBN['NrOperacion'])
+        ACT(R7, FBN['OperacionRef'])
+        ACT(R8, FBN['TipoOp'])
+        ACN(N1, 1)
+        Message('- Op Baja encontrada : '~Val(R6))
+        Break
+      endif
+    endif
+  Proximo
+  
+  if Val(N1)=1
+    ********************
+    * Encontro Operacion
+    ********************
+    if Val(x1)=1
+      *- OPERACIONES CON OTROS AGENTES (BAJA INICIADA POR CONTRAPARTE)
+      *- MANDO LA OPERACION A COMPLIANCE Y ESTE ACEPTARA O RECHAZARA CON UN 0510
+      *- LUEGO ESPERO UN 7020 AL 0510 CONFIRMANDO O RECHAZANDO
+      ACN(AE2, SQL("SELECT NrBit FROM "~DBO~".OPERACIONESBITS Where NrOperacion = '"~Val(R6)~"' and Valor = '1' ") )
+      if Dialogo.Check1=1
+        SQL.ADD("Insert into "~DBO~".EXCEPCIONES ( ")
+        SQL.ADD(" NrOperacion, Fecha, Tipo, Descripcion ")
+        SQL.ADD(" ) Values ( ")
+        SQL.ADD(" '"~Val(R6)~"', ")
+        SQL.ADD(" "~SQLAhora~", ")
+        SQL.ADD(" 'BAJAMAE', ")
+        SQL.ADD(" 'Pedido de Baja del MAE' ")
+        SQL.ADD(" ) ")
+        SQL.NEW
+          
+        *- Rojo = '1'  es un pedido de baja
+        SQL.ADD("Update "~DBO~".OPERACIONES ")
+        SQL.ADD("   Set Rojo       = '1', ")
+* FJL 28/10/19 - Por raiden III le agrego Fuente baja (RB7)
+        SQL.ADD("       RB7        = 0, ")
+        SQL.ADD("       LInstancia = "~Fstr(Val(AE2),1,0)~"")
+        SQL.ADD(" Where NrOperacion= '"~Val(R6)~"' ")
+        SQL.NEW
+          
+        SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+        SQL.ADD("   Set Valor       = '0' ")
+        SQL.ADD(" Where Valor       = '1' ")
+        SQL.ADD("   and NrOperacion = '"~Val(R6)~"' ")
+        SQL.NEW
+        SQL.EXEC
+         
+        EjecutarEvento('CBOINS', String1=Val(R6), Radio1=1, Radio2=2, Entero1=Val(AE2), Entero2=76)
+
+        SQL.ADD("Update "~DBO~".MENSAJESMAE ")
+        SQL.ADD("   Set Estado    = 'A76' ")
+        SQL.ADD(" Where Codigo    = 'CONBAJ' ")
+        SQL.ADD("   and FechaMAE  = '"~Val(ab:2)~"' ")
+        SQL.ADD("   and HoraMAE   = '"~Val(ab:3)~"' ")
+        SQL.ADD("   and Secuencia = '"~Val(ab:4)~"' ")
+        SQL.ADD("   and CodigoMAE = '"~Val(ab:5)~"' ")
+        SQL.ADD("   and Estado    = 'PEN' ")
+        SQL.NEW
+        SQL.EXEC
+      endif
+    else
+      *- OPERACIONES CON TERCEROS (BAJA INICIADA POR Banco) 
+      *- MANDO LA CONFIRMACION (0510) Y ESPERO UN 7020 AL 0302 U OTRA BAJA
+      if Dialogo.Check1=1
+        EjecutarEvento('CONMAE',NrOperacion1=Val(R6), String=Val(P1)~Val(P2), Check1=1, Check2=1)
+        if EqStr(Val(L6),'1')
+          * Operacion de PASE
+          ACT(w1, BuscarCampo('OPERACIONES','NroBajaMAE','NrOperacion',Val(R7)))
+          if Incluido(Val(R8),'TIC|TIV')
+            ACT(w2, 'CON '~Pad(Copy(Val(w1),5,4),4))
+          else
+            ACT(w2, Pad(Copy(Val(w1),1,4),4)~'CON ')
+          endif
+          SQL.ADD("Update "~DBO~".OPERACIONES ")
+          SQL.ADD("   Set NroBajaMAE  = '"~Val(w2)~"' ")
+          SQL.ADD(" Where NrOperacion = '"~Val(R7)~"' ")
+          SQL.NEW
+        else
+          SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+          SQL.ADD("   Set Valor = '0' ")
+          SQL.ADD(" Where Valor       = '1' ")
+          SQL.ADD("   and NrOperacion = '"~Val(R6)~"' ")
+          SQL.NEW
+          SQL.ADD("Update "~DBO~".OPERACIONESBITS ")
+          SQL.ADD("   Set Valor = '1' ")
+          SQL.ADD(" Where NrBit       = 62 ")
+          SQL.ADD("   and NrOperacion = '"~Val(R6)~"' ")
+          SQL.NEW
+        endif
+
+        SQL.ADD("Update "~DBO~".MENSAJESMAE ")
+        SQL.ADD("   Set Estado    = 'CON' ")
+        SQL.ADD(" Where Codigo    = 'CONBAJ' ")
+        SQL.ADD("   and FechaMAE  = '"~Val(ab:2)~"' ")
+        SQL.ADD("   and HoraMAE   = '"~Val(ab:3)~"' ")
+        SQL.ADD("   and Secuencia = '"~Val(ab:4)~"' ")
+        SQL.ADD("   and CodigoMAE = '"~Val(ab:5)~"' ")
+        SQL.ADD("   and Estado    = 'PEN' ")
+        SQL.NEW
+        SQL.EXEC
+      endif
+    endif
+  else
+    if Val(N2)=1
+      ***********************
+      * Encontro Op.Minorista
+      ***********************
+      *- OPERACIONES CON TERCEROS (BAJA INICIADA POR Banco) 
+      *- MANDO LA CONFIRMACION (0510) Y ESPERO UN 7020 AL 0302 U OTRA BAJA
+      if Dialogo.Check1=1
+
+        EjecutarEvento('CONMAF',NrOperacion1=Val(R6), String=Val(P1)~Val(P2), Check1=1, Check2=1)
+
+        SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+        SQL.ADD("   Set Valor       = '0' ")
+        SQL.ADD(" Where Valor       = '1' ")
+        SQL.ADD("   and NrOperacion = '"~Val(R6)~"' ")
+        SQL.NEW
+        SQL.ADD("Update "~DBO~".OPERACIONESBITS ")
+        SQL.ADD("   Set Valor = '1' ")
+        SQL.ADD(" Where NrBit       = 62 ")
+        SQL.ADD("   and NrOperacion = '"~Val(R6)~"' ")
+        SQL.NEW
+
+        SQL.ADD("Update "~DBO~".MENSAJESMAE ")
+        SQL.ADD("   Set Estado    = 'CON' ")
+        SQL.ADD(" Where Codigo    = 'CONBAJ' ")
+        SQL.ADD("   and FechaMAE  = '"~Val(ab:2)~"' ")
+        SQL.ADD("   and HoraMAE   = '"~Val(ab:3)~"' ")
+        SQL.ADD("   and Secuencia = '"~Val(ab:4)~"' ")
+        SQL.ADD("   and CodigoMAE = '"~Val(ab:5)~"' ")
+        SQL.ADD("   and Estado    = 'PEN' ")
+        SQL.NEW
+        SQL.EXEC
+      endif
+    else
+      Message('---------- Operacion no encontrada - Tiempo disponible')
+      *- Plazo no vencido y operacion no encontrada (dejar para volver a chequear + tarde)
+      *- Avisar al Trader que la Operacion no esta
+    endif
+  endif
+Proximo
+FormatoCeldas(j6,Exe('F9'))

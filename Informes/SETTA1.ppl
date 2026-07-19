@@ -1,0 +1,284 @@
+﻿*- Informe toma tasas estimadas o reales de la
+*- tabla de cotizaciones, las impacta en las operaciones y recalcula
+*- intereses e impuestos
+
+*Actua para Simuladas que Recalculen y Reales
+
+HojaVisible(SI)
+MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1       : "Fecha Vigencia"    ;;;;NO;;Dialogo.Fecha1<>0 y Dialogo.Fecha1<=Fsys;'Fecha Vigencia Invalida';NO;Fsys;
+  Fecha2       : "Reset Desde"       ;;;;;;Dialogo.Fecha2>=Dialogo.Fecha1;'Fecha Desde Reseteo Invalida';NO;Dialogo.Fecha1;Dialogo.Fecha1
+  Fecha4       : "Reset Hasta"       ;;;;;;Dialogo.Fecha4>=Dialogo.Fecha2;'Fecha Hasta Reseteo Invalida';NO;Dialogo.Fecha1;Dialogo.Fecha1
+  Fecha3       : "Inicio Desde"      ;;;;;;Dialogo.Fecha2>=Dialogo.Fecha1;'Fecha Desde Vto Invalida';NO;Dialogo.Fecha2+Dialogo.Entero1;Dialogo.Fecha2+Dialogo.Entero1
+  Fecha5       : "Inicio Hasta"      ;;;;;;Dialogo.Fecha5>=Dialogo.Fecha3;'Fecha Hasta Vto Invalida';NO;Habiles(Dialogo.Fecha2,Dialogo.Entero1,'ARG',SI);Habiles(Dialogo.Fecha2,Dialogo.Entero1,'ARG',SI)
+  NrOperacion1 : "Operacion"         ;;;;;;
+  Radio1       : 'Tipo|Reales|Simuladas' ;;;;;;;;;1;;;
+  Entero1      : 'Dias+'                 ;;;;;;;;;Dialogo.Radio1+1;Dialogo.Radio1+1;;
+  Lista1       : "Vehiculo"              ;2;2;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet(" Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSET(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo = '"~UsuarioActivo~"' AND U.Vehiculo = V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")); 
+  Feriado1     : "Feriados"              ;;;;;;
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,6,")
+CrearFont(5,"Arial,12,BI")
+
+ACT(ls:1000, IIF(Vacio(UsrVehiculos(UsuarioActivo)), SQLSet("Select Codigo From "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='') "), SQLSet(" Select U.Vehiculo From "~DBO~".USRVEHICULO U, "~DBO~".VEHICULOS V Where U.Codigo='"~UsuarioActivo~"' AND U.Vehiculo=V.Codigo AND (Status='HAB' or Status Is Null or Status='') ")))
+ACT(ls:1100, SQLSet(" Select Codigo From "~DBO~".TIPOSOPERACION Where Codigo Like 'MM%' or Codigo In ('DTSFVM','DTSVVM','DTSVV','DTSFV','DTCAP','DTFLO')"))
+
+SetFilaActual(2)
+
+ACT(d:FAC  ,"Informe de Reseto de Tasas del "~Dialogo.Fecha1~" Para la Tabla de Feriados de "~Dialogo.Feriado1)
+
+SetFont(a:fac..e:fac+2,3)
+
+SetFilaActual(5)
+ACT(a:fac, 'Fecha Vig:    '~Dialogo.Fecha1)
+
+if NoVacio(Dialogo.NrOperacion1)
+   ACT(a:fac+2, 'Operacion: '~Dialogo.NrOperacion1)
+else
+   ACT(a:fac+2, 'Operacion:  Todas')
+endif
+
+if NoVacio(Dialogo.Lista1)
+   ACT(a:fac+1, 'Vehiculos :  '~Dialogo.Lista1)
+else
+   if NoVacio(Dialogo.NrOperacion1)
+      ACT(a:fac+1,'Vehiculos:   '~BuscarCampo('OPERACIONES', 'Vehiculo1', 'NrOperacion',Dialogo.NrOperacion1))
+   Else
+      ACT(a:fac+1, 'Vehiculos:   Todos') 
+   EndIf
+endif
+SetFont(a:fac..a:fac+2,2)
+SetFilaActual(fac+4)
+
+ACT(a:FAC, 'Tasa Tipo')
+ACT(b:FAC, 'TipoOp')
+ACT(c:FAC, 'NrOperacion')
+ACT(d:FAC, 'NrCuota')
+ACT(e:FAC, 'Vehiculo')
+ACT(f:FAC, 'Entidad')
+ACT(g:FAC, 'FInicio')
+ACT(h:FAC, 'FFin')
+ACT(i:FAC, 'Plazo')
+ACT(j:FAC, 'Especie')
+ACT(k:FAC, 'V.Nominal')
+
+
+
+SetFont(a:fac..k:fac,2)
+AgregarMarco(a:FAC..k:FAC,2,0,Exe('COLOR'))
+
+*- re1: 0 Real 1 Simulado
+ACN(re1,Dialogo.Radio1)
+
+*- Operaciones Multiple Vto
+SQL.ADD("SELECT  O.TipoTasa,O.TipoOp,O.NrOperacion,C.NrCuota,O.MB1,O.Precio3 OPrecio3,O.Precio2 OPrecio2,")
+SQL.ADD("O.MB3,O.ImpGastos2,O.RB8,O.TotalAux1,O.RB9,O.PlazoGracia,O.Vehiculo1,")
+SQL.ADD("O.RB6,O.CB10,O.MB1,O.Precio3,O.RB7,O.RB5,O.TasaPrecan,O.Spread,O.Cliente1,")
+SQL.ADD("O.TotalAux2,O.Especie,O.ImpGastos1,O.TasaImp1,O.IntDevengados1,O.DeltaTasa,O.FechaOp,O.FechaVto,O.Plazo,O.Cantidad,")
+SQL.ADD("O.PrecioEj,O.ImpComCor1,O.ImpComCor2,O.FechaVto2,O.TotalBrutoCli2,O.TotalComisiones,O.TotalIntereses,O.InteresesCorr,O.ContraEspecie,")
+SQL.ADD("O.TCComCor1,C.Cantidad1,C.Cantidad2,C.Total5,C.Plazo1,C.Cantidad5,C.Cantidad2,C.Plazo3,")
+SQL.ADD("C.Tasa2, C.Precio4,C.Fecha1,C.Fecha2,C.Total6,C.Precio3,C.Cantidad7,C.Check1,C.Cantidad4,C.Tasa3, ")
+SQL.ADD("C.Total3,C.Total4,C.Fecha5,C.Fecha6,' ' as Pata,C.Cantidad3,C.Cantidad4,O.OperacionRef,O.TotalAux4, O.TasaBase ")
+SQL.ADD(" from  "~DBO~".CUOTAS C, "~DBO~".OPERACIONES  O ")
+SQL.ADD(" where O.NrOperacion = C.NrOperacion ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("       AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+   SQL.ADD("       AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+IF NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+ENDIF
+IF NoVacio(Dialogo.Feriado1)
+   SQL.ADD(" and O.TablaFeriados1 = '"~Dialogo.Feriado1~"'")
+ENDIF
+
+SQL.ADD("       and O.TipoOp In ('MMFIMV','MMSIMV','MMPCLM','MMPEM','MMPIM','MMPOSM','MMONM','MMPCCM') ")
+SQL.ADD("       and O.FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and C.Fecha1 Between '"~IdxDate(Dialogo.Fecha3)~"' and '"~IdxDate(Dialogo.Fecha5)~"'  ")
+MESSAGE("       and C.Fecha1 Between '"~IdxDate(Dialogo.Fecha3)~"' and '"~IdxDate(Dialogo.Fecha5)~"'  ")
+SQL.ADD("       and O.TipoTasa<>'FIJA' ")
+SQL.ADD(" Union ")
+*- Operaciones Unico Vto
+SQL.ADD("SELECT O.TipoTasa,O.TipoOp,O.NrOperacion,0 NrCuota,O.MB1,O.Precio3 OPrecio3,O.Precio2 OPrecio2,")
+SQL.ADD("O.MB3,O.ImpGastos2,O.RB8,O.TotalAux1,O.RB9,O.PlazoGracia,O.Vehiculo1,")
+SQL.ADD("O.RB6,O.CB10,O.MB1,O.Precio3,O.RB7,O.RB5,O.TasaPrecan,O.Spread,O.Cliente1,")
+SQL.ADD("O.TotalAux2,O.Especie,O.ImpGastos1,O.TasaImp1,O.IntDevengados1,O.DeltaTasa,O.FechaOp,O.FechaVto,O.Plazo,O.Cantidad,")
+SQL.ADD("O.PrecioEj,O.ImpComCor1,O.ImpComCor2,O.FechaVto2,O.TotalBrutoCli2,O.TotalComisiones,O.TotalIntereses,O.InteresesCorr,O.ContraEspecie,")
+SQL.ADD("O.TCComCor1,O.Cantidad Cantidad1,O.Cantidad Cantidad2,0 Total5,O.Plazo Plazo1,0 Cantidad5,0 Cantidad2,0 Plazo3,")
+SQL.ADD("0 Tasa2,0 Precio4,O.FechaOp Fecha1,O.FechaVto Fecha2,0 Total6,0 Precio3,0 Cantidad7, '0' Check1,0 Cantidad4,0 Tasa3, ")
+SQL.ADD("0 Total3,0 Total4,O.FechaOp Fecha5,O.FechaVto Fecha6,' ' as Pata, 0 Cantidad3,0 Cantidad4,O.OperacionRef,O.TotalAux4, O.TasaBase ")
+SQL.ADD(" from "~DBO~".OPERACIONES  O ")
+SQL.ADD("where O.TipoOp In ('MMFRN','MMFRNP','MMPSC','MMPSI','MMPCL','MMPCOS','MMPE','MMPI','MMPLME','MMON','MMPCCV') ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+IF NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+ENDIF
+IF NoVacio(Dialogo.Feriado1)
+   SQL.ADD(" and O.TablaFeriados1 = '"~Dialogo.Feriado1~"'")
+ENDIF
+
+
+SQL.ADD(" and O.FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and O.FechaOp Between '"~IdxDate(Dialogo.Fecha3)~"'  and '"~IdxDate(Dialogo.Fecha5)~"'  ")
+SQL.ADD(" and O.TipoTasa<>'FIJA' ")
+SQL.ADD(" Union ")
+***---Swap Datos Vehiculo
+SQL.ADD("SELECT O.TipoTasa,O.TipoOp,O.NrOperacion,C.NrCuota,O.MB1,O.Precio3 OPrecio3,O.Precio2 OPrecio2,")
+SQL.ADD("O.MB3,O.ImpGastos2,O.RB8,O.TotalAux1,O.RB9,O.PlazoGracia,O.Vehiculo1,")
+SQL.ADD("O.RB6,O.CB10,O.MB1,O.Precio3,O.RB7,O.RB5,O.TasaPrecan,O.Spread,O.Cliente1,")
+SQL.ADD("O.TotalAux2,O.Especie,O.ImpGastos1,O.TasaImp1,O.IntDevengados1,O.DeltaTasa,O.FechaOp,O.FechaVto,O.Plazo,O.Cantidad,")
+SQL.ADD("O.PrecioEj,O.ImpComCor1,O.ImpComCor2,O.FechaVto2,O.TotalBrutoCli2,O.TotalComisiones,O.TotalIntereses,O.InteresesCorr,O.ContraEspecie,")
+SQL.ADD("O.TCComCor1,C.Cantidad1 ,C.Cantidad2 , C.Total5,C.Plazo1,C.Cantidad5,C.Cantidad2,C.Plazo3,")
+SQL.ADD("C.Tasa2, C.Precio4,C.Fecha1,C.Fecha2,C.Total6,C.Precio3,C.Cantidad7,C.Check1,C.Cantidad4,C.Tasa3, ")
+SQL.ADD("C.Total3,C.Total4,C.Fecha5,C.Fecha6,'VEHI' as Pata,C.Cantidad3,C.Cantidad4,O.OperacionRef,O.TotalAux4, O.TasaBase ")
+SQL.ADD(" From "~DBO~".CUOTAS C, "~DBO~".OPERACIONES O ")
+SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+Endif
+IF NoVacio(Dialogo.Feriado1)
+   SQL.ADD(" and O.TablaFeriados1 = '"~Dialogo.Feriado1~"'")
+ENDIF
+SQL.ADD(" AND O.TipoOp IN ('DTSFVM','DTSVVM','DTCAP','DTFLO') ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND C.Fecha4 Between '"~IdxDate(Dialogo.Fecha2)~"'  and '"~IdxDate(Dialogo.Fecha4)~"' ")
+SQL.ADD(" AND O.TipoTasa<>'FIJA' AND O.TipoTasa Is Not Null AND O.TipoTasa<>' ' ")
+SQL.ADD(" Union ")
+***---Swap Datos Contraparte
+SQL.ADD("SELECT O.TipoTasa2 TipoTasa,O.TipoOp,O.NrOperacion,C.NrCuota,O.MB1,O.Precio3 OPrecio3,O.Precio2 OPrecio2,")
+SQL.ADD("O.MB3,O.ImpGastos2,O.RB8,O.TotalAux1,O.RB9,O.PlazoGracia,O.Vehiculo1,")
+SQL.ADD("O.RB6,O.CB10,O.MB1,O.Precio3,O.RB7,O.RB5,O.TasaPrecan,O.Spread,O.Cliente1,")
+SQL.ADD("O.TotalAux2,O.Especie,O.ImpGastos1,O.TasaImp1,O.IntDevengados1,O.DeltaTasa,O.FechaOp,O.FechaVto,O.Plazo,O.Cantidad,")
+SQL.ADD("O.PrecioEj,O.ImpComCor1,O.ImpComCor2,O.FechaVto2,O.TotalBrutoCli2,O.TotalComisiones,O.TotalIntereses,O.InteresesCorr,O.ContraEspecie,")
+SQL.ADD("O.TCComCor1,C.Cantidad1 ,C.Cantidad2 , C.Total5,C.Plazo1,C.Cantidad5,C.Cantidad2,C.Plazo3,")
+SQL.ADD("C.Tasa2, C.Precio4,C.Fecha1,C.Fecha2,C.Total6,C.Precio3,C.Cantidad7,C.Check1,C.Cantidad4,C.Tasa3, ")
+SQL.ADD("C.Total3,C.Total4,C.Fecha5,C.Fecha6,'CONT' as Pata,C.Cantidad3,C.Cantidad4,'' OperacionRef,O.TotalAux4, O.TasaBase ")
+SQL.ADD(" From "~DBO~".CUOTAS C, "~DBO~".OPERACIONES O  ")
+SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+EndIf
+IF NoVacio(Dialogo.Feriado1)
+   SQL.ADD(" and O.TablaFeriados1 = '"~Dialogo.Feriado1~"'")
+ENDIF
+SQL.ADD(" AND O.TipoOp IN ('DTSFVM','DTSVVM','DTCAP','DTFLO') ")
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND C.Fecha4 Between '"~IdxDate(Dialogo.Fecha2)~"'  and '"~IdxDate(Dialogo.Fecha4)~"'  ")
+SQL.ADD(" AND O.TipoTasa2<>'FIJA' AND O.TipoTasa2 Is Not Null AND O.TipoTasa2<>' ' ")
+SQL.ADD(" UNION ")
+***---Swaps Unico Vto Datos Vehiculo
+SQL.ADD("SELECT O.TipoTasa,O.TipoOp,O.NrOperacion,0 NrCuota,O.MB1,O.Precio3 OPrecio3,O.Precio2 OPrecio2,")
+SQL.ADD("O.MB3,O.ImpGastos2,O.RB8,O.TotalAux1,O.RB9,O.PlazoGracia,O.Vehiculo1,")
+SQL.ADD("O.RB6,O.CB10,O.MB1,O.Precio3,O.RB7,O.RB5,O.TasaPrecan,O.Spread,O.Cliente1,")
+SQL.ADD("O.TotalAux2,O.Especie,O.ImpGastos1,O.TasaImp1,O.IntDevengados1,O.DeltaTasa,O.FechaOp,O.FechaVto,O.Plazo,O.Cantidad,")
+SQL.ADD("O.PrecioEj,O.ImpComCor1,O.ImpComCor2,O.FechaVto2,O.TotalBrutoCli2,O.TotalComisiones,O.TotalIntereses,O.InteresesCorr,O.ContraEspecie,")
+SQL.ADD("O.TCComCor1,0 Cantidad1,0 Cantidad2,0 Total5,0 Plazo1,0 Cantidad5,0 Cantidad2,0 Plazo3,")
+SQL.ADD("0 Tasa2,0 Precio4,O.FechaCargaSys Fecha1,O.FechaCargaSys Fecha2,0 Total6,0 Precio3,0 Cantidad7, '0' Check1,0 Cantidad4,0 Tasa3, ")
+SQL.ADD("0 Total3,0 Total4,O.FechaOp Fecha5,O.FechaVto Fecha6,'VEHI' as Pata, 0 Cantidad3,0 Cantidad4,O.OperacionRef,O.TotalAux4, O.TasaBase")
+SQL.ADD(" From "~DBO~".OPERACIONES O ")
+SQL.ADD(" Where O.TipoOp IN ('DTSFV','DTSVV')  ")
+IF NoVacio(Dialogo.Lista1)
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+    SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+Endif
+IF NoVacio(Dialogo.Feriado1)
+   SQL.ADD(" and O.TablaFeriados1 = '"~Dialogo.Feriado1~"'")
+ENDIF
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.FechaPrecan Between '"~IdxDate(Dialogo.Fecha2)~"'  and '"~IdxDate(Dialogo.Fecha4)~"'  ")
+SQL.ADD(" AND O.TipoTasa<>'FIJA' AND O.TipoTasa Is Not Null AND O.TipoTasa<>' ' ")
+SQL.ADD(" UNION ")
+***--- Swaps Unico Vto Datos Contraparte
+SQL.ADD("SELECT O.TipoTasa2 TipoTasa,O.TipoOp,O.NrOperacion,0 NrCuota,O.MB1,O.Precio3 OPrecio3,O.Precio2 OPrecio2,")
+SQL.ADD("O.MB3,O.ImpGastos2,O.RB8,O.TotalAux1,O.RB9,O.PlazoGracia,O.Vehiculo1,")
+SQL.ADD("O.RB6,O.CB10,O.MB1,O.Precio3,O.RB7,O.RB5,O.TasaPrecan,O.Spread,O.Cliente1,")
+SQL.ADD("O.TotalAux2,O.Especie,O.ImpGastos1,O.TasaImp1,O.IntDevengados1,O.DeltaTasa,O.FechaOp,O.FechaVto,O.Plazo,O.Cantidad,")
+SQL.ADD("O.PrecioEj,O.ImpComCor1,O.ImpComCor2,O.FechaVto2,O.TotalBrutoCli2,O.TotalComisiones,O.TotalIntereses,O.InteresesCorr,O.ContraEspecie,")
+SQL.ADD("O.TCComCor1,0 Cantidad1,0 Cantidad2,0 Total5,0 Plazo1,0 Cantidad5,0 Cantidad2,0 Plazo3,")
+SQL.ADD("0 Tasa2,0 Precio4,O.FechaCargaSys Fecha1,O.FechaCargaSys Fecha2,0 Total6,0 Precio3,0 Cantidad7,'0' Check1,0 Cantidad4, 0 Tasa3, 0 Total3,0 Total4,O.FechaOp Fecha5,O.FechaVto Fecha6,'CONT' as Pata, 0 Cantidad3,0 Cantidad4,'' OperacionRef,O.TotalAux4, O.TasaBase ")
+SQL.ADD(" From "~DBO~".OPERACIONES O")
+SQL.ADD(" Where ")
+SQL.ADD(" O.TipoOp IN ('DTSFV','DTSVV') ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+   SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Val(LS:1000))~") ")
+ENDIF
+
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+Endif
+IF NoVacio(Dialogo.Feriado1)
+   SQL.ADD(" and O.TablaFeriados1 = '"~Dialogo.Feriado1~"'")
+ENDIF
+SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.FechaPrecan Between '"~IdxDate(Dialogo.Fecha2)~"'  and '"~IdxDate(Dialogo.Fecha4)~"'  ")
+SQL.ADD(" AND O.TipoTasa2<>'FIJA' AND O.TipoTasa2 Is Not Null AND O.TipoTasa2<>' '  ")
+SQL.ADD(" Order By 1,2,3,4")
+
+
+Recorrer SQL
+
+ACT(a:FAC, fbn['TipoTasa'])
+ACT(b:FAC, fbn['TipoOp'])
+ACT(c:FAC, fbn['NrOperacion'])
+ACLO(c:FAC, fbn['NrOperacion'])
+ACN(d:FAC, fbn['NrCuota'])
+ACT(e:FAC, fbn['Vehiculo1'])
+ACT(f:FAC, fbn['Cliente1'])
+ACT(g:FAC, fbn['Fecha1'])
+ACT(h:FAC, fbn['Fecha2'])
+ACN(i:FAC, fbn['Plazo1'])
+ACT(j:FAC, fbn['Especie'])
+ACN(k:FAC, fbn['Cantidad2'])
+FormatoCeldas(d:fac, Exe('F0'))
+FormatoCeldas(i:fac, Exe('F0'))
+
+SetFont(a:fac..k:fac,1)
+Proximo
+ACO(1, 8)
+ACO(2, 8)
+ACO(3, 8)
+ACO(4, 8)
+ACO(5, 8)
+ACO(6, 8)
+ACO(7, 8)
+ACO(8, 8)
+ACO(9, 8)
+ACO(10,10)
+LimitesVision(m:FAC+2)
+Impresion(2, 0)
+Impresion(3, 0)

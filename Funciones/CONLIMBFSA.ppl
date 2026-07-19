@@ -1,0 +1,43 @@
+﻿*-TIPOOP para el BOOK-*
+*-Para Titulos usamos la funcion COLITIBFSA-* 
+**Si existe TipoOp para el book, permito asignar
+QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') ")=1;'El Book no puede invertir en este TipoOp';NO
+
+
+**-INSTRUCCION FIDUCIANTE-**
+*-OPERACION SI LIMITE SI - NO CONTROLA MAS NADA-*
+*-OPERACION SI LIMITE NO - CONTROLA DESPUES RESTO CAMPOS-*
+*-OPERACION NO LIMITE NO - CONTROLA DESPUES RESTO CAMPOS-*
+*-OPERACION NO LIMITE SI - NO PERMITO-*
+(CB11 = 1 Y NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='SI'"))) O (NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='NO'")));'Este TipoOp solo puede operarse por Instruccion del Fiduciante';NO
+
+
+**-LIMITADO A UNA CONTRAPARTE-** 
+*-controla ESPECIE - solo aplica para FCI -*
+Not EqStr(TIPOOP,'FCI') O ((CB11 = 1 Y NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='SI'"))) O ((NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='NO'"))) Y [Vacio(SQLSet("Select Especies FROM "~DBO~".LIMASIGNADOSBOOK where (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND Codigo = '"~BOOK1~"' AND CB1='NO'")) O Incluido(ESPECIE,SQLSet("Select Especies FROM "~DBO~".LIMASIGNADOSBOOK where (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND Codigo = '"~BOOK1~"' AND CB1='NO'")) O Incluido(SQLSet("Select Especies FROM "~DBO~".LIMASIGNADOSBOOK where (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND Codigo = '"~BOOK1~"' AND CB1='NO'"),Ascendientes('ESPECIES',ESPECIE),1)])) ; 'El book no puede invertir en la Especie' ~ESPECIE ; NO
+*-controla CLIENTES - solo aplica para Plazo Fijo -*
+Not EqStr(TIPOOP,'MMCPM') O ((CB11 = 1 Y NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='SI'"))) O ((NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='NO'"))) Y [Vacio(SQLSet("Select Clientes FROM "~DBO~".LIMASIGNADOSBOOK where (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND Codigo = '"~BOOK1~"' AND CB1='NO'")) O Incluido(CLIENTE1,SQLSet("Select Clientes FROM "~DBO~".LIMASIGNADOSBOOK where (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND Codigo = '"~BOOK1~"' AND CB1='NO'")))]) ; 'El book no puede invertir en el Cliente '~CLIENTE1; NO
+
+
+**-MONTO - control solo para Plazo Fijo de acuerdo al valor de la variable MONMINPFML -**
+**cotizacion para validacion: si contraespecie <> a MoneLoca, cotizacionC  de la ContraEspecie en MoneLoca
+**cotizacion para mensaje: si contraespecie <> a MoneLoca, variable*cotizacionC de la MonedaLoca en ContraEspecie
+*Not EqStr(TIPOOP,'MMCPM') O ((CB11 = 1 Y NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='SI'"))) O ((NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='NO'"))) Y (VAR('MONMINPFML')<(Cantidad * IF(CONTRAESPECIE=Var('MONELOCA'), 1, CotizacionC(CONTRAESPECIE,,,,FECHAOP,1,SI,VAR('MONELOCA')))) Y Incluido(CLIENTE1,VAR('BANMONPF')))));'El Monto de la OP debe ser mayor a '~(VAR('MONMINPFML')*IF(CONTRAESPECIE=Var('MONELOCA'), 1, CotizacionC(Var('MONELOCA'),,,,FECHAOP,1,SI,CONTRAESPECIE)));NO
+Not EqStr(TIPOOP,'MMCPM') O NOT(VAR('MONMINPFML')>(Cantidad * IF(ESPECIE=Var('MONELOCA'), 1, CotizacionC(ESPECIE,,,,FECHAOP,1,SI,VAR('MONELOCA')))) Y Incluido(CLIENTE1,VAR('BANMONPF')));'El Monto de la OP debe ser mayor a '~(VAR('MONMINPFML')*IF(ESPECIE=Var('MONELOCA'), 1, CotizacionC(Var('MONELOCA'),,,,FECHAOP,1,SI,ESPECIE)));NO
+
+
+*******A PARTIR DE ACA SON WARNING CON EXCEPCIONES*******
+
+**-PORCENTAJE GLOBAL-**
+(CB11 = 1 Y NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='SI'"))) O ((NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='NO'"))) Y [QUERY("Select Porcentaje FROM "~DBO~".LIMASIGNADOSBOOK where (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND Codigo = '"~BOOK1~"' and CB1='NO'")=0 O QUERY("Select Porcentaje FROM "~DBO~".LIMASIGNADOSBOOK where (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND Codigo = '"~BOOK1~"' AND CB1='NO'") >= LimPorcConsum ] ) ; 'El % global invertido en '~TIPOOP~' excede el %  global permitido de la cartera';SI;SI;FSYS;'EXCPOR';
+
+**-PORCENTAJE DE LA ENTIDAD - solo aplica a Plazo Fijo-**
+Not EqStr(TIPOOP,'MMCPM') O ((CB11 = 1 Y NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='SI'"))) O ((NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='NO'"))) Y [QUERY("Select Porcentaje1 FROM "~DBO~".LIMASIGNADOSBOOK where (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND Codigo = '"~BOOK1~"' and CB1='NO'")=0 O QUERY("Select Porcentaje1 FROM "~DBO~".LIMASIGNADOSBOOK where (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND Codigo = '"~BOOK1~"' AND CB1='NO'") >= LimPorcConsum1 ] )) ; 'El % por entidad invertido en '~TIPOOP~' excede el % por entidad permitido de la cartera';SI;SI;FSYS;'EXCPOR';
+
+**-MONTO MAXIMO Y MINIMO - no aplica para Cauciones-**
+*-Se deja el control para PlazoFijo pero queda sin efecto ya que se controla contra la variable MONMINPFML como restriccion*-
+EqStr(TIPOOP,'SECAC') O ((CB11 = 1 Y NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='SI'"))) O ((NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='NO'"))) Y [(LimMonSup>=LimConsum+(MontoOpLim*CotiOpLim) O Vacio(LimMonSup) O LimMonSup = 0) Y (LimMonInf<=LimConsum+(MontoOpLim*CotiOpLim) O Vacio(LimMonInf) O LimMonInf = 0)] )) ; 'Excede el Monto del Limite';SI;SI;FSYS;'EXCLIM';
+
+**-PLAZO - controlamos dias corridos o habiles de acuerdo a marca en limite - no aplica para FCI -**
+**tanto para PF como Cauciones controlamos el plazo, si para PF desde el limite le ponen que se controla como dias habiles, va a saltar igual el mensaje.
+EqStr(TIPOOP,'FCI') O ((CB11 = 1 Y NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='SI'"))) O ((NoVacio(QUERY("Select 1 FROM "~DBO~".LIMASIGNADOSBOOK where Codigo= '"~BOOK1~"' AND (TiposOperacion LIKE '"~TIPOOP~"|%' OR TiposOperacion LIKE '%|"~TIPOOP~"|%') AND CB1='NO'"))) Y [FechaVto <= Habiles(FechaOp,LimPlazo,TABLAFERIADOS1,If(LimTipoDias='HAB',SI,NO)) O Vacio(LimPlazo) O LimPlazo = 0] )) ; 'Excede el Plazo del Limite';SI;SI;FSYS;'EXCPLA';

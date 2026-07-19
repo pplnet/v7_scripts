@@ -1,0 +1,70 @@
+﻿***---Calculo de Dividendos por Operacion. No esta agrupado por vehiculo, book. Hacer en caso de ser necesario.
+Message('Procesando Repo Spot Vencido y  Futuro no vencido ...')
+SQL.ADD("SELECT O.TipoOp, O.NrOperacion, O.Cliente1, O.Vehiculo1, ")
+SQL.ADD("       O.Cantidad, O.Precio2, O.FechaVto, O.TotalDerechos, ")
+SQL.ADD("       O.ImpGastos2, O.ImpComCor2, O.MB1, O.TotalRetenciones, ")
+SQL.ADD("       O.RB9, O.Book1 ")
+SQL.ADD("  from "~DBO~".OPERACIONES O ")
+SQL.ADD(" Where O.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD("   and O.TipoOp In ('SERA','SERP','SERAV','SERPV') ")
+SQL.ADD("   and O.FechaOp <='"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD("   and O.FechaVto2 >='"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD(" order by O.TipoOp, O.Especie")
+
+Recorrer SQL
+   Message('Repo  :'~FBN['TipoOp']~' '~FBN['NrOperacion'])   
+
+   act(a:fac,fbn['Cliente1'])
+   act(b:fac,fbn['TipoOp'])
+   act(c:fac,fbn['Vehiculo1'] )
+   acn(d:fac,fbn['Cantidad'] )
+   act(k:fac,fbn['NrOperacion'])
+   act(l:fac,fbn['Book1'])
+
+   * o:fac 0: Spot no Vencido   1: Spot Vencido   
+   acn(o:fac,0)
+
+   IF FBN['FechaVto']<=Dialogo.Fecha1
+      acn(o:fac,1)  
+   EndIf
+
+   * e: Monto en Efectivo 
+   * f: Monto en Acciones 
+   * g: Precio Nuevo 
+   * g: Precio 
+   * h:TotalBrutoCli2 
+   * i: TotalNetoCli2
+
+   * Calculo el Precio del Dividendo en Efectivo si Liquida
+   IF FBN['RB9']=0
+      acn(e:fac,FBN['Cantidad']*(Dialogo.Precio1/100))    
+      acn(g:fac,FBN['Precio2']-(Dialogo.Precio1/100))    
+   ELSE
+      acn(e:fac,0)    
+      acn(g:fac,FBN['Precio2'])    
+   ENDIF
+
+   acn(h:fac,FBN['Cantidad']*VAL(g:fac))    
+
+   * Calculo el Importe a Liquidar Futuro
+   acn(i:fac,VAL(h:fac)+FBN['TotalDerechos']+FBN['ImpGastos2']+IIF(FBN['MB1']=0,FBN['ImpComCor2'],0))
+
+   IF Incluido(FBN['TipoOp'],'SERP|SERPV')
+      acn(i:fac,VAL(h:fac)+FBN['TotalDerechos']-FBN['ImpGastos2']-IIF(FBN['MB1']=0,FBN['ImpComCor2'],0))
+   EndIf
+
+   * j: Cantidad Originial
+   ACN(j:fac,IIF(FBN['TotalRetenciones']<>0,FBN['TotalRetenciones'],FBN['Cantidad']))
+
+   * Calculo el Dividendo en Acciones.
+   acn(f:fac,FBN['Cantidad']*(Dialogo.Precio2/100))
+
+   * Calculo el Nuevo Precio
+   acn(g:fac,VAL(h:fac)/(FBN['Cantidad']+VAL(f:fac)))       
+
+   * xLiquida o Financia
+   act(x:fac,FBN['RB9'])
+
+   *** Calcula importes de dividendos ***
+   (.'CALCDIVI2'.)
+Proximo

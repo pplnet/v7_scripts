@@ -1,0 +1,149 @@
+﻿CrearDialogo
+  Fecha1:       'Fecha'       ;1;1;;;;;;;fsys
+FinDialogo
+
+If Not Ok
+   Cancelar
+   
+Endif
+
+ACT(aa:5,SQL("select convert(varchar(8),Getdate(),112)"))
+    
+if NOt ExisteDirectorio(VAR("PATHBASCON"))
+     MessageBox("No existe el directorio "~VAR("PATHBASCON"))
+     Cancelar
+endif
+
+*SQL.ADD("SELECT A.NrUnicoAsiento,convert(varchar(8),A.FechaValor,112) as FechaValor,convert(varchar(8),A.FechaValor,112) as FechaLiquidacion,substring(A1.Cuenta,1,9) as Cuenta,")
+SQL.ADD("SELECT A.NrUnicoAsiento,A.FechaValor,substring(A1.Cuenta,1,9) as Cuenta,")
+SQL.ADD("case when A1.DebitoCredito='DEB' then 'D' else 'C' end as DC,str(A1.Cantidad1,14,2) as Cantidad1,isnull(RTRIM(A.NrOperacion),'') as NrOperacion,")
+SQL.ADD("SUBSTRING('FPA-' + RTRIM(A.NrUnicoAsiento) +'-'+ isnull(RTRIM(A.Modelo),'') + ' ' + isnull(RTRIM(A.NrOperacion),''),1,40)      as Descripcion,")
+*SQL.ADD("SUBSTRING(A1.alias4,1,2) + SUBSTRING(A1.alias4,4,2) + SUBSTRING(A1.alias4,7,4) AS FechaVto,A1.alias5,A1.valor3,A1.valor2,A1.alias5,A1.NrTrans2,")
+SQL.ADD("A1.Alias4 as FechaVto, A1.alias5,A1.valor3,A1.valor2,A1.alias5,A1.NrTrans2,")
+SQL.ADD("isnull(RTRIM(Case WHEN A.NrOperacion = '' THEN A1.NrTrans2 else A.NrOperacion END),'')      as Descripcion1, A.Estado, A1.Especie1 Moneda")
+SQL.ADD("FROM dbo.ASIENTOSCON A INNER JOIN dbo.ASIENTOSCON1 A1 on (A.NrUnicoAsiento=A1.NrUnicoAsiento)")
+*SQL.ADD("where A.FechaGeneracion = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("where (A.Estado IS Null OR A.Estado = '' OR A.Estado = ' ' OR A.Estado = 'COT' OR A.Estado = 'REV') ")
+SQL.ADD("AND A.FechaValor <= '"~IdxDate(Fsys)~"' ")
+*SQL.ADD("AND (A.Sector Is Null OR A.Sector = '' OR A.Sector = ' ') ")
+
+ACT(bb:1,"N")
+ACN(aa:4,0)
+ACN(aa:6,0)
+ACN(aa:7,0)
+
+Recorrer SQL    
+
+    if EqStr(Val(bb:1),"N")
+    AbrirASCII(VAR("PATHBASCON")~"\CBSIS005"~copy(Val(aa:5),1,4)~copy(Val(aa:5),5,2)~copy(Val(aa:5),7,2)~copy(Hora(SQLAhora),1,2)~copy(Hora(SQLAhora),4,2)~copy(Hora(SQLAhora),7,2)~".TXT",0)
+        ACN(aa:2,FBN['NrUnicoAsiento'])
+    endif    
+
+    ACT(bb:1,"S")
+    
+    if NOT Val(aa:2)=FBN['NrUnicoAsiento']
+        ACN(aa:2,FBN['NrUnicoAsiento'])
+        ACN(aa:1,1)
+    else
+        ACN(aa:1,Val(aa:1)+1)
+    endif
+    
+    
+    ACN(aa:10,Posicion(',',fbn['valor3'], 0))
+    IF Val(aa:10) = 0
+        ACN(aa:10,5)
+    ENDIF
+    
+    ACN(aa:11,Posicion('-',fbn['valor2'], 0))
+    IF val(aa:11) <> 0
+       ACT(aa:11,'-'~Pad0(Copy(fbn['valor2'],2,200),11) )
+    ELSE
+        ACT(aa:11,Pad0(fbn['valor2'],12) )
+    ENDIF
+    
+    *--*Ubicacion de guion de Alias5
+    ACN(PO:1,Posicion('-',fbn('Alias5'),1))
+    *--*Especie 6
+    ACT(ES:1,Copy(fbn('Alias5'),val(PO:1)+1,longitud(fbn('Alias5'))))
+    If Longitud(val(ES:1)) > 6
+        ACT(ES:1,Copy(val(ES:1),Longitud(val(ES:1))-6+1,Longitud(val(ES:1))))
+    EndIf
+    
+    If val(PO:1) > 7
+        *--*Posicion desde donde copio cliente porque viene con 10 caracteres padeados con 0's a izquierda y necesitamos los ultimos 6
+        ACN(DE:1,val(PO:1)-6)
+        *--*Cuenta Comitente-Cliente BanTotal 6
+        ACT(CC:1,Copy(fbn('Alias5'),val(DE:1),6))
+    Else
+        *--*Posicion desde donde copio cliente
+        ACN(DE:1,1)
+        *--*Cuenta Comitente-Cliente BanTotal 6
+        ACT(CC:1,Copy(fbn('Alias5'),val(DE:1),val(PO:1)-1))
+    EndIf
+    
+    *--*FechaVto ddmmaaaa completado con 8 ceros si viene vacio
+    ACT(FV:1,Copy(fbn('FechaVto'),1,2)~Copy(fbn('FechaVto'),4,2)~Copy(fbn('FechaVto'),7,4) )
+    
+    *--*FechaValor ddmmaaaa completado con 8 ceros si viene vacio
+    ACT(FV:2,Copy(fbn('FechaValor'),1,2)~Copy(fbn('FechaValor'),4,2)~Copy(fbn('FechaValor'),7,4) )
+
+    *--*FechaLiquidacion ddmmaaaa completado con 8 ceros si viene vacio
+    ACT(FL:1,Copy(fbn('FechaValor'),1,2)~Copy(fbn('FechaValor'),4,2)~Copy(fbn('FechaValor'),7,4) )
+     
+    *--*Fecha Proceso
+    ACT(FP:1,Copy(Dialogo.Fecha1,1,2)~Copy(Dialogo.Fecha1,4,2)~Copy(Dialogo.Fecha1,7,4) )
+    
+    *--*NrOperaion/Transaccion debe tener 0's reemplazando letras
+    *--*Primer Caracter
+    If NOT EsNumero(Copy(fbn('Descripcion1'),1,1)) 
+       **Ej T0007729 = 00007729
+        ACT(NO:1,'0'~Copy(fbn('Descripcion1'),2,7))
+        If NOT EsNumero(Copy(fbn('Descripcion1'),2,1)) 
+            **Ej TT007729 = 00007729
+            ACT(NO:1,'00'~Copy(fbn('Descripcion1'),3,6))
+        EndIf
+    Else
+        **Ej 1T007729 = 10007729
+         If NOT EsNumero(Copy(fbn('Descripcion1'),2,1)) 
+            ACT(NO:1,Copy(fbn('Descripcion1'),1,1)~'0'~Copy(fbn('Descripcion1'),3,6))
+         Else
+            ACT(NO:1, fbn('Descripcion1'))
+        EndIf     
+    EndIf  
+    *--*Moneda
+    ACT(MO:1,SQL("Select ValorSistemaExterno from "~DBO~".CONFIGVALEXTERNOS where CodigoProceso = 'CBSIS' and Atributo = 'MONEDA' and Valor = '"~fbn('Moneda')~"' ") )
+*    ACT(aa:8,SQL("select Alias1 from DBO.ASIENTOSCON1 where NrUnicoAsiento='"~FBN['NrUnicoAsiento']~"' and TablaRC='"~VAR("ENVSISEXT")~"'")) 
+*    
+*    ACT(aa:8,SQL("select CodigoExterno from DBO.ESPECIES where Codigo='"~Val(aa:8)~"'"))
+    
+    ACN(aa:9,Posicion('-',fbn['alias5'],1))
+*    IF Val(aa:9) = 0 OR Val(aa:9) > 5
+*        ACN(aa:9,6)
+*        EscribirASCII("001"~Pad0(fbn('NrUnicoAsiento'),9)~Pad0(Val(aa:1),4)~copy(IdxDate(Dialogo.Fecha1),1,4)~copy(IdxDate(Dialogo.Fecha1),6,2)~copy(IdxDate(Dialogo.Fecha1),9,2)~fbn['FechaValor']~fbn['FechaLiquidacion']~Pad0(fbn['Cuenta'],9)~"        000000      000"~fbn['DC']~Pad0(Copy(fbn['Cantidad1'],1,Posicion('.',fbn['Cantidad1'],1)-1)~Copy(fbn['Cantidad1'],Posicion('.',fbn['Cantidad1'],1)+1,2),14)~Pad0('0',14)~Pad(fbn['Descripcion'],40)~Pad0('0',6 )~Pad(fbn['alias4'],8)~Pad0(val(CC:1),6)~Pad0('0',3)~Pad0(Copy(fbn['valor3'],1,Val(aa:10)-1),4)~Pad(Copy(fbn['valor3'],Val(aa:10)+1,6),6,'0')~Pad0('0',3)~Val(aa:11)~Pad0('0',56)~Pad('',35)~Pad(fbn['Descripcion1'],8)~Pad0('0',3))
+*    ELSE
+        EscribirASCII("001"~Pad0(fbn('NrUnicoAsiento'),9)~Pad0(Val(aa:1),4)~Pad0(val(FP:1),8)~Pad0(val(FV:2),8)~Pad0(val(FL:1),8)~Pad0(fbn['Cuenta'],9)~"        "~val(MO:1)~"      000"~fbn['DC']~Pad0(Copy(fbn['Cantidad1'],1,Posicion('.',fbn['Cantidad1'],1)-1)~Copy(fbn['Cantidad1'],Posicion('.',fbn['Cantidad1'],1)+1,2),14)~Pad0('0',14)~Pad(fbn['Descripcion'],40)~Pad0(val(ES:1),6)~Pad0(val(FV:1),8)~Pad0(val(CC:1),6)~Pad0('0',3)~Pad0(Copy(fbn['valor3'],1,Val(aa:10)-1),4)~Pad(Copy(fbn['valor3'],Val(aa:10)+1,6),6,'0')~Pad0('0',3)~Val(aa:11)~Pad0('0',56)~Pad('',35)~Pad0(val(NO:1),8)~Pad0('0',3))
+*    ENDIF
+   
+   
+    ACN(aa:4,Val(aa:4)+1)
+    ACN(aa:6,Val(aa:6)+fbn('NrUnicoAsiento'))
+    ACN(aa:7,Val(aa:7)+fbn('cantidad1'))
+    **SQL.ADD("where (A.Estado IS Null OR A.Estado = '' OR A.Estado = ' ' OR A.Estado = 'COT' OR A.Estado = 'REV') ")
+    
+    If EqStr(fbn('Estado'),'COT')
+        SQL("Update "~DBO~".ASIENTOSCON set Estado='COE' Where NrUnicoAsiento='"~FBN['NrUnicoAsiento']~"'")
+    Else
+        If EqStr(fbn('Estado'),'REV')
+            SQL("Update "~DBO~".ASIENTOSCON set Estado='REE' Where NrUnicoAsiento='"~FBN['NrUnicoAsiento']~"'")
+        Else
+            SQL("Update "~DBO~".ASIENTOSCON set Estado='E' Where NrUnicoAsiento='"~FBN['NrUnicoAsiento']~"'")
+        EndIf
+    EndIf
+proximo
+
+
+if EqStr(Val(bb:1),"S")
+       ACT(aa:7,FStr(Val(aa:7), 18,2)) 
+       EscribirASCII(Pad0(Val(aa:4),18)~Pad0(Val(aa:6),18)~Pad0(Copy(Val(aa:7),1,Posicion('.',Val(aa:7),1)-1)~Copy(Val(aa:7),Posicion('.',Val(aa:7),1)+1,2),18)~Pad('',218))
+    CerrarASCII
+endif

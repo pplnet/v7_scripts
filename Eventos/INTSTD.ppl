@@ -1,0 +1,230 @@
+﻿***NUEVOS Filtros*** DESHABILITADOS (Simax 22080) Comentado: **++
+MostrarCuadroDeMensajes
+CrearDialogo
+  Radio1         : 'Proceso|Default|Excel';;;;;;;;;;;;
+  **// Campos proceso Excel
+  String1        : 'Archivo'              ;;;;;;;;;;;;;
+  Directorio2    : 'Path Pend.'           ;;;;;;;;;;;;;
+  Directorio3    : 'Path Proc.'           ;;;;;;;;;;;;;
+  **// Campos proceso default
+  NrUnicoAsiento1: 'Nr Asiento'           ;;;;;;;;;;;;;
+  NrOperacion1   : 'Operacion'            ;;;;;;;;;;;;;
+  TipoOp1        : 'Tipo de Op.'          ;;;;;;;;;;;;;
+  Fecha3         : 'F.Valor Desde'        ;;;;;;;;;;;;;
+  Fecha4         : 'F.Valor Hasta'        ;;;;;;;;;;;;;
+  **++Fecha1         : 'F.Gen Desde'      ;7;1;;;Dialogo.Radio1=0 Y [Vacio(Dialogo.NrUnicoAsiento1) Y Vacio(Dialogo.NrOperacion1)];;;;PriDeMes(FSYS,NO,'ARG') 
+  **++Fecha2         : 'F.Gen Hasta'      ;8;1;;;Dialogo.Radio1=0 Y [Vacio(Dialogo.NrUnicoAsiento1) Y Vacio(Dialogo.NrOperacion1)];;;;FSYS;;;
+  Lista1         : 'Vehiculo'             ;;;;;;;;;;;;;
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+IF Vacio(Dialogo.NrUnicoAsiento1) Y Dialogo.Radio1=0
+   ACN(MG:1,MessageBox('No ingreso NrAsiento, Confirma?',1,1))
+   IF val(MG:1)=2
+      Cancelar
+   EndIf
+EndIF
+
+**** Barrera de habilitacion de proceso Contable Vrs Proceso SAP
+IF Eqstr(Var('INTASIENTO'), 'SI')
+   Cancelar('Se esta ejecutando el proceso contable con SAP...Por favor intente en unos minutos')
+Else
+*** Barrera de habilitacion de proceso Contable
+   IF Eqstr(Var('GENASIENTO'), 'SI')
+      Cancelar('Ya esta siendo ejecutado el proceso contable...Por favor intente en unos minutos')
+   EndIf
+EndIf
+
+SQL.ADD(" Update "~DBO~".VARIABLES Set Valor='SI' Where Codigo='INTASIENTO' ")
+SQL.NEW
+SQL.EXEC
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+   ACT(zz:6,Dialogo.Lista1)
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz:6,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+   EndIf
+EndIf
+
+***Contador de segmentos***
+ACN(co:1,0)
+ACT(ML:2, Var('MONELOCA'))
+ACT(CL:66, Var('CLDOCNOSAP'))
+ACT(VH:1, Var('VEHIEXTRAN'))
+ACD(FI:1, Fecha(VAR('FEVAINI')))
+
+***Campos para el nombre del archivo***
+ACT(nl:1,FStr(EXE('NRLOTE')+1,0,0))
+ACT(fe:1,FStr(Anio(FSYS),0,0)~Pad0(FStr(Mes(FSYS),0,0),2)~Pad0(FStr(Dia(FSYS),0,0),2))
+
+SQL.ADD(" Select A.NrUnicoAsiento, A.FechaGeneracion, A.Vehiculo, A.FechaValor, A.Modelo, A.Libro, A.NrOperacion, A.Estado, ")
+SQL.ADD(" A1.Alias6, A1.DebitoCredito, A1.Cuenta, A1.Valor1, A1.Cantidad1, A1.Cantidad2, A1.Cantidad3, A1.CentroCosto, A1.Alias2,  A1.Alias3, A1.Alias5, A1.Alias7 Especie, A1.Alias8, ")
+SQL.ADD(" A1.Alias9, A1.Alias10, A.Fecha1 FechaEjecucion, A1.Valor3, M.ClaseDocumento, M.TipoOp, A.NrAsiento ")
+SQL.ADD(" from "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1, "~DBO~".MODELOSASIENTO M ")
+SQL.ADD(" Where A.NrUnicoAsiento = A1.NrUnicoAsiento ")
+SQL.ADD(" AND A.Modelo = M.Codigo ")
+SQL.ADD(" AND M.Codigo IN ("~Pipe2Comillas(Var('MODCONINT'))~") ")
+
+**// Proceso por DEFAULT
+If Dialogo.Radio1 = 0
+   SQL.ADD(" AND (A.Estado IS Null OR A.Estado = '' OR A.Estado = ' ' OR A.Estado = 'COT' OR A.Estado = 'REV') ")
+   SQL.ADD(" AND (A.Sector Is Null OR A.Sector = '' OR A.Sector = ' ') ")
+   IF NoVacio(Dialogo.NrUnicoAsiento1)
+      SQL.ADD(" AND A.NrUnicoAsiento = '"~Dialogo.NrUnicoAsiento1~"' ")
+   ENDIF
+   IF NoVacio(Dialogo.NrOperacion1)
+       SQL.ADD(" AND A.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   ENDIF
+   ***NUEVOS Filtros*** 
+   IF Vacio(Dialogo.NrUnicoAsiento1) Y Vacio(Dialogo.NrOperacion1) 
+      **++   If Dialogo.Fecha1>0
+      **++      SQL.ADD(" and  A.FechaGeneracion between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"'  ")   
+      **++   EndIf
+      If Dialogo.Fecha3>0
+         SQL.ADD("and A.FechaValor between '"~IdxDate(Dialogo.Fecha3)~"' and '"~IdxDate(Dialogo.Fecha4)~"'  ")    
+      EndIf
+      If NoVacio(Val(zz:6))
+            SQL.ADD("and A.Vehiculo in ("~Pipe2Comillas(Val(zz:6))~") ")
+      EndIf
+      If NoVacio(Dialogo.TipoOp1)
+         SQL.ADD("and M.TipoOp in ('"~Dialogo.TipoOp1~"') ")
+      EndIf
+   EndIF
+Else
+**// Proceso por EXCEL
+   **// Esta funcion devuelve el SQL.ADD() con los filtros a los asientos importados
+   (.'INTCONEXC1'.)
+Endif
+
+SQL.ADD(" AND A.FechaValor >= '"~IdxDate(Val(FI:1))~"' ")
+SQL.ADD(" Order by 1, 2, A1.Alias3 Desc ")
+
+Message('Buscando asientos...')
+Recorrer SQL
+   **// FLAG de error, el asiento no se procesa
+   ACN(ER:1, 0)
+   **// En esta celda guardo el "estado" de cada asiento para luego guardarlo en el excel.
+   **// Mensaje default para cuando se levanta el asiento pero no se procesa.
+   ACT(ES:9, 'Asiento no procesado')
+   If Dialogo.Radio1 = 1
+      IF EqStr(fbn('Estado'),'E')
+         ACT(ES:9, 'Asiento ya enviado')
+         ACN(ER:1, 1)
+      Endif
+      IF EqStr(fbn('Estado'),'COE')
+         ACT(ES:9, 'Contrasiento ya enviado')
+         ACN(ER:1, 1)
+      Endif
+      IF EqStr(fbn('Estado'),'REE')
+         ACT(ES:9, 'Reversa ya enviado')
+         ACN(ER:1, 1)
+      Endif
+      IF Incluido(fbn('Estado'),'COT|REV')
+         **// Si es contrasiento o reversa, chequeo que el asiento original este enviado.
+         IF SQL(" Select 1 from "~DBO~".ASIENTOSCON Where NrUnicoAsiento = '"~FBN('NrAsiento')~"' and Estado = 'E' ") <> 1
+            ACT(ES:9, 'El asiento '~FBN('NrAsiento')~' no fue enviado.')
+            ACN(ER:1, 1)
+         Endif
+      Endif
+   Endif
+   IF [Not Incluido(fbn('ClaseDocumento'), Val(CL:66)) O Incluido(fbn('Vehiculo'), Val(VH:1))] Y Val(ER:1)=0
+      IF Val(co:1)=0
+         **// Abro el archivo por unica vez al inicio del proceso
+         AbrirAscii(Var('PATHINTCON')~Var('FILEINTCON')~'-'~Val(fe:1)~'-'~VAL(nl:1)~'.TEM', 0)
+      ENDIF
+      **//Message('Procesando Asiento: '~fbn('NrUnicoAsiento'))
+      SCN(co:1,1)
+      ***Cada vez que se cambia de asiento***
+      If Vacio(Val(na:1)) o Not EqStr(Val(na:1),fbn('NrUnicoAsiento'))
+         ACN(ca:1,SQL("Select Count(NrUnicoAsiento) FROM "~DBO~".ASIENTOSCON1 where NrUnicoAsiento = '"~fbn('NrUnicoAsiento')~"' "))
+         ***Contador de posiciones de cada asiento***
+         ACN(po:1,0)
+         ***Registro de control***
+         (.'INTSAP2'.)
+         ***Se imprime el registro en el archivo***
+         EscribirAscii(Val(li:1))
+         ***Registro de cabecera del asiento***
+         (.'INTSAP3'.)
+         ***Se imprime el registro en el archivo***
+         EscribirAscii(Val(li:1))
+         SCN(co:1,1)
+         ***Se actualiza el estado del asiento***
+         SQL.ADD("Update "~DBO~".ASIENTOSCON set Estado = ")
+         If Vacio(fbn('Estado'))
+            SQL.ADD(" 'E' ")
+            ACT(ES:9, 'Asiento Enviado!')
+         Else
+            If EqStr(fbn('Estado'),'COT')
+               SQL.ADD(" 'COE' ")
+               ACT(ES:9, 'Contrasiento Enviado!')
+            Else
+               SQL.ADD(" 'REE' ")
+               ACT(ES:9, 'Reversa Enviada!')
+            Endif
+         Endif
+         SQL.ADD(", Fecha2 = "~SQLAHORA~", ")
+         SQL.ADD(" NrLote = '"~VAL(nl:1)~"' ")
+         SQL.ADD(" where NrUnicoAsiento = '"~fbn('NrUnicoAsiento')~"' ")
+         SQL.NEW
+         SQL.EXEC
+      Endif
+      SCN(po:1,1)
+      ***Reg de Posicion del asiento***
+      (.'INTSAP4'.)
+      ***Se imprime el registro en el archivo***
+      EscribirAscii(Val(li:1))
+      ***Si la posicion es de cliente o proveedor, se agrega una linea adicional***
+      If Incluido(VAL(cc:1),'D|K') y Incluido(fbn('Libro'),'AP|AR')
+         SCN(co:1,1)
+         ***Reg adicional de Posicion para clientes o proveedores*** 
+         (.'INTSAP5'.)
+         ***Se imprime el registro en el archivo***
+         EscribirAscii(Val(li:1))
+      Endif
+   ENDIF
+   If Vacio(Val(na:1)) o Not EqStr(Val(na:1),fbn('NrUnicoAsiento'))
+      **//MessageBox(Val(ES:9))
+      **// Si es por excel, busco el asiento para ponerle el estado.
+      If Dialogo.Radio1 = 1
+         Recorrer&i 1, 10000
+            If Eqstr(Val(AS:&i), FBN('NrUnicoAsiento'))
+               ACT(AT:&i, Val(ES:9))
+            Endif
+         Proximo
+      Endif
+   Endif
+   Message('Asiento: '~fbn('NrUnicoAsiento')~' -> '~Val(ES:9))
+   ACT(na:1,fbn('NrUnicoAsiento'))
+Proximo
+
+If VAL(co:1)>0
+   Message('Generando archivo '~Var('FILEINTCON')~'...')
+   **// Cierro el archivo
+   CerrarAscii
+
+   ***Incremento la variable NRLOTE en 1***
+   SQL.ADD(" Update "~DBO~".VARIABLES ")
+   SQL.ADD(" Set Valor = '"~VAL(nl:1)~"' ")
+   SQL.ADD(" where Codigo = 'NRLOTE' ")
+   SQL.NEW
+   SQL.EXEC
+
+   **// Cambio la extencion del archivo para dejarlo definitivo
+   WinExec('CMD.EXE /C REN '~Var('PATHINTCON')~'*.TEM *.TXT', 0)
+   Esperar(3)
+Endif
+
+**// Si es por excel, exporto los resultados
+If Dialogo.Radio1 = 1
+   (.'INTCONEXC2'.)
+Endif
+
+** Se coloca la variable INTASIENTO en NO para habilitar el proceso contable con SAP 
+SQL.ADD(" Update "~DBO~".VARIABLES Set Valor='NO' Where Codigo='INTASIENTO' ")
+SQL.NEW
+SQL.EXEC

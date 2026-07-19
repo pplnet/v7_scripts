@@ -1,0 +1,229 @@
+﻿* Ejecuta el mismo proceso que el Evento NROCOM
+HOJAVISIBLE(SI)
+CrearDialogo
+  Vehiculo1  : "Vehiculo"             ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Fecha1     : "Fecha"                ;;;;;;;;;Fsys
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+act(aa6,iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))) 
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+
+SetFilaActual(4)
+
+ACT(k:2,'Fecha : '~Var('FECHASYS')~' Hora: '~HORA(AHORA) )
+SetFont(k:2..k:2,1)
+
+ACT(a:FAC, "Calculo de Commitment Fee")
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(5)
+ACN(w1,FAC)
+
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(a:FAC+1, 'Vehiculo : '~Dialogo.Vehiculo1~'  '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+else
+  ACT(a:FAC+1, 'Vehiculo : '~val(aa6))
+endif
+
+ACT(a:FAC+2, 'Fecha: '~Dialogo.Fecha1)
+
+
+SetFont(a:fac..k:FAC+3,2)
+
+SetFilaActual(FAC+3)
+ACT(a:FAC,'Numero Op')
+ACT(b:FAC,'Tipo Op.')
+ACT(c:FAC,'Fecha')
+ACT(d:FAC,'Tasa %')
+ACT(e:FAC,'U.Tiempo')
+ACT(f:FAC,'VN No Utilizado')
+ACT(g:FAC,'VN Operacion')
+ACT(h:fac,'SubTotal')
+ACT(i:fac,'Imp. Acumulado')
+ACT(j:FAC,'Imp. IVA')
+ACT(k:FAC,'Imp. WH')
+ACT(L:FAC,'Total A Pagar')
+
+SetFont(a:fac..l:FAC,2)
+AgregarMarco(a:FAC..l:FAC,2,0,Exe('COLOR'))
+
+SetFilaActual(FAC)
+
+SQL.ADD(" Select O.FechaOp, O.Cantidad, O.TotalComisiones, O.TotalAux3, O.TotalNetoCli3,O.TipoOp, ")
+SQL.ADD(" C.* from "~DBO~".OPERACIONES O, "~DBO~".COMISIONES2 C ")
+SQL.ADD(" WHERE O.NrOperacion=C.NrOperacion ")
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD(" and O.Vehiculo1='"~Dialogo.Vehiculo1~"' ")
+EndIf
+SQL.ADD(" and O.Vehiculo1 In ("~Pipe2Comillas(val(aa6))~") ")
+SQL.ADD(" and C.Fecha1='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and O.TipoOp IN ('MMP','MMPV','MMFRN','MMFCMV','MMPSC','MMSCMV') ")
+SQL.ADD(" and Tipo IN ('4') ")
+SQL.ADD(" ORDER BY C.NrOperacion,C.Tipo ")
+
+acn(z11,fac)
+
+Recorrer SQL   
+
+   *-- X2: Disponible => Verifico que no se haya consumido el Total de la Operacion
+   ACN(X2,FBN['TotalNetoCli3'])
+
+   IF Incluido(FBN['TipoOp'],'MMP')
+      ACN(X2,FBN['Cantidad']+FBN['TotalComisiones']-FBN['TotalAux3'])
+   EndIf
+
+   IF Incluido(FBN['TipoOp'],'MMPV')
+      ACN(X2,FBN['Cantidad']-FBN['TotalAux3'])
+   EndIf
+
+*   IF VAL(X2)<>0
+      Message("*-- Recuperando Fecha de Pago Anterior Operaci¦n: "~FBN['NrOperacion']~" Nro: "~FBN['NrComision']~"...")    
+
+      * A: NrOperacion B:TipoOP
+      ACT(a:fac,FBN['NrOperacion'])
+      ACT(b:fac,FBN['TipoOp'])
+
+      *-- A: Desembolso a la Fecha (c) B: Valor de la Partida No Utilizado
+      *-- C: Fecha Origen o Pago anterior comision
+      *-- D: Tasa Comision E: UT.
+      ACN(z1,fac)
+      ACN(D:fac,FBN['Tasa1'])
+      ACN(E:fac,IIF(FBN['RB2']=0,36000,36500))
+
+      *-- Obtengo la Fecha de Pago Anterior para este tipo de comision
+      SQL.ADD(" Select * FROM "~DBO~".COMISIONES2  ")
+      SQL.ADD(" WHERE NrOperacion='"~FBN['NrOperacion']~"' AND Tipo='"~FBN['Tipo']~"' ")
+      SQL.ADD(" AND Importe1<>0 AND Fecha1<'"~IdxDate(Dialogo.Fecha1)~"' ")
+      SQL.ADD(" ORDER BY Fecha1 DESC")
+  
+      * X1=1 -> Se pago con anterioridad la comision tipo 6 
+      ACN(x1,0)        
+      Recorrer SQL   
+         DFA
+         ACN(x1,1)    
+         ACN(f:fac,FBN['Importe5'])
+         ACD(C:fac,FBN['Fecha1'])
+         Break
+      Proximo
+
+      IF VAL(X1)=0 
+         * No Existe Pago Anterior 
+ 
+         ACN(f:fac,FBN['Cantidad'])
+         ACD(C:fac,FBN['FechaOp'])
+  
+         *-- Obtengo el Importe de la comision tipo 6 de esta operacion
+         SQL.ADD(" Select * FROM "~DBO~".COMISIONES2 ")
+         SQL.ADD(" WHERE NrOperacion='"~FBN['NrOperacion']~"' ")
+         SQL.ADD(" AND Tipo='5' ")
+  
+         Recorrer SQL
+            DFA
+            ACN(f:fac,VAL(f:fac)+FBN['Importe1']) 
+            Break                             
+         Proximo
+      ENDIF         
+
+      * z1: Ubicaci¦n de la 1er. Fila por Nro. de Operacion
+      * g: VN Partida b: FechaOrigen Partida c: Valor del Desembolso Anterior
+      * d: Tasa Comision e: UT. 
+      * h: Ultimo Tramo de la comision i: Total de comision
+      * j: Valor de Comision tipo 6 de la operacion
+ 
+      *-- Recupero Los Desembolsos Asociadas a la Partida que aun no fueron tenidos en cuenta
+      SQL.ADD(" Select * FROM "~DBO~".OPERACIONES ")
+      SQL.ADD(" WHERE OperacionRef='"~FBN['NrOperacion']~"' ")
+      SQL.ADD(" AND  FechaOp <='"~IdxDate(Dialogo.Fecha1)~"' ")
+      SQL.ADD(" AND  FechaOp >='"~IdxDate(VAL(C:fac))~"' ")
+      SQL.ADD(" ORDER BY FechaOp ")
+
+    Recorrer SQL   
+
+         ACT(a:fac,FBN['NrOperacion'])
+         ACT(b:fac,FBN['TipoOp'])
+
+         ACN(g:fac,FBN['Cantidad'])       
+         ACD(C:fac,FBN['FechaOp'])       
+ 
+         *-- Obtengo el Importe de la comision tipo 6 de esta operacion
+         SQL.ADD(" Select * FROM "~DBO~".COMISIONES2 ")
+         SQL.ADD(" WHERE NrOperacion='"~FBN['NrOperacion']~"' ")
+         SQL.ADD(" AND Tipo='5' ")
+   
+         Recorrer SQL
+            DFA
+            ACN(g:fac,VAL(g:fac)+FBN['Importe1']) 
+            Break                             
+         Proximo
+ 
+         * Actualizo el monto no utilizado a fecha c
+         ACN(f:fac,VAL(f:fac-1)-VAL(g:fac)) 
+
+         * Paso1: Solamente se aplica para la Evaluacion del Primer Pago de Comision
+         ACN(h:fac, (VAL(f:fac-1)*VAL(D:VAL(z1))*(VAL(c:fac)-VAL(c:fac-1)))/VAL(e:val(z1)))
+         ACN(i:fac,VAL(i:fac-1)+VAL(h:fac))
+      Proximo
+
+      * Todas las Op. estan en la instancia correcta
+      IFA
+      ACT(A:FAC,'--- Ultimo Tramo ')
+      ACD(C:fac,Dialogo.Fecha1)
+
+      * Calculo el Ultimo Tramo de la Comision
+      ACN(h:fac,(VAL(f:fac-1)*VAL(D:VAL(z1))*(Dialogo.Fecha1-VAL(c:fac-1)))/VAL(e:val(z1)))  
+      ACN(i:fac,VAL(i:fac-1)+VAL(h:fac) )
+
+      IFA    
+      AgregarMarco(a:FAC..l:FAC,2,0,Exe('COLOR'))
+      ACT(A:FAC,'Total CF '~VAL(b:VAL(Z1))~' '~VAL(a:VAL(Z1))~' ...')
+
+      * J: Importe de Iva  K: Importe de WH 
+      ACN(i:fac,VAL(i:fac-1))
+      ACN(J:fac,VAL(i:fac)*FBN['Tasa2']/100)
+      ACN(K:fac,VAL(i:fac)*FBN['Tasa3']/100)
+      ACN(L:fac,VAL(i:fac)+VAL(k:fac))
+
+*   ENDIF
+Proximo
+
+SetFont(a:val(z11)..l:FAC,1)
+FormatoCeldas(e:val(z11)..e:fac,"0")
+FormatoCeldas(f:val(z11)..l:fac,Exe('F2'))
+
+ACO(1,8)
+ACO(2,8)
+ACO(3,7)
+ACO(4,7)
+ACO(5,7)
+ACO(6,8)
+ACO(7,8)
+ACO(8,11)
+ACO(9,11)
+ACO(10,7)
+ACO(11,11)
+ACO(12,11)
+
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(l:FAC)
+
+*
+*    Esto es lo que agrega Silvia
+*
+
+RangoTitulo(a:1..l:FAC, 8)
+

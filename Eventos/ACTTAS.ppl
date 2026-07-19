@@ -1,0 +1,192 @@
+﻿MostrarCuadroDeMensajes
+*1 - PREPARA ARCHIVO DE SALIDA: TITULOS Y APERTURA DEL TXT
+* --- Fto File TXT = variable PATHLOG + Fecha + Hora + .TXT sobre NO1
+
+ACT(OU:1, 'OK')
+ACT(FG:1, 'Si')
+act(ZZ:1, HORA(AHORA))
+ACT(nr:2, copy(val(zz:1),1,2)~copy(val(zz:1),4,2)~copy(val(zz:1),7,2) )
+acn(ze:1, Num(Copy(Fstr(Anio(Fsys), 4, 0), 3, 2)) ) *** ERROR ***
+acn(ze:2, Num(PAD0 (Copy(Fstr(MES(Fsys), 2, 0), 1, 2) ,2) ))
+acn(ze:3, Num(PAD0 (Copy(Fstr(DIA(Fsys), 2, 0), 1, 2) ,2) )) 
+ACT(nr:1, 'TASBLOO'~Pad0(Fstr(val(ze:3),0,0),2)~PAD0(Fstr(val(ze:2),0,0),2)~PAD0(Fstr(val(ze:1),0,0),2))
+ACT(nr:3, '.TXT')
+ACN(tx:2, 0)
+ACT(fh:1, FECHA(HOY)~' '~HORA(AHORA)~' ACTTAS')
+ACT(pn:2, VAR('PATHBLOTAS')~VAR('BLOOMTASA'))
+
+ACT(aa:1, VAR('PATHLOG')~val(nr:1)~val(nr:2)~val(nr:3))
+
+IF Not ExisteDirectorio(Var('PATHBLOTAS'))
+   AbrirASCII(val(aa:1),0)
+   If Val(bd:7)=0
+      AbrirASCII(val(aa:1),0)  
+      EscribirAscii(Val(fh:1))
+      ACN(tx:2,6)
+      (.'MENSAJETXT'.)
+      ACN(bd:7, 1)
+      CerrarAscii
+      LinkearHoja('ERRCOT',1,String1=Val(aa:1),Radio1=2)
+      Cancelar 
+   Else 
+      ACN(tx:2,6)
+      (.'MENSAJETXT'.)
+      CerrarAscii
+      LinkearHoja('ERRCOT',1,String1=Val(aa:1),Radio1=2)
+      Cancelar
+   EndIf
+ENDIF
+
+*2 TRATAMIENTO ARCHIVO DE ENTRADA (EXCEL CON LAS TASAS)
+ImportarXLS(a:2..e:1000, a:2..e:1000, VAR('PATHBLOTAS')~VAR('BLOOMTASA'))
+
+IF Not OK
+   If Val(bd:7)=0
+
+      AbrirASCII(val(aa:1),0)  
+      EscribirAscii(Val(fh:1))
+      ACN(tx:2,6)
+      (.'MENSAJETXT'.)
+   Else 
+      ACN(tx:2,6)
+      (.'MENSAJETXT'.)
+   EndIf
+   CerrarAscii
+   LinkearHoja('ERRCOT',1,String1=Val(aa:1),Radio1=2)
+   Cancelar 
+ENDIF
+
+
+ACN(z2, 2)
+ACN(z3, 1000)
+SetFilaActual(2)
+ACN(z5, fac) 
+
+
+Recorrer&i Val(z2), Val(z3)
+ IF Not CeldaVacia(A:&i) Y Not CeldaVacia(B:&i)
+      ACT(a:fac, val(a:&i))
+      ACT(b:fac, val(b:&i))
+      ACN(c:fac, val(c:&i))
+      ACN(d:fac, val(D:&i)) 
+      ACd(e:fac, val(e:&i))
+       
+      ACT(es:1, Val(b:fac))
+      ACT(ta:2, Val(a:fac))
+
+
+*3  Filtro de errores en el archivo de entrada (Base del TXT) 
+   If Val(d:fac)<>0         
+        * NO SE PROCESA EN LA TABLA TASDIA CON TASA CERO 
+   Else   
+      If Val(bd:7)=0
+        AbrirASCII(val(aa:1),0)
+        EscribirAscii(Val(fh:1))
+        ACN(tx:2,5)
+        (.'MENSAJETXT'.)
+        ACN(bd:7, 1)
+      Else 
+        ACN(tx:2,5)
+        (.'MENSAJETXT'.)
+      EndIf
+      ACT(FG:1, 'No')
+   Endif
+
+                             *** FECHA Erroneo (Formato no date)
+   If Val(E:fac)<>0         
+        * NO SE PROCESA: Mal Formato de Fechas en el Excel
+   Else 
+      If Val(bd:7)=0
+        AbrirASCII(val(aa:1),0)
+        EscribirAscii(Val(fh:1))
+        ACN(tx:2,7)
+        (.'MENSAJETXT'.)
+        ACN(bd:7, 1)
+      Else 
+        ACN(tx:2,7)
+        (.'MENSAJETXT'.)
+      EndIf
+      ACT(FG:1, 'No')
+   Endif
+
+                             *** FECHA Erroneo (Fecha de carga mayor que fecha del dia)
+
+   If Val(E:fac) <= fsys    
+        * NO SE PROCESA: La fecha de carga no puede ser mayor que la fecha del dia
+   Else    
+      If Val(bd:7)=0
+        AbrirASCII(val(aa:1),0)
+        EscribirAscii(Val(fh:1))
+        ACN(tx:2,8)
+        (.'MENSAJETXT'.)
+        ACN(bd:7, 1)
+      Else 
+        ACN(tx:2,8)
+        (.'MENSAJETXT'.)
+      EndIf
+      ACT(FG:1, 'No')
+   Endif
+
+                             *** Tipo de Tasa erroneo 
+   ACN(x:9, SQL("SELECT 1 FROM "~DBO~".TIPOSTASA WHERE Codigo = '"~Val(a:fac)~"'   "))
+   if Val(x:9)<>1     
+      If Val(bd:7)=0
+         AbrirASCII(val(aa:1),0)
+         EscribirAscii(Val(fh:1))
+         ACN(tx:2,2)
+         (.'MENSAJETXT'.)
+         ACN(bd:7,1)  
+      Else 
+       ACN(tx:2,2)
+       (.'MENSAJETXT'.)
+      EndIf  
+      ACT(FG:1, 'No')
+   Endif
+                              *** Especie erroneo
+   ACN(x:9,SQL("SELECT 1 FROM "~DBO~".ESPECIES WHERE Codigo='"~Val(b:fac)~"'   "))
+   if Val(x:9)<>1     
+      If Val(bd:7)=0
+         AbrirASCII(val(aa:1),0)
+         EscribirAscii(Val(fh:1))
+         ACN(tx:2,1)
+         (.'MENSAJETXT'.)
+         ACN(bd:7, 1)  
+      Else 
+         ACN(tx:2,1)
+         (.'MENSAJETXT'.)
+      EndIf  
+      ACT(FG:1, 'No')
+   Endif
+                
+*                                                                                                  
+*4  Actulizacion de la tabla TasasDIA: Si coresponde Actualizar LLEGA FLAG EN "Si"
+    If EQSTR (Val(FG:1),'Si') 
+       acn(x3, 0)
+       acn(x3, SQL("SELECT 1 FROM "~DBO~".TASASDIA WHERE TipoTasa = '"~Val(a:fac)~"' AND Especie = '"~Val(b:fac)~"' AND Fecha ='"~IdxDate(val(E:fac))~"' AND PlazoHasta = "~Fstr(Val(c:fac),1,0)~" "))
+       if Val(x3)=1
+            */Actualizo  
+            SQL.ADD(" UPDATE "~DBO~".TASASDIA SET ")
+            SQL.ADD(" Valor1 = "~Fstr(val(D:fac),1,8)~" ")
+            SQL.ADD(" WHERE TipoTasa = '"~Val(a:fac)~"' AND Especie = '"~Val(b:fac)~"' AND Fecha = '"~IdxDate(val(E:fac))~"' AND PlazoHasta = "~Fstr(Val(c:fac),1,0)~" ") 
+       else    
+            */Inserto
+            SQL.ADD(" INSERT INTO "~DBO~".TASASDIA ")
+            SQL.ADD(" (Fecha, Especie, TipoTasa, ")
+            SQL.ADD(" PlazoDesde, PlazoHasta, Valor1) ")
+            SQL.ADD(" VALUES ")
+            SQL.ADD(" ('"~IdxDate(val(E:fac))~"', '"~val(b:fac)~"', '"~val(a:fac)~"', ")
+            SQL.ADD(" 0, "~Fstr(val(c:fac),1,0)~" , "~Fstr(val(D:fac),1,8)~" ) ")
+       endIf
+       SQL.NEW
+       SQL.EXEC
+       ifa
+    Else
+       ACT(FG:1, 'Si')  
+    ENDIF 
+
+ ENDIF
+   
+Proximo
+
+CerrarAscii
+LinkearHoja('ERRCOT',1,String1=Val(aa:1),Radio1=2)

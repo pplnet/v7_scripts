@@ -1,0 +1,302 @@
+﻿*ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1:         'D.FechaValor'     ;;;;;;Dialogo.Fecha1<=FSYS;'Debe ingresar una fecha valida' ;NO;FSys
+  Fecha2:         'H.FechaValor'     ;;;;;;Dialogo.Fecha2<=FSYS;'Debe ingresar una fecha valida' ;NO;FSys
+  Fecha3:         'D.FechaGeneracion';;;;;;Dialogo.Fecha3<=FSYS;'Debe ingresar una fecha valida' ;NO;FSys
+  Fecha4:         'H.FechaGeneracion';;;;;;Dialogo.Fecha4<=FSYS;'Debe ingresar una fecha valida' ;NO;FSys
+  ModeloAsiento1: 'Modelo'
+  TipoAsiento1:   'Tipo'
+  NrOperacion1:   'Operacion'
+  Especie2:       'Especie' 
+  NrBOperacion:   'Op.Anulada'
+  Cuenta1:        'Cuenta'            ;;;;;;;;;;;;;;" TipoCuenta in('CA','CC') ";
+FinDialogo
+
+IF NOT OK
+  Cancelar
+ENDIF
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+ACT(a4, 'Asientos por Fecha')
+
+ACT(a5, 'Desde FechaValor: '~FECHA(Dialogo.Fecha1,'dd/mm/yyyy'))
+ACT(a6, 'Hasta FechaValor: '~FECHA(Dialogo.Fecha2,'dd/mm/yyyy'))
+
+ACT(d5, 'Desde FechaGeneracion: '~FECHA(Dialogo.Fecha3,'dd/mm/yyyy'))
+ACT(d6, 'Hasta FechaGeneracion: '~FECHA(Dialogo.Fecha4,'dd/mm/yyyy'))
+
+ACT(a7, 'Modelo: '~iif(Novacio(Dialogo.ModeloAsiento1),Dialogo.ModeloAsiento1,'Todos')) 
+ACT(d7, 'Tipo: '~iif(Novacio(Dialogo.TipoAsiento1),Dialogo.TipoAsiento1,'Todos'))
+ACT(a8, 'Operacion: '~iif(Novacio(Dialogo.NrOperacion1),Dialogo.NrOperacion1,'Todas'))
+ACT(d8, 'Cuenta: '~iif(Novacio(Dialogo.Cuenta1),Dialogo.Cuenta1,'Todas'))
+ACT(a9, 'Operacion Anulada: '~iif(Novacio(Dialogo.NrBOperacion),Dialogo.NrBOperacion,'Todas'))
+
+SetFont(a1..k9, 1)
+SetFilaActual(9)
+
+SQL.ADD(" SELECT A1.NrUnicoAsiento, A1.Especie1, A1.NrOperacion, A1.Cuenta, A1.DebitoCredito, ")
+SQL.ADD("        A1.Cantidad1, A1.NrTrans2, A1.Especie2, A1.CentroCosto, A.FechaValor, A1.Book, ")
+SQL.ADD("        A.FechaGeneracion, A.Modelo, M.TipoAsiento, A1.NrItem, ")
+SQL.ADD("        A1.Detalle, M.Descripcion, A1.Alias1, A1.Alias4, A.Estado, A.Acuerdo ")
+SQL.ADD(" FROM  "~DBO~".ASIENTOSCON A LEFT OUTER JOIN "~DBO~".MODELOSASIENTO M2 ON A.Modelo=M2.Codigo , ")
+SQL.ADD("       "~DBO~".ASIENTOSCON1 A1 ,  ")
+SQL.ADD("       "~DBO~".MODELOSASIENTO M ")
+SQL.ADD(" WHERE A1.NrUnicoAsiento   = A.NrUnicoAsiento              ")
+SQL.ADD(" AND   A.FechaValor      >= '"~IdxDate(Dialogo.Fecha1)~  "'")
+SQL.ADD(" AND   A.FechaValor      <= '"~IdxDate(Dialogo.Fecha2)~  "'")
+SQL.ADD(" AND   A.FechaGeneracion >= '"~IdxDate(Dialogo.Fecha3)~  "'")
+SQL.ADD(" AND   A.FechaGeneracion <= '"~IdxDate(Dialogo.Fecha4)~  "'")
+SQL.ADD(" AND   A.Modelo           = M.Codigo                       ")
+
+IF NoVacio(Dialogo.ModeloAsiento1)
+   SQL.ADD(" AND A.Modelo = '"~Dialogo.ModeloAsiento1~"'")
+ENDIF
+
+IF NoVacio(Dialogo.TipoAsiento1)
+   SQL.ADD(" AND M.TipoAsiento = '"~Dialogo.TipoAsiento1~"'")
+ENDIF
+
+IF NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" AND A.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+ENDIF
+
+IF NoVacio(Dialogo.NrBOperacion)
+   SQL.ADD(" AND A.NrOperacion = '"~Dialogo.NrBOperacion~"'")
+ENDIF
+
+IF NoVacio(Dialogo.Especie2)
+   SQL.ADD(" AND A1.Especie2 = '"~Dialogo.Especie2~"'")
+ENDIF
+
+IF NoVacio(Dialogo.Cuenta1)
+   SQL.ADD(" AND A.NrTrans2 = '"~Dialogo.Cuenta1~"'")
+ENDIF
+
+SQL.ADD(" ORDER BY  A.FechaValor, A1.NrUnicoAsiento,  A1.Especie1, A.Modelo, A1.DebitoCredito desc, A1.NrItem ")
+
+ACN(pr1,0)
+ACN(pr2,0)
+
+Recorrer SQL
+  IF [NOT EqStr(fbn('NrUnicoAsiento'), Val(aa1))] o [NOT EqStr(fbn('Especie1'), Val(ea1))] o [NOT EqStr(fbn('Modelo'), Val(ma1))]
+     message(fbn('NrOperacion'))
+     IF Val(pr1)=1
+        ACT(a:fac, 'Totales Modelo ... ')
+        ACN(g:fac, SUM(g:Val(fa1)..g:fac))
+        ACN(f:fac, SUM(f:Val(fa1)..f:fac))
+        SCN(cf1, Val(g:fac))
+        SCN(df1, Val(f:fac))       
+        SCN(tc1, Val(g:fac))
+        SCN(td1, Val(f:fac))
+        IF Round(Val(g:fac),2) <> Round(Val(f:fac),2)
+           IF Val(g:fac) > Val(f:fac)
+              ACT(h:fac, 'Credito: ')
+           ELSE
+              ACT(h:fac, 'Debito: ')
+           ENDIF
+        ENDIF
+        AlinearCeldas(h:fac..h:fac,'D')
+        IF Round(Val(g:fac),2) <> Round(Val(f:fac),2)
+           ACN(i:fac, ABS(Val(f:fac)-Val(g:fac)))
+        ENDIF
+        SetFont(a:val(fa1)..k:fac-1, 2)
+        SetFont(a:fac..k:fac, 1)
+        ifa
+        ifa
+     ELSE
+       ACN(pr1,1)      
+     ENDIF
+     IF NOT EqStr(fbn('NrUnicoAsiento'), Val(aa1)) o NOT EqStr(fbn('Especie1'), Val(ea1))
+        IF Val(pr2)=1
+         dfa
+         ACT(a:fac, 'Total Asiento: '~Val(aa1)~' en '~Val(ea1))
+         ACN(g:fac, Val(tc1))
+         ACN(f:fac, Val(td1))
+         IF Round(Val(g:fac),2) <> Round(Val(f:fac),2)
+            IF Val(g:fac) > Val(f:fac)
+               ACT(h:fac, 'Credito: ')
+            ELSE
+               ACT(h:fac, 'Debito: ')
+            ENDIF
+         ENDIF
+         AlinearCeldas(h:fac..h:fac,'D')
+         IF Round(Val(g:fac),2) <> Round(Val(f:fac),2)
+            ACN(i:fac, ABS(Val(f:fac)-Val(g:fac)))      
+         ENDIF
+         SetFont(a:fac..k:fac, 1)
+         ACN(tc1, 0)
+         ACN(td1, 0)
+         ifa
+         ifa
+        ELSE
+         ACN(pr2,1)      
+        ENDIF
+        ACT(a:fac, fbn('NrUnicoAsiento')~'   Moneda: '~fbn('Especie1'))
+        ACT(aa1, fbn('NrUnicoAsiento'))
+        ACT(ea1, fbn('Especie1'))
+        SetFont(a:fac..k:fac, 1)
+        AgregarMarco(a:fac..k:fac,1,0,EXE('COLOR'))
+        ifa
+
+        ACT(a:fac, 'Modelo: '~fbn('Modelo')~' - '~fbn['Descripcion']~' - '~IIF(EqStr(fbn['Estado'],'COT'),'ContraAsiento',''))
+
+        SetFont(a:fac..k:fac, 1)
+        AgregarMarco(a:fac..k:fac,1,0)
+        ACT(ma1, fbn('Modelo'))
+        ifa
+        ACT(a:fac, 'NrAsiento')
+        ACT(b:fac, 'Item')
+        ACT(c:fac, 'Cuenta')        
+        ACT(d:fac, 'FechaValor')
+        ACT(e:fac, 'FechaGen.')
+        ACT(f:fac, 'Debito')
+        ACT(g:fac, 'Credito')
+        ACT(h:fac, 'Operacion')
+        ACT(i:fac, 'Vou./Cuenta')
+        ACT(j:fac, 'Especie')
+        ACT(k:fac, 'Centro Costo')
+
+        AgregarMarco(a:fac..k:fac,1,0)
+        SetFont(a:fac..k:fac, 1)
+        ifa
+     ENDIF 
+     ACN(fa1, fac)
+  ENDIF
+  IF NOT EqStr(fbn('Modelo'), Val(ma1)) 
+     ACT(dm1, SQL("SELECT Descripcion FROM "~DBO~".MODELOSASIENTO WHERE Codigo = '"~fbn('Modelo')~"'"))
+     ACT(a:fac, 'Modelo: '~fbn('Modelo')~' - '~Val(dm1))
+     SetFont(a:fac..k:fac, 1)
+     AgregarMarco(a:fac..k:fac,1,0)
+     ACT(ma1, fbn('Modelo'))
+     ifa
+     ACT(a:fac, 'NrAsiento')
+     ACT(b:fac, 'Item')
+     ACT(c:fac, 'Cuenta')        
+     ACT(d:fac, 'FechaValor')
+     ACT(e:fac, 'FechaGen.')
+     ACT(f:fac, 'Debito')
+     ACT(g:fac, 'Credito')
+     ACT(h:fac, 'Operacion')
+     ACT(i:fac, 'Vou./Cuenta')
+     ACT(j:fac, 'Especie')
+     ACT(k:fac, 'Centro Costo')
+
+     AgregarMarco(a:fac..k:fac,1,0)
+     SetFont(a:fac..k:fac, 1)
+     ifa
+     ACN(fa1, fac)
+  ENDIF
+
+  ACN(a:fac, fbn('NrUnicoAsiento'))
+  ACT(b:fac, Fstr(fbn('NrItem'),1,0))
+  **  ACT(c:fac, fbn('Cuenta')~' - '~fbn('Detalle'))
+  ACT(c:fac, fbn('Cuenta')~' - '~fbn('Alias1')~' - '~fbn('Alias4')~' - '~fbn('Book'))
+  ACD(d:fac, fbn('FechaValor'))
+  ACD(e:fac, fbn('FechaGeneracion'))
+  IF EqStr(fbn('DebitoCredito'), 'CRE')
+      ACN(g:fac, fbn('Cantidad1'))
+      ACN(f:fac, 0)
+  ELSE
+      ACN(f:fac, fbn('Cantidad1'))
+      ACN(g:fac, 0)
+  ENDIF
+  ACT(h:fac, fbn('NrOperacion'))
+  ACLO(h:fac, fbn('NrOperacion'))
+  ACT(i:fac, fbn('NrTrans2'))
+  ACLT(i:fac, fbn('NrTrans2'))
+  ACT(j:fac, fbn('Especie2'))
+  ACT(k:fac, fbn('CentroCosto'))
+Proximo
+ifa
+ACT(a:fac, 'Totales Modelo ... ')
+ACN(g:fac, SUM(g:Val(fa1)..g:fac))
+ACN(f:fac, SUM(f:Val(fa1)..f:fac))
+IF Round(Val(g:fac),2) <> Round(Val(f:fac),2)
+   ACN(i:fac, Val(f:fac)-Val(g:fac))
+ENDIF
+SCN(tc1, Val(g:fac))
+SCN(td1, Val(f:fac))
+
+SCN(cf1, Val(g:fac))
+SCN(df1, Val(f:fac))
+
+IF Round(Val(g:fac),2) <> Round(Val(f:fac),2)
+   IF Val(g:fac) > Val(f:fac)
+      ACT(h:fac, 'Credito: ')
+   ELSE
+      ACT(h:fac, 'Debito: ')
+   ENDIF
+ENDIF
+
+AlinearCeldas(h:fac..h:fac,'D')
+
+ACT(a:fac+1, 'Total Asiento: '~Val(aa1)~' en '~Val(ea1))
+
+IF Round(VAL(tc1),2) <> 0
+   ACN(g:fac+1, Val(tc1))
+ENDIF
+
+IF Round(VAL(td1),2) <> 0
+   ACN(f:fac+1, Val(td1))
+ENDIF
+
+IF Round(Val(g:fac+1),2) <> Round(Val(f:fac+1),2)
+   IF Val(g:fac+1) > Val(f:fac+1)
+      ACT(h:fac+1, 'Credito: ')
+   ELSE
+      ACT(h:fac+1, 'Debito: ')
+   ENDIF
+ENDIF
+
+ACT(a:fac+5, 'Total Final . . . ')
+
+IF Round(Val(cf1),2) <> 0
+   ACN(g:fac+5, Val(cf1))
+ENDIF
+
+IF Round(Val(df1),2) <> 0
+   ACN(f:fac+5, Val(df1))
+ENDIF
+
+IF Round(Val(cf1),2) <> Round(Val(df1),2)
+   IF Val(cf1) > Val(df1)
+      ACT(h:fac+5, 'Credito: ')
+   ELSE
+      ACT(h:fac+5, 'Debito: ')
+   ENDIF
+ENDIF
+
+AlinearCeldas(h:fac+1..h:fac+5,'D')
+
+IF Round(Val(f:FAC+1),2) <> Round(Val(G:FAC+1),2)
+   ACN(i:fac+1, ABS(Val(f:fac+1)-Val(g:fac+1)))      
+ENDIF
+
+IF Round(Val(f:FAC+5),2) <> Round(Val(G:FAC+5),2)
+   ACN(i:fac+5, ABS(Val(f:fac+5)-Val(g:fac+5)))      
+ENDIF
+
+SetFont(a:val(fa1)..k:fac-1, 2)
+SetFont(a:fac..k:fac, 1)
+
+SetFont(a:fac+1..k:fac+5, 1)
+
+AgregarMarco(a:fac+5..k:fac+5,1,0)
+
+AlinearCeldas(f8..g:fac+5,'D')
+FormatoCeldas(a9..a:fac+5,Exe('F0'))
+FormatoCeldas(g9..h:fac+5,Exe('F2'))
+
+ACO(2,3)
+ACO(3,50)
+ACO(7,8)
+ACO(10,6)
+ACO(11,8)
+
+LimitesVision(l:fac+7)
+Impresion(1,2)
+SetPrintFit(3,90)
+Rangotitulo(a1..h:fac,8)

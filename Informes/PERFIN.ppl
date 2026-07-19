@@ -1,0 +1,209 @@
+﻿CrearDialogo
+    Fecha1:     'Fecha'     ;1;1;;NO;;;;;FSYS
+    Cliente1:   'Cliente'   ;;;;;;;;;;;SQLSET("SELECT Codigo FROM "~DBO~".CLIENTES WHERE "~DBO~".DesciendeDeCliente(Codigo,'CLIENTES') = 1 AND "~DBO~".EsTerminalcliente(Codigo) = 1");si;;(""~DBO~".DesciendeDeCliente(Codigo,'CLIENTES') = 1 AND "~DBO~".EsTerminalcliente(Codigo) = 1");;;
+    Lista1:     'Estado'    ;;;;;;;;;;;'A Realizar|Vencido|Proximo a Vencer|Vigente'
+    Lista2:     'Perfil'    ;;;;;;;;;;;'Conservador|Moderado|Arriesgado|Calificado'
+FinDialogo
+
+If Not Ok
+   Cancelar
+EndIf
+
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")    
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(1)
+
+ACT(a:fac,'Test del Inversor en Clientes')
+SetFont(a:fac,3)
+
+ACT(f:fac, 'Fecha: '~Var('FECHASYS'))
+SetFont(f:fac,2)
+
+SetFilaActual(fac+2)
+
+*Muestro el cliente o el estado-perfil según la selección de lista1 y lista2.
+If NoVacio(Dialogo.Cliente1)
+    ACT(a:fac, 'Cliente: ')
+    ACT(b:fac, Dialogo.Cliente1)
+Else
+    ACT(a:fac, 'Estado:')
+    *Copio el contenido de la lista1 en una celda de tipo texto.
+    ACT(b:fac, Pipe2Coma(Dialogo.Lista1))
+
+    *Si la lista1 esta vacia, no filtra por estado. Caso contrario si filtra por estado.
+    If Elementos(Dialogo.Lista1) = 0 OR Elementos(Dialogo.Lista1) = 4
+        ACT(b:fac, 'Todos')
+    Else
+        *Agrego los filtros que uso al informe, eliminando la ultima ',' de la copia de la lista1. 
+        ACT(b:fac, Copy(Val(b:fac),1,Longitud(Val(b:fac))-1))
+    EndIf
+    SetFont(a:fac..aa:fac,2)
+
+
+    IFA
+    ACT(a:fac, 'Perfil:')
+
+    *Copio el contenido de la lista2 en una celda de tipo texto.
+    ACT(b:fac, Pipe2Coma(Dialogo.Lista2))
+
+    *Si la lista2 esta vacia, no filtra por perfil. Caso contrario si filtra por perfil.
+    If Elementos(Dialogo.Lista2) = 0 OR Elementos(Dialogo.Lista2) = 4
+        ACT(b:fac, 'Todos')
+    Else
+        *Agrego los filtros que uso al informe, eliminando la ultima ',' de la copia de la lista2. 
+        ACT(b:fac, Copy(Val(b:fac),1,Longitud(Val(b:fac))-1))
+    EndIf
+EndIf
+
+SetFont(a:fac..aa:fac,2)
+SetFilaActual(fac+2)
+
+SQL.ADD("SELECT Codigo, RazonSocial, CategDepositante, Cuit, TestInv, PerfilInv, FechaVtoTest") 
+SQL.ADD("FROM "~DBO~".CLIENTES")
+
+If Vacio(Dialogo.Cliente1)
+    SQL.ADD("WHERE "~DBO~".DesciendeDeCliente(Codigo,'CLIENTES') = 1 AND "~DBO~".EsTerminalcliente(Codigo) = 1")
+    *Filtro segun el Perfil en caso de que no sean 'Todos'. 
+    If Elementos(Dialogo.Lista2) > 0 AND Elementos(Dialogo.Lista2) < 4
+    SQL.ADD("AND (PerfilInv IN ("~Pipe2Comillas(Dialogo.Lista2)~") OR PerfilInv IS NULL)")
+    EndIf  
+Else
+    SQL.ADD("WHERE Codigo = '"~Dialogo.Cliente1~"'")
+EndIf
+
+*Ordeno los registros por Codigo
+SQL.ADD("ORDER BY Codigo")
+
+
+ACT(a:fac,'Codigo')
+ACT(b:fac,'Razon Social')
+ACT(c:fac,'CUIT')
+ACT(d:fac,'Categoria')
+ACT(e:fac,'Test Realizado')
+ACT(f:fac,'Perfil del Inversor')
+ACT(g:fac,'Fecha Test')
+ACT(h:fac,'Fecha Vencimiento')
+ACT(i:fac,'Estado')
+
+AgregarMarco(a:fac..i:fac,2,0,Exe('COLOR'))
+AlinearCeldas(a:4..i:fac,'I')
+
+SetFont(a:fac..aa:fac,2)
+ACN(op:1,fac+1)
+
+Recorrer SQL
+    ACT(a:fac,FBN('Codigo'))
+    ACT(b:fac,FBN('RazonSocial'))  
+    ACT(f:fac,FBN('PerfilInv'))
+    
+    If Vacio(FBN('CUIT'))
+        ACT(c:fac,'-')
+    Else
+        ACT(c:fac,FBN('CUIT'))  
+    EndIf
+    
+    If Vacio(FBN('CategDepositante'))
+        ACT(d:fac,'-')
+    Else
+        ACT(d:fac,FBN('CategDepositante'))  
+    EndIf
+    
+    *Calculo en que estado cae cada cliente, los If de cada estado estan ordenados de menor a mayor prioridad
+    *Segun las condiciones que cumplan, pueden caer en varios If, pero solo quedaran los valores del ultimo If 
+            
+    ACD(h:fac,FBN('FechaVtoTest') + 364)
+    
+    *Estado Proximo a Vencer
+    If (Val(h:fac) >= FSys AND Val(h:fac) <= (FSys+30))
+        ACT(i:fac,'Proximo a Vencer') 
+        
+    Else
+        *Estado Vigente
+        If (Val(h:fac) >= FSys)
+            ACT(i:fac,'Vigente') 
+            
+        Else
+            *Estado Vencido
+            If (Val(h:fac) < FSys)
+                ACT(i:fac,'Vencido')
+                
+            EndIf
+        EndIf
+    EndIf
+        
+    ACT(e:fac,FBN('TestInv'))
+    ACD(g:fac,FBN('FechaVtoTest'))  
+            
+    *Estado A Realizar
+    If Vacio(FBN('TestInv')) OR Eqstri(TRIM(FBN('TestInv')),'NO')
+        ACT(e:fac,'NO')
+        ACT(f:fac,'-')
+        ACT(g:fac,'-')
+        ACT(h:fac,'-')
+        ACT(i:fac,'A Realizar') 
+    EndIf
+    
+    *Estado N/A
+    If Eqstri(FBN('PerfilInv'),'Calificado')
+        ACT(e:fac,'N/A')
+        ACT(f:fac,FBN('PerfilInv'))
+        ACT(g:fac,'N/A')
+        ACT(h:fac,'N/A')
+        ACT(i:fac,'N/A')
+    EndIf
+    
+    *Si no selecciona un cliente, procedo a filtrar por estado y perfil segun la seleccion ingresada.
+    If Vacio(Dialogo.Cliente1)
+    
+        *Condiciones a cumplir para NO ingresar el registro actual en el informe.
+        *Filtro por el Estado, si el estado del registro actual no esta en la Lista1 lo saco del informe.
+        If Not (Incluido(Val(i:fac),Dialogo.Lista1)) AND Elementos(Dialogo.Lista1) > 0 AND Elementos(Dialogo.Lista1) < 4
+            ACT(z:1,'True')
+        Else
+            ACT(z:1,'False')
+        EndIf
+        
+        *Filtro por el Perfil, saco del informe los registros con perfiles vacios o que no hicieron el test.
+        If Elementos(Dialogo.Lista2) > 0 AND Elementos(Dialogo.Lista2) < 4 AND (Eqstri(Val(i:fac),'A Realizar') OR Vacio(FBN('PerfilInv')))
+            ACT(z:2,'True')
+        Else
+            ACT(z:2,'False')
+        EndIf
+        
+        *Si alguna de las condiciones anteriores en verdadera ignoro el registro.
+        If Eqstri(Val(z:1),'True') OR Eqstri(Val(z:2),'True')
+            ACT(a:fac,'')
+            ACT(b:fac,'')
+            ACT(c:fac,'')
+            ACT(d:fac,'')
+            ACT(e:fac,'')
+            ACT(f:fac,'')
+            ACT(g:fac,'')
+            ACT(h:fac,'')
+            ACT(i:fac,'')
+            DFA
+        EndIf
+    EndIf
+    
+Proximo
+
+SetFont(a:val(op:1)..j:fac,1)
+
+ACO(2,40)
+ACO(3,10)
+ACO(4,6)
+ACO(5,9)
+ACO(6,10)
+ACO(7,7)
+ACO(8,11)
+ACO(9,9)
+
+IFA
+IFA
+ACT(a:fac, 'FIN DEL INFORME')
+SetFont(a:fac..a:fac,2)
+
+Limitesvision(j:fac+1)

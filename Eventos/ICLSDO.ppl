@@ -1,0 +1,118 @@
+﻿CrearDialogo
+  Fecha1:    'Fecha'      ; ; ; ;  ;  ;;;;;FSys
+  Termsheet: 'TermSheet'  ; ; ; ;  ;;NoVacio(Dialogo.termsheet);'Debe ingresar una TermSheet Valida';NO;
+FinDialogo
+if Not ok
+  Cancelar
+endif
+**HojaVisible(SI)
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+
+ACN(SU:1,SQL("select Count(*) from CUOTAS where NrOperacion in (Select NrOperacion from OPERACIONES O, ICLTERMSHEET T where TipoOp = 'CONU' and  O.TermSheet=T.Codigo and Termsheet = '"~Dialogo.Termsheet~"'  and FechaOp < '"~IdxDate(Dialogo.Fecha1)~"') and Radio2=1"))
+
+If Val(SU:1) > 0
+   Cancelar('Termsheet '~Dialogo.Termsheet~' tiene '~PyC(Val(su:1),1,0) ~' autorizaciones pendientes')
+Endif
+
+ACN(x:1, 0)
+** AA 31-01-2025 para presupuestar
+** verificar que no hay Cuotas con Radio2=1 para las operaciones de la termsheet y sacar mensaje "actualizaciones sin autorizar"
+SQL.ADD("Select NrOperacion,Termsheet,T.Monto,T.Utilizado,FechaOp,CB1,CB9,CB10,FechaVto,FechaPrecan,Cantidad, Cliente1, Especie,")
+SQL.ADD("  Isnull((select SUM(CU.cantidad1*-1) from CUOTAS CU where CU.NrOperacion1=O.NrOperacion and (Radio1=1 or Radio1=2)),0) as SaldoUti, ")
+SQL.ADD("  Isnull((select SUM(CU.cantidad1*-1) from CUOTAS CU where CU.NrOperacion1=O.NrOperacion and Radio1=4),0) as SaldoPICD ")
+SQL.ADD("  from "~DBO~".OPERACIONES O, "~DBO~".ICLTERMSHEET T ")
+SQL.ADD(" where TipoOp = 'CONU' ")
+SQL.ADD("   and  O.TermSheet=T.Codigo ")
+SQL.ADD("   and Termsheet = '"~Dialogo.Termsheet~"' ")
+SQL.ADD("   and FechaOp < '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" Order by NrOperacion ")
+watch(SQL.Batch)
+recorrer SQL
+    SCN(x:1, 1)
+    ACT(a:Val(x:1), fbn('NrOperacion'))
+    ACT(b:Val(x:1), fbn('TermSheet'))
+    ACD(c:Val(x:1), fbn('FechaOp'))
+    ACT(d:Val(x:1), iif(fbn('CB1')=1,'SI','NO'))
+    ACT(e:Val(x:1), iif(fbn('CB9')<>0,'SI','NO'))
+    ACT(f:Val(x:1), iif(fbn('CB10')<>1,'Ok','Falta Sup.'))
+    ACN(g:Val(x:1), fbn('Cantidad'))
+    ACN(h:Val(x:1), fbn('SaldoUti'))
+    ACN(j:Val(x:1), fbn('Monto'))
+    ACN(k:Val(x:1), fbn('Utilizado'))
+    ACT(l:Val(x:1), fbn('Cliente1'))
+    ACT(m:Val(x:1), fbn('Especie'))
+    ACN(n:Val(x:1), fbn('SaldoPICD'))
+    ACN(i:Val(x:1), iif(Val(g:Val(x:1))=Val(n:Val(x:1)),fbn('SaldoPICD'),0))
+    
+    SetFont(aa:Val(x:1)..ah:Val(x:1), 1)
+Proximo
+
+Repetir
+
+   CrearListBox ; 'Arial,8,';'Actualizacion saldo TermSheet  '~Dialogo.termsheet~' Monto '~PyC(Val(j:1),1,0)~' Utilizado '~PyC(Val(k:1),1,0)
+       **'OK'               ;xy:1..xy:val(x1);SI;;;40 ;CHECK;;
+       'Operacion '       ;a:1..a:val(x1);NO;;;70 ;STRING;;
+       'Fecha Op  '       ;c:1..c:val(x1);NO;;;100;FECHA;;
+       'Evergreen '       ;d:1..d:val(x1);NO;;;70 ;STRING;;
+       'Bloqueada '       ;e:1..e:val(x1);NO;;;70 ;STRING;;
+       'Supervisada '     ;f:1..f:val(x1);NO;;;70 ;STRING;;
+       'Cantidad  '       ;g:1..g:val(x1);NO;;;100;NUMERO;'###,###,###,###.##';
+       'Canc.PICD '       ;n:1..n:val(x1);NO;;;100;NUMERO;'###,###,###,###.##';
+       'Utilizado'        ;h:1..h:val(x1);NO;;;100;NUMERO;'###,###,###,###.##';
+       'Nueva Cantidad  ' ;i:1..i:val(x1);Not Val(g:FLB)=Val(n:FLB) y Not EqStr(Val(e:FLB),'SI') y EqStr(Val(f:FLB),'Ok');Val(i:FLB)>=(Val(h:FLB)+Val(n:FLB));'El Valor deber ser mayor o igual al Cancelado+Utilizado';100;NUMERO;'###,###,###,###.##';RGB(232,232,255); 
+   FinListBox
+
+   IF NOT OK 
+         Cancelar('No se Actualizan las Cantidades')
+   Endif 
+
+   Recorrer&i 1,val(x1)
+     SCN(x2,Val(g:&i))
+     SCN(x3,Val(i:&i))
+   Proximo
+   
+   if Val(x2) <> Val(x3)
+      Messagebox('Los nuevos valores deben dar la sumatoria de CONUs')
+      ACT(x4,'NOK')
+   else
+      ACT(x4,'OK')
+   Endif
+
+   ** si esa Ok terminar el repetir
+   if EqStr(val(x4),'OK')   
+      break
+   endif
+Proximo   
+** 
+
+** AA 31-01-2025 si hubiese cambios generar cuota con Radio1=5, radio2=1 Cantidad1=Nuevo Valor, Cantidad2=valor actual, Fecha1 con fecha de proceso, cliente y especie 
+
+Recorrer&j 1,val(x1)
+
+    If Val(g:&j)<>Val(i:&j)
+       ** AA 31-01-2025 si hubiese cambios generar cuota con radio2=1 Cantidad1=Nuevo Valor, Cantidad2=valor actual, Fecha1 con fecha de proceso 
+       ACN(CT:1, SQL("Select Max(NrCuota) From "~DBO~".CUOTAS Where NrOperacion='"~Val(a:&j)~"' ")+1) 
+       
+       message('Generando CUOTA Cantidad Actualizada a Supervisar ... ')
+       SQL.ADD(" INSERT INTO "~DBO~".CUOTAS ( ")
+       SQL.ADD(" NrOperacion, NrCuota, Radio1, Radio2, Fecha1, Cantidad1, Cantidad2, Cliente1, Especie1")
+       SQL.ADD(" ) VALUES ( ")
+       SQL.ADD(" '"~Val(a:&j)~"', "~Val(CT:1)~",  '5', '1', '"~IdxDate(Dialogo.Fecha1)~"', "~FSTR(Val(i:&j),0,2)~", "~FSTR(Val(g:&j),0,2)~", '"~Val(l:&j)~"','"~Val(m:&j)~"' ")
+       SQL.ADD(" ) ")
+       SQL.NEW
+       SQL.EXEC
+       
+       SCN(x5,1)
+    Endif
+
+Proximo 
+
+if Val(x5)>0
+   MessageBox('Actualizacion Realizada')
+else
+   MessageBox('No hubo modificaciones en los montos')
+endif   
+  
+
+

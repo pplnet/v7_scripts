@@ -1,0 +1,251 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Lista1   : "Vehiculo" ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Fecha1   :'F.Desde'   ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys
+  Fecha2   :'F.Hasta'   ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar una Fecha';NO;FSys
+  Especie1 : 'Especie'  ;;;
+  NrOperacion1 : 'Operacion';4;2;;;;;;;
+  Radio1       : 'Estado|Todos|Pendientes|Liquidados' ;;;;;;;;;0;
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+*-- Veo solamente los tipos seleccionados
+SetListaClaves(2)
+
+* Vehiculos permitidos por el usuario
+If NoVacio(Dialogo.Lista1)
+   ACT(zz6,Dialogo.Lista1)
+Else
+   If NoVacio(UsrVehiculos(UsuarioActivo))
+      ACT(zz6,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+   EndIf
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,8,B")
+
+SetFilaActual(3)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,1)
+ACT(a:fac, 'Listado de Vouchers Liquidados y Pendientes a Liquidar')
+SetFont(a:fac..a:fac,3)
+SetFilaActual(fac+2)
+ACN(w1,fac)
+
+If NoVacio(Val(zz6))
+   ACT(a:fac+1, 'Vehiculo : '~val(zz6))
+Else
+   ACT(a:fac+1, 'Vehiculo : Todos')
+EndIf
+
+ACT(a:fac+2, 'F.Desde: '~Dialogo.Fecha1)
+ACT(a:fac+3, 'F.Hasta: '~Dialogo.Fecha2)
+
+if NoVacio(Dialogo.Especie1)
+   ACT(a:fac+4, 'Especie: '~Dialogo.Especie1)
+else
+   ACT(a:fac+4, 'Especie: Todos')
+endif
+
+if NoVacio(Dialogo.NrOperacion1)                                             
+   ACT(a:fac+5, 'Nr.Operacion: '~Dialogo.NrOperacion1)
+else
+   ACT(a:FAC+5, 'NrOperacion : Todas')
+endif                                                                        
+
+
+If Dialogo.Radio1 = 0 
+   ACT(a:fac+6,'Estado: TODOS' )   
+Else
+   If Dialogo.Radio1 = 2
+      ACT(a:fac+6,'Estado: Liquidados' )   
+   Else 
+      ACT(a:fac+6,'Estado: Pendientes de Liquidacion' )   
+   Endif 
+Endif
+SetFont(a:fac..a:fac+6,2)
+SetFilaActual(fac+7)
+
+*--- Listo los Mov. Pendientes
+
+If Dialogo.Radio1<>2
+
+   * Si pidio Todos o Pendientes
+   SQL.ADD(" Select M.NrOperacion, M.FechaMov, M.Cliente, M.Especie, M.Cantidad, M.EnteCustodia, ")
+   SQL.ADD(" M.Leyenda, B.NrBit ")
+   SQL.ADD(" from "~DBO~".MOVPENDIENTES M, "~DBO~".OPERACIONESBITS B where")
+   SQL.ADD("NrSaldo = 1 ")
+   SQL.ADD("and M.FechaMov Between  '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' ")
+   SQL.ADD("and M.NrOperacion = B.NrOperacion ")
+   if NoVacio(VAL(zz6))
+      SQL.ADD(" and M.EnteCustodia in ("~Pipe2Comillas(val(zz6))~") ")
+   endif
+   If NoVacio(Dialogo.Especie1)
+      SQL.ADD(" and M.Especie = '"~Dialogo.Especie1~"' ")
+   Endif
+  
+   if NoVacio(Dialogo.NrOperacion1)                                          
+      SQL.ADD(" and M.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   endif                                                                     
+
+   SQL.ADD("and M.Bits = 'MV'")
+   SQL.ADD("and B.Valor = '1' ")
+   SQL.ADD("order by M.NrOperacion")
+ 
+   * Contador de Operaciones Pendientes de Liquidar
+   ACN(X1,0)
+
+   ACT(a:fac, 'Movimientos Pendientes De Liquidacion')
+   SetFont(a:fac..s:fac, 2)
+   AgregarMarco(a:fac..c:fac,2,0,Exe('COLOR'))
+   SetFilaActual(fac+1)
+
+   ACT(a:fac, 'NrOperacion')
+   ACT(b:fac, 'FechaMov')
+   ACT(c:fac, 'Cliente')
+   ACT(d:fac, 'Especie')
+   ACT(e:fac, 'Monto ')
+   ACT(f:fac, 'Vehiculo')
+   ACT(g:fac, 'Leyenda')
+   ACT(h:fac, 'Instancia')
+   ACT(i:fac, 'TipoOp')
+
+   AgregarMarco(a:fac..i:fac,1,0,Exe('COLOR'))
+   SetFont(a:fac..i:fac, 2)
+
+   Recorrer SQL
+
+     Message(' Mov.Pendientes Operacion Nro. '~FBN['NrOperacion'])
+
+     ACT(a:fac, FBN['NrOperacion'])
+     ACLO(a:fac,Val(a:fac))
+     ACD(b:fac, FBN['FechaMov'])
+     ACT(c:fac, FBN['Cliente'])
+     ACT(d:fac, FBN['Especie'])
+     ACN(e:fac, -FBN['Cantidad'])
+     ACT(f:fac, FBN['EnteCustodia'])
+     ACT(g:fac, FBN['Leyenda'])   
+     ACT(i:fac, BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', fbn('NrOperacion')))
+
+     ACT(ta1, 'OPERACIONES' )
+     If Vacio(val(i:fac))
+        ACT(ta1, 'TRANSACCIONES2' )
+     EndIf
+
+     ACT(h:fac, SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(FBN['NrBit'],0,0)~" AND Tabla='"~VAL(ta1)~"'") )
+
+  
+     SCN(x1,1)
+     SetFont(a:fac..i:fac, 1)
+     FormatoCeldas(e:fac..e:fac,Exe('F2'))
+  Proximo
+
+  ACT(a:fac+2, 'Cantidad de Mov.Pendientes : '~FStr(Val(x1), 4, 0))
+  SetFont(a:fac+2..n:fac+2,2)
+EndIf
+
+Message('Salio de Pendientes ')
+
+*--- Listo los Mov. Liquidados
+If Dialogo.Radio1<>1
+
+   Message('Entro a Liquidados')
+   SetFilaActual(fac+4)
+
+   ACT(a:fac, 'Movimientos Liquidados ')
+   SetFont(a:fac..g:fac, 2)
+   AgregarMarco(a:fac..c:fac,2,0,Exe('COLOR'))
+
+   SetFilaActual(fac+1)
+
+   ACT(a:fac, 'Nr.Operacion')
+   ACT(b:fac, 'Fecha Carga')
+   ACT(c:fac, 'Cliente')
+   ACT(d:fac, 'Especie')
+   ACT(e:fac, 'Cantidad')
+   ACT(f:fac, 'Vehiculo')
+   ACT(g:fac, 'Leyenda')
+   ACT(h:fac, 'Instancia')
+   ACT(i:fac, 'TipoOp')
+   ACT(j:fac, 'Nr.Voucher')
+   ACT(k:fac, 'Fecha Liq.')
+   ACT(l:fac, 'Tipo Tr.')
+   ACT(m:fac, 'Cuenta')
+   ACT(n:fac, 'Nr.Carta')
+
+   SetFont(a:fac..n:fac,2)
+   AgregarMarco(a:fac..n:fac,2,0,Exe('COLOR'))
+
+   if NoVacio(Dialogo.Especie1)
+      ACT(z1, "Especie= '"~Dialogo.Especie1~"' and ")
+   endif
+   SQL.ADD("Select T.TipoTr2, T.NrTrans, T.Fecha1, T.Fecha2, T.Especie, T.Cliente1, T.Cantidad1, T.Vehiculo1, T.Cuenta1, T.Cuenta2, T.NrOperacionRef1, T.NrOperacionRef2")
+   SQL.ADD(" from "~DBO~".TRANSACCIONES2 T")
+   SQL.ADD("where "~Val(z1) ~" ")
+   SQL.ADD("T.Fecha1 Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' and T.TipoTr2 in ('DEP','RET')")
+   if NoVacio(VAL(zz6))
+      SQL.ADD(" and T.Vehiculo1 in ("~Pipe2Comillas(val(zz6))~") ")
+   endif
+   
+   if NoVacio(Dialogo.NrOperacion1)                                          
+      SQL.ADD(" and T.NrOperacionRef1 = '"~Dialogo.NrOperacion1~"' ")
+   endif                 
+
+   SQL.ADD("order by T.NrTrans")
+
+   Recorrer SQL
+     SCN(z2,1)
+     ACT(z3, ' ')
+
+     Message(' Transaccion Nro. '~fbn('NrTrans'))
+
+     ACT(a:fac, fbn('NrOperacionRef1'))
+     ACD(b:fac, fbn('Fecha1'))
+     ACT(c:fac, fbn('Cliente1'))
+     ACT(d:fac, fbn('Especie'))
+     ACN(e:fac, fbn('Cantidad1'))
+     ACT(f:fac, fbn('Vehiculo1'))
+     ACT(g:fac, SQL("Select Leyenda FROM "~DBO~".MOVEJECUTADOS Where NrTrans2='"~fbn('NrTrans')~"' AND NrOperacion='"~fbn('NrOperacionRef1')~"' "))
+
+     ACN(o:fac, SQL("Select NrBit from "~DBO~".OPERACIONESBITS where NrOperacion = '"~fbn('NrTrans')~"' and Valor = '1'"))
+
+     ACT(h:fac, SQL("Select Nombre FROM "~DBO~".INSTANCIAS  Where NrInstancia="~Fstr(val(o:fac),0,0)~" AND Tabla='TRANSACCIONES2' ") )
+     ACT(i:fac, BuscarCampo('OPERACIONES', 'TipoOp', 'NrOperacion', fbn('NrOperacionRef1')) )
+     ACT(j:fac, fbn('NrTrans'))
+     ACD(k:fac, fbn('Fecha2'))
+     ACT(l:fac, fbn('TipoTr2'))
+     ACT(m:fac, fbn('Cuenta2'))
+     ACT(n:fac, fbn('NrOperacionRef2'))
+  
+     FormatoCeldas(e:fac..e:fac,Exe('F2'))
+     SetFont(a:fac..n:fac,1)
+
+     *-- link con consulta de operaciones
+     ACLT(j:fac,Val(j:fac))
+     ACLO(a:fac,Val(a:fac))
+  Proximo
+
+  ACT(a:fac+2, 'Cantidad de Vouchers Liquidados: '~FStr(Val(z2), 4, 0))
+  SetFont(a:fac+2..n:fac+2,2)
+EndIf
+
+ACO(1,8)
+ACO(2,8)
+ACO(3,10)
+ACO(7,20)
+ACO(8,20)
+
+
+SetPrintFit(3, 75)
+Impresion(1,2)
+SetFilaActual(fac+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:fac, 2)
+LimitesVision(N:fac+1)
+
+SetFont(a4..a5,2)

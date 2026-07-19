@@ -1,0 +1,87 @@
+﻿***/// Esta funcion devuelve el saldo Consolidado para la especie y vehiculos que correspondan.
+ACN(SD:1, 0)
+ACT(ES:1, FBN('Especie'))
+
+SQL.ADD(" Select distinct O.Vehiculo1 ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O  ")
+SQL.ADD(" WHERE TipoOp in ('FCS','FCR','SEPVMV','SEPTMV','FCCPV','FCVPV') ")
+SQL.ADD(" and ((FechaVto between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' AND TipoOp Not IN ('SEPTMV','SEPVMV')) ")
+SQL.ADD("      OR (FechaOp between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' AND TipoOp IN ('SEPTMV','SEPVMV'))) ")
+IF NoVacio(Dialogo.Lista1)
+  SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("and O.Vehiculo1 in("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo1))~")")
+  EndIf
+ENDIF
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.ContraEspecie = '"~val(en1)~"' ")
+endif
+
+SQL.ADD(" and O.Especie = '"~FBN('Especie')~"' ")
+
+SQL.ADD(" UNION ")
+***---Vto de los Prestamos
+SQL.ADD(" Select distinct O.Vehiculo1 ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C  ")
+SQL.ADD(" WHERE TipoOp in ('SEPVMV','SEPTMV') ")
+SQL.ADD(" AND O.NrOperacion = C.NrOperacion ")
+SQL.ADD(" AND C.Fecha2 between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' AND TipoOp IN ('SEPTMV','SEPVMV') ")
+IF NoVacio(Dialogo.Lista1)
+  SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("and O.Vehiculo1 in("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo1))~")")
+  EndIf
+ENDIF
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.ContraEspecie = '"~val(en1)~"' ")
+endif
+
+SQL.ADD(" and O.Especie = '"~FBN('Especie')~"' ")
+
+***// QUERY para traer saldos anteriores
+
+SQL.ADD(" UNION ")
+
+SQL.ADD(" Select distinct S.Cliente Vehiculo1 ")
+SQL.ADD(" FROM "~DBO~".SALDOSDIA S, "~DBO~".ESPECIES E ")
+SQL.ADD(" WHERE S.Fecha < '"~IdxDate(Dialogo.Fecha1)~"'  AND S.NrSaldo = 1 ")
+SQL.ADD(" and (S.CallPut IS NULL OR S.CallPut = ' ' OR S.CallPut = 'CON')  ")
+SQL.ADD(" and (S.PrecioEj IS NULL OR S.PrecioEj = 0)  and S.FechaEj IS NULL  ")
+SQL.ADD(" and S.Cliente = S.EnteCustodia ")
+SQL.ADD(" and ROUND(S.Saldo,0) <> 0 ")
+SQL.ADD(" and S.Fecha in (select Max(R.Fecha) from "~DBO~".SALDOSDIA R  ")
+SQL.ADD(" where R.Fecha < '"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD(" and R.NrSaldo = 1 and R.NrSaldo = S.NrSaldo  ")
+SQL.ADD(" and R.Cliente = S.Cliente and R.Especie = S.Especie  ")
+SQL.ADD(" and ((R.Mercado Is Null and S.Mercado Is null) or R.Mercado=S.Mercado)  ")
+SQL.ADD(" and ((R.EnteCustodia Is Null and S.EnteCustodia Is null) or R.EnteCustodia=S.EnteCustodia)  ")
+SQL.ADD(" and ((R.Cuenta Is Null and S.Cuenta Is null) or R.Cuenta=S.Cuenta)  ")
+SQL.ADD(" and ((R.Cupon Is Null and S.Cupon Is null) or R.Cupon=S.Cupon)  ")
+SQL.ADD(" and ((R.Book Is Null and S.Book Is null) or R.Book=S.Book)  ")
+SQL.ADD(" and ((R.Vehiculo Is Null and S.Vehiculo Is null) or R.Vehiculo=S.Vehiculo)  ")
+SQL.ADD(" and ((R.CallPut Is Null and S.CallPut Is null) or R.CallPut=S.CallPut)  ")
+SQL.ADD(" and ((R.FechaEj Is Null and S.FechaEj Is null) or R.FechaEj=S.FechaEj) ) ")
+
+SQL.ADD(" and S.Especie = E.Codigo ")
+SQL.ADD(" and E.Tipo = 'FON' ")
+IF NoVacio(Dialogo.Lista1) 
+  SQL.ADD(" AND S.Cliente IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+ELSE
+  If NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("and S.Cliente in("~Pipe2Comillas(Descendientes('VEHICULOS', Dialogo.Vehiculo1))~") ")
+  EndIf
+ENDIF
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and E.Cotiza = '"~val(en1)~"' ")
+endif
+
+SQL.ADD(" and E.Codigo = '"~FBN('Especie')~"' ")
+
+SQL.ADD(" Order By O.Vehiculo1 ")
+
+Recorrer SQL
+   DFA
+   SCN(SD:1, SaldoD2(FBN('Vehiculo1'),Val(ES:1),,,,,FBN('Vehiculo1'),,1,Dialogo.Fecha1-1))
+Proximo

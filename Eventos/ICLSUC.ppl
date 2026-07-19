@@ -1,0 +1,119 @@
+﻿CrearDialogo
+  Fecha1   : 'Fecha'      ; ; ; ;  ;;;;;;FSYS
+  Termsheet: 'TermSheet'  ; ; ; ;  ;;;;;
+  
+FinDialogo
+
+if not ok
+  Cancelar
+endif
+
+** AA 31-01-2025 la actualizacion de Operaciones y Cuota debe hacerse en nuevo evento de supervision. que debe levantar 
+** las cuotas con Radio2=1. Si Autoriza modificar: Cantidad de la Operacion y cuota con radio1=0. Cambiar Radio2=0.
+**                          Si no Autoriza  Eliminar registro en cuotas (verificar que pasa si deja interrumpida la secuencia de NrCuota)
+
+SQL.ADD(" Select NrCuota,C.Nroperacion,Fecha1,C.Cliente1,C.Especie1,Cantidad1,Cantidad2,O.Termsheet from CUOTAS C, OPERACIONES O ")
+SQL.ADD(" where  C.Nroperacion=O.NrOperacion ")
+If NoVacio(Dialogo.Termsheet)
+   SQL.ADD(" and Termsheet = '"~Dialogo.Termsheet~"' ")
+  Else
+   SQL.ADD("  and Termsheet <> '' and FechaOp < '"~IdxDate(Dialogo.Fecha1)~"' ")  
+Endif
+SQL.ADD(" and Radio2=1 and Radio1=5")
+SQL.ADD("Order by Termsheet, NrOperacion ")
+**watch(SQL.Batch)
+
+ recorrer SQL
+ 
+    acn(a:fac,1)
+    act(b:fac,FBN['TermSheet'])
+    act(c:fac,FBN['NrOperacion'])
+    act(d:fac,FBN['Cliente1'])
+    act(e:fac,FBN['Especie1'])
+    acn(f:fac,FBN['Cantidad2'])
+    acn(g:fac,FBN['Cantidad1'])
+    acn(h:fac,FBN['NrCuota'])
+    
+    scn(ca:1,1)
+Proximo
+
+If Val(ca:1)>0 
+   **- Armo la lista de las CONUs a Supervisar
+   CrearListBox ; 'Arial,8,';'Supervision Montos en CONUs'
+       'Accion ?'              ;a:1..a:Fac   ;SI;;;60;COMBO;'Ok|Rechaza'       
+       'TermSheet'             ;b:1..b:Fac   ;NO;;;70 ;STRING;;
+       'Operacion'             ;c:1..c:Fac   ;NO;;;70 ;STRING;;
+       'Cliente'               ;d:1..d:Fac   ;NO;;;70 ;STRING;;
+       'Especie'               ;e:1..e:Fac   ;NO;;;70 ;STRING;;
+       'Monto Original'        ;f:1..f:Fac   ;NO;;;100 ;NUMERO;'##,###,###,###.##';
+       'Monto Actualizdo'      ;g:1..g:Fac   ;NO;;;100 ;NUMERO;'##,###,###,###.##';              
+    FinListBox
+
+    IF NOT OK 
+       Cancelar
+    ENDIF
+
+   If Ok
+      ** Verificar si todas las CONUs de una Termsheet tiene la misma accion
+      ACT(t0,'TSXXXXX')
+      ACN(x1,1)
+      Recorrer&j 1,val(ca:1)
+         if EqStr(val(t0),'TSXXXXX')
+            ACT(t0,val(b:&j))
+         endif
+         if EqStr(val(t0),val(b:&j))
+            SCN(t:val(x1),Val(a:&j))
+            SCN(u:val(x1),1)
+         else
+            ACT(t0,val(b:&j))
+            SCN(x1,1)
+            ACN(t:val(x1),Val(a:&j))
+            ACN(u:val(x1),1)
+         endif   
+      Proximo
+      ACT(u:0,'XX')
+      Recorrer&k 1,val(x:1)
+         if Val(t:&k)=0 y Not Eqstr(Val(u:0),'NOK')
+            ACT(u:0,'OK')
+         else
+            if Val(t:&k)=Val(u:&k) y Not Eqstr(Val(u:0),'NOK')
+               ACT(u:0,'OK')
+            else
+               ACT(u:0,'NOK')
+            endif   
+         endif
+      Proximo      
+      IF EqStr(val(U:0),'OK')
+         Recorrer&i 1, Val(ca:1)
+            If Val(a:&i) = 1
+               ** Borrar Cuota
+               SQL.ADD(" Delete "~DBO~".CUOTAS ")
+               SQL.ADD(" Where NrOperacion = '"~val(c:&i)~"' and NrCuota= '"~FSTR(val(h:&i),1,0)~"'")
+               SQL.NEW
+               SQL.EXEC
+            Else
+            ** Supervisada Ok
+               SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+               SQL.ADD("SET Cantidad = "~FStr(Val(g:&i),0,2)~", Cuotas2=1 ")
+               SQL.ADD("Where NrOperacion = '"~Val(c:&i)~"' ")
+               SQL.NEW
+               SQL.ADD("UPDATE "~DBO~".CUOTAS ")
+               SQL.ADD("SET Cantidad1 = "~FStr(Val(g:&i),0,2)~" ")
+               SQL.ADD("Where NrOperacion = '"~Val(c:&i)~"' and Radio1=0 ")
+               SQL.NEW
+               SQL.ADD("UPDATE "~DBO~".CUOTAS ")
+               SQL.ADD("SET Radio2 = '0' ")
+               SQL.ADD("Where NrOperacion = '"~Val(c:&i)~"' and NrCuota='"~FSTR(val(h:&i),1,0)~"' ")
+               SQL.NEW
+                 
+               SQL.EXEC
+            Endif
+         Proximo
+         Messagebox('Supervision terminada') 
+      else
+        Messagebox('La supervision debe tener la misma opcion(Ok/Rechaza) para las CONUs de la TermSheet')
+      endif
+   Endif
+  Else
+  Messagebox('No se encontraron operaciones para Supervisar')
+Endif

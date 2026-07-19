@@ -1,0 +1,208 @@
+﻿*-------------------------------------------------------------------------------------
+*- ch1: Acumulador HM *- ch2: Acumulador del resto
+ACN(ch1,0)
+ACN(ch2,0)
+
+Message('----- Corte de Posicion Cliente: '~Val(a:&i))
+
+SQL.ADD(" SELECT P.CantidadFin, P.PrecioFin, P.Cliente, P.NrSaldo, P.TipoNegocio, P.NrSaldo, ")
+SQL.ADD(" P.Vehiculo, P.Trader, E.Cotiza, E.InteresesC, E.TamanioLote, 'Ejecutado' Estado, P.Fecha FechaMov ")
+SQL.ADD(" FROM  "~DBO~".POSICIONES P, "~DBO~".ESPECIES E ")
+SQL.ADD(" WHERE P.Cliente  = P.Vehiculo ")
+SQL.ADD(" AND   P.Especie  = E.Codigo ")
+SQL.ADD(" AND   P.Fecha    <= '"~IdxDate(Val(g2))~"' ")
+SQL.ADD(" AND   P.Vehiculo  = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND   P.Especie   = '"~Val(b2)~"' ")
+SQL.ADD(" AND   P.Cupon     = '"~FStr(Val(c2),1,0)~"' ")
+SQL.ADD(" AND   P.Fecha IN (SELECT MAX(Fecha) FROM "~DBO~".POSICIONES X")
+SQL.ADD("                 WHERE  X.Cliente = P.Cliente ")
+SQL.ADD("                 AND    X.Especie = P.Especie ")
+SQL.ADD("                 AND    (X.TipoNegocio=P.TipoNegocio OR (X.TipoNegocio IS NULL AND P.TipoNegocio IS NULL)) ")
+SQL.ADD("                 AND    X.Vehiculo     = P.Vehiculo ") 
+SQL.ADD("                 AND    X.NrSaldo      = P.NrSaldo  ") 
+SQL.ADD("                 AND    (X.Trader=P.Trader OR (X.Trader IS NULL AND P.Trader IS NULL))  ") 
+SQL.ADD("                 AND    X.Cupon        = P.Cupon    ") 
+SQL.ADD("                 AND    X.Fecha <= '"~IdxDate(Val(g2))~"') ")
+***---Posiciones no cortadas por CCUPONPOS
+SQL.ADD(" AND   P.Cliente NOT IN (SELECT Cliente FROM "~DBO~".MOVPOSEJE ")
+SQL.ADD("                         WHERE  FechaMov = '"~IdxDate(Val(g2))~"' ")
+SQL.ADD("                         AND    NrOperacion = '"~Val(y1)~"' ")
+SQL.ADD("                         AND    (Especie = '"~Val(b2)~"' OR Especie = '"~Val(b4)~"') ) ")
+SQL.ADD(" ORDER By P.Cliente, P.NrSaldo")
+
+SetFilaActual(199)
+ACN(zz:1, 0)
+
+Recorrer SQL
+  Message(FBN['NrSaldo']~' '~Fstr(fbn('CantidadFin'),0,2))
+  IF fbn('CantidadFin')<>0
+    *- Distribuye distintas carteras
+    If FBN['NrSaldo']=110
+      *- HM
+      SCN(ch1,fbn('CantidadFin'))
+    EndIf
+    If FBN['NrSaldo']>110 y FBN['NrSaldo']<200
+      SCN(ch2,fbn('CantidadFin'))
+    EndIf
+
+    ACN(zz:1, 1)
+ 
+    ACT(aa:fac, fbn('Cliente'))
+    ACN(ab:fac, fbn('NrSaldo'))
+    ACN(ad:fac, fbn('CantidadFin'))
+    ACN(ae:fac, fbn('PrecioFin'))
+    ACT(af:fac, fbn('Vehiculo'))
+    ACT(ag:fac, fbn('Trader'))
+    ACT(ah:fac, fbn('TipoNegocio'))
+    ACN(ai:fac, fbn('NrSaldo'))
+    ACT(am:fac, fbn('Estado'))
+    ACD(an:fac, fbn('FechaMov'))
+
+    if Eqstr(BuscarCampo('ESPECIES','InteresesC','Codigo',Val(b2)),'CLE')
+       ACN(aj:fac,fbn('PrecioFin'))
+    else
+       ACN(aj:fac,fbn('PrecioFin')-((Val(k2)+Val(l2)+Val(m2))/100))
+    endif 
+    ACN(ak:fac, 1)
+    ACT(al:fac, fbn('Vehiculo'))
+  ENDIF
+Proximo
+
+IF Val(zz:1)<>0
+   Recorrer&i 200,fac
+     Message('Fn CCPONPOS2 Recorriendo linea ...'~Fstr(&i,0,0))
+
+     IF Val(ak:&i)=1
+        ***---ACT(Y1,GetNumerador(20))
+        ACT(Y:1, GetNumerador(BuscarCampo('VEHICULOS','Alias3','Codigo', Val(J:2))))
+
+        *--------------- insertar una transaccion para actualizar el saldo
+        SQL.ADD("INSERT INTO "~DBO~".TRANSACCIONES2 (")
+        SQL.ADD(" Especie,   Especie2,   Cupon1 ,")
+        SQL.ADD(" Fecha1,    Fecha2,     Cliente1, ")
+        SQL.ADD(" Cantidad1, Precio1,    Precio2, ")
+        SQL.ADD(" Precio3,   Cambio1,    Cambio2, ")
+        SQL.ADD(" Vehiculo1, TipoTr2,    NrTrans, ")
+        SQL.ADD(" CB4,       FechaCarga, FechaCargaSys, ")
+        SQL.ADD(" UsrInput,  Cupon2,     Cambio3")
+        If val(ab:&i)=101
+           *- Graba la distribucion de carteras solamente en la consolidada
+           SQL.ADD(" ,Cantidad2, Cantidad3 ")
+        EndIf
+        SQL.ADD(" ) VALUES ( ")
+        SQL.ADD(" '"~Val(b2)~"', ")
+        SQL.ADD(" '"~Val(b4)~"', ")
+        SQL.ADD(" '"~FStr(Val(c2),1,0)~"', ")
+
+        SQL.ADD(" '"~IdxDate(Val(g2))~"', ")
+        SQL.ADD(" '"~IdxDate(Val(h4))~"', ")
+        SQL.ADD(" '"~Val(aa:&i)~"', ")
+
+        SQL.ADD(" "~FStr(Val(ad:&i),1,2)~", ")
+        SQL.ADD(" "~FStr(Val(k2),1,8)~", ")    
+        SQL.ADD(" "~FStr(Val(l2),1,8)~", ")
+
+        SQL.ADD(" "~FStr(Val(m2),1,8)~", ")
+        SQL.ADD(" "~FStr(Val(e2),1,8)~", ")
+        SQL.ADD(" "~FStr(Val(e3),1,8)~", ")
+
+        SQL.ADD(" '"~VAL(j2)~"', ")
+        SQL.ADD(" 'CUPON', ")
+        SQL.ADD(" '"~Val(Y1)~"', ")
+
+        SQL.ADD(" '1', ")
+        SQL.ADD(" "~SQLAhora~", ")
+        SQL.ADD(" '"~IdxDate(Fsys)~"', ")
+
+        SQL.ADD(" '"~UsuarioActivo~"', ")
+        SQL.ADD(" '"~FStr(Val(c4),1,0)~"', ")
+        SQL.ADD(" "~FStr(Val(in1),1,8)~" ")
+
+        If val(ab:&i)=101
+          SQL.ADD(" ,"~Fstr(val(ch1),0,2)~" ")
+          SQL.ADD(" ,"~Fstr(val(ch2),0,2)~" ")
+        EndIf
+        SQL.ADD(" ) ")
+        SQL.NEW 
+
+        SQL.ADD("INSERT INTO "~DBO~".OPERACIONESBITS ")
+        SQL.ADD("(NrBit, NrOperacion, Valor) ")
+        SQL.ADD(" VALUES ")
+        SQL.ADD("(20, '"~Val(y1)~"', '1') ")
+        SQL.NEW
+        SQL.EXEC
+
+        ACN(z1, val(ad:&i))
+        ACN(z2, val(ae:&i))
+
+        * Precio Final actualizado
+        if Eqstr(BuscarCampo('ESPECIES','InteresesC','Codigo',Val(b2)),'CLE')
+           ACN(z4, (Val(l2)+Val(k2)*Val(z2)+Val(m2))/100)
+           ACN(z3,Val(z2))
+        else
+           ACN(z4, (Val(l2) + (Val(k2) * (Val(z2)-Val(l2)/100-Val(m2)/100)) + Val(m2))/100 )
+           ACN(z3,  Val(z2) - Val(z4) )
+        endif 
+
+        * Actualizar movimientos de posicion para la especie vieja
+        *------ Posicion del Cliente ----------------*
+        SQL.ADD(" INSERT INTO "~DBO~".MOVPOSEJE ")   
+        SQL.ADD(" ( Especie, Cantidad, NrOperacion, ")
+        SQL.ADD(" FechaMov, Cliente, Vehiculo, ")
+        SQL.ADD(" NrSaldo, Precio, ")
+        SQL.ADD(" Cupon, Tipo, TipoNegocio, Trader, ")
+        SQL.ADD(" Unidad, Centro, Sector, Sucursal, ")
+        SQL.ADD(" CallPut, Cartera, Book, Estrategia ")
+        SQL.ADD(" ) Values ( ")
+        SQL.ADD(" '"~Val(b2)~"', "~Fstr(val(ad:&i)*(-1),1,2)~", '"~Val(Y1)~"', ")
+        SQL.ADD(" '"~IdxDate(Val(g2))~"', ")
+        SQL.ADD(" '"~Val(aa:&i)~"', '"~Val(al:&i)~"', ")
+        SQL.ADD(" "~FStr(Val(ai:&i),1,0)~", "~FStr(Val(z2),1,8)~", ")
+        SQL.ADD(" '"~FStr(Val(c2),1,0)~"', 1, '"~Val(ah:&i)~"', '"~Val(ag:&i)~"', ")
+        SQL.ADD(" '', '', '', '', ")
+        SQL.ADD(" '', '', '', '' ) ")
+        SQL.NEW
+
+        If Round2(Val(e:3),3)<>0
+           * Actualizar movimientos de posicion para la especie nueva
+           SQL.ADD(" INSERT INTO "~DBO~".MOVPOSEJE ")   
+           SQL.ADD(" ( Especie, Cantidad, NrOperacion, ")
+           SQL.ADD(" FechaMov, Cliente, Vehiculo, ")
+           SQL.ADD(" NrSaldo, Precio,  ")
+           SQL.ADD(" Cupon, Tipo, TipoNegocio, Trader, ")
+           SQL.ADD(" Unidad, Centro, Sector, Sucursal, ")
+           SQL.ADD(" CallPut, Cartera, Book, Estrategia ")
+           SQL.ADD(" ) Values ( ")
+           SQL.ADD(" '"~Val(b2)~"', "~Fstr(val(ad:&i),1,2)~", '"~Val(Y1)~"', ")
+           SQL.ADD(" '"~IdxDate(Val(g2))~"', ")
+           SQL.ADD(" '"~Val(aa:&i)~"', '"~Val(al:&i)~"', ")
+           SQL.ADD(" "~FStr(Val(ai:&i),1,0)~", "~FStr(Val(z3),1,8)~", ")
+           SQL.ADD(" '"~FStr(Val(c3),1,0)~"', 1, '"~Val(ah:&i)~"', '"~Val(ag:&i)~"', ")
+           SQL.ADD(" '', '', '', '', ")
+           SQL.ADD(" '', '', '', '' ) ")
+           SQL.NEW
+        Endif
+
+        If val(l2)+val(k2)<>0
+           * Actualizar movimientos de posicion para el cupon
+           SQL.ADD(" INSERT INTO "~DBO~".MOVPOSEJE ")   
+           SQL.ADD(" ( Especie, Cantidad, NrOperacion, ")
+           SQL.ADD(" FechaMov, Cliente, Vehiculo, ")
+           SQL.ADD(" NrSaldo, Precio,  ")
+           SQL.ADD(" Cupon, Tipo, TipoNegocio, Trader, ")
+           SQL.ADD(" Unidad, Centro, Sector, Sucursal, ")
+           SQL.ADD(" CallPut, Cartera, Book, Estrategia ")
+           SQL.ADD(" ) Values ( ")
+           SQL.ADD(" '"~Val(b4)~"', "~Fstr(val(ad:&i),1,2)~", '"~Val(Y1)~"', ")
+           SQL.ADD(" '"~IdxDate(Val(g2))~"', ")
+           SQL.ADD(" '"~Val(aa:&i)~"', '"~Val(al:&i)~"', ")
+           SQL.ADD(" "~FStr(Val(ai:&i),1,0)~", "~FStr(val(z4),1,8)~",  ")
+           SQL.ADD(" '"~FStr(Val(c2),1,0)~"', 1, '"~Val(ah:&i)~"', '"~Val(ag:&i)~"', ")
+           SQL.ADD(" '', '', '', '', ")
+           SQL.ADD(" '', '', '', '' ) ")
+           SQL.NEW
+           SQL.EXEC
+        EndIf
+     ENDIF
+   Proximo   
+ENDIF

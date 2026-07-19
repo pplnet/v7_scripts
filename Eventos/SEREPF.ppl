@@ -1,0 +1,62 @@
+﻿CrearDialogo
+   NrOperacion1 : 'Nro. Operacion'    ;;;;;;EqStr(BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion1),'MMCPM') y QUERY("Select 1 from "~DBO~".MOVPENDIENTES Where NrSaldo = 1 and NrOperacion = '"~Dialogo.NrOperacion1~"'")=1;'La operacion ingresada debe ser de tipo MMCPM y no debe contar con movimientos liquidados al vencimiento';NO;;;;;;"TipoOp= 'MMCPM' and NrOperacion IN (Select NrOperacion From "~DBO~".MOVPENDIENTES Where NrSaldo=1)"
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+
+
+SQL.ADD("Select O.NrOperacion, O.FechaOp, O.Plazo, O.FechaVto, O.Cantidad, C.Cantidad3 as 'Intereses' ,")
+SQL.ADD(" O.ImpGastos1 as 'TasaRet.', C.Cantidad4 as 'Retenciones',O.RB6 as 'Redondea' ")
+SQL.ADD("From "~DBO~".OPERACIONES O JOIN "~DBO~".CUOTAS C  ON O.NrOperacion = C.NrOperacion ")
+SQL.ADD("Where O.NrOperacion = '"~Dialogo.NrOperacion1~"'")
+
+
+
+
+Recorrer SQL
+    ACT(A:fac,fbn['NrOperacion'])
+    ACD(B:fac,fbn['FechaOp'])
+    ACN(C:fac,fbn['Plazo'])
+    ACD(D:fac,fbn['FechaVto'])
+    ACN(E:fac,fbn['Cantidad'])
+    ACN(F:fac,fbn['Intereses'])
+    ACN(G:fac,fbn['TasaRet.'])
+    ACN(H:fac,fbn['Retenciones'])
+    ACT(I:fac,fbn['Redondea'])
+    
+    CrearListBox;'Arial,8,B'
+        'NrOperacion'; a:fac..a:fac; NO; NO;;100; STRING
+        'FechaOp'    ; b:fac..b:fac; NO; NO;;100; FECHA
+        'Plazo'      ; c:fac..c:fac; NO; NO;;100; NUMERO;'####'
+        'FechaVto'   ; d:fac..d:fac; NO; NO;;100; FECHA
+        'Cantidad'   ; e:fac..e:fac; NO; NO;;100; NUMERO;'###,###,###,###.##'
+        'Intereses'  ; f:fac..f:fac; NO; NO;;100; NUMERO;'###,###,###,###.##'
+        'TasaRet.'   ; g:fac..g:fac; SI; Val(g:fac)>=0;'La tasa de retencion no puede ser negativa';100; NUMERO;'###.########'
+        'Retenciones'; h:fac..h:fac; NO; NO;;100; NUMERO;'###,###,###,###.##';;IIf(EqStr(Val(i:fac),'0'),Round([Val(f:fac)*Val(g:fac)]/100),[Val(f:fac)*Val(g:fac)]/100);
+        'Redondea'   ; i:fac..i:fac; NO; NO;;0; STRING
+    FinListBox
+    *
+    If Not Ok
+        Cancelar
+    Endif
+    
+    If Val(g:fac)=0
+        ACN(ZZ:1,MessageBox('La tasa de retencion es 0,¿Confirma?',3,1))
+        If Val(ZZ:1)=2
+            Cancelar
+        Endif
+    Endif
+
+    SQL.ADD("UPDATE "~DBO~".OPERACIONES Set ImpGastos1= "~Fstr(Val(g:fac),0,8)~" Where NrOperacion = '"~Dialogo.NrOperacion1~"'")
+    SQL.ADD("UPDATE "~DBO~".CUOTAS Set Cantidad4= "~Fstr(Val(h:fac),0,2)~" Where NrOperacion = '"~Dialogo.NrOperacion1~"'")
+    SQL.NEW
+    SQL.EXEC
+
+    SQL.ActualizarMovimientos3(FBN['NrOperacion'],SI,NO,NO,NO,SI)
+    SQL.EXEC
+
+Proximo
+

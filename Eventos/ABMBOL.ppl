@@ -1,0 +1,279 @@
+﻿Repetir
+    MostrarCuadrodeMensajes
+    BorrarCeldas(a0..bz:fac)
+    CrearDialogo
+      Radio1:   'Accion|Alta|Baja|Modificacion' ;;;;;;Dialogo.Radio1 >= 0;'Accion Invalida.';NO;-1;
+      Radio2:   'Boleto|Compra|Venta'           ;;;;;;Dialogo.Radio2 >= 0;'Tipo de Boleto Invalido.';NO;-1;
+      NrTrans1: 'Boleto'                        ;;;;;Dialogo.Radio1 > 0 Y Dialogo.Radio2 >= 0;[NoVacio(Dialogo.NrTrans1) Y [SQL(" Select 1 From "~DBO~".TRANSACCIONES2 Where NrTrans = '"~Dialogo.NrTrans1~"' AND TipoTr2 = 'BOBCRA' AND RB1 = "~Dialogo.Radio2~" ") = 1]] O Dialogo.Radio1 = 0;'Nro. de Boleto Invalido.';NO;;;;;;" TipoTr2 = 'BOBCRA' AND RB1 = "~Dialogo.Radio2~" ";
+      Radio3:   'FX Asociada|SI|NO'             ;;;;;Dialogo.Radio1 = 0;;;;0;
+      Vehiculo1:'Vehiculo'                      ;;;;Dialogo.Radio3 = 1;Dialogo.Radio3 = 1;Dialogo.Radio3 = 0 O NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido.';NO;Var('VEHICULODE');
+    FinDialogo
+
+    IF Not OK
+       Cancelar
+    ENDIF
+
+*FO 08/02/2007    ACT(LS:1, SQLSet(" Select Codigo From "~DBO~".CLIENTES Where Sector <> 'BAN' OR Sector Is Null OR Codigo IN ("~Pipe2Comillas(Descendientes('CLIENTES', 'BEXTER'))~") "))
+    ACT(LS:1, SQLSet(" Select Codigo From "~DBO~".CLIENTES Where Status = 'HAB' ") )
+    SetFilaActual(0)
+    ACN(BD:1, 0)
+
+    IF Dialogo.Radio1 = 0
+        ***---Alta
+        IF Dialogo.Radio3 = 0
+            ***---Con FX Asociada
+            ***---Select
+            (.'ABMBOL1'.)
+            Recorrer&k 1, fac
+                IF Val(K:&k) = 1
+                    ***---Fila de la Operacion
+                    ACN(FI:1, &k)
+                    ACT(SW:1, SQL("SELECT SWIFT FROM "~DBO~".ESPECIES WHERE Codigo = '"~Val(O:&k)~"' ") )
+                    IF Dialogo.Radio2 = 0
+                        ***---Compra
+                        CrearListBox ; 'Arial,8,';'Ingrese los Siguientes Datos del Boleto de Compra'
+                           'Cod. Concepto'           ;AA:Val(FI:1)..AA:Val(FI:1);SI;NoVacio(Val(AA:FLB)) Y Eqstr(BuscarCampo('CONCEPTOSBCRA','Alias1','Codigo', Val(AA:FLB)), 'COMPRA');'Concepto BCRA Invalido.';80;TABLA;'CONCEPTOSBCRA';'Codigo';'Codigo;Descripcion';" Alias1 = 'COMPRA' ";RGB(220,220,193);
+                           'Cod. Pais Origen'        ;AB:Val(FI:1)..AB:Val(FI:1);SI;;;80;TABLA;'PAISES';'Alias';'Alias;Codigo;Nombre';"Alias Is Not Null";RGB(220,220,193);
+                           'Fecha Ingreso'           ;AC:Val(FI:1)..AC:Val(FI:1);SI;;;75;FECHA;RGB(220,220,193);
+                           'Nro.Ofic.'               ;AD:Val(FI:1)..AD:Val(FI:1);SI;;;75;STRING;75;RGB(220,220,193);
+                           'Cod.Instr.Comprado'      ;AE:Val(FI:1)..AE:Val(FI:1);SI;NoVacio(Val(AE:FLB));'Codigo de Instrumento Comprado Invalido.';100;TABLA;'INSTRUMENTOS';'Codigo';'Codigo;Descripcion';;RGB(220,220,193);
+                           'Cod.Instr.Recibido'      ;ba:Val(FI:1)..ba:Val(FI:1);SI;NoVacio(Val(ba:FLB));'Codigo de Instrumento Recibido Invalido.';100;TABLA;'INSTRUMENTOS';'Codigo';'Codigo;Descripcion';;RGB(220,220,193);
+                           'Pagador'                 ;AF:Val(FI:1)..AF:Val(FI:1);SI;NoVacio(Val(AF:FLB));'Pagador Invalido.';200;STRING;200;RGB(220,220,193);
+                           'Domicilio'               ;AG:Val(FI:1)..AG:Val(FI:1);SI;NoVacio(Val(AG:FLB));'Domicilio Invalido.';200;STRING;200;RGB(220,220,193);
+                           'Cod.Pais Pagador'        ;AH:Val(FI:1)..AH:Val(FI:1);SI;NoVacio(Val(AH:FLB));'Codigo Pais Pagador Invalido.';90;TABLA;'PAISES';'Alias';'Alias;Codigo;Nombre';"Alias Is Not Null";RGB(220,220,193);
+                           'Cod.Swift Bco Pagador del Exterior' ;AI:Val(FI:1)..AI:Val(FI:1);SI;NoVacio(Val(AI:FLB));'Cod. Swif Banco Pagador del Exterior Invalido.';200;STRING;;RGB(220,220,193);
+                           'Banco Pagador del Exterior'         ;AJ:Val(FI:1)..AJ:Val(FI:1);SI;NoVacio(Val(AJ:FLB));'Banco Pagador del Exterior Invalido.';200;STRING;200;RGB(220,220,193);
+                        FinListBox
+
+                        IF Not OK
+                           Cancelar
+                        ENDIF
+
+                        ACN(FE:1, Val(AC:&k))
+                        ACT(NR:1, GetNumerador(79))
+                        message("Generando Boleto de Compra "~Val(nr:1)~" ... ")
+                        SQL.ADD(" Insert Into "~DBO~".TRANSACCIONES2 ")
+                        SQL.ADD(" (NrTrans, TipoTr2, ")
+                        IF Val(FE:1) <> 0
+                           SQL.ADD(" Fecha2, ")
+                        ENDIF
+                        SQL.ADD(" Especie, Cliente1, Ley4, ")
+                        SQL.ADD(" Cantidad1, Precio1, ")
+                        SQL.ADD(" Cambio1, CEmpresa3, ")
+                        SQL.ADD(" Cambio3, Ley2, Ley1, ")
+                        SQL.ADD(" CEmpresa4, Ley5, RB1, ")
+                        SQL.ADD(" NrOperacionRef1, Especie1, ")
+                        SQL.ADD(" FechaCarga, FechaCargaSys, UsrInput, ")
+                        SQL.ADD(" Numerador, Vehiculo1, Fecha1, ")
+                        SQL.ADD(" NrOfic, Cantidad3 ) ")
+                        SQL.ADD(" Values ")
+                        SQL.ADD(" ('"~Val(NR:1)~"', 'BOBCRA', ")
+                        IF Val(FE:1) <> 0
+                           SQL.ADD(" '"~IdxDate(Val(AC:&k))~"', ")
+                        ENDIF
+                        * Especie
+                        SQL.ADD(" '"~Val(SW:1)~"', '"~Val(C:&k)~"', '"~Val(AJ:&k)~"', ")
+                        * Cantidad
+                        SQL.ADD(" "~Fstr(Val(F:&k), 0, 2)~", "~Fstr(Val(G:&k), 0, 8)~", ")
+                        * Cambio1
+                        SQL.ADD(" "~Fstr(Num(Val(AA:&k)), 0, 0)~", '"~Copy(Val(AB:&k), 1, 10)~"', ")
+                        * Cambio3
+                        SQL.ADD(" "~Fstr(Num(Val(AE:&k)), 0, 0)~", '"~Copy(Val(AF:&k), 1, 300)~"', '"~Copy(Val(AG:&k), 1, 300)~"', ")
+                        SQL.ADD(" '"~Copy(Val(AH:&k), 1, 10)~"', '"~Copy(Val(AI:&k), 1, 30)~"', 0, ")
+                        SQL.ADD(" '"~Val(A:&k)~"', '"~Val(O:&k)~"', ")
+                        SQL.ADD(" "~SQLAhora~", '"~IdxDate(Fsys)~"', '"~UsuarioActivo~"', ")
+                        SQL.ADD(" 79, '"~Val(Q:&k)~"', '"~IdxDate(Val(D:&k))~"', ")
+                        SQL.ADD(" '"~Val(AD:&k)~"', "~Fstr(Num(Val(ba:&k)),0,0)~") ")
+                        SQL.NEW
+                    ELSE
+                        ***---Venta
+                        CrearListBox ; 'Arial,8,';'Ingrese los Siguientes Datos del Boleto de Venta'
+                           'Cod. Concepto'          ;AA:Val(FI:1)..AA:Val(FI:1);SI;NoVacio(Val(AA:FLB)) Y Eqstr(BuscarCampo('CONCEPTOSBCRA','Alias1','Codigo', Val(AA:FLB)), 'VENTA');'Concepto BCRA Invalido.';80;TABLA;'CONCEPTOSBCRA';'Codigo';'Codigo;Descripcion';" Alias1 = 'VENTA' ";RGB(220,220,193);
+                           'Fecha Embarque'         ;AB:Val(FI:1)..AB:Val(FI:1);SI;;;80;FECHA;RGB(220,220,193);
+                           'Cod.Instr.Vendido'      ;AC:Val(FI:1)..AC:Val(FI:1);SI;NoVacio(Val(AC:FLB));'Codigo de Instrumento Vendido Invalido.';100;TABLA;'INSTRUMENTOS';'Codigo';'Codigo;Descripcion';;RGB(220,220,193);
+                           'Cod.Instr.Recibido'     ;AD:Val(FI:1)..AD:Val(FI:1);SI;NoVacio(Val(AD:FLB));'Codigo de Instrumento Recibido Invalido.';100;TABLA;'INSTRUMENTOS';'Codigo';'Codigo;Descripcion';;RGB(220,220,193);
+                           'Beneficiario Exterior'  ;AE:Val(FI:1)..AE:Val(FI:1);SI;NoVacio(Val(AE:FLB));'Beneficiario del Exterior Invalido.';200;STRING;200;RGB(220,220,193);
+                           'Nro. Cuenta'            ;AF:Val(FI:1)..AF:Val(FI:1);SI;NoVacio(Val(AF:FLB));'Nro. de Cuenta Invalido.';200;STRING;200;RGB(220,220,193);
+                           'Domicilio'              ;AG:Val(FI:1)..AG:Val(FI:1);SI;NoVacio(Val(AG:FLB));'Domicilio Invalido.';200;STRING;200;RGB(220,220,193);
+                           'Cod. Pais Beneficiario' ;AH:Val(FI:1)..AH:Val(FI:1);SI;NoVacio(Val(AH:FLB));'Cod.Pais Beneficiario Invalido.';100;TABLA;'PAISES';'Alias';'Alias;Codigo;Nombre';"Alias Is Not Null";RGB(220,220,193);
+                           'Cod.Swift Bco. Recibidor del Exterior' ;AI:Val(FI:1)..AI:Val(FI:1);SI;NoVacio(Val(AI:FLB));'Cod. Swif Banco Recibidor del Exterior Invalido.';200;STRING;;RGB(220,220,193);
+                           'Banco Recibidor del Exterior'          ;AJ:Val(FI:1)..AJ:Val(FI:1);SI;NoVacio(Val(AJ:FLB));'Banco Recibidor del Exterior Invalido.';200;STRING;200;RGB(220,220,193);
+                        FinListBox
+
+                        IF Not OK
+                           Cancelar
+                        ENDIF
+
+                        ACN(FE:1, Val(AB:&k))
+                        ACT(NR:1, GetNumerador(79))
+                        message("Generando Boleto de Venta "~Val(nr:1)~" ... ")
+                        SQL.ADD(" Insert Into "~DBO~".TRANSACCIONES2 ")
+                        SQL.ADD(" (NrTrans, TipoTr2, ")
+                        IF Val(FE:1) <> 0
+                           SQL.ADD(" Fecha2, ")
+                        ENDIF
+                        SQL.ADD(" Especie, Cliente1, Ley3, ")
+                        SQL.ADD(" Cantidad1, Precio1, ")
+                        SQL.ADD(" Cambio1, Cantidad2, Cantidad3, ")
+                        SQL.ADD(" Ley2, Ley1, ")
+                        SQL.ADD(" CEmpresa4, Ley5, RB1, ")
+                        SQL.ADD(" NrOperacionRef1, Especie1, Ley4, ")
+                        SQL.ADD(" FechaCarga, FechaCargaSys, UsrInput, ")
+                        SQL.ADD(" Numerador, Vehiculo1, Fecha1) ")
+                        SQL.ADD(" Values ")
+                        SQL.ADD(" ('"~Val(NR:1)~"', 'BOBCRA', ")
+                        IF Val(FE:1) <> 0
+                           SQL.ADD(" '"~IdxDate(Val(AB:&k))~"', ")
+                        ENDIF
+                        SQL.ADD(" '"~Val(SW:1)~"', '"~Val(C:&k)~"', '"~Copy(Val(AF:&k), 1, 30)~"', ")
+                        SQL.ADD(" "~Fstr(Val(F:&k), 0, 2)~", "~Fstr(Val(G:&k), 0, 8)~", ")
+                        SQL.ADD(" "~Fstr(Num(Val(AA:&k)), 0, 0)~", "~Fstr(Num(Val(AC:&k)), 0, 0)~", "~Fstr(Num(Val(AD:&k)), 0, 0)~", ")
+                        SQL.ADD(" '"~Copy(Val(AE:&k), 1, 300)~"', '"~Copy(Val(AG:&k), 1, 300)~"', ")
+                        SQL.ADD(" '"~Copy(Val(AH:&k), 1, 10)~"', '"~Copy(Val(AI:&k), 1, 30)~"', 1, ")
+                        SQL.ADD(" '"~Val(A:&k)~"', '"~Val(O:&k)~"', '"~Val(AJ:&k)~"', ")
+                        SQL.ADD(" "~SQLAhora~", '"~IdxDate(Fsys)~"', '"~UsuarioActivo~"', ")
+                        SQL.ADD(" 79, '"~Val(Q:&k)~"', '"~IdxDate(Val(D:&k))~"') ")
+                        SQL.NEW
+                    ENDIF
+                    SQL.ADD(" Update "~DBO~".OPERACIONES Set NrOperacion4 = '"~Val(NR:1)~"' Where NrOperacion = '"~Val(A:&k)~"' ")
+                    SQL.NEW
+                    SQL.EXEC
+                ENDIF
+            Proximo
+        ELSE
+            ***---Sin FX Asociada
+            ifa
+            IF Dialogo.Radio2 = 0
+                ***---Compra
+                CrearListBox ; 'Arial,8,';'Ingrese los Siguientes Datos del Boleto de Compra'
+                   'Fecha'               ;AK:fac..AK:fac;SI;Val(AK:FLB) <> 0;'Fecha Invalida';75;FECHA;RGB(220,220,193);
+                   'Solicitante'         ;AL:fac..AL:fac;SI;NoVacio(Val(AL:FLB)) Y Incluido(Val(AL:FLB), Val(LS:1));'Solicitante Invalido.';80;TABLA;'CLIENTES';'Codigo';'Codigo;RazonSocial';" Codigo IN ("~Pipe2Comillas(Val(LS:1))~") ";RGB(220,220,193);
+                   'Moneda'              ;AM:fac..AM:fac;SI;NoVacio(Val(AM:FLB)) Y Eqstr(BuscarCampo('ESPECIES','Tipo','Codigo', Val(AM:FLB)), 'MON') Y EsTerminal(Val(AM:FLB), ESPECIES);'Moneda Invalida.';80;TABLA;'ESPECIES';'Codigo';'Codigo;Nombre';" Status = 'HAB' AND Tipo = 'MON' ";RGB(220,220,193);
+                   'Importe'             ;AN:fac..AN:fac;SI;Val(AN:FLB) > 0;'Importe Invalido.';75;NUMERO;'###,###,###,###.##';RGB(220,220,193);
+                   'T.de Cambio'         ;AO:fac..AO:fac;SI;Val(AO:FLB) > 0;'Tipo de Cambio Invalido.';75;NUMERO;'###.########';RGB(220,220,193);
+                   'Cod. Concepto'       ;AA:fac..AA:fac;SI;NoVacio(Val(AA:FLB)) Y Eqstr(BuscarCampo('CONCEPTOSBCRA','Alias1','Codigo', Val(AA:FLB)), 'COMPRA');'Concepto BCRA Invalido.';80;TABLA;'CONCEPTOSBCRA';'Codigo';'Codigo;Descripcion';" Alias1 = 'COMPRA' ";RGB(220,220,193);
+                   'Cod. Pais Origen'    ;AB:fac..AB:fac;SI;;;80;TABLA;'PAISES';'Alias';'Alias;Codigo;Nombre';"Alias Is Not Null";RGB(220,220,193);
+                   'Fecha Ingreso'       ;AC:fac..AC:fac;SI;;;75;FECHA;RGB(220,220,193);
+                   'Nro.Ofic.'           ;AD:fac..AD:fac;SI;;;75;STRING;75;RGB(220,220,193);
+                   'Cod.Instr.Comprado'  ;AE:fac..AE:fac;SI;NoVacio(Val(AE:FLB));'Codigo de Instrumento Comprado Invalido.';100;TABLA;'INSTRUMENTOS';'Codigo';'Codigo;Descripcion';;RGB(220,220,193);
+                   'Cod.Instr.Recibido'  ;ba:fac..ba:fac;SI;NoVacio(Val(ba:FLB));'Codigo de Instrumento Recibido Invalido.';100;TABLA;'INSTRUMENTOS';'Codigo';'Codigo;Descripcion';;RGB(220,220,193);
+                   'Pagador'             ;AF:fac..AF:fac;SI;NoVacio(Val(AF:FLB));'Pagador Invalido.';200;STRING;200;RGB(220,220,193);
+                   'Domicilio'           ;AG:fac..AG:fac;SI;NoVacio(Val(AG:FLB));'Domicilio Invalido.';200;STRING;200;RGB(220,220,193);
+                   'Cod.Pais Pagador'    ;AH:fac..AH:fac;SI;NoVacio(Val(AH:FLB));'Codigo Pais Pagador Invalido.';90;TABLA;'PAISES';'Alias';'Alias;Codigo;Nombre';"Alias Is Not Null";RGB(220,220,193);
+                   'Cod.Swift Bco Pagador del Exterior' ;AI:fac..AI:fac;SI;NoVacio(Val(AI:FLB));'Cod. Swif Banco Pagador del Exterior Invalido.';200;STRING;;RGB(220,220,193);
+                   'Banco Pagador del Exterior'         ;AJ:fac..AJ:fac;SI;NoVacio(Val(AJ:FLB));'Banco Pagador del Exterior Invalido.';200;STRING;200;RGB(220,220,193);
+                FinListBox
+
+                IF Not OK
+                   Cancelar
+                ENDIF
+
+*FO 03/01/2007                ACN(FE:1, Val(AC:&k))
+                ACN(FE:1, Val(AC:fac))
+                ACT(SW:1, SQL("SELECT SWIFT FROM "~DBO~".ESPECIES WHERE Codigo = '"~Val(am:fac)~"' ") )
+                ACT(NR:1, GetNumerador(79))
+                message("Generando Boleto de Compra "~Val(nr:1)~" ... ")
+                SQL.ADD(" Insert Into "~DBO~".TRANSACCIONES2 ")
+                SQL.ADD(" (NrTrans, TipoTr2, ")
+                IF Val(FE:1) <> 0
+                   SQL.ADD(" Fecha2, ")
+                ENDIF
+                SQL.ADD(" Especie, Cliente1, Ley4, ")
+                SQL.ADD(" Cantidad1, Precio1, Cantidad3, ")
+                SQL.ADD(" Cambio1, CEmpresa3, NrOfic, ")
+                SQL.ADD(" Cambio3, Ley2, Ley1, ")
+                SQL.ADD(" CEmpresa4, Ley5, RB1, ")
+                SQL.ADD(" Especie1, ")
+                SQL.ADD(" FechaCarga, FechaCargaSys, UsrInput, ")
+                SQL.ADD(" Numerador, Vehiculo1, Fecha1) ")
+                SQL.ADD(" Values ")
+                * NrTrans
+                SQL.ADD(" ('"~Val(NR:1)~"', 'BOBCRA', ")
+                IF Val(FE:1) <> 0
+                   * Fecha2
+                   SQL.ADD(" '"~IdxDate(Val(AC:fac))~"', ")
+                ENDIF
+                * Especie
+                SQL.ADD(" '"~Val(SW:1)~"', '"~Val(AL:fac)~"', '"~Val(AJ:fac)~"', ")
+                * Cantidad1
+                SQL.ADD(" "~Fstr(Val(AN:fac), 0, 2)~", "~Fstr(Val(AO:fac), 0, 8)~", "~Fstr(Num(Val(ba:fac)),0,0)~", ")
+                * Cambio1
+                SQL.ADD(" "~Fstr(Num(Val(AA:fac)), 0, 0)~", '"~Copy(Val(AB:fac), 1, 10)~"', '"~Val(AD:fac)~"', ")
+                * Cambio3
+                SQL.ADD(" "~Fstr(Num(Val(AE:fac)), 0, 0)~", '"~Copy(Val(AF:fac), 1, 300)~"', '"~Copy(Val(AG:fac), 1, 300)~"', ")
+                * CEmpresa4
+                SQL.ADD(" '"~Copy(Val(AH:fac), 1, 10)~"', '"~Copy(Val(AI:fac), 1, 30)~"', 0, ")
+                * Especie1
+                SQL.ADD(" '"~Val(AM:fac)~"', ")
+                * FechaCarga
+                SQL.ADD(" "~SQLAhora~", '"~IdxDate(Fsys)~"', '"~UsuarioActivo~"', ")
+                * Numerador
+                SQL.ADD(" 79, '"~Dialogo.Vehiculo1~"', '"~IdxDate(Val(AK:fac))~"') ")
+                SQL.NEW
+            ELSE
+                ***---Venta
+                CrearListBox ; 'Arial,8,';'Ingrese los Siguientes Datos del Boleto de Venta'
+                   'Fecha'                  ;AK:fac..AK:fac;SI;Val(AK:FLB) <> 0;'Fecha Invalida.';75;FECHA;RGB(220,220,193);
+                   'Solicitante'            ;AL:fac..AL:fac;SI;NoVacio(Val(AL:FLB)) Y Incluido(Val(AL:FLB), Val(LS:1));'Solicitante Invalido.';80;TABLA;'CLIENTES';'Codigo';'Codigo;RazonSocial';" Codigo IN ("~Pipe2Comillas(Val(LS:1))~") ";RGB(220,220,193);
+                   'Moneda'                 ;AM:fac..AM:fac;SI;NoVacio(Val(AM:FLB)) Y Eqstr(BuscarCampo('ESPECIES','Tipo','Codigo', Val(AM:FLB)), 'MON') Y EsTerminal(Val(AM:FLB), ESPECIES);'Moneda Invalida.';80;TABLA;'ESPECIES';'Codigo';'Codigo;Nombre';" Status = 'HAB' AND Tipo = 'MON' ";RGB(220,220,193);
+                   'Importe'                ;AN:fac..AN:fac;SI;Val(AN:FLB) > 0;'Importe Invalido.';75;NUMERO;'###,###,###,###.##';RGB(220,220,193);
+                   'T.de Cambio'            ;AO:fac..AO:fac;SI;Val(AO:FLB) > 0;'Tipo de Cambio Invalido.';75;NUMERO;'###.########';RGB(220,220,193);
+                   'Cod. Concepto'          ;AA:fac..AA:fac;SI;NoVacio(Val(AA:FLB)) Y Eqstr(BuscarCampo('CONCEPTOSBCRA','Alias1','Codigo', Val(AA:FLB)), 'VENTA');'Concepto BCRA Invalido.';80;TABLA;'CONCEPTOSBCRA';'Codigo';'Codigo;Descripcion';" Alias1 = 'VENTA' ";RGB(220,220,193);
+                   'Fecha Embarque'         ;AB:fac..AB:fac;SI;;;80;FECHA;RGB(220,220,193);
+                   'Cod.Instr.Vendido'      ;AC:fac..AC:fac;SI;NoVacio(Val(AC:FLB));'Codigo de Instrumento Vendido Invalido.';100;TABLA;'INSTRUMENTOS';'Codigo';'Codigo;Descripcion';;RGB(220,220,193);
+                   'Cod.Instr.Recibido'     ;AD:fac..AD:fac;SI;NoVacio(Val(AD:FLB));'Codigo de Instrumento Recibido Invalido.';100;TABLA;'INSTRUMENTOS';'Codigo';'Codigo;Descripcion';;RGB(220,220,193);
+                   'Beneficiario Exterior'  ;AE:fac..AE:fac;SI;NoVacio(Val(AE:FLB));'Beneficiario del Exterior Invalido';200;STRING;200;RGB(220,220,193);
+                   'Nro. Cuenta'            ;AF:fac..AF:fac;SI;NoVacio(Val(AF:FLB));'Nro. de Cuenta Invalido.';200;STRING;200;RGB(220,220,193);
+                   'Domicilio'              ;AG:fac..AG:fac;SI;NoVacio(Val(AG:FLB));'Domicilio Invalido.';200;STRING;200;RGB(220,220,193);
+                   'Cod. Pais Beneficiario' ;AH:fac..AH:fac;SI;NoVacio(Val(AH:FLB));'Cod.Pais Beneficiario Invalido.';100;TABLA;'PAISES';'Alias';'Alias;Codigo;Nombre';"Alias Is Not Null";RGB(220,220,193);
+                   'Cod.Swift Bco. Recibidor del Exterior' ;AI:fac..AI:fac;SI;NoVacio(Val(AI:FLB));'Cod. Swif Banco Recibidor del Exterior Invalido.';200;STRING;;RGB(220,220,193);
+                   'Banco Recibidor del Exterior'          ;AJ:fac..AJ:fac;SI;NoVacio(Val(AJ:FLB));'Banco Recibidor del Exterior Invalido.';200;STRING;200;RGB(220,220,193);
+                FinListBox
+
+                IF Not OK
+                   Cancelar
+                ENDIF
+
+*FO 03/01/2007                ACN(FE:1, Val(AB:&k))
+                ACN(FE:1, Val(AB:fac))
+                ACT(SW:1, SQL("SELECT SWIFT FROM "~DBO~".ESPECIES WHERE Codigo = '"~Val(am:fac)~"' ") )
+                ACT(NR:1, GetNumerador(79))
+                message("Generando Boleto de Venta "~Val(nr:1)~" ... ")
+                SQL.ADD(" Insert Into "~DBO~".TRANSACCIONES2 ")
+                SQL.ADD(" (NrTrans, TipoTr2, ")
+                IF Val(FE:1) <> 0
+                   SQL.ADD(" Fecha2, ")
+                ENDIF
+                SQL.ADD(" Especie, Cliente1, Ley3, ")
+                SQL.ADD(" Cantidad1, Precio1, ")
+                SQL.ADD(" Cambio1, Cantidad2, Cantidad3, ")
+                SQL.ADD(" Ley2, Ley1, ")
+                SQL.ADD(" CEmpresa4, Ley5, RB1, ")
+                SQL.ADD(" Especie1, Ley4, ")
+                SQL.ADD(" FechaCarga, FechaCargaSys, UsrInput, ")
+                SQL.ADD(" Numerador, Vehiculo1, Fecha1) ")
+                SQL.ADD(" Values ")
+                SQL.ADD(" ('"~Val(NR:1)~"', 'BOBCRA', ")
+                IF Val(FE:1) <> 0
+                   SQL.ADD(" '"~IdxDate(Val(AB:fac))~"', ")
+                ENDIF
+                SQL.ADD(" '"~Val(SW:1)~"', '"~Val(AL:fac)~"', '"~Copy(Val(AF:fac), 1, 30)~"', ")
+                SQL.ADD(" "~Fstr(Val(AN:fac), 0, 2)~", "~Fstr(Val(AO:fac), 0, 8)~", ")
+                SQL.ADD(" "~Fstr(Num(Val(AA:fac)), 0, 0)~", "~Fstr(Num(Val(AC:fac)), 0, 0)~", "~Fstr(Num(Val(AD:fac)), 0, 0)~", ")
+                SQL.ADD(" '"~Copy(Val(AE:fac), 1, 300)~"', '"~Copy(Val(AG:fac), 1, 300)~"', ")
+                SQL.ADD(" '"~Copy(Val(AH:fac), 1, 10)~"', '"~Copy(Val(AI:fac), 1, 30)~"', 1, ")
+                SQL.ADD(" '"~Val(AM:fac)~"', '"~Val(AJ:fac)~"', ")
+                SQL.ADD(" "~SQLAhora~", '"~IdxDate(Fsys)~"', '"~UsuarioActivo~"', ")
+                SQL.ADD(" 79, '"~Dialogo.Vehiculo1~"', '"~IdxDate(Val(AK:fac))~"') ")
+                SQL.NEW
+            ENDIF
+            SQL.EXEC
+        ENDIF
+    ENDIF
+
+    * --- Baja --- *
+    (.'ABMBOL2'.)
+
+    * --- Modificacion --- *
+    (.'ABMBOL3'.)
+Proximo

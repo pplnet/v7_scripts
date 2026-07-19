@@ -1,0 +1,420 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1    :"Fecha"            ;1;1;;NO;;;;;;FSYS
+  String    :"Archivo"          ;2;1;;  ;;NOVACIO(Dialogo.String) ;'Archivo Invalido'   ;NO;VAR('DNCCHY');;;;;;;;;SI
+  String2   :"Nuevo Directorio" ;3;1;;  ;;NOVACIO(Dialogo.String2);'Directorio Invalido';NO;VAR('DNPROCES')
+  Radio1:  '|W98|NT';;;;;;;;;0
+  Check10: 'HojaVisible' ;;;;;;;;;1
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+If Dialogo.Check10=1
+  HojaVisible(SI)
+EndIf
+
+ACN(x:3,0)
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+
+ACT(a:1, 'Errores en la interfaz de Movimientos del Dia. Archivo: '~Dialogo.String)
+ACT(a:3, 'Banco')
+ACT(b:3, 'Cuenta')
+SetFont(a:1, 2)
+ACN(x:4, 4)
+ACN(x:6,0)
+ACT(DT:1, Var('DTTIPNN'))
+ACT(DD:1, Var('DTDESNN'))
+
+AbrirAscii(MAYUSCULAS2(Dialogo.String),0)
+Recorrer&i 1,10000000
+ ACT(ta:1,LEERASCII)
+ If &i>=2
+    * --- Saco la cuenta corta para identificar la moneda y tipo de cuenta.
+    ACT(ta:2, Copy(Val(ta:1),2,5) )
+    ACT(ta:3, SQL(" SELECT /*+ RULE */ Codigo FROM "~DBO~".CUENTAS WHERE Alias3 = '"~Val(ta:2)~"' ") )
+    If NoVacio(Val(ta:3)) o Vacio(Val(ta:1))
+      * --- Cuando encuentro una cuenta valida para determinar la moneda o terminal el archivo, salgo.
+      Break
+    Endif
+ Endif
+Proximo
+CerrarAscii
+
+SQL.ADD(" SELECT /*+ RULE */ Codigo, Especies, Alias3, TipoCuenta FROM "~DBO~".CUENTAS WHERE Codigo = '"~Val(ta:3)~"' ")
+Recorrer SQL
+  dfa
+  ACT(tc:1, fbn('TipoCuenta'))
+  If Incluido('ARP',fbn('Especies'))
+    ACT(es:1, 'ARP')
+  Endif
+  If Incluido('USD',fbn('Especies'))
+    ACT(es:1, 'USD')
+  Endif
+  If Incluido('USB',fbn('Especies'))
+    ACT(es:1, 'USD')
+  Endif
+Proximo
+
+If Eqstr(Val(es:1),'ARP')
+   If Incluido(Val(tc:1),'CA')
+     * CAJA DE AHORRO EN PESOS - DNCAHY
+     ACN(ta:1, 1)
+   Else
+     * CC EN PESOS - DNCCHY
+     ACN(ta:1, 2)
+   Endif
+Else
+   If Incluido(Val(tc:1),'CA')
+     * CAJA DE AHORRO EN DOLARES - DNADHY
+     ACN(ta:1, 3)
+   Else
+     * CC EN DOLARES - DNCDHY
+     ACN(ta:1, 4)
+   Endif
+Endif
+
+
+If ExisteArchivo(MAYUSCULAS2(Dialogo.String))
+  ACT(PT:1, Var('DNERROR'))
+  SQL.ADD(" SELECT /*+ RULE */ ")
+  SQL.ADD(" Distinct M.NrDatanet, M.NrMovDatanet ")
+  SQL.ADD(" FROM " ~DBO~ ".MOVDATANET M, "~DBO~".DATANET D ")
+  SQL.ADD(" WHERE M.NrDatanet = D.NrDatanet ")
+  SQL.ADD(" AND   D.FechaBajada = '" ~Dialogo.Fecha1~ "' ")
+  If Val(ta:1)=2
+    SQL.ADD(" AND   D.Archivo     = 'DNCCHY' ")
+    ACT(ar:1, Val(PT:1)~'DNCCHY-'~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".TXT")
+    ACT(ar:2, Dialogo.String2~"DNCCHY-"~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".dat")
+    ACT(ar:3, Val(PT:1)~'DNCCHY-'~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".XLS")
+  EndIf
+  If Val(ta:1)=1
+    SQL.ADD(" AND   D.Archivo     = 'DNCAHY' ")
+    ACT(ar:1, Val(PT:1)~'DNCAHY-'~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".TXT")
+    ACT(ar:2, Dialogo.String2~"DNCAHY-"~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".dat")
+    ACT(ar:3, Val(PT:1)~'DNCCAY-'~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".XLS")
+  EndIf
+  If Val(ta:1)=4
+    SQL.ADD(" AND   D.Archivo     = 'DNCDHY' ")
+    ACT(ar:1, Val(PT:1)~'DNCDHY-'~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".TXT")
+    ACT(ar:2, Dialogo.String2~"DNCDHY-"~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".dat")
+    ACT(ar:3, Val(PT:1)~'DNCDHY-'~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".XLS")
+  EndIf
+  If Val(ta:1)=3
+    SQL.ADD(" AND   D.Archivo     = 'DNADHY' ")
+    ACT(ar:1, Val(PT:1)~'DNADHY-'~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".TXT")
+    ACT(ar:2, Dialogo.String2~"DNADHY-"~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".dat")
+    ACT(ar:3, Val(PT:1)~'DNADHY-'~Pad0(fstr(Dia(Dialogo.Fecha1),0,0),2)~Pad0(fstr(Mes(Dialogo.Fecha1),0,0),2)~fstr(Anio(Dialogo.Fecha1),0,0)~"-"~Reemplazar(Hora(AHORA),":","-")~".XLS")
+  EndIf
+  SQL.ADD(" ORDER BY M.NrDatanet, M.NrMovDatanet ")
+
+  Recorrer SQL
+    message('Recuperando MovDatanet del dia.')
+    ACN(x:3,1)
+    ACT(x:2,fbn('NrDatanet'))
+    ACN(nm:1,fbn('NrMovDatanet'))
+  Proximo
+  ACN(fi:1, fac)
+
+  AbrirAscii(Dialogo.String,0)
+
+  Recorrer&i 1,1000000
+    ACT(x:1,LEERASCII)
+    ACN(nm:2, &i)
+    message(' Registrando movimientos del archivo. '~fstr(Val(nm:2),0,0))
+
+    If Vacio(val(x:1))
+      * Termino el archivo
+      ACT(aq:&i, Val(x:1))
+      ACN(x:5, &i)
+      Break  
+    Endif
+
+    If Eqstrl(Val(x:1),"Y",1)
+      *Tipo de Registro
+      ACT(aa:&i,Copy(Val(x:1),1,1))
+
+      *Banco
+      ACT(ab:&i,Copy(Val(x:1),2,3))
+
+      *Cuenta Corta
+      ACT(ac:&i,Copy(Val(x:1),5,2))
+
+      *Hora de Origen
+      ACT(ad:&i,Copy(Val(x:1),7,2)~':'~Copy(Val(x:1),9,2)~':'~Copy(Val(x:1),11,2))
+
+      *Importe
+      ACN(ae:&i, NUM(COPY(Val(x:1),14,15)~'.'~COPY(Val(x:1),29,2)))
+
+      *D/C
+      ACT(af:&i,Copy(Val(x:1),31,1))
+
+      *Numero Comprobante
+      ACT(ag:&i,Copy(Val(x:1),32,12))
+
+      *Codigo de Operacion
+      ACT(ah:&i,Copy(Val(x:1),44,3))
+*      ACN(as:&i, SQL("SELECT COUNT(*) FROM "~DBO~".CODIGOSDATANET WHERE Codigo='"~val(ah:&i)~"' AND Tipo is not NULL"))
+      ACN(as:&i, SQL(" SELECT /*+ RULE */ 1 FROM "~DBO~".CODIGOSDATANET WHERE Codigo='"~val(ah:&i)~"' "))
+      IF Val(AS:&i) <> 1 Y Not Eqstr(Val(AH:&i), '   ') Y Not CeldaVacia(AH:&i)
+          ***---No Existe el Codigo de Operacion => lo inserto como generico
+          SQL.ADD(" Insert Into "~DBO~".CODIGOSDATANET ")
+          SQL.ADD(" (Codigo, Descripcion, Tipo) ")
+          SQL.ADD(" Values ")
+          SQL.ADD(" ('"~Mayusculas2(Val(AH:&i))~"', '"~Val(DD:1)~"', '"~Val(DT:1)~"') ")
+          SQL.NEW
+          SQL.EXEC
+      ENDIF
+
+      *Codigo de Sucursal
+      ACT(ai:&i,Copy(Val(x:1),47,5))
+
+      *Codigo de Depositante
+      ACT(aj:&i,Copy(Val(x:1),52,8))
+
+      *Informacisn Libre
+      ACT(ak:&i,Copy(Val(x:1),60,25))
+
+      *Sin Contenido
+      ACT(al:&i,Copy(Val(x:1),85,36))
+
+      *Cuenta Larga
+      ACT(am:&i, SQL(" SELECT /*+ RULE */ Numero FROM "~DBO~".CUENTAS WHERE Alias3 = '"~TRIM(MIRT(Val(ab:&i)))~TRIM(MIRT(Val(ac:&i)))~"' ") )
+
+      *Vehiculo
+      ACT(an:&i, SQL(" SELECT /*+ RULE */ Cliente FROM "~DBO~".CUENTAS WHERE Numero = '"~TRIM(MIRT(Val(am:&i)))~"' ") )
+    EndIf
+
+    ACT(aq:&i, Val(x:1))
+    ACN(x:5, &i)
+  Proximo
+  CerrarAscii
+
+  * --- Abre archivo TXT para Grabar errores para las lineas sin cuentas.
+  AbrirAscii(val(ar:1),0)
+
+  If val(x:3) = 1
+    * --- Hay movimientos Datanet del Dia - Se borran y vuelven a generar.
+    Recorrer&i 1,val(x:5)
+      * --- Si hay movimientos del dia los borra para volver a generar 
+      SQL.ADD(" DELETE /*+ RULE */ FROM "~DBO~".MOVDATANET WHERE NrDatanet = '"~val(x:2)~"' ") 
+      SQL.ADD(" AND Banco    = '"~val(ab:&i)~"' ")
+      SQL.ADD(" AND Cuenta   = '"~val(am:&i)~"' ")
+      SQL.ADD(" AND Vehiculo = '"~val(an:&i)~"' ")
+      SQL.ADD(" AND FechaIngreso='"~idxdate(Dialogo.Fecha1)~"' ")
+      SQL.NEW
+      SQL.EXEC
+    Proximo
+
+    Recorrer&i 1,val(x:5)
+      * Recorre los movimientos del Ascii 
+      If NoVacio(val(an:&i))
+        * --- Si hay vehiculo
+        SCN(nm:1,1)
+        SQL.ADD(" INSERT INTO "~DBO~".MOVDATANET ( ")
+        SQL.ADD(" NrDatanet, NrMovDatanet, Vehiculo, ")
+        SQL.ADD(" Banco, Sucursal, Cuenta, ")
+        SQL.ADD(" Moneda, Importe, DC, ")
+        SQL.ADD(" FechaIngreso, FechaAcreditacion, Hora, TipoMov, ")
+        SQL.ADD(" Comprobante, Observaciones, NrOperacion, NrMovimiento, EstadoConciliacion ")
+        SQL.ADD(" ) VALUES ( ")
+        SQL.ADD(" '"~val(x:2)~"', "~fstr(Val(nm:1),0,0)~", '"~val(an:&i)~"', ")
+        SQL.ADD(" '"~val(ab:&i)~"', '"~val(ai:&i)~"', '"~val(am:&i)~"', ")
+        If Val(ta:1)=2 o Val(ta:1)=1
+          SQL.ADD(" '$', ")
+        EndIf
+        If Val(ta:1)=4 o Val(ta:1)=3
+          SQL.ADD(" 'U$S', ")
+        EndIf
+        SQL.ADD(" "~fstr(val(ae:&i),1,2)~", '"~val(af:&i)~"', ")
+        SQL.ADD(" '"~idxdate(Dialogo.Fecha1)~"', '"~idxdate(Dialogo.Fecha1)~"', '"~val(ad:&i)~"', '"~val(ah:&i)~"', ")
+        SQL.ADD(" '"~val(ag:&i)~"', '"~val(ak:&i)~"', '', '', 'OK' )  ")
+        SQL.NEW
+        SQL.EXEC
+        message(' Movimiento nuevo OK.')
+        If val(as:&i) <> 1 y Eqstr(Val(aa:&i),'Y')
+          * --- El codigo Datanet no existe
+          message(' La Codigo Datanet '~Val(ah:&i)~' no existe o no esta tipificado.')
+          ACT(a:Val(x:4), Val(ah:&i))
+          ACT(b:Val(x:4), '<- Cod.Datanet')
+          ACT(c:Val(x:4), ' El codigo Datanet no existe o no esta tipificado.')
+          SCN(x:4,1)
+        EndIf
+      Else
+        * --- No hay vehiculo 
+        If val(as:&i) <> 1  y Eqstr(Val(aa:&i),'Y')
+          * --- El codigo Datanet no existe
+          message(' La Codigo Datanet '~Val(ah:&i)~' no existe o no esta tipificado.')
+          ACT(a:Val(x:4), Val(ah:&i))
+          ACT(b:Val(x:4), '<- Cod.Datanet')
+          ACT(c:Val(x:4), ' El codigo Datanet no existe o no esta tipificado.')
+          SCN(x:4,1)
+        EndIf
+
+        If novacio(val(ab:&i))
+          * Si Hay Banco
+          message(' La cuenta '~Val(an:&i)~' no existe.')
+          ACT(a:Val(x:4), Val(ab:&i))
+          ACT(b:Val(x:4), Val(ac:&i))
+          ACT(c:Val(x:4), ' El codigo de Banco o Cuenta Corta no existe.')
+          SCN(x:4,1)
+          SCN(x:6,1)
+          * Si no tiene vehiculo graba el error.
+          EscribirAscii(Val(aq:&i))
+        EndIf
+      EndIf
+    Proximo
+
+  Else
+
+    * ---- No hay MovDatanet del Dia
+    ACT(x:2,getnumerador(7))
+    ACN(nm:1,0)
+
+    Recorrer&i 1,val(x:5)
+      * Recorre los movimientos del Ascii 
+      If NoVacio(val(an:&i))
+        * --- Si hay vehiculo
+        SCN(nm:1,1)
+        SQL.ADD(" INSERT INTO "~DBO~".MOVDATANET ( ")
+        SQL.ADD(" NrDatanet, NrMovDatanet, Vehiculo, ")
+        SQL.ADD(" Banco, Sucursal, Cuenta, ")
+        SQL.ADD(" Moneda, Importe, DC, ")
+        SQL.ADD(" FechaIngreso, FechaAcreditacion, Hora, TipoMov, ")
+        SQL.ADD(" Comprobante, Observaciones, NrOperacion, NrMovimiento, EstadoConciliacion ")
+        SQL.ADD(" ) VALUES ( ")
+        SQL.ADD(" '"~val(x:2)~"', "~fstr(Val(nm:1),0,0)~", '"~val(an:&i)~"', ")
+        SQL.ADD(" '"~val(ab:&i)~"', '"~val(ai:&i)~"', '"~val(am:&i)~"', ")
+        If Val(ta:1)=2 o Val(ta:1)=1
+          SQL.ADD(" '$', ")
+        EndIf
+        If Val(ta:1)=4 o Val(ta:1)=3
+          SQL.ADD(" 'U$S', ")
+        EndIf
+        SQL.ADD(" "~fstr(val(ae:&i),1,2)~", '"~val(af:&i)~"', ")
+        SQL.ADD(" '"~idxdate(Dialogo.Fecha1)~"', '"~idxdate(Dialogo.Fecha1)~"', '"~val(ad:&i)~"', '"~val(ah:&i)~"', ")
+        SQL.ADD(" '"~val(ag:&i)~"', '"~val(ak:&i)~"', '', '', 'OK' )  ")
+        SQL.NEW
+        SQL.EXEC
+
+        If val(as:&i) <> 1  y Eqstr(Val(aa:&i),'Y')
+          * --- El codigo Datanet no existe
+          message(' La Codigo Datanet '~Val(ah:&i)~' no existe o no esta tipificado.')
+          ACT(a:Val(x:4), Val(ah:&i))
+          ACT(b:Val(x:4), '<- Cod.Datanet')
+          ACT(c:Val(x:4), ' El codigo Datanet no existe o no esta tipificado.')
+          SCN(x:4,1)
+          ACN(zz:1,1)
+        EndIf
+        message(' Movimiento nuevo OK.')
+      Else
+        * No hay vehiculo
+        If val(as:&i) <> 1  y Eqstr(Val(aa:&i),'Y')
+          * --- El codigo Datanet no existe
+          message(' La Codigo Datanet '~Val(ah:&i)~' no existe o no esta tipificado.')
+          ACT(a:Val(x:4), Val(ah:&i))
+          ACT(b:Val(x:4), '<- Cod.Datanet')
+          ACT(c:Val(x:4), ' El codigo Datanet no existe o no esta tipificado.')
+          SCN(x:4,1)
+        EndIf
+
+        If novacio(val(ab:&i))
+          message(' La cuenta '~Val(an:&i)~' no existe.')
+          ACT(a:Val(x:4), Val(ab:&i))
+          ACT(b:Val(x:4), Val(ac:&i))
+          ACT(c:Val(x:4), ' El codigo de Banco o Cuenta Corta no existe.')
+          SCN(x:4,1)
+          SCN(x:6,1)
+          * Si no tiene vehiculo graba el error.
+          EscribirAscii(Val(aq:&i))
+        EndIf
+      EndIf
+    Proximo
+
+    If val(zz:1)=1
+      SQL.ADD(" INSERT INTO "~DBO~".DATANET ( ")
+      SQL.ADD(" NrDatanet, FechaBajada, Archivo, ")
+      SQL.ADD(" FechaDesde, FechaHasta, Usuario, Estado ")
+      SQL.ADD(" ) VALUES ( ")
+      SQL.ADD(" '"~val(x:2)~"', '"~idxdate(Dialogo.Fecha1)~"', ")
+      If Val(ta:1)=2
+        SQL.ADD(" 'DNCCHY',  ")
+      EndIf
+      If Val(ta:1)=1
+        SQL.ADD(" 'DNCAHY',  ")
+      EndIf
+      If Val(ta:1)=4
+        SQL.ADD(" 'DNCDHY',  ")
+      EndIf
+      If Val(ta:1)=3
+        SQL.ADD(" 'DNADHY',  ")
+      EndIf
+      SQL.ADD(" '"~idxdate(Dialogo.Fecha1)~"', '"~idxdate(Dialogo.Fecha1)~"', ")
+      SQL.ADD(" '"~UsuarioActivo~"', 'NC' ) ")
+      SQL.NEW
+      SQL.EXEC
+    EndIf
+    * Endif de hay o no mov del dia.
+  EndIf
+
+  * --- Cierro Archivo de Errores
+  CerrarAscii
+
+  If val(x:4) > 4
+    * --- Si hay errores graba XLS
+    ExportarXLS(a:1..e:val(x:4), a1..e:val(x:4), val(ar:3))
+  Endif
+
+  If val(x:6) = 0
+    * --- Si NO hay errores borra el xls
+    BorrarArchivo(val(ar:1))  
+  EndIf
+
+  * --- Graba en procesados
+  AbrirAscii(val(ar:2),0)
+  Recorrer&i 1,val(x:5)
+     EscribirAscii(val(aq:&i))
+  Proximo
+  CerrarAscii
+  * ---------------------------------- *
+
+  * --- Borra el archivo procesado
+  If Dialogo.Radio1=0
+    *W98
+*    message('Pasando archivo '~Dialogo.String~' a Procesados.')
+*    WinExec("COMMAND.COM /C Copy  "~MIRT(TRIM(Dialogo.String))~"  "~Val(ar:2),0)
+*    Esperar(5)
+
+    message('Borrando archivo '~Dialogo.String)
+    WinExec("COMMAND.COM /C del "~Dialogo.String,0)
+    Esperar(5)
+  Else
+    *NT
+*    message('Pasando archivo '~Dialogo.String~' a Procesados.')
+*    WinExec("CMD.EXE /C Copy  "~MIRT(TRIM(Dialogo.String))~"  "~Val(ar:2),0)
+*    Esperar(5)
+
+    message('Borrando archivo '~Dialogo.String)
+    WinExec("CMD.EXE /C del "~Dialogo.String,0)
+    Esperar(5)
+  EndIf
+  * ---------------------------------- *
+
+Else
+  Message('El archivo '~Dialogo.String~' aun no se ha generado.')
+  Cancelar
+EndIf
+
+ACT(a:Val(x:4)+1, 'Fin')
+SetFont(a:Val(x:4)+1, 1)
+
+ACO(1,20)
+ACO(2,20)
+ACO(3,20)
+LimitesVision(d:Val(x:4)+2)
+
+ACT(fe:1,Fecha(Dialogo.Fecha1))
+GrabarPMG(Val(fe:1), 'APBD4|Mov del Dia|'~Hora(AHORA) )

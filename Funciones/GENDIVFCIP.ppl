@@ -1,0 +1,110 @@
+﻿SetFilaActual(0)
+
+***---Identifico Prestamos Vigentes
+SQL.ADD(" Select O.NrOperacion, C.NrCuota, C.Fecha1, C.Fecha2, C.Cantidad2, O.Book1, O.MB3, O.Vehiculo2 ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+SQL.ADD(" AND O.TipoOp In ('SEPVMV', 'SEPTMV') ")
+SQL.ADD(" AND C.Fecha2 > '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND O.Especie = '"~Dialogo.Especie1~"' ")
+SQL.ADD(" AND O.Book1 = '"~Dialogo.Book1~"' ")
+SQL.ADD(" Order By O.NrOperacion, C.NrCuota ")
+Recorrer SQL
+    ACT(A:fac, fbn('NrOperacion'))
+    ACN(B:fac, fbn('NrCuota'))
+    ACD(C:fac, fbn('Fecha1'))
+    ACD(D:fac, fbn('Fecha2'))
+    IF fbn('MB3') = 0
+        ACN(E:fac, -fbn('Cantidad2'))
+        ACN(I:fac, 1)
+    ELSE
+        ACN(E:fac, fbn('Cantidad2'))
+        ACN(I:fac, 0)
+    ENDIF
+    ACN(F:fac, Dialogo.Precio11)
+    ACN(G:fac, Dialogo.Precio12)
+    ACN(H:fac, (Val(E:fac) * (Val(G:fac) - Val(F:fac))) / Val(F:fac))
+    ACT(J:fac, fbn('Vehiculo2'))
+    SCN(RS:1, Val(H:fac))
+    SCN(VN:1, Val(E:fac))
+Proximo
+ACN(FC:99,fac)
+If Val(FC:99) =0
+   Cancelar('No hay Prestamos Vigentes para el Fondo Solicitado')
+EndIf
+ifa
+ACT(A:fac, 'TOTAL')
+ACN(E:fac, Val(VN:1))
+ACN(F:fac, Dialogo.Precio11)
+ACN(G:fac, Dialogo.Precio12)
+ACN(H:fac, Val(RS:1))
+IF Val(RS:1) > 0
+    ***---Es un cobro
+    ACN(I:fac, 0)
+ELSE
+    ***---Es un pago
+    ACN(I:fac, 1)
+ENDIF
+CrearListBox ; 'MS Sans Serif,8,'; 'Dividendos FCI '~Dialogo.Vehiculo1~' x Prestamos '~Dialogo.Especie1
+  'NrOperacion'       ;A:1..A:Fac;NO;SI;;90;STRING;
+  'NrCuota'           ;B:1..B:fac;NO;SI;;50;NUMERO;'###'
+  'Inicio'            ;C:1..C:fac;NO;SI;;70;FECHA;
+  'Fin'               ;D:1..D:fac;NO;SI;;70;FECHA;
+  'Cantidad'          ;E:1..E:Fac;NO;SI;;120;NUMERO;'###,###,###,###'
+  'Precio Inicial'    ;F:1..F:Fac;NO;SI;;120;NUMERO;'###.########'
+  'Precio Final'      ;G:1..G:Fac;NO;SI;;120;NUMERO;'###.########'
+  'Resultado'         ;H:1..H:Fac;NO;SI;;120;NUMERO;'###,###,###,###.##'
+  'Contraparte'       ;J:1..J:Fac;NO;SI;;90;STRING;
+FinListBox
+
+If Not Ok 
+   Cancelar
+Endif
+
+ACT(ZO:99,UsuarioActivo)
+ACN(ZC:66, BuscarCampo('VEHICULOS','Alias1','Codigo', Dialogo.Vehiculo1))
+ACT(ZC:77, BuscarCampo('ESPECIES','Issuer','Codigo', Dialogo.Especie1))
+Recorrer&j 1, fac-1
+   Recorrer&k 1, 3
+       IF &k = 1
+           ACN(SL:1, 101)
+       ELSE
+           IF &k = 2
+               ACN(SL:1, 121)
+           ELSE
+               ACN(SL:1, 131)
+           ENDIF
+       ENDIF
+   ACT(Z3,GetNumerador(Val(ZC:66))) 
+   SQL.ADD(" INSERT INTO "~DBO~".OPERACIONES ")
+   SQL.ADD(" (TipoOp, CB7, NrOperacion, Especie, ")
+   SQL.ADD(" Book1, Cliente1, Cantidad, ")
+   SQL.ADD(" TotalBrutoCli1, RB2, ")
+   SQL.ADD(" FechaOp, FechaPago, FechaCarga, ")
+   SQL.ADD(" FechaCargaSys, Numerador, MB3, ")
+   SQL.ADD(" MB4, ")
+   SQL.ADD(" MB2, UsrInput, Vehiculo1, Precio3, ")
+   SQL.ADD(" Spread, Operador, Cuenta1, Vehiculo2, OperacionRef, TipoCambio3) ")
+   SQL.ADD(" Values ")
+   SQL.ADD(" ('DIVIDE', '1', '"~Val(Z3)~"', '"~Dialogo.Especie1~"', ")
+   SQL.ADD(" '"~Dialogo.Book1~"' , '"~Val(ZC:77)~"', "~FStr(Abs(val(E:&j)),0,2)~", ")
+   SQL.ADD(" "~FStr(Abs(Val(H:&j)),0,8)~", 0, ")
+   SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', '"~IdxDate(Dialogo.Fecha2)~"', "~SQLAhora~", ")
+   SQL.ADD(" '"~IdxDate(FSYS)~"', "~FStr(Val(ZC:66),0,0)~", "~Fstr(Val(I:&j), 0, 0)~", ")
+   SQL.ADD(" 4, ")
+   SQL.ADD(" -1 , '"~UsuarioActivo~"', '"~Dialogo.Vehiculo1~"', "~Fstr(Val(F:&j), 0, 8)~", ")
+   SQL.ADD(" "~Fstr(Val(G:&j), 0, 8)~", '"~UsuarioActivo~"', '"~Dialogo.Cuenta4~"', '"~Val(J:&j)~"', '"~Val(A:&j)~"', "~Fstr(Val(SL:1), 0, 0)~") ")
+   SQL.NEW
+   SQL.EXEC
+   Message('Generando - Op '~Val(Z3)~' En Instancia Terminal')
+   EjecutarEvento('INSBIT',String1='OPERACIONES',Entero1=50,NrOperacion1=Val(Z:3))
+   SQL.ActualizarMovimientos2(Val(Z:3),SI,NO,NO,SI)
+   SQL.EXEC
+   Proximo
+Proximo
+
+
+
+
+

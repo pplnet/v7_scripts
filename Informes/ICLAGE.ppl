@@ -1,0 +1,328 @@
+﻿ModoReproceso(SINDIALOGO)
+CrearDialogo
+  Cliente1 : 'Cliente'       ;1;1;;;;;;
+  Especie1 : 'Especie'       ; ;1;;;;;;
+  Fecha1   : 'Fecha V.Desde' ;1;2;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha' ;NO;FSys;
+  Fecha2   : 'Fecha V.Hasta' ; ; ;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha' ;NO;FSys+365;
+  Check1   : 'Evergreen'     ; ; ;;;;;;;1;
+  Lista1   : 'Books'         ; ;1;;;;;;;;;SQLSet("Select Codigo from "~DBO~".BOOKS")  
+FinDialogo
+
+If Not Ok
+   Cancelar
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+*ACD(pm:1,PrideMes(Dialogo.Fecha1,SI))
+if Dialogo.Fecha2<FSys
+   acd(fe:10,Dialogo.Fecha2)
+else
+   acd(fe:10,FSys)
+endif
+ACD(pm:1,PrideMes(val(fe:10),SI))
+
+SetFilaActual(4)
+ACT(h:fac,'ICL - Agenda de vencimientos')
+SetFont(h:fac,3)
+SetFilaActual(fac+2)
+If NoVacio(Dialogo.Cliente1)
+   ACT(a:fac,'Cliente:')
+   ACT(b:fac,'('~Dialogo.Cliente1~') '~BuscarCampo('CLIENTES','RazonSocial','Codigo',Dialogo.Cliente1))
+Else
+   ACT(a:fac,'Clientes:')
+   ACT(b:fac,'Todos')
+EndIf
+
+ACT(d:fac,'Fecha desde:')
+ACT(e:fac,Dialogo.Fecha1)
+SetFont(a:fac..e:fac,2)
+IFA
+If NoVacio(Dialogo.Especie1)
+   ACT(a:fac,'Especie:')
+   ACT(b:fac,'('~Dialogo.Especie1~') '~BuscarCampo('ESPECIES','Nombre','Codigo',Dialogo.Especie1))
+Else
+   ACT(a:fac,'Especies:')
+   ACT(b:fac,'Todos')
+EndIf
+
+ACT(d:fac,'Fecha hasta:')
+ACT(e:fac,Dialogo.Fecha2)
+SetFont(a:fac..e:fac,2)
+IFA
+
+ACT(a:fac,'Books:')
+If NoVacio(Dialogo.Lista1)
+   ACT(b:fac,Dialogo.Lista1)
+Else
+   ACT(b:fac,'Todos')
+EndIf
+
+ACT(d:fac,'Evergreen:')
+If Dialogo.Check1=1
+   ACT(e:fac,'SI')
+Else
+   ACT(e:fac,'NO')
+EndIf
+SetFont(a:fac..e:fac,2)
+IFA
+ACT(a:fac,  'Vencimiento')
+ACT(b:fac,  'Operacion')
+ACT(c:fac,  'Fecha Op.')
+ACT(d:fac  ,'Tipo Op.')
+ACT(e:fac  ,'Entidad')
+ACT(f:fac  ,'Especie')
+ACT(g:fac  ,'Saldo')
+ACT(h:fac  ,'Tasa')
+ACT(i:fac  ,'Tasa Base')
+ACT(j:fac  ,'Spread')
+ACT(k:fac  ,'Tasa')
+ACT(k:fac+1,'Spread')
+ACT(l:fac  ,'Plazo Total')
+ACT(m:fac  ,'Dias Trans.')
+ACT(n:fac  ,'Intereses')
+ACT(n:fac+1,'Deveng.Total')
+ACT(o:fac  ,'Intereses')
+ACT(o:fac+1,'Deveng.Fecha')
+ACT(p:fac  ,'Book')
+*13/09/24 Se agrega  Operaciones bloqueadas
+ACT(q:FAC, ' Bloqueada')
+ACT(q:FAC+1,'SI/NO')
+* FJL 15/01/20 - Se agrega Termsheet ID
+ACT(r:FAC, 'TermSheet ID')
+* FJL 07/11/20 - Se agrega TipoCONU
+ACT(s:FAC, 'Tipo CONU')
+
+AlinearCeldas(a:fac..s:fac+1,'C')
+SetFont(a:fac..y:fac+1,2)
+AgregarMarco(a:fac..s:fac+1,2,0,EXE('COLOR'))
+acn(w:1,fac+1)
+acn(ag:1,0)
+acn(an:1,0)
+acn(ao:1,0)
+acn(cg:1,0)
+acn(cn:1,0)
+acn(co:1,0)
+acn(fe:1,1)
+act(bo:1,'*')
+SQL.ADD(" Select O.NrOperacion, O.Cliente1, O.Especie, O.TipoOp, O.Cantidad, O.FechaOp, O.FechaVto, ")
+SQL.ADD(" O.Precio1 as Tasa, O.TipoTasa as CodTasa, O.Spread, O.Especie1 as CodSpread, O.Plazo, O.DiasAnio, O.Book1, O.CB1, ")
+* FJL 15/01/20 - Se agrega Termsheet ID
+*SQL.ADD(" O.ObservacDoc as TSID,  ")
+* FJL 07/11/20 - Por Issue 4523 se cambia el campo del TS y se agrega TipoCONU
+* 13/09/24 Se agrega  CB9 para Operaciones bloqueadas
+SQL.ADD("  O.Termsheet as TSID, O.TipoCONU, O.CB9,  ")
+SQL.ADD(" (Select "~DBO~".SaldoCONU(NrOperacion,'"~IdxDate(FSys)~"',2)) SaldoHoy, O.MB1 TipoTasa, O.MB2 TipoSpread  ")
+SQL.ADD(" from "~DBO~".OPERACIONES O ")
+SQL.ADD(" where (((FechaVto >= "~IdxDate2(Dialogo.Fecha1)~" and FechaVto <= "~IdxDate2(Dialogo.Fecha2)~") or CB1=1 )) ")
+SQL.ADD("   and FechaOp <= "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("   and TipoOp in ('CONU')")
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+EndIf
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and O.Book1 In ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+EndIf
+If Dialogo.Check1=0
+   SQL.ADD(" and CB1=0 ")
+EndIf
+SQL.ADD(" ORDER BY O.FechaVto, O.Book1, O.Nroperacion ")
+watch(SQL.Batch)
+Recorrer SQL
+    if Not Eqstr(Fecha(fbn['FechaVto'])~fbn['Book1'],val(bo:1))
+        if fbn['FechaVto']<>val(fe:1)
+           ifa
+           if Not Eqstr(val(bo:1),'*')
+               act(b:fac,'Total '~val(bo:2))
+               acn(g:fac,val(cg:1))
+               acn(n:fac,val(cn:1))
+               acn(o:fac,val(co:1))
+               SetFont(a:fac..z:fac,2)
+               AgregarMarco(b:fac..p:fac,1,0)   
+               acn(cg:1,0)
+               acn(cn:1,0)
+               acn(co:1,0)
+               ifa
+               ifa
+           ENDIF           
+           if val(fe:1)<>1
+               act(a:fac,'Total '~val(fe:2))
+               acn(g:fac,val(ag:1))
+               acn(n:fac,val(an:1))
+               acn(o:fac,val(ao:1))
+               SetFont(a:fac..z:fac,2)
+               AgregarMarco(a:fac..p:fac,1,0)   
+               acn(ag:1,0)
+               acn(an:1,0)
+               acn(ao:1,0)
+               ifa
+           ENDIF
+           
+           ifa 
+           if fbn['FechaVto']<>0
+              act(a:fac,'Fecha Vto: '~fbn['FechaVto'])
+           else   
+              act(a:fac,'Fecha Vto: Evergreen')
+           endif   
+           SetFont(a:fac..z:fac,2)
+           AgregarMarco(a:fac..p:fac,1,0)   
+           ifa
+           ifa
+           act(b:fac,'Book: '~fbn['Book1']~' - '~BuscarCampo('BOOKS','Descripcion','Codigo',fbn['Book1']))
+           SetFont(a:fac..z:fac,2)
+           AgregarMarco(b:fac..p:fac,1,0)   
+           ifa       
+        else
+            if Not Eqstr(fbn['Book1'],val(bo:1))
+               ifa
+               if Not Eqstr(val(bo:1),'*')
+                   act(b:fac,'Total '~val(bo:2))
+                   acn(g:fac,val(cg:1))
+                   acn(n:fac,val(cn:1))
+                   acn(o:fac,val(co:1))
+                   SetFont(a:fac..z:fac,2)
+                   AgregarMarco(b:fac..p:fac,1,0)   
+                   acn(cg:1,0)
+                   acn(cn:1,0)
+                   acn(co:1,0)
+                   ifa
+                   ifa
+               ENDIF
+               act(b:fac,'Book: '~fbn['Book1'])
+               SetFont(a:fac..z:fac,2)
+               AgregarMarco(b:fac..p:fac,1,0)   
+               ifa       
+            endif
+        endif    
+    endif
+    Message(FBN['NrOperacion'])
+
+    ACT(b:fac,FBN['NrOperacion'])
+    ACLO(b:fac,FBN['NrOperacion'])
+    ACD(c:fac,FBN['FechaOp'])
+    ACD(ar:fac,FindeMes(val(fe:10),SI))
+
+    if FBN['FechaVto']>0
+       ACD(c:fac,FBN['FechaVto'])
+       if val(ar:fac)>val(c:fac)
+          ACD(ar:fac,val(c:fac))
+       endif
+    endif    
+    ACT(d:fac,FBN['TipoOp'])
+    ACT(e:fac,FBN['Cliente1'])
+    ACT(f:fac,FBN['Especie'])
+    ACN(g:fac,FBN['SaldoHoy'])
+    if FBN['TipoTasa']=1
+       if Dialogo.Fecha2<FSys
+          acd(fe:3,Dialogo.Fecha2)
+       else
+          acd(fe:3,FSys)
+       endif
+       acn(h:fac, SQL("SELECT Tasa1 From "~DBO~".MOVDEVENGADOS WHERE NrOperacion='"~FBN['NrOperacion']~"' and Fecha=(SELECT Max(FECHA) FROM "~DBO~".MOVDEVENGADOS WHERE NrOperacion='"~FBN['NrOperacion']~"' and Fecha<="~IdxDate2(val(fe:3))~") "))   
+    else   
+       ACN(h:fac,FBN['Tasa'])
+    endif
+    ACT(i:fac,FBN['CodTasa'])
+    if FBN['TipoSpread']=1
+       if Dialogo.Fecha1<FSys
+          acd(fe:3,Dialogo.Fecha1)
+       else
+          acd(fe:3,FSys)
+       endif
+       acn(j:fac, SQL("SELECT Tasa2 From "~DBO~".MOVDEVENGADOS WHERE NrOperacion='"~FBN['NrOperacion']~"' and Fecha=(SELECT Max(FECHA) FROM "~DBO~".MOVDEVENGADOS WHERE NrOperacion='"~FBN['NrOperacion']~"' and Fecha<="~IdxDate2(val(fe:3))~") "))   
+    else   
+    * FJL 15/01/20 - Replicado arreglo de ICLINT reportado en UAT. Cuando es Spread fijo se toma el valor de la operacion
+*       ACN(j:fac,FBN['Tasa'])
+       ACN(j:fac,FBN['Spread'])
+    endif
+    ACT(k:fac,FBN['CodSpread'])
+    if FBN['FechaVto']>0
+       ACN(l:fac,FBN['FechaVto']-FBN['FechaOp'])
+    endif    
+    ACN(m:fac,FSys-FBN['FechaOp']+1)
+    ACN(n:fac,SQL("SELECT SUM(Monto) FROM "~DBO~".MOVDEVENGADOS WHERE NrOperacion='"~FBN['NrOperacion']~"' and Fecha>="~IdxDate2(val(pm:1))~" and Fecha<="~IdxDate2(val(fe:10))))
+    ACN(o:fac,SQL("SELECT SUM(Monto) FROM "~DBO~".MOVDEVENGADOS WHERE NrOperacion='"~FBN['NrOperacion']~"' and Fecha="~IdxDate2(val(fe:10))))
+    ACT(p:fac,FBN['Book1'])
+* 13/09/24 Se agrega  Operaciones bloqueadas
+    if EqStr(FBN['CB9'], '1') 
+        ACT(q:fac,'SI')
+    else
+        ACT(q:fac,'NO')
+    endif    
+* FJL 15/01/20 - Se agrega Termsheet ID
+    if EqStr(FBN['TipoOp'],'CONU')
+        ACT(r:fac, FBN['TSID'])
+* FJL 07/11/20 - Se agrega TipoCONU
+        ACT(s:fac, FBN['TipoCONU'])
+    endif
+
+    ACD(fe:1,fbn['FechaVto'])
+    if fbn['FechaVto']<>0
+       ACT(fe:2,fbn['FechaVto'])
+    else   
+       ACT(fe:2,'Evergreen')
+    endif    
+    ACT(bo:1,Fecha(fbn['FechaVto'])~fbn['Book1'])
+    ACT(bo:2,fbn['Book1'])
+    SCN(ag:1,val(g:fac))
+    SCN(an:1,val(n:fac))
+    SCN(ao:1,val(o:fac))
+    SCN(cg:1,val(g:fac))
+    SCN(cn:1,val(n:fac))
+    SCN(co:1,val(o:fac))
+Proximo
+ifa
+ifa
+act(b:fac,'Total '~val(bo:2))
+acn(g:fac,val(cg:1))
+acn(n:fac,val(cn:1))
+acn(o:fac,val(co:1))
+SetFont(a:fac..z:fac,2)
+AgregarMarco(b:fac..p:fac,1,0)   
+ifa
+ifa
+act(a:fac,'Total '~val(fe:2))
+acn(g:fac,val(ag:1))
+acn(n:fac,val(an:1))
+acn(o:fac,val(ao:1))
+SetFont(a:fac..z:fac,2)
+AgregarMarco(a:fac..p:fac,1,0)   
+
+FormatoCeldas(g:val(w:1)..o:fac,EXE('F2'))
+FormatoCeldas(h:val(w:1)..k:fac,EXE('F6'))
+FormatoCeldas(l:val(w:1)..m:fac,EXE('F0'))
+AlinearCeldas(d:val(w:1)..d:fac+1,'C')
+AlinearCeldas(f:val(w:1)..f:fac+1,'C')
+AlinearCeldas(i:val(w:1)..i:fac+1,'C')
+AlinearCeldas(k:val(w:1)..m:fac+1,'C')
+AlinearCeldas(p:val(w:1)..p:fac+1,'C')
+
+SetFilaActual(fac+2)
+ACT(a:fac, 'FIN DEL LISTADO')
+SetFont(a:fac,2)
+
+LimitesVision(s:fac)
+Rangotitulo(a:1..s:fac,Val(w:1))
+SetPrintFit(3, 50)
+
+ACO(1,9)
+ACO(2,7)
+ACO(3,7)
+ACO(4,7)
+ACO(5,7)
+ACO(6,6)
+ACO(7,10)
+ACO(8,10)
+ACO(9,6)
+ACO(10,10)
+ACO(11,6)
+ACO(12,7)
+ACO(13,7)
+ACO(14,10)
+ACO(15,10)
+ACO(16,8)
+ACO(17,7)
+* FJL 07/11/20 - Se agrega TipoCONU
+ACO(18,7)

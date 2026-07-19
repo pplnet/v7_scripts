@@ -1,0 +1,99 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1   : 'Fecha:'    ;;;;  ;  ;;;;Fsys
+  Vehiculo1: 'Vehiculo:' ;;;;  ;  ;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+  Cliente1 : 'Agente'    ;;;;  ;  ;Vacio(Dialogo.Cliente1) O [Dialogo.Entero1 <> 0];'Agente Invalido';NO;;;;;;" NrMAE Is Not Null AND NrMAE <> 0 ";
+  Entero1  : 'NrMAE'     ;;;;NO;NO;;;;;BuscarCampo('CLIENTES','NrMAE','Codigo', Dialogo.Cliente1);
+FinDialogo
+IF Not OK
+  Cancelar
+ENDIF
+
+ACN(BD:1, 0)
+SetFilaActual(0)
+***---Si hay movejecutados de cualquier LIQOCT del dia => no puede ejecutarse el evento
+SQL.ADD(" Select NrTrans From "~DBO~".TRANSACCIONES2 ")
+SQL.ADD(" Where TipoTr2 = 'LIQOCT' ")
+SQL.ADD(" AND Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+IF NoVacio(Dialogo.Cliente1)
+    SQL.ADD(" AND Cliente1 = '"~Dialogo.Cliente1~"' ")
+ENDIF
+Recorrer SQL
+    IF SQL(" Select 1 From "~DBO~".MOVEJECUTADOS Where NrOperacion = '"~fbn('NrTrans')~"' ") = 1
+        Cancelar('El Mark To Mark del dia ya fue liquidado')
+    ELSE
+        ACN(BD:1, 1)
+        ACT(TA:fac, fbn('NrTrans'))
+    ENDIF
+Proximo
+
+ACN(FI:1, fac)
+ACT(ME:1, Var('MERCOCT'))
+ACT(CT:2, SQL("select Codigo from "~DBO~".CUENTAS WHERE Cliente = '"~Dialogo.Vehiculo1~"' AND Estado = 'HAB' and Especies Like '%ARP%' and Permanente = 'SI' ") )
+
+SQL.ADD(" Select Sum(Cantidad) Cantidad, EnteCustodia, Cliente ")
+SQL.ADD(" From "~DBO~".MOVEJECUTADOS ")
+SQL.ADD(" Where FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND NrSaldo = 100 ")
+SQL.ADD(" AND EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+IF NoVacio(Dialogo.Cliente1)
+    SQL.ADD(" AND Cliente = '"~Dialogo.Cliente1~"' ")
+ENDIF
+SQL.ADD(" Group By EnteCustodia, Cliente ")
+
+Recorrer SQL
+    ****ACT(CT:1, SQL("select Codigo from "~DBO~".CUENTAS WHERE Cliente = '"~Dialogo.Vehiculo1~"' AND Estado = 'HAB' and Especies Like '%ARP%' and Permanente = 'SI' ") )
+    ACT(NT:1, GetNumerador(88))
+    Message('Generando LIQOCT '~Val(NT:1))
+    SQL.ADD(" Insert Into "~DBO~".TRANSACCIONES2 ")
+    SQL.ADD(" (NrTrans, TipoTr2, Cliente1, Especie, ")
+    SQL.ADD(" Vehiculo1, Cantidad1, Fecha1, Cuenta1, ")
+    SQL.ADD(" FechaCarga, FechaCargaSys, Numerador, UsrInput, ")
+    SQL.ADD(" Cambio1, Mercado1, Cuenta2) ")
+    SQL.ADD(" Values ")
+    SQL.ADD(" ('"~Val(NT:1)~"', 'LIQOCT', '"~fbn('Cliente')~"', 'ARP', ")
+    SQL.ADD(" '"~Dialogo.Vehiculo1~"', "~Fstr(fbn('Cantidad') , 0, 2)~", '"~IdxDate(Dialogo.Fecha1)~"', '"~Val(CT:1)~"', ")
+    SQL.ADD(" "~SQLFecha(Ahora)~", '"~IdxDate(Fsys)~"', 88, '"~UsuarioActivo~"', ")
+    SQL.ADD(" 0, '"~Val(ME:1)~"', '"~Val(CT:2)~"') ")
+    SQL.NEW
+
+    SQL.ADD(" Insert Into "~DBO~".OPERACIONESBITS ")
+    SQL.ADD(" (NrOperacion, NrBit, Valor) ")
+    SQL.ADD(" Values ")
+    SQL.ADD(" ('"~Val(NT:1)~"', 2, '1') ")
+    SQL.NEW
+
+    IF fbn('Cantidad')<>0
+        SQL.ADD(" Insert Into "~DBO~".MOVPENDIENTES ( ")
+        SQL.ADD(" NrOperacion, FechaMov, Cliente, Especie, ")
+        SQL.ADD(" Mercado, EnteCustodia, NrSaldo, Cantidad, ")
+        SQL.ADD(" Leyenda, Bits, Cuenta, NrMov, ")
+        SQL.ADD(" Concepto, NrGrupo, NrGrupo2, NrInstan) ")
+        SQL.ADD(" Values ")
+        SQL.ADD(" ('"~Val(NT:1)~"', '"~IdxDate(Dialogo.Fecha1)~"', '"~fbn('Cliente')~"', 'ARP', ")
+        SQL.ADD(" '"~Val(ME:1)~"', '"~Dialogo.Vehiculo1~"', 1, "~Fstr(-fbn('Cantidad'),0,2)~", ")
+        SQL.ADD(" 'Liquidacion OCT', 'MV', '"~Val(CT:1)~"', 1, ")
+        SQL.ADD(" 'OCT', 0, 0, 0) ")
+        SQL.NEW
+    ENDIF
+    SQL.ADD(" Update "~DBO~".MOVEJECUTADOS ")
+    SQL.ADD(" Set NrTrans2 = '"~Val(NT:1)~"' ")
+    SQL.ADD(" Where FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND NrSaldo = 100 ")
+    SQL.ADD(" AND EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+    SQL.ADD(" AND Cliente = '"~fbn('Cliente')~"' ")
+    SQL.NEW
+    SQL.EXEC
+
+    *****ModificarOperacion(Val(NT:1),0,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO,NO,NO,1)
+
+Proximo
+IF Val(BD:1) = 1
+    Message('***---Anulando Transacciones anteriores')
+    Recorrer&k 1, Val(FI:1)
+        IF NoVacio(Val(TA:&k))
+            EjecutarEvento('ANLOCT', NrTrans1 = Val(TA:&k))
+        ENDIF
+    Proximo
+ENDIF

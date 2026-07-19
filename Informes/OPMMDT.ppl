@@ -1,0 +1,242 @@
+﻿CrearDialogo
+  Fecha1   : 'Fecha'       ;;;;;;;;;PriDeMes(FSys,SI)
+  Lista1   : 'Vehiculo'    ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+  Cliente1 : 'ContraParte' ;;;;;;;;;;;
+  Especie1 : 'Especie '    ;;;;;;NOVACIO(Dialogo.Especie1);'Especie Inexistente';NO;;;
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+
+Message(Dialogo.Lista1)
+Message(Dialogo.Cliente1)
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+ACT(a1, 'Mark to Market - Detalle de Operaciones Vigentes por Contraparte')
+ACT(a2, 'Fecha : '~Dialogo.Fecha1)
+
+if NoVacio(Dialogo.Lista1)
+   ACT(a:4, 'Vehiculo : '~Dialogo.Lista1)
+else
+   ACT(a:4, 'Vehiculo : Todos')
+endif
+
+ACT(a6, 'ContraParte')
+ACT(b6, 'Numero')
+ACT(c6, 'Producto')
+ACT(d6, 'TipoTasa')
+ACT(e6, 'P.Strike')
+ACT(f6, 'Cantidad')
+ACT(g6, 'NrCuota')
+ACT(h6, 'F.Inicio')
+ACT(i6, 'F.Fin')
+ACT(j6, 'Exposicion')
+ACT(k6, 'Liquidacion')
+
+*-----------------------------------------
+*--- No mover columnas j y k porque se utiliza para linkear
+*-----------------------------------------
+
+AgregarMarco(a6..n7, 2,0,Exe('COLOR'))
+
+SetFilaActual(7)
+
+SQL.ADD("Select O.Vehiculo1, O.TipoOp, O.NrOperacion,O.*,0 NrCuota,0 Cant1,0 Cant2,O.FechaOp2 Fecha1,O.FechaOp2 Fecha2,O.FechaOp2 Fecha5,O.FechaOp2 Fecha6,0 Cant8,O.FechaOp2 Fecha3 ")
+SQL.ADD("from "~DBO~".OPERACIONES O ")
+SQL.ADD("where ")
+SQL.ADD(" ((TipoOp IN ('DTSFV','DTSFF','DTSVV','DTSFVV') and O.FechaOp2<='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaEj>='"~IdxDate(Dialogo.Fecha1)~"')   ")
+SQL.ADD(" or (TipoOp IN ('DTO','DTOV') and O.FechaOp2<='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaEj>'"~IdxDate(Dialogo.Fecha1)~"')) ")
+if NoVacio(Dialogo.Lista1)
+  SQL.ADD("and O.Vehiculo1 in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+endif
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD("and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+EndIf
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie='"~Dialogo.Especie1~"' ")
+EndIf
+SQL.ADD("  Union All ")
+SQL.ADD("Select O.Vehiculo1, O.TipoOp, O.NrOperacion,O.*,C.NrCuota, C.Cantidad1 Cant1,C.Cantidad2 Cant2,C.Fecha1,C.Fecha2,C.Fecha5,C.Fecha6,C.Cantidad8 Cant8,C.Fecha3 ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+SQL.ADD(" where O.NrOperacion = C.NrOperacion ")
+SQL.ADD("  and ((TipoOp IN ('DTC','DTF','DTK','DTKVI','DTSFFM','DTSFVM','DTSFVX','DTSVVM') and C.Fecha1<='"~IdxDate(Dialogo.Fecha1)~"' and C.Fecha2>'"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD("  or (TipoOp IN ('DTOM','DTOMV') and  C.Fecha2>'"~IdxDate(Dialogo.Fecha1)~"') ")
+SQL.ADD("  or (TipoOp IN ('DTSNFV') and C.Fecha2>'"~IdxDate(Dialogo.Fecha1)~"')) ")
+if NoVacio(Dialogo.Lista1)
+  SQL.ADD("and O.Vehiculo1 in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+endif
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD("and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+EndIf
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie='"~Dialogo.Especie1~"' ")
+EndIf
+SQL.ADD(" order by 1,2,3 ")
+
+BorrarCeldas(z1..z1)
+
+*- bv2: Fila desde donde se listan los datos 
+*- bv3: Fila hasta donde se listan los datos 
+acn(bv2,8)
+
+Recorrer SQL
+
+  if Not EQstr(fbn('Vehiculo1'),Val(z1))
+     * cambia Cliente
+     if NoVacio(Val(z7))
+        act(a:fac,'Total '~Val(z7) )
+        acn(j:fac, Val(w2))
+
+        BorrarCeldas(w2..w2)
+        AgregarMarco(a:fac..m:fac,1)
+        SetFont(a:fac..m:fac,1)
+        ifa
+     endif
+
+     * cambia empresa
+     if NoVacio(Val(z1))
+        act(a:fac,'Total Empresa '~Val(z1) )
+        acn(j:fac, Val(w1))
+
+        BorrarCeldas(w1..w1)
+        AgregarMarco(a:fac..n:fac,1,0,RGB(192,192,192))
+        SetFont(a:fac..n:fac,1)
+        ifa
+     endif
+
+     * Asignar Empresa
+     act(z1, fbn('Vehiculo1'))
+     act(a:fac,'Empresa '~Val(z1) )
+     AgregarMarco(a:fac..n:fac,1,0,RGB(192,192,192))
+     SetFont(a:fac..n:fac,1)
+     ifa
+
+     * Asignar cliente
+     act(z7, fbn('Cliente1'))
+     act(a:fac,Val(z7) )
+     AgregarMarco(a:fac..n:fac,1)
+     SetFont(a:fac..n:fac,1)
+     ifa
+  else
+     if Not EQstr(fbn('Cliente1'),Val(z7))
+        * cambia Cliente
+        if NoVacio(Val(z7))
+           act(a:fac,'Total '~Val(z7) )
+           acn(j:fac, Val(w2))
+
+           BorrarCeldas(w2..w2)
+           AgregarMarco(a:fac..n:fac,1)
+           SetFont(a:fac..n:fac,1)
+           ifa
+        endif
+        * Asignar cliente
+        act(z7, fbn('Cliente1'))
+        act(a:fac,Val(z7) )
+        AgregarMarco(a:fac..n:fac,1)
+        SetFont(a:fac..n:fac,1)
+        ifa
+     endif
+  endif
+
+  act(b:fac, fbn('NrOperacion'))
+  aclo(b:fac, fbn('NrOperacion'))
+  act(c:fac, BuscarCampo('TIPOSOPERACION','Nombre','Codigo',fbn('TipoOp')))
+  act(d:FAC, FBN('TipoTasa'))
+  acn(e:FAC, FBN('PrecioEj'))
+  acn(f:FAC, FBN['Cantidad'])
+  acn(g:FAC, FBN['NrCuota'])
+
+  If Incluido(FBN['TipoOp'],'DTSFV|DTSFF|DTSVV|DTSFVV')
+     ACD(h:FAC, FBN['FechaOp2'])
+     ACD(i:FAC, FBN['FechaEj'])
+  EndIf
+
+  If Incluido(FBN['TipoOp'],'DTO|DTOV')
+     ACD(h:FAC, FBN['FechaEx1'])
+     ACD(i:FAC, FBN['FechaEx2'])
+  EndIf
+
+  If Incluido(FBN['TipoOp'],'DTC|DTF|DTK|DTKVI|DTSFFM|DTSFVM|DTSFVX|DTSVVM|DTSNFV')
+     ACD(h:FAC, FBN['Fecha1'])
+     ACD(i:FAC, FBN['Fecha2'])
+  EndIf
+
+  If Incluido(FBN['TipoOp'],'DTOM|DTOMV')
+     ACD(h:FAC, FBN['Fecha5'])
+     ACD(i:FAC, FBN['Fecha6'])
+  EndIf
+
+  If Incluido(FBN['TipoOp'],'DTO|DTOV|DTSFV|DTSFF|DTSVV|DTSFVV')
+     acn(j:fac, fbn('TCComCor2'))
+     acd(k:FAC, FBN('FechaPago'))
+  Else
+     acn(j:fac, fbn('Cant8'))
+     acd(k:FAC, FBN('Fecha3'))
+  EndIf
+
+  scn(w1,Val(j:fac))
+  scn(w2,Val(j:fac))
+  scn(w3,Val(j:fac))
+
+  SetFont(a:fac..n:fac,2)
+proximo
+acn(bv3,fac)
+
+* ultimo total cliente
+ifa
+if NoVacio(Val(z7))
+  act(a:fac,'Total '~Val(z7) )
+
+  acn(j:fac, Val(w3))
+
+  *- Guardo en bv1 Resultado para Linkear por Mark to Market Ppal
+  ACN(bv1,val(j:fac))
+  *----
+
+  BorrarCeldas(w3..w3)
+  AgregarMarco(a:fac..n:fac,1)
+  SetFont(a:fac..n:fac,1)
+endif
+
+* ultimo total Empresa
+ifa
+if NoVacio(Val(z1))
+   act(a:fac,'Total Empresa '~Val(z1) )
+
+   acn(j:fac, Val(w1))
+   BorrarCeldas(w1..w1)
+   AgregarMarco(a:fac..n:fac,1,0,RGB(192,192,192))
+   SetFont(a:fac..n:fac,1)
+endif
+
+
+BorrarCeldas(w1..w12)
+AgregarMarco(a:fac..n:fac, 2,0,Exe('COLOR'))
+SetFont(a:fac..n:fac,2)
+
+ACO(1,10)
+ACO(3,19)
+ACO(4,9)
+ACO(5,6)
+ACO(6,6)
+ACO(7,8)
+ACO(8,8)
+ACO(9,8)
+ACO(10,8)
+ACO(11,8)
+ACO(12,8)
+ACO(13,8)
+
+
+SetFont(a1..z7, 1)
+SetFont(a8..z:fac, 2)
+FormatoCeldas(e7..e:fac, Exe('F7'))
+FormatoCeldas(j7..j:fac, Exe('F2N'))
+LimitesVision(n:fac+1)
+Impresion(1,2)
+
+*CrearFont(6,"Arial,6,B")
+*RangoTitulo(a:5..m:FAC, 2)

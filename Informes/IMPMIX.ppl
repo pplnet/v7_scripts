@@ -1,0 +1,91 @@
+﻿*** este informe lista las operaciones de dos formas
+*** 1 las operaciones que hayan sido supervisadas y ademas hayan pasado por back office en la seleccion de la fecha
+*** 2 todas las operaciones de las seleccion de la fecha
+HojaVisible(NO)
+CrearDialogo
+  Vehiculo1 : 'Vehiculo';;;;Vacio(Dialogo.NrOperacion1);Vacio(Dialogo.NrOperacion1)
+  Radio1    : 'Fecha|Concertacion|Origen';;;;Vacio(Dialogo.NrOperacion1);Vacio(Dialogo.NrOperacion1);;;;0
+  TipoOp1   : 'Tipo Op.';;;;Vacio(Dialogo.NrOperacion1);Vacio(Dialogo.NrOperacion1)
+  NrOperacion1 : 'Nro.Op.'
+  Fecha1    : 'F.Desde';;;;Vacio(Dialogo.NrOperacion1);Vacio(Dialogo.NrOperacion1);;;;FSys
+  Fecha2    : 'F.Hasta';;;;Vacio(Dialogo.NrOperacion1);Vacio(Dialogo.NrOperacion1);;;;FSys
+  Radio2    : 'Minutas |Supervisadas en Back y Terminal|Todas' ;;;;Vacio(Dialogo.NrOperacion1);Vacio(Dialogo.NrOperacion1);;;;0
+  Entero1   : 'Copias' ;;;;;;;;;1
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+endif
+
+* Vehiculos permitidos por el usuario
+ACT(zz6,SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+
+SQL.ADD("Select NrOperacion, TipoOp, CB7 from "~DBO~".OPERACIONES where")
+
+if Vacio(Dialogo.NrOperacion1)
+  if Dialogo.Radio1=0
+    SQL.ADD("((FechaOp2 >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp2 <= '"~IdxDate(Dialogo.Fecha2)~"') or ")
+    SQL.ADD("(FechaOp2 is Null and FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"'))")
+  else
+    SQL.ADD("FechaOp >= '"~IdxDate(Dialogo.Fecha1)~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"'")
+  endif
+  if NoVacio(Dialogo.TipoOp1)
+    SQL.ADD("and TipoOp = '"~Dialogo.TipoOp1~"'")
+  endif
+  if NoVacio(Dialogo.Vehiculo1)
+    SQL.ADD("and Vehiculo1 = '"~Dialogo.Vehiculo1~"'")
+  endif
+else
+  SQL.ADD("NrOperacion = '"~Dialogo.NrOperacion1~"'")
+
+endif
+
+recorrer SQL
+
+if NoVacio(Dialogo.NrOperacion1)
+                      recorrer&i 1, Dialogo.Entero1
+                          ImprimirOperacion(fbn['NrOperacion'])
+                      proximo
+else
+
+  if Dialogo.Radio2=1
+                      recorrer&i 1, Dialogo.Entero1
+                          ImprimirOperacion(fbn['NrOperacion'])
+*                         ImprimirOperacion(val(a1),SI,,NO,NO)
+                      proximo
+  else
+     * saca las operaciones que van directo a terminal
+     if Eqstr(fbn['TipoOp'] ,'AJUCOB') o  Eqstr(fbn['TipoOp'] ,'AJUCON') o  Eqstr(fbn['TipoOp'] ,'AJUCOR') o  Eqstr(fbn['TipoOp'] ,'AJULIM') o  Eqstr(fbn['TipoOp'] ,'AJUSMV') o  Eqstr(fbn['TipoOp'] ,'AJUSTE') o  Eqstr(fbn['TipoOp'] ,'ASF') o  Eqstr(fbn['TipoOp'] ,'CUPON') o  Eqstr(fbn['TipoOp'] ,'MARG') o  Eqstr(fbn['TipoOp'] ,'POSOPE') o  Eqstr(fbn['TipoOp'] ,'TEMIND') o  Eqstr(fbn['TipoOp'] ,'VIMIND')
+
+     else
+       * saca las operaciones temd o vimd sin desembolso
+       if [Eqstr(fbn['TipoOp'] ,'TEMD') y fbn['CB7']=0] o  [Eqstr(fbn['TipoOp'] ,'VIMD')  y fbn['CB7']=0]
+
+       else
+
+           act(a1, fbn['NrOperacion'])
+           SQL.ADD("Select NrBit from "~DBO~".OPERACIONESBITS where NrOperacion='"~val(a1)~"' and Valor='1' ")
+           recorrer SQL
+ 
+               if fbn['NrBit']=20 o fbn['NrBit']=50
+
+                      recorrer&i 1, Dialogo.Entero1
+                        ImprimirOperacion(val(a1))
+              ***    ImprimirOperacion(val(a1),SI,,NO,NO)
+                      proximo
+
+
+               endif
+           Proximo
+        endif
+      endif
+
+  endif
+endif
+proximo

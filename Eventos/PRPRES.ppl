@@ -1,0 +1,240 @@
+﻿* Viene el importe con signo , el evento siempre suma
+* HOJAVISIBLE(SI)
+CrearDialogo
+   NrOperacion2:'Op. Participante'
+   String1     :'Condicion de Select Cuotas'
+   Precio1     :'Importe de Cesion (Con Signo)'
+FinDialogo
+
+If not Ok
+ Cancelar
+EndIf
+
+
+
+*-- Calculo la Sumatoria de Porcentajes de las cuotas a insertar 
+SQL.ADD("SELECT SUM(Tasa1) As SumTasa, SUM(Cantidad1) As SumAmort ")
+SQL.ADD("FROM "~DBO~".CUOTAS WHERE NrOperacion='"~Dialogo.NrOperacion2~"' ")
+If NOVACIO(Dialogo.String1)   
+   SQL.ADD(" and "~Dialogo.String1~" ")
+EndIf
+
+Recorrer SQL
+  *-- A32: Sumatoria de cuotas a tratar  
+  *-- A33: Sumatoria de Capital que resta amortizar
+  ACN(A32,FBN['SumTasa'])
+  ACN(A33,FBN['SumAmort'])
+Proximo
+
+*-- a34: Obtengo el Factor a aplicar a cada importe a actual y asi obtener el nuevo importe de amortizacion
+IF VAL(A33)<>0
+   ACN(A34,1+(Dialogo.Precio1/VAL(A33)))
+ELSE 
+   *-- Obtengo el 1er. Valor Nominal
+   SQL.ADD(" SELECT Cantidad2 FROM "~DBO~".CUOTAS WHERE ")
+   SQL.ADD(" NrOperacion='"~Dialogo.NrOperacion2~"' ")
+   If NOVACIO(Dialogo.String1)   
+      SQL.ADD(" and "~Dialogo.String1~" ")
+   EndIf
+
+   Recorrer SQL
+      ACN(A33,FBN['Cantidad2'])
+      Break
+   Proximo
+   ACN(A34,0)
+ENDIF
+
+SQL.ADD("SELECT TipoOp,RB8,ImpGastos2,TotalAux1,TasaImp1,CB10,RB6,MB1,Precio3,DeltaTasa,")
+SQL.ADD("Precio2,RB5,IntDevengados1 ")
+SQL.ADD("FROM "~DBO~".OPERACIONES WHERE NrOperacion='"~Dialogo.NrOperacion2~"' ")
+
+Recorrer SQL
+    dfa
+
+    *-- A35: Tipo de Operacion que prorrateo
+    ACT(A35,FBN['TipoOp'])
+
+    *-- A10: Unidad de Tiempo Calculo de Intereses
+    ACN(A10,FBN['RB8'])
+
+    *-- VN del periodo
+    ACN(A3,VAL(A33)+Dialogo.Precio1)
+
+    IF Val(A:3) < 0
+        ACN(A:3, 0)
+    ENDIF
+
+    *-- A20: TasaIva   A21: TasaWH  a40: %Imp.Interes
+    ACN(A20,FBN['ImpGastos2'])
+    ACN(A21,FBN['TotalAux1'])
+    ACN(A40,FBN['TasaImp1'])
+
+    *- a60: % Iva Cen  para MMPOSM a61: Tasa Cen
+
+    ACN(a60, 0)
+    ACN(a61, 0)
+    IF EqStr('MMPOSM',FBN['TipoOp']) 
+       ACN(a60, FBN['IntDevengados1'])
+       ACN(a61, FBN['Precio2'])
+       ACN(a62, FBN['RB5'])
+    EndIf
+
+    *-- LOCAL O EXTRANJERO
+    ACT(A26,FBN['CB10'])
+
+    *- RB6 => Caso
+    ACN(A22,FBN['RB6'])
+
+    *- MB1 => UT_CEC|360|365
+    ACT(A23,FBN['MB1'])
+
+    *- Tasa CEC
+    ACN(A25,FBN['Precio3'])
+
+    *- %_Cs_Fin_CEC
+    ACN(A26,FBN['DeltaTasa'])
+Proximo
+
+*-- Calculo CUOTAS
+SQL.ADD(" SELECT * FROM "~DBO~".CUOTAS WHERE NrOperacion='"~Dialogo.NrOperacion2~"' ")
+If NOVACIO(Dialogo.String1)   
+   SQL.ADD(" and "~Dialogo.String1~" ")
+EndIf
+SQL.ADD(" order By NrCuota ")
+
+Recorrer SQL
+  dfa
+
+  *-- INTERES
+  acn (a4, val(a3) * ((FBN['Precio2']+FBN['Precio4'])/100) * FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],val(a10)+1))
+
+  * A4 es el interes 
+  * A11 es el interes total
+  * A5 es el monto
+  * A6 es el monto total
+  * A7 es el importe iva
+  * A8 es el importe wh
+  * A9 es el importe de amortizaci¦n del per¦odo
+  * A30 Y 31 360 O 365 PARA IVA Y WH
+
+  ACN(A7,0)
+  ACN(A8,0)
+  ACN(A41,0)
+
+  If EqStr('MMPCLM',val(a35)) 
+     *- El prestamo local Fondeo local no habilita Tasa Interes para el calculo del iva
+     ACN(A7,((val(a3)*(FBN['Precio2']+FBN['Precio4'])/100)*FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],VAL(A10)+1))*(VAL(A20)/100))
+  Else
+     ACN(A7,((val(a3)*FBN['Tasa2']/100)*FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],VAL(A10)+1))*(VAL(A20)/100))
+  EndIf
+
+  *-- Calculo de Imp.Interes
+  acn(a41,VAL(a4)*VAL(a40)/100)  
+
+  *-- Para Extranjeros
+  IF Not EqStr(val(A26),'0') y EqStr('MMPOSM',val(a35))
+     ACN (A8, ((val(a3)*FBN['Total6']/100)*FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],val(a10)+1)) * (VAL(A21)/100))
+  ENDIF
+
+  *-- calcula el importe de amortizacion del per¦odo
+  acn(A9, FBN['Cantidad1']*VAL(A34))
+
+  *- Para MMPCLM 
+  *- Si RB6=1 Calculo importe variable cec en A23 
+  *- a27 => Costo Financiero Cec a28: Importe Total cec
+  ACN(A24, 0)
+  ACN(A27, 0)
+  IF VAL(A22)=1 y EqStr('MMPCLM',val(a35))
+     ACN(A24, ((val(a3)*FBN['Total5']*FBN['Plazo1'])/IIF(val(a23)=0,36000,36500)*(val(A25)/100))  )
+     ACN(A28,FBN['Cantidad5']+val(a24) )
+     ACN(A27,val(a26)*val(a28)/100)
+     ACN(A7,((val(a3)*FBN['Tasa2']/100)*FACTORDIAS(FBN['Fecha1'],FBN['Fecha2'],VAL(A10)+1)+VAL(A28))*(VAL(A20)/100))
+  ENDIF
+  IF VAL(A22)=0 y EqStr('MMPOSM',val(a35))
+     *- a24: CEN variable => Cantidad4
+     *- a28: CEN Total => Cantidad6 a63: Cen Equivalente => Cantidad8
+     *- a64: Iva Cen
+     ACN(A24, (val(a3)*val(a61)*FBN['Plazo1'])/IIF(val(a62)=0,36000,36500) )
+     ACN(A28,FBN['Cantidad5']+val(a24) )
+     ACN(a63,FBN['Cantidad7']^IIF(EqStr(FBN['Check1'],'1'),1,-1)*val(a28))
+     ACN(a64,val(a28)*(val(a60)/100) )
+  ENDIF
+
+  *-- INTERES TOTAL
+  acn (a11, VAL(A27)+VAL(A41)+VAL(A4)+VAL(A28)+val(a8))
+
+  *-- MONTO
+  ACN (A5, val(a9) +VAL(A4))
+
+  *-- MONTO TOTAL
+  ACN (A6, val(a9) +VAL(A11))
+
+
+  IF EqStr('MMPCLM',val(a35))
+     SQL.ADD("Update "~DBO~".CUOTAS SET ")
+     SQL.ADD(" Cantidad1= "~Fstr(VAL(A9),0,2)~", ")
+     SQL.ADD(" Cantidad2= "~Fstr(VAL(A3),0,2)~", ")
+     SQL.ADD(" Cantidad4= "~Fstr(VAL(A24),0,2)~", ")
+     SQL.ADD(" Cantidad6= "~Fstr(VAL(A28),0,2)~", ")
+     SQL.ADD(" Cantidad7= "~Fstr(VAL(A27),0,2)~", ")
+     SQL.ADD(" Cantidad3= "~Fstr(VAL(A4),0,2)~", ")
+     SQL.ADD(" Total4= "~Fstr(VAL(A7),0,2)~", ")
+     SQL.ADD(" Total9= "~Fstr(VAL(A41),0,2)~", ")
+     SQL.ADD(" Total3= "~Fstr(val(a11),0,2)~", ")
+     SQL.ADD(" Total2= "~Fstr(VAL(A5),0,2)~", ")
+     SQL.ADD(" Total1= "~Fstr(VAL(A6),0,2)~", ")
+     *- Campos de mod. especial de operaciones
+     SQL.ADD(" Precio5= "~Fstr(VAL(A4),0,2)~", ")
+     SQL.ADD(" Precio6= "~Fstr(VAL(A7),0,2)~", ")
+     SQL.ADD(" Precio7= "~Fstr(VAL(A24),0,2)~", ")
+     SQL.ADD(" PrecioRef1= "~Fstr(VAL(A41),0,2)~", ")
+     SQL.ADD(" Cantidad8= "~Fstr(VAL(A27),0,2)~", ")
+     SQL.ADD(" Cantidad1Ori     ="~Fstr(VAL(A9),0,2)~", ")
+     SQL.ADD(" Cantidad2Ori     ="~Fstr(VAL(A3),0,2)~", ")
+     SQL.ADD(" ResultadoIndice  =0 ")
+     SQL.ADD(" WHERE NrOperacion='"~Dialogo.NrOperacion2~"' ")
+     SQL.ADD(" AND NrCuota="~FStr(FBN['NrCuota'],2,0)~" ")
+     SQL.NEW
+     SQL.EXEC
+  Else
+     SQL.ADD("Update "~DBO~".CUOTAS SET ")
+     SQL.ADD(" Cantidad1= "~Fstr(VAL(A9),0,2)~", ")
+     SQL.ADD(" Cantidad2= "~Fstr(VAL(A3),0,2)~", ")
+     SQL.ADD(" Cantidad4= "~Fstr(VAL(A24),0,2)~", ")
+     SQL.ADD(" Cantidad6= "~Fstr(VAL(A28),0,2)~", ")
+     SQL.ADD(" Cantidad3= "~Fstr(VAL(A4),0,2)~", ")
+     SQL.ADD(" Cantidad8= "~Fstr(VAL(A63),0,2)~", ")
+     SQL.ADD(" Tasa3    = "~Fstr(VAL(A64),0,2)~", ")
+     SQL.ADD(" Total4= "~Fstr(VAL(A7),0,2)~", ")
+     SQL.ADD(" Total9= "~Fstr(VAL(A41),0,2)~", ")
+     SQL.ADD(" Total3= "~Fstr(val(a11),0,2)~", ")
+     SQL.ADD(" Total7= "~Fstr(val(a8),0,2)~", ")
+     SQL.ADD(" Total2= "~Fstr(val(a5),0,2)~", ")
+     SQL.ADD(" Total1= "~Fstr(val(a6),0,2)~", ")
+     *- Campos de mod. especial de operaciones
+     SQL.ADD(" Precio5= "~Fstr(VAL(A4),0,2)~", ")
+     SQL.ADD(" Precio6= "~Fstr(VAL(A7),0,2)~", ")
+     SQL.ADD(" PrecioRef1= "~Fstr(VAL(A41),0,2)~", ")
+     SQL.ADD(" Precio7= "~Fstr(val(a8),0,2)~", ")
+     SQL.ADD(" Precio8= "~Fstr(VAL(A24),0,2)~", ")
+     SQL.ADD(" PrecioRef2 = "~Fstr(VAL(A64),0,2)~", ")
+     SQL.ADD(" Cantidad1Ori     ="~Fstr(VAL(A9),0,2)~", ")
+     SQL.ADD(" Cantidad2Ori     ="~Fstr(VAL(A3),0,2)~", ")
+     SQL.ADD(" ResultadoIndice  =0 ")
+     SQL.ADD(" WHERE NrOperacion='"~Dialogo.NrOperacion2~"' ")
+     SQL.ADD(" AND NrCuota="~FStr(FBN['NrCuota'],2,0)~" ")
+     SQL.NEW
+     SQL.EXEC
+  EndIf
+
+
+  *-- amortiza
+  ACN(A3, val(A3)-VAL(A9))
+Proximo
+
+
+
+
+
+
+

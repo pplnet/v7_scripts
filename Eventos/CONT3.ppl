@@ -1,0 +1,176 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:       'Fecha'       ;1;1;;;;;;;fsys
+  Vehiculo1:   'Vehiculo'     ;2;;;NO;;;;;Var('VEHICON')
+  ListaTabla1: 'Operaciones'  ;1;2;;;;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES' 
+  Check1:      'Contab.Procesada' ;3;1;;NO;NO;
+  Radio1:       'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos'   ; 4;1;;NO;NO;;;;4;
+FinDialogo
+
+If Not Ok
+   Raise('Evento Cancelado')
+Endif
+
+IF Dialogo.Radio1 = 0 O Dialogo.Radio1 = 4
+    Message('--- Asientos de Custodia ---')
+    ACD(FE:1, Habiles(Dialogo.Fecha1,-Var('FVALORCONT'),'ARG'))
+    ACT(TA:1, Var('TIPASICUST'))
+    ACT(VC:1, Dialogo.Vehiculo1)
+    ACN(NA:1, Var('ASINUM'))
+    **DTP y RTP
+    SQL.ADD("SELECT T.NrTrans, T.TipoTr2, T.Fecha1 Fecha, T.Vehiculo1, T.Cantidad1 as Cantidad, MA.Codigo CodAsi, T.Cuenta1, T.Cuenta2, ")
+    SQL.ADD("       CU1.CuentaContable1 CuentaOrigen, CU2.CuentaContable1 CuentaDestino, ")
+    SQL.ADD("CASE T.TipoTr2 when 'RTP' then 'Retiro de ' when 'DTP' then 'Deposito de ' else rtrim(T.TipoTr2) + ', ' end ")
+    SQL.ADD("+ rtrim(T.Especie) + ' (' + rtrim(T.NrTrans) + ')' Leyenda, T.Especie, T.Cantidad4 Cantidad1, T.Cantidad4 Cantidad2, T.RB3 Bloqueado, T.TipoTr2 as TipoOp, T.Cliente1 Cliente, T.Vehiculo1, E.MonedaEmision, E.Cotiza,  ")
+    SQL.ADD(" T.Cuenta1 CtaDestino, T.Cuenta2 CtaOrigen, T.ConceptoPago Concepto, T.Book1, E.Tipo TipoEspecie, ")
+    SQL.ADD(" 'TIC' TipoOpC, 'TIV' TipoOpV, E.Issuer,T.Cliente1, '' ConceptoDest, '' ConceptoOri, T.NrOperacionRef2 NrOperacion ")
+    SQL.ADD("FROM "~DBO~".OPERACIONESBITS B, "~DBO~".MODELOSASIENTO MA, "~DBO~".MERCADOS M, "~DBO~".TRANSACCIONES2 T ")
+    SQL.ADD(" LEFT JOIN CUENTAS CU1 ON (T.Cuenta1 = CU1.Codigo) ")
+    SQL.ADD(" LEFT JOIN CUENTAS CU2 ON (T.Cuenta2 = CU2.Codigo) ")
+    SQL.ADD(" ,"~DBO~".ESPECIES E ")
+    SQL.ADD("WHERE T.NrTrans = B.NrOperacion ")
+    SQL.ADD(" AND T.Especie = E.Codigo ")
+    SQL.ADD("AND T.TipoTr2 = MA.TipoTr2 AND MA.TipoAsiento = '"~Var('TIPASICUST')~"' ")
+    ***Cintia 200723(STD) SE CONTABILIZARAN CON O SIN MARCA DE TRANSFERENCIA (CB1)
+    *SQL.ADD("AND (T.TipoTr2 = 'DTP' OR T.TipoTr2 = 'RTP') AND T.CB1 = 1 ")
+    SQL.ADD("AND (T.TipoTr2 = 'DTP' OR T.TipoTr2 = 'RTP') ")
+    **CB1 transferencia CB6 Automatico
+    #ifdef MLASA
+        *SQL.ADD("AND T.CB6 = 0")
+        SQL.ADD("AND T.CB6 = 0 AND T.CB1 = 1")
+    #else
+        *SOLO SE CONTABILIZARAN LAS DTP y RTP DE TERCEROS Y MANUALES,
+        *SQL.ADD("AND ((T.CB6 =1 AND T.Cliente1 <> T.Vehiculo1) OR (T.CB6 = 0 AND T.Cliente1 = T.Vehiculo1)) ")
+        SQL.ADD("AND ((T.CB6 =0 AND T.Cliente1 <> T.Vehiculo1)) ")
+    #endif
+    **
+    SQL.ADD("AND B.Valor = 1 AND B.NrBit = 70 ")
+    SQL.ADD(" AND '|'+RTrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+    SQL.ADD(" AND MA.Habilitado = 'SI' ")
+    SQL.ADD("AND T.Fecha1 >= '"~IdxDate(val(FE:1))~"' ")
+    *SQL.ADD("AND T.Mercado1 = M.Codigo AND CASE WHEN M.Netea = 'SI' THEN T.FechaConfir ELSE T.Fecha3 END = '"~IdxDate(Dialogo.fecha1)~"' ")
+    SQL.ADD("AND T.FechaCargaSys = '"~IdxDate(Dialogo.fecha1)~"' ")
+    SQL.ADD("AND T.Mercado1 = M.Codigo ")
+
+    SQL.ADD("UNION ALL ")
+    **DRT
+    SQL.ADD("SELECT T.NrTrans, T.TipoTr2, T.Fecha1 Fecha, T.Vehiculo1, T.Cantidad1 as Cantidad, MA.Codigo CodAsi, T.Cuenta1, T.Cuenta2, ")
+    SQL.ADD("       CU1.CuentaContable1 CuentaOrigen, CU2.CuentaContable1 CuentaDestino, ")
+    SQL.ADD("CASE T.TipoTr2 when 'RTP' then 'Retiro de ' when 'DTP' then 'Deposito de ' else rtrim(T.TipoTr2) + ', ' end ")
+    SQL.ADD("+ rtrim(T.Especie) + ' (' + rtrim(T.NrTrans) + ')' Leyenda, T.Especie, T.Cantidad4 Cantidad1, T.Cantidad4 Cantidad2, T.RB3 Bloqueado, T.TipoTr2 as TipoOp, T.Cliente1 Cliente, T.Vehiculo1, E.MonedaEmision, E.Cotiza,  ")
+    SQL.ADD(" T.Cuenta1 CtaDestino, T.Cuenta2 CtaOrigen, T.ConceptoPago Concepto, T.Book1, E.Tipo TipoEspecie, ")
+    SQL.ADD(" 'TIC' TipoOpC, 'TIV' TipoOpV, E.Issuer,T.Cliente1, ")
+    **ConceptoDestino
+    SQL.ADD(" CASE WHEN CU1.CB2='SI' THEN T.ConceptoPago ELSE '' END ConceptoDest, ")
+    **ConceptoOrigen
+    SQL.ADD(" CASE WHEN CU2.CB2='SI' THEN T.ConceptoPago ELSE '' END ConceptoOri, '' NrOperacion ")
+    SQL.ADD("FROM "~DBO~".OPERACIONESBITS B, "~DBO~".MODELOSASIENTO MA, "~DBO~".MERCADOS M, "~DBO~".TRANSACCIONES2 T ")
+    **CtaDestino
+    SQL.ADD(" LEFT JOIN CUENTAS CU1 ON (T.Cuenta1 = CU1.Codigo) ")
+    **CtaOrigen
+    SQL.ADD(" LEFT JOIN CUENTAS CU2 ON (T.Cuenta2 = CU2.Codigo) ")
+    SQL.ADD(" ,"~DBO~".ESPECIES E ")
+    SQL.ADD("WHERE T.NrTrans = B.NrOperacion ")
+    SQL.ADD(" AND T.Especie = E.Codigo ")
+    SQL.ADD("AND T.TipoTr2 = MA.TipoTr2 AND MA.TipoAsiento = '"~Var('TIPASICUST')~"' ")
+    SQL.ADD("AND T.TipoTr2 in ('DRT') ")
+    SQL.ADD("AND B.Valor = 1 AND B.NrBit = 70 ")
+    SQL.ADD(" AND '|'+RTrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+    SQL.ADD(" AND MA.Habilitado = 'SI' ")
+    SQL.ADD("AND T.Fecha1 >= '"~IdxDate(val(FE:1))~"' ")
+    *SQL.ADD("AND T.Mercado1 = M.Codigo AND CASE WHEN M.Netea = 'SI' THEN T.FechaConfir ELSE T.Fecha3 END = '"~IdxDate(Dialogo.fecha1)~"' ")
+    SQL.ADD("AND T.FechaCargaSys = '"~IdxDate(Dialogo.fecha1)~"' ")
+    SQL.ADD("AND T.Mercado1 = M.Codigo ")
+    ***Cintia 200723(STD) DRT SOLO PARA CARTERA PROPIA Y MANUALES
+    #ifdef MLASA
+    #else
+        SQL.ADD(" AND T.CB6 =0  AND (T.Cliente1=T.Vehiculo1 OR T.Cliente2=T.Vehiculo1)")
+    #endif
+    **
+    SQL.ADD("UNION ALL ")
+    
+    SQL.ADD("SELECT T.NrTrans, T.TipoTr2, T.Fecha1 Fecha, T.Vehiculo1, T.Precio2 as Cantidad, MA.Codigo CodAsi, T.Cuenta1, T.Cuenta2, ")
+    SQL.ADD("       CU1.CuentaContable1 CuentaOrigen, CU2.CuentaContable1 CuentaDestino, ")
+    SQL.ADD("rtrim(T.TipoTr2) + ', ' + rtrim(T.Especie) + ' (' + rtrim(T.NrTrans) + ')' Leyenda, T.Especie, ")
+    SQL.ADD("T.Cantidad1 Cantidad1, T.Cantidad2 Cantidad2, T.RB3 Bloqueado, T.TipoTr2 as TipoOp, T.Cliente1 Cliente, T.Vehiculo1, E.MonedaEmision, E.Cotiza, ")
+    SQL.ADD(" T.Cuenta1 CtaDestino, T.Cuenta2 CtaOrigen, T.ConceptoPago Concepto, T.Book1, E.Tipo TipoEspecie, ")
+    SQL.ADD(" '' TipoOpC, '' TipoOpV, E.Issuer,T.Cliente1, '' ConceptoDest, '' ConceptoOri, '' NrOperacion ")
+    SQL.ADD("FROM "~DBO~".MODELOSASIENTO MA, "~DBO~".TRANSACCIONES2 T ")
+    SQL.ADD(" LEFT JOIN CUENTAS CU1 ON (T.Cuenta1 = CU1.Codigo) ")
+    SQL.ADD(" LEFT JOIN CUENTAS CU2 ON (T.Cuenta2 = CU2.Codigo) ")
+    SQL.ADD(" ,"~DBO~".ESPECIES E ")
+    SQL.ADD("WHERE T.TipoTr2 = MA.TipoTr2 AND MA.TipoAsiento = '"~Var('TIPASICUST')~"' AND T.TipoTr2 = '"~Var('CAMEST')~"' ")
+    SQL.ADD(" AND '|'+RTrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+    SQL.ADD(" AND T.Especie = E.Codigo ")
+    SQL.ADD(" AND MA.Habilitado = 'SI' ")
+    SQL.ADD("AND T.Fecha1 >= '"~IdxDate(val(FE:1))~"' ")
+    SQL.ADD("AND T.FechaCargaSys = '"~IdxDate(Dialogo.fecha1)~"' ")
+    SQL.ADD("AND "~DBO~".DesciendedeEspecie(T.Especie,'TITULO')=1  ")
+    ACN(XX:1,0)
+    watch (SQL.batch)
+
+    Recorrer SQL
+      IF fbn('Bloqueado') = 0 
+        IF fbn('Cantidad2') = Var('BLOQGROFEX')
+            ACT(SL:1,'GTIAROFEX')
+        ELSE
+            IF fbn('Cantidad2') = Var('BLOQMAE')
+                ACT(SL:1,'GTIAMAE')
+            ELSE
+                ACT(SL:1,'CARTERA')
+            ENDIF     
+        ENDIF
+      ELSE 
+         IF fbn('Cantidad2') = Var('BLOQGROFEX')
+           ACT(SL:1,'GTIAROFEX')
+         ELSE
+           IF fbn('Cantidad2') = Var('BLOQMAE')
+               ACT(SL:1,'GTIAMAE')
+           ELSE
+               ACT(SL:1,'CARTERA')
+           ENDIF     
+         ENDIF
+      END
+      IF fbn('Cantidad1') = Var('BLOQGROFEX')
+        ACT(SL:2,'GTIAROFEX')
+      ELSE
+        IF fbn('Cantidad1') = Var('BLOQMAE')
+            ACT(SL:2,'GTIAMAE')
+        ELSE
+            ACT(SL:2,'CARTERA')
+        ENDIF     
+      ENDIF  
+      ACD(FV:1, fbn('Fecha'))
+      ACD(FD:1, Dialogo.Fecha1)
+      ACT(VH:1, fbn('Vehiculo1'))
+      ACT(TO:1, fbn('CodAsi'))
+      ACT(TI:1, fbn('TipoTr2'))
+      ACT(NR:1, '')
+      ACT(NR:2, fbn('NrTrans'))
+      ACT(MN:99,fbn('Cotiza'))
+      If NoVacio(BuscarCampo('OPERACIONES','NrOperacion','NrOperacion', fbn('NrOperacion')))
+        ACT(NO:1,fbn('NrOperacion'))
+      Else
+        ACT(NO:1,'')
+      EndIf
+      
+      IF NOT(EqStr(val(TI:1),Var('CAMEST'))) 
+         If  (EqStr(VAL(SL:1),'CARTERA') Y EqStr(VAL(SL:2),'CARTERA'))
+            ***---(.'GENASIENTO'.)
+            ACN(CK:1, 0)
+            IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+                ACN(CK:1, 1)
+                IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrTrans2 = '"~fbn('NrTrans')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+                    ACN(CK:1, 0)
+                ENDIF
+            ENDIF
+            let &codAsi fbn('CodAsi')
+            IF Val(CK:1) = 0
+                Message(fbn('NrTrans')~' - Modelo: '~fbn('CodAsi'))
+                SQL.GenerarAsientoOp(&codAsi, val(NO:1),'','',Val(NA:1),Val(FV:1),fbn('Vehiculo1'),,,,,,fbn('TipoTr2'),,fbn('NrTrans'),,,,,fsys,Dialogo.Fecha1)
+                SQL.EXEC
+            ENDIF
+         Endif
+      ENDIF
+    Proximo
+ENDIF

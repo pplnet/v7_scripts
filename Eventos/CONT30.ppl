@@ -1,0 +1,220 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+   Fecha1:      'Fecha'           ; 1;;;;;;;;fsys
+   Lista1:      'Vehiculos'       ; 3;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+   ListaTabla1: 'Operaciones'     ;-3;2;;;;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES' 
+   Check1:      'Contab.Procesada';;;;NO;NO;
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+message('--- Asientos de Reclasificacion Deuda Prestamos ---')
+
+***---DI:1 = Nro. de dia Habil del mes a ejecutarse el evento
+****---DI:2 = Fecha de ejecucion del evento
+ACN(DI:1, SQL(" Select 1 from "~DBO~".VARIABLES where Codigo = 'DIASCONT' "))
+ACN(x3, SQL("Select 1 from "~DBO~".VARIABLES where Codigo = 'DIASCONT' "))
+IF Val(DI:1) = 1
+   ACN(DI:1, Trunc(Var('DIASCONT'),0))
+ENDIF
+IF Val(DI:1) < 1
+   ACN(DI:1, 1)
+ENDIF
+ACD(DI:2, Habiles(PriDeMes(Dialogo.Fecha1,SI)-1, Val(DI:1),'ARG'))
+IF Dialogo.Fecha1 <> Val(DI:2)
+   Cancelar('La fecha es incorrecta. Verificar variable DIASCONT.')
+ENDIF
+
+
+***---FE:1 = Fecha que se procesa
+***---FE:2 = Ultimo dia Habil del mes anterior al que se procesa
+***---FE:3 = Ultimo dia Habil de dos meses anteriores al que se procesa
+***---FE:4 = Fecha hasta que la deuda es corriente para FE:2
+***---FE:5 = Fecha hasta que la deuda es corriente para FE:3
+***---FE:1 = 05/10/07 => FE:2 = 28/09/07 => FE:3 = 31/08/07 => FE:4 = 27/09/08 => FE:5 = 31/08/08
+
+ACD(FE:1, Dialogo.Fecha1)
+***---ACD(FE:2, Habiles(PriDeMes(Dialogo.Fecha1),-1,'ARG'))
+ACD(FE:2, FinDeMes(PriDeMes(Dialogo.Fecha1, SI)-1, NO))
+***---ACD(FE:3, Habiles(PriDeMes(Val(FE:2)),-1,'ARG'))
+ACD(FE:3, FinDeMes(PriDeMes(Val(FE:2), SI)-1, NO))
+***---ACD(FE:4, Val(FE:2) + 365)
+ACD(FE:4, Val(FE:2) + VAR('PLCAPCORR'))
+***---ACD(FE:5, Val(FE:3) + 365)
+ACD(FE:5, Val(FE:3) + VAR('PLCAPCORR'))
+
+***/// Campo a usar para reclasificacion de gastos en ON
+ACN(GS:1, 0)
+
+
+*******************************************************************
+*** Reclasificacion de Capital en Prestamos y de Prima/Desc para ON
+*******************************************************************
+
+SQL.ADD(" SELECT Case When O.TipoOp in ('SEPVMV','SEPTMV') Then O.ContraEspecie Else O.Especie END Moneda, O.NrOperacion, O.Especie, ")
+SQL.ADD("        O.ContraEspecie, O.TipoOp, MA.Codigo CodAsi, V.Valor1, V.Valor2, CU.Fecha2 FechaVto, O.Vehiculo1, E.Tipo, O.FechaOp, ")
+SQL.ADD("        O.Cliente1, Case O.TipoOp When 'MMONM ' Then CU.Cantidad4 Else CU.Cantidad1 END Cantidad, O.Observaciones, O.MB3, ")
+SQL.ADD("        E.Alias8, V.Alias4 MonLocalVeh, O.Precio1, CU.Cantidad3Ori, CU.Cantidad9, O.Book1 Book ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".MODELOSASIENTO MA, "~DBO~".CLIENTES C, "~DBO~".VEHICULOS V, ")
+SQL.ADD("      "~DBO~".CUOTAS CU, "~DBO~".ESPECIES E ")
+SQL.ADD(" Where O.Cliente1 = C.Codigo ")
+SQL.ADD("   AND O.Vehiculo1 = V.Codigo ")
+SQL.ADD("   AND O.Especie = E.Codigo ")
+SQL.ADD("   AND O.NrOperacion = CU.NrOperacion ")
+SQL.ADD("   AND O.TipoOp IN ('MMPCLM','MMPEM','MMPIM','MMPOSM','MMSCMV','MMFCMV','MMPCCM','MMONM','SEPVMV','SEPTMV') ")
+SQL.ADD("   AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIREDE'))~") ")
+SQL.ADD("   AND MA.Habilitado = 'SI' ")
+SQL.ADD("   AND MA.Entorno = '"~SIGLA~"' ")
+SQL.ADD("   AND O.Vehiculo1 Not IN ("~Pipe2Comillas(Var('VLIQUIDAA'))~") ")
+SQL.ADD("   AND CU.Fecha2 > O.FechaOp +"~VAR('PLCAPCORR'))
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD(" AND O.NrOperacion IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ELSE
+   ***---Deuda Corriente
+   SQL.ADD(" AND CU.Fecha2 <= '"~IdxDate(Val(FE:4))~"' ")
+   ***---Deuda que no era corriente el mes anterior
+   SQL.ADD(" AND CU.Fecha2 > '"~IdxDate(Val(FE:5))~"' ")
+   ***---Que la operacion este vigente a la fecha valor
+   SQL.ADD(" AND O.FechaOp <= '"~IdxDate(Val(FE:2))~"' ")
+   SQL.ADD(" AND MA.Habilitado = 'SI' ")   
+   IF NoVAcio(Dialogo.Lista1)
+       SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND (( ")
+       Recorrer&i 1,Elementos(Dialogo.Lista1)
+            SQL.ADD(" '|'+rtrim(MA.Vehiculo)+'|' like '%|"~ItemLista(Dialogo.Lista1,&i)~"|%' ")
+            If NOT Elementos(Dialogo.Lista1)=&i
+                SQL.ADD(" OR ")
+            EndIf
+       proximo
+       SQL.ADD(") OR MA.Vehiculo is null OR MA.Vehiculo = '' OR MA.Vehiculo = ' ' )")     
+   ELSE
+      IF NoVacio(UsrVehiculos(UsuarioActivo))
+         SQL.ADD(" AND O.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+      ENDIF
+   ENDIF
+ENDIF
+SQL.ADD(" AND O.FechaOp >= '"~IdxDate(Fecha(Var('FECHAMIGRA')))~"' ")
+SQL.ADD(" ORDER By O.NrOperacion, MA.Codigo ")
+watch(sql.batch)
+Recorrer SQL
+   **//MessageBox(fbn('NrOperacion'))
+   ACD(FV:1, Val(FE:2))
+   ACT(VH:1, fbn('Vehiculo1'))
+   ACD(FO:1, val(FV:1))
+   ACD(FO:2, Habiles(FinDeMes(val(FO:1),NO,'ARG')))
+   ACD(FV:2, Val(FV:1))
+   (.'FECHAVALOR'.)
+   let &book fbn('Book')
+   ACN(CK:1, 0)
+   IF Incluido(FBN('TipoOp'), 'SEPVMV|SEPTMV|')
+      ***// Para prestamos en especie se reclasifica el importe amort. valorizado.
+      ACN(RC:1, FBN('Cantidad')*FBN('Precio1'))
+   Else
+      ***// Para prestamos con cap. de int. tomo el Imp. Amort. Original
+      IF Incluido(FBN('TipoOp'), 'MMPCLM|MMPOSM|')
+         ACN(RC:1, FBN('Cantidad3Ori'))
+      Else
+         ACN(RC:1, FBN('Cantidad'))
+      Endif
+   Endif
+   IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+      ACN(CK:1, 1)
+      IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrOperacion = '"~fbn('NrOperacion')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado = 'E' AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND (FechaValor > '"~IdxDate(Val(FO:2))~"' OR FechaValor =  '"~IdxDate(Val(FO:1))~"') AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+         ACN(CK:1, 0)
+      ENDIF
+   ENDIF
+   IF Val(CK:1) = 0
+      Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+      let &modeloContable fbn('CodAsi')
+      SQL.GenerarAsientoOp(&modeloContable,fbn('NrOperacion'),'','',810,Val(FV:1),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+      SQL.EXEC
+   ENDIF   
+Proximo
+
+
+
+
+******************************************************
+*** Reclasificacion de Gastos para ON - Por Devengados
+******************************************************
+
+SQL.ADD(" SELECT CO.Especie1 as Moneda, O.NrOperacion, CO.Especie1 as Especie, O.ContraEspecie, O.TipoOp, MA.Codigo CodAsi, V.Valor1,")
+SQL.ADD("        V.Valor2, O.FechaVto, O.Vehiculo1, E.Tipo, O.FechaOp, O.Cliente1, O.Observaciones, O.MB3, ")
+SQL.ADD("        E.Alias8, V.Alias4 MonLocalVeh, O.Precio1, CO.Fecha1, CO.NrComision, 0 as Cantidad, 0 as Cantidad9, O.Book1 Book ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".MODELOSASIENTO MA, "~DBO~".CLIENTES C, "~DBO~".VEHICULOS V, ")
+SQL.ADD("      "~DBO~".COMISIONES2 CO, "~DBO~".ESPECIES E ")
+SQL.ADD(" Where O.Cliente1 = C.Codigo ")
+SQL.ADD("   AND O.Vehiculo1 = V.Codigo ")
+SQL.ADD("   AND O.Especie = E.Codigo ")
+SQL.ADD("   AND O.NrOperacion = CO.NrOperacion ")
+SQL.ADD("   AND O.TipoOp = 'MMONM' ")
+SQL.ADD("   AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIREDE'))~") ")
+SQL.ADD("   AND MA.Habilitado = 'SI' ")
+SQL.ADD("   AND MA.Entorno = '"~SIGLA~"' ")
+SQL.ADD("   AND O.Vehiculo1 Not IN ("~Pipe2Comillas(Var('VLIQUIDAA'))~") ")
+SQL.ADD("   AND O.FechaVto > CO.Fecha1 +"~VAR('PLCAPCORR'))
+SQL.ADD("   AND CO.Fecha1 <= '"~IdxDate(Val(FE:2))~"' ")
+SQL.ADD(" AND MA.Habilitado = 'SI' ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD(" AND O.NrOperacion IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ELSE
+   IF NoVAcio(Dialogo.Lista1)
+       SQL.ADD(" AND O.Vehiculo1 IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND (( ")
+       Recorrer&i 1,Elementos(Dialogo.Lista1)
+            SQL.ADD(" '|'+rtrim(MA.Vehiculo)+'|' like '%|"~ItemLista(Dialogo.Lista1,&i)~"|%' ")
+            If NOT Elementos(Dialogo.Lista1)=&i
+                SQL.ADD(" OR ")
+            EndIf
+       proximo
+       SQL.ADD(") OR MA.Vehiculo is null OR MA.Vehiculo = '' OR MA.Vehiculo = ' ' )")    
+   ELSE
+      IF NoVacio(UsrVehiculos(UsuarioActivo))
+         SQL.ADD(" AND O.Vehiculo1 IN (Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"') ")
+      ENDIF
+   ENDIF
+ENDIF
+SQL.ADD(" AND CO.Fecha1 >= '"~IdxDate(Fecha(Var('FECHAMIGRA')))~"' ")
+SQL.ADD(" ORDER By O.NrOperacion, MA.Codigo ")
+watch(sql.batch)
+Recorrer SQL
+   ACD(FV:1, Val(FE:2))
+   ACT(VH:1, fbn('Vehiculo1'))
+   ACD(FO:1, val(FV:1))
+   ACD(FO:2, Habiles(FinDeMes(val(FO:1),NO,'ARG')))
+   ACD(FV:2, Val(FV:1))
+   (.'FECHAVALOR'.)
+   ACN(CK:1, 0)
+   let &book fbn('Book')
+   **// Obtengo a partir de que fecha tengo que tomar los devengados   
+   IF FBN('Fecha1') > Val(FE:3)
+      ACD(FD:1, FBN('Fecha1') + VAR('PLCAPCORR'))
+   Else
+      ACD(FD:1, Val(FE:3) + VAR('PLCAPCORR'))
+   Endif   
+   
+   ACN(GS:1, 0)
+   SQL.ADD(" Select SUM(Monto) Monto ")
+   SQL.ADD(" FROM "~DBO~".MOVDEVENGADOS ")
+   SQL.ADD(" WHERE NrOperacion = '"~FBN('NrOperacion')~"' ")
+   SQL.ADD(" AND TipoDevengado = 'COMION' ")
+   SQL.ADD(" AND Cupon = "~FBN('NrComision')~" ")
+   SQL.ADD(" AND Fecha > '"~IdxDate(Val(FD:1))~"' ")
+   SQL.ADD(" AND Fecha <= '"~IdxDate(Val(FE:4))~"'  ")
+   Recorrer SQL
+      ACN(GS:1, Round(ABS(FBN('Monto')),2))
+   Proximo
+   
+   IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+      ACN(CK:1, 1)
+      IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrOperacion = '"~fbn('NrOperacion')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado = 'E' AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND (FechaValor > '"~IdxDate(Val(FO:2))~"' OR FechaValor =  '"~IdxDate(Val(FO:1))~"') AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+         ACN(CK:1, 0)
+      ENDIF
+   ENDIF
+   IF Val(CK:1) = 0
+      Message(fbn('NrOperacion')~' - Modelo: '~fbn('CodAsi'))
+      let &modeloContable fbn('CodAsi')
+      SQL.GenerarAsientoOp(&modeloContable,fbn('NrOperacion'),'','',810,Val(FV:1),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,,,,,,fsys,Dialogo.Fecha1)
+      SQL.EXEC
+   ENDIF   
+Proximo

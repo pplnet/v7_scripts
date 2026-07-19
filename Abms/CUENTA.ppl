@@ -1,0 +1,222 @@
+﻿#*********************************************************************************
+#combos data sources.
+#%%ifdef CMF
+     set ds_TipoCuenta          = "CA:CA|CUS:Custodia|VIS:Vista|CCO:C.Propias|CAJ:Caja|INV:Inversor|FCI:F.Comun|CC:Cta.Cte.|PF:Plazo Fijo|OTR:Otros|"   
+#%%else
+#    set ds_TipoCuenta          = "CA:CA|CUS:Custodia|VIS:Vista|CCO:C.Propias|CAJ:Caja|INV:Inversor|FCI:F.Comun|CC:Cta.Cte.|OTR:Otros|"
+#%%endif
+set ds_Estado              = "HAB:Habilitada|SUS:Suspendida|CER:Cerrada|PEN:Pendiente|BLO:Bloqueada"
+set ds_FechaAlta           = db.get_scalar("SELECT convert(datetime, Valor, 103) from "+dbo+".VARIABLES where Codigo='FECHASYS' ")
+
+#*********************************************************************************
+def abm 'Cuentas'
+   def grid
+   Codigo:, Nombre:, Numero:, Cliente:, Mercado:, MercadoLiq:
+   end
+   %%ifdef BIND
+   def user_filter
+   "Inicial", "Cliente = '"+ppl.Var('VEHICULODE')+"'"
+   end
+   %%endif
+   def key
+       Codigo: 
+   end
+   def dialog
+       #*************************************************************************
+       tab 'General'
+          column
+             Codigo: , 'Codigo', small_text, 'XXXXXXXXXX'
+             Nombre: ,          , large_text
+             Numero: , 'Numero', large_text
+             Cliente: ,          , autocomplete, 'Clientes', 'Codigo,RazonSocial'
+             Mercado: , 'Merc./Cle.House'   , autocomplete, 'Mercados', 'Codigo,Descripcion'
+             Comitente: , 'Depositante', autocomplete, 'Clientes', 'Codigo,RazonSocial'
+             NrDepositante: , 'Comitente', small_text
+             Corresponsal: , 'Corresp.Destino', autocomplete, 'Corresponsales', 'Codigo,Nombre'
+             TitularAlternativo: , 'Tit.Alternativo', autocomplete, 'Clientes', 'Codigo,RazonSocial'
+             Interface: , 'Interface Automatica' , check
+             Permanente: , 'Cta Default' , check
+             FechaAlta: , 'Fecha Apertura' , date
+             
+          column
+             TiposOperacion: ,    , autocomplete_ar_list, 'TiposOperacion', 'Codigo,Nombre'
+             Especies: ,          , autocomplete_ar_list, 'Especies', 'Codigo,Nombre'
+             Transacciones: ,     , autocomplete_ar_list, 'TiposTransaccion2', 'Codigo,Nombre'
+       #**************************************************************************
+       tab 'Adicional'
+          column
+             FechaEstado: , 'Fecha Estado' , date
+             Estado: ,          , combo, ds_Estado
+             Alias1: , 'Alias 1', large_text
+             CBU: , ' CBU', text
+             Alias2: , 'SubCta CV', large_text
+             Alias3: , 'Alias 3', large_text
+             ABA: ,    ' ABA'    , large_text
+             CHIPS: ,  ' CHIPS'  , large_text
+             Fedwire: , 'Fedwire', small_text
+             Repetitivo: ,          , numeric , '0'
+             MercadoLiq: , 'M.Liquidacion'   , autocomplete, 'Mercados', 'Codigo,Descripcion',, " EsLiquidacion = 'SI' "
+             MercadoNeg: , 'M.Negociacion'   , autocomplete, 'Mercados', 'Codigo,Descripcion',, " EsNegociacion = 'SI' "
+             #En V3 dbo aparece este campo, pero no funciona.. No existe esta tabla.
+             #TipoCtaInv: , 'TipoCtaInv', autocomplete, 'TiposCtaInv', 'Codigo,Descripcion'
+             
+             #Tengo que hacer dos campos no mapeados en la base para Cuenta Contable y Cta Cnt en ARP porque los filtros en el where son distintos y el label es distinto.
+             CB1: ,'Multimoneda' ,check
+             CuentaCon1: , 'Cta. Contable', autocomplete, 'CONTABILIDAD', 'Codigo,Nombre'
+             CuentaCon2: , 'Cta. Cont. ARP', autocomplete, 'CONTABILIDAD', 'Codigo,Nombre',,"Moneda = 'ARP' "
+             CuentaContable2: , 'Cta. Cont. USD', autocomplete, 'CONTABILIDAD', 'Codigo,Nombre',,"Moneda = 'USD' "
+             
+             CuentaContable1: , 'Cta Cont ALIAS', autocomplete, 'Contabilidad', 'Codigo,Nombre'
+             #CuentaContable2: , 'Cta Contable 2', autocomplete, 'Contabilidad', 'Codigo,Nombre'
+             EstadoCore:, 'EstadoCore' , large_text
+          column
+             TipoCuenta: , 'Tipo', combo, ds_TipoCuenta
+             Book: , 'Book'   , autocomplete, 'Books', 'Codigo,Descripcion'
+             CB2: ,'Cta.Garantias' ,check   
+             NoRemunerable: , 'No Remunerable', check
+             CodigoTasa: , 'Codigo Tasa', small_text
+#             TipoTasa:, 'Tipo Tasa', autocomplete,  'TIPOSTASA','Codigo,Nombre',,"TiposOperacion Like '%MMCREM%'"#
+#             TipoTasa:, 'Tipo Tasa', autocomplete,  'TIPOSTASA','Codigo,Nombre',,
+             TEM:, 'TEM', check
+             EsEfMiCr:, 'Efectivo Min Cryl', check
+
+       #**************************************************************************
+       tab 'Integrantes'
+          column
+          Integrantes: ,          , embeded_abm, "INTECT"
+   end
+   upper_case_fields: Codigo:;
+   
+   do_not_map: CuentaCon1:, CuentaCon2: 
+
+   before_show_create_dialog:  do
+        if $.Alta()
+           $.set_field FechaAlta:,ds_FechaAlta
+        endif
+        if $.Modificacion()
+           set EstadoAnt = $.Val Estado
+           set FechaAnt  = $.Val FechaEstado
+        endif
+    end
+   
+   when_change: TipoCuenta:, Cliente: do
+      set cliente = $.val Cliente:
+      set isCP = db.GetScalar("Select 1 from "+dbo+".CLIENTES where Codigo='"+ cliente +"' and Alias1='CP' ")
+      If $.val TipoCuenta: = 'CUS' and isCP = 1
+         $.show(Book:)
+      else
+         $.hide(Book:)
+      end
+   end
+
+   before_show_create_dialog: do
+        $.set_field CB1:, 'NO'
+        $.hide(CuentaContable1:)
+        $.set_field CB2:, 'NO'
+   end
+   
+   before_show_dialog: do
+       $.hide(CuentaContable1:)
+ 
+       If $.val(CB1:) == 'SI'
+           $.hide(CuentaCon1:)
+           $.show(CuentaCon2:)
+           $.show(CuentaContable2:)
+       else
+           $.show(CuentaCon1:)
+           $.hide(CuentaCon2:)
+           $.hide(CuentaContable2:)       
+       endif
+       If $.val(CB1:) == 'SI'
+           $.set_field CuentaCon2:, $.val(CuentaContable1:)
+       else
+           $.set_field CuentaCon1:, $.val(CuentaContable1:)
+       endif
+   end
+   
+   when_change: CuentaContable1: do
+    If $.val(CB1:) == 'SI'
+        $.set_field CuentaCon2:, $.val(CuentaContable1:)
+    else
+        $.set_field CuentaCon1:, $.val(CuentaContable1:)
+    endif
+   end
+   
+   when_change: CB1: do
+   
+       if ppl.Vacio($.val(Codigo:)) OR $.Alta()
+            $.set_field CuentaContable1:, null
+            $.set_field CuentaCon1:, null
+            $.set_field CuentaCon2:, null  
+            $.set_field CuentaContable2:, null          
+       Else
+           set CtaCon1 = ppl.SQL("Select CuentaContable1 from "+DBO+".CUENTAS where Codigo = '"+$.val(Codigo:)+"' ")
+           set CtaCon2 = ppl.SQL("Select CuentaContable2 from "+DBO+".CUENTAS where Codigo = '"+$.val(Codigo:)+"' ")
+           $.set_field CuentaCon1:, CtaCon1
+           $.set_field CuentaCon2:, CtaCon1
+           $.set_field CuentaContable1:, CtaCon1
+           $.set_field CuentaContable2:, CtaCon2
+       EndIf
+       If $.val(CB1:) == 'SI'
+           $.hide(CuentaCon1:)
+           $.show(CuentaCon2:)
+           $.show(CuentaContable2:)    
+       else
+           $.show(CuentaCon1:)
+           $.hide(CuentaCon2:)
+           $.hide(CuentaContable2:)  
+       endif
+   end
+   when_change: CuentaContable1: do
+       If $.val(CB1:) == 'SI'
+           $.set_field CuentaCon2:, $.val(CuentaContable1:)
+       else
+           $.set_field CuentaCon1:, $.val(CuentaContable1:)
+       endif
+   end 
+   when_change: Estado: do
+      if EstadoAnt <>  $.val(Estado:)  
+         $.set_field FechaEstado:, ds_FechaAlta
+      else
+         $.set_field FechaEstado:, FechaAnt
+      endif
+   end
+  
+   before_save:  do
+       If $.val(CB1:) == 'SI'
+           $.set_field CuentaContable1:, $.val(CuentaCon2:)
+       else
+           $.set_field CuentaContable1:, $.val(CuentaCon1:)
+           $.set_field CuentaContable2:, null
+       endif
+        set MercLiqOk = ppl.SQL("Select EsLiquidacion from "+DBO+".MERCADOS where Codigo = '"+$.val(MercadoLiq:)+"' ")
+        set MercNegOk = ppl.SQL("Select EsNegociacion from "+DBO+".MERCADOS where Codigo = '"+$.val(MercadoNeg:)+"' ")
+        If ppl.EqStr(MercLiqOk, 'SI') or ppl.Vacio($.val(MercadoLiq:))
+            If ppl.EqStr(MercNegOk, 'SI')  or ppl.Vacio($.val(MercadoNeg:))
+               true
+            Else
+               $.Alert('Mercado Negociacion Erroneo ')
+               False
+            End
+        Else
+           $.Alert('Mercado Liquidacion Erroneo ')
+           False
+        End
+   End
+   disable:
+       CodigoTasa: , 1=1            
+   validates_max_length_of:
+       Codigo:,10,true; 
+       Nombre:,50,true;
+       Numero:,40,true;
+       CBU:,22,true;
+       NrDepositante:,10,true;
+       Alias1:,40,true;
+       Alias2:,40,true;
+       Alias3:,40,true;
+       ABA:,40,true;
+       CHIPS:,40,true;
+       Fedwire:,12,true;
+       EstadoCore:,40,true
+    validates_uniqueness_of: Codigo:
+ end

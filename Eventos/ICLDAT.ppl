@@ -1,0 +1,145 @@
+﻿HOJAVISIBLE(NO)
+ModoReproceso(SinDialogo)
+MostrarCuadrodeMensajes
+CrearDialogo
+  Fecha1  : 'Fecha'        ;;;;NO;;;;;;FSYS
+  String1 : 'Path'         ;;;;;;;;;Var('PATHICL')
+  String3 : 'Spread'       ;;;;;;;;;'SPREAD.XLS'
+  String2 : 'Tasas'        ;;;;;;;;;'TASAS.XLS'  
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+*(.'ABCDARIO'.)
+
+If Not ExisteDirectorio(Var('PATHICL'))
+   Cancelar('Debe Crear el Directorio '~Var('PATHICL'))
+Endif
+
+CrearFont(1, "Arial,10,B")
+CrearFont(2, "Arial,8,")
+CrearFont(3, "Arial,8,B")
+** Armar Relacion para Spread Especie=Codigoletra/Currency en ESPECIES y Tasas TiposTasa=Currency/Tenor/Bank-Non-Bank en TIPOSTASA
+
+*- Excel Tasas
+ImportarXLS(a:2..b:200,a:1..b:200,Dialogo.String1~Dialogo.String2)
+
+If Vacio(val(a2))
+   Cancelar('No se ha podido recuperar el archivo Tasas')
+EndIf
+
+SetFilaActual(1)
+
+ACN(zx1,0)
+Recorrer&i 2,200
+
+   *- Veo si esta cargada la tasa
+   
+   ** Analizar que columnas contienen Codigo de tasa, Valor y si la fecha es por archivo o por Valor
+   act(c:&i,SQL(" Select Codigo From "~DBO~".TIPOSTASA Where CodigoExterno = '"~val(a:&i)~"' AND EspecieValida = '"~val(b:1)~"'  "))
+
+   IF Vacio(Val(a:&i))
+      Break
+   Endif
+   SCN(zx3,1)
+   ACN(d:&i,Num(Val(b:&i)))  
+   IF No Vacio(Val(c:&i)) y Val(d:&i)<>0
+      SCN(zx1,1)
+      IF SQL("SELECT 1 FROM "~DBO~".TASASDIA WHERE TipoTasa='"~Val(c:&i)~"' and Fecha='"~IdxDate(Dialogo.Fecha1)~"' and Especie= '"~val(b:1)~"' and PlazoDesde=1 and PlazoHasta=999999")= 0 
+         Message('Insertando Tasa ICL'~val(c:&i))
+         SQL.ADD(" Insert "~DBO~".TASASDIA ")
+         SQL.ADD(" (Fecha, Especie, TipoTasa, ")
+         SQL.ADD(" PlazoDesde, PlazoHasta, Valor1, ")
+         SQL.ADD(" Valor2, Valor3, Valor4, ")
+         SQL.ADD(" Valor5) ")
+         SQL.ADD(" Values ")
+         SQL.ADD(" ('"~IdxDate(Dialogo.Fecha1)~"', '"~val(b:1)~"', '"~val(c:&i)~"', ")
+         SQL.ADD(" 1, 999999, "~Fstr(val(d:&i), 0, 8)~", ")
+         SQL.ADD(" "~Fstr(0, 0, 8)~", "~Fstr(0, 0, 8)~", "~Fstr(0, 0, 8)~", ")
+         SQL.ADD(" "~Fstr(0, 0, 8)~" ) ")
+         SQL.NEW
+      Else
+         ***--- => la actualizo con la anterior
+         Message('Actualizando Tasa ICL'~val(c:&i))
+         SQL.ADD(" Update "~DBO~".TASASDIA ")
+         SQL.ADD(" Set Valor1 = "~Fstr(val(d:&i), 0, 8)~", ")
+         SQL.ADD(" Valor2 = "~Fstr(0, 0, 8)~", ")
+         SQL.ADD(" Valor3 = "~Fstr(0, 0, 8)~", ")
+         SQL.ADD(" Valor4 = "~Fstr(0, 0, 8)~", ")
+         SQL.ADD(" Valor5 = "~Fstr(0, 0, 8)~" ")
+         SQL.ADD(" Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+         SQL.ADD(" AND Especie = '"~val(b:1)~"' ")
+         SQL.ADD(" AND TipoTasa = '"~val(c:&i)~"' ")
+         SQL.ADD(" AND PlazoDesde = 1 ")
+         SQL.ADD(" AND PlazoHasta = 999999 ")
+         SQL.NEW
+      Endif
+      SQL.EXEC
+   ELSE
+      If Val(d:&i)=0
+         Message('Sin valor de Tasa para '~Val(a:&i)~' '~Val(b:1)~' '~Val(b:&i))
+      Else
+         Message('No Existe '~Val(a:&i)~' '~Val(b:1)~' '~Val(b:&i))
+      Endif
+   ENDIF
+Proximo
+
+**messagebox('Encontrados '~Val(zx1)~' Leidos'~Val(zx3))
+
+ACN(zx3,0)
+
+*- Excel Spread
+ImportarXLS(a:2..h:501,k:1..r:500,Dialogo.String1~Dialogo.String3)
+
+If Vacio(val(k1))
+   Cancelar('No se ha podido recuperar el archivo Spread')
+EndIf
+
+SetFilaActual(1)
+
+ACN(zx2,0)
+
+*- Recorrer valores
+Recorrer&i 1,500
+
+   act(j:&i,SQL(" Select Codigo From "~DBO~".ESPECIES Where CodigoExterno = '"~val(m:&i)~"' AND MonedaEmision = '"~val(k:&i)~"'  and Tenor = '"~val(l:&i)~"' "))   
+   IF Vacio(Val(k:&i))
+      Break
+   Endif  
+   SCN(zx3,1)
+   
+   ACN(s:&i,Num(Val(p:&i)))    
+   If No Vacio(Val(j:&i)) y Val(s:&i)<>0
+   
+      Message('Actualizando Spread: '~Val(j:&i))
+  
+      *- Buscar Valor Spread de hoy
+      If SQL("SELECT 1 FROM "~DBO~".COTIZACIONES WHERE Codigo='"~Val(j:&i)~"' and (CallPut='CON' or CallPut is Null) and Fecha='"~IdxDate(Dialogo.Fecha1)~"' and Moneda = '"~Val(k:&i)~"' ")=1
+         SQL.ADD("UPDATE "~DBO~".COTIZACIONES SET ")
+         SQL.ADD("Precio1="~FStr(Val(s:&i)/100,1,8)~" ")
+         SQL.ADD("WHERE  Codigo='"~Val(j:&i)~"' and (CallPut='CON' or CallPut is Null) and Fecha='"~IdxDate(Dialogo.Fecha1)~"' ")
+         SQL.NEW
+         SQL.EXEC
+      Else
+         *- Insertar registro
+         SQL.ADD("INSERT INTO "~DBO~".COTIZACIONES ")
+         SQL.ADD("(Fecha, Codigo, CallPut, Precio1, Moneda) ")
+         SQL.ADD(" VALUES ('"~IdxDate(Dialogo.Fecha1)~"', '"~Val(j:&i)~"', 'CON', ")
+         SQL.ADD(" "~Fstr(Val(s:&i)/100,0,8)~", '"~Val(k:&i)~"' )")
+         SQL.NEW
+         SQL.EXEC
+      Endif
+      SCN(zx2,1)
+   Else
+      If Val(s:&i)=0
+         Message('Sin valor de Spread para '~Val(k:&i)~' '~Val(l:&i)~' '~Val(m:&i))
+      Else
+         Message('No Existe '~Val(k:&i)~' '~Val(l:&i)~' '~Val(m:&i))
+      Endif
+   Endif
+   
+   
+Proximo
+**messagebox('Encontrados '~Val(zx2)~' Leidos'~Val(zx3))

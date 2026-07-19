@@ -1,0 +1,358 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Vehiculo1  : "Vehiculo"       ;;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"'"))
+  Especie1   : "Especie"        ;;;;NO;;;;;'ORO'
+  TipoOp1    : "Tipo Op."       ;;;;;;;;;;;SQLSET("Select Codigo from "~DBO~".TIPOSOPERACION Where Codigo like 'DP%'")
+  Fecha1     : "Fecha Desde"    ;;;;;;Dialogo.Fecha1<>0;'Fecha Incorrecta';NO;Fsys
+  Fecha2     : "Fecha Hasta"    ;;;;;;Dialogo.Fecha2<>0;'Fecha Incorrecta';NO;Fsys+365
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+else
+   If [SQL("Select Count(*) from "~DBO~".VEHICULOS ") <> SQL("Select Count(*) from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"' ")] y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(4)
+
+ACT(g:2,'Fecha : '~Var('FECHASYS'))
+SetFont(g:2..g:2,1)
+
+ACT(a:FAC, "Resumen de Operaciones Realizadas con Apertura por Producto - "~Dialogo.Especie1)
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(5)
+ACN(w1,FAC)
+
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(a:FAC+1, 'Vehiculo : '~Dialogo.Vehiculo1~'  '~BuscarCampo('Vehiculos','Descripcion','Codigo',Dialogo.Vehiculo1))
+else
+  ACT(a:FAC+1, 'Vehiculo : Todos')
+endif
+if NoVacio(Dialogo.Especie1)
+  ACT(a:FAC+2, 'Especie : '~Dialogo.Especie1~'  '~BuscarCampo('Especies','Nombre','Codigo',Dialogo.Especie1))
+ else
+  ACT(a:FAC+2, 'Especie : Todos')
+endif
+if NoVacio(Dialogo.TipoOp1)
+  ACT(a:FAC+3, 'Tipo Op. : '~Dialogo.TipoOp1~'  '~BuscarCampo('TiposOperacion','Nombre','Codigo',Dialogo.TipoOp1))
+else
+  ACT(a:FAC+3, 'Tipo Op. : Todos')
+endif
+ACT(a:FAC+4, 'Fecha Desde : '~Dialogo.Fecha1)
+ACT(a:FAC+5, 'Fecha Hasta : '~Dialogo.Fecha2)
+SetFont(a:fac..N:FAC+5,2)
+
+SetFilaActual(FAC+7)
+
+acn(aa1,Anio(Dialogo.Fecha1))
+
+* Maxima Fecha de Fin
+SQL.ADD("Select Max(O.FechaEj) Fecha ")
+SQL.ADD(" from "~DBO~".OPERACIONES  O ")
+SQL.ADD("where O.FechaEj >='"~IdxDate(Dialogo.Fecha1)~"'  and ")
+SQL.ADD("      O.FechaOp2 <='"~IdxDate(Dialogo.Fecha2)~"'  and ")
+SQL.ADD("      O.TipoOp Like 'DP%' ")
+
+if NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'")
+endif
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+endif
+if NoVacio(Dialogo.TipoOp1)
+   SQL.ADD(" and  O.TipoOp = '"~Dialogo.TipoOp1~"' ")
+endif
+
+Recorrer SQL
+  dfa
+  acn(aa2,Anio(fbn['Fecha']))
+Proximo
+
+Recorrer&i val(aa1), val(aa2)
+
+   ACT(a:FAC,  Fstr(&i,0,0))
+   Message('Listando año '~val(a:fac))
+ 
+   ACT(b:FAC, 'Tipo')
+   ACT(c:FAC, 'Cantidad')
+   ACT(d:FAC, 'U.Medida')
+   ACT(e:FAC, 'Precio Prom.')
+   ACT(f:FAC, 'Strike Put')
+   ACT(g:FAC, 'Strike Call')
+   ACT(h:FAC, 'Reset Level')
+   ACT(i:FAC, 'Knock Out')
+   ACT(j:FAC, 'Knock In')
+   ACT(k:FAC, 'Observaciones')
+
+   SetFont(a:fac..r:FAC,2)
+   AlinearCeldas(a:fac..a:fac,'C')
+   AlinearCeldas(c:fac..c:fac,'D')
+   AlinearCeldas(e:fac..j:fac,'D')
+   AgregarMarco(a:FAC..k:FAC,2,0,Exe('COLOR'))
+
+   SQL.ADD("Select O.TipoOp, O.UMedida, O.MB1, O.MB4, ")
+   SQL.ADD("O.MB3, CASE TipoOp When 'DPOS'  Then O.FechaOp ")
+   SQL.ADD("                   When 'DPOGS' Then O.FechaOp ")
+   SQL.ADD("                   Else              O.FechaOp2 End FechaOp2, ")
+   SQL.ADD("O.FechaEj, O.FechaEx1, O.FechaPrecan, O.TipoCambio3,")
+   SQL.ADD("O.MB2, O.RB9, Sum(O.Cantidad) Cant, O.PrecioEj Precio, O.TipoCambio2 Precio2,O.PrecioMer ")
+   SQL.ADD(" from "~DBO~".OPERACIONES  O ")
+   SQL.ADD("where O.FechaEj>='"~IdxDate(Dialogo.Fecha1)~"' and ")
+   SQL.ADD(" ((O.TipoOp In ('DPOS','DPOGS') and O.FechaOp<='"~IdxDate(Dialogo.Fecha2)~"' and DATEPART(YEAR,O.FechaEj)>="~Fstr(&i,0,0)~" and DATEPART(YEAR,O.FechaOp)<="~Fstr(&i,0,0)~") ")
+   SQL.ADD("   or (O.FechaOp2<='"~IdxDate(Dialogo.Fecha2)~"' and DATEPART(YEAR,O.FechaEj)>="~Fstr(&i,0,0)~" and DATEPART(YEAR,O.FechaOp2)<="~Fstr(&i,0,0)~" )) ")
+   SQL.ADD(" and  O.TipoOp Like 'DP%' ")
+   SQL.ADD(" and  O.TipoOp Not In ('DPSO','DPSS','DPRS','DPRRS','DPSN','DPDSS','DPDSO','DPS') ")
+   if NoVacio(Dialogo.Vehiculo1)
+      SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'")
+   endif
+   if NoVacio(Dialogo.Especie1)
+      SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+   endif
+   if NoVacio(Dialogo.TipoOp1)
+      SQL.ADD(" and  O.TipoOp = '"~Dialogo.TipoOp1~"' ")
+   endif
+   SQL.ADD("group by O.TipoOp, O.UMedida, O.MB1, O.MB4, O.MB3, CASE TipoOp When 'DPOS' Then O.FechaOp When 'DPOGS' Then O.FechaOp Else O.FechaOp2 End,")
+   SQL.ADD("O.FechaEj, O.FechaEx1, O.FechaPrecan, O.TipoCambio3, O.MB2, O.RB9, O.PrecioEj, O.TipoCambio2,O.PrecioMer  ")
+   SQL.ADD("Union All ")
+   SQL.ADD("Select O.TipoOp, O.UMedida, O.MB1, O.MB4, ")
+   SQL.ADD("O.MB3, O.FechaOp2, O.FechaEj, O.FechaEx1, O.FechaPrecan, O.TipoCambio3,")
+   SQL.ADD("O.MB2, O.RB9, Sum(O.Cantidad) Cant, O.PrecioEj Precio, Sum(O.Cantidad*O.TipoCambio2) Precio2,0 PrecioMer  ")
+   SQL.ADD(" from "~DBO~".OPERACIONES  O ")
+   SQL.ADD("where O.FechaEj>='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaOp2<='"~IdxDate(Dialogo.Fecha2)~"'  ")
+   SQL.ADD(" and  O.TipoOp In ('DPRS','DPRRS') ")
+   SQL.ADD(" and  (DATEPART(YEAR,O.FechaEj)>="~Fstr(&i,0,0)~" and DATEPART(YEAR,O.FechaOp2)<="~Fstr(&i,0,0)~") ")
+   if NoVacio(Dialogo.Vehiculo1)
+      SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'")
+   endif
+   if NoVacio(Dialogo.Especie1)
+      SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+   endif
+   if NoVacio(Dialogo.TipoOp1)
+      SQL.ADD(" and  O.TipoOp = '"~Dialogo.TipoOp1~"' ")
+   endif
+   SQL.ADD("group by O.TipoOp, O.UMedida, O.MB1, O.MB4, O.MB3, O.FechaOp2, O.FechaEj, O.FechaEx1, O.FechaPrecan, O.TipoCambio3, O.MB2, O.RB9, O.PrecioEj ")
+   SQL.ADD("Union All ")
+   SQL.ADD("Select O.TipoOp, O.UMedida, O.MB1, O.MB4, ")
+   SQL.ADD("O.MB3, O.FechaOp2, O.FechaEj, O.FechaEx1, O.FechaPrecan, O.TipoCambio3,")
+   SQL.ADD("O.MB2, O.RB9, Sum(O.Cantidad) Cant, Sum(O.Cantidad*O.PrecioEj) Precio, 0 Precio2,0 PrecioMer  ")
+   SQL.ADD(" from "~DBO~".OPERACIONES  O ")
+   SQL.ADD("where O.FechaEj>='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaOp2<='"~IdxDate(Dialogo.Fecha2)~"' ")
+   SQL.ADD(" and  ((O.TipoOp In ('DPSN','DPDSS') and  (CB8='0' or CB8 IS NULL)) ")
+   SQL.ADD(" or  O.TipoOp In ('DPDSO','DPS')) ")
+   SQL.ADD(" and  (DATEPART(YEAR,O.FechaEj)>="~Fstr(&i,0,0)~" and DATEPART(YEAR,O.FechaOp2)<="~Fstr(&i,0,0)~") ")
+   if NoVacio(Dialogo.Vehiculo1)
+      SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'")
+   endif
+   if NoVacio(Dialogo.Especie1)
+      SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+   endif
+   if NoVacio(Dialogo.TipoOp1)
+      SQL.ADD(" and  O.TipoOp = '"~Dialogo.TipoOp1~"' ")
+   endif
+   SQL.ADD("group by O.TipoOp, O.UMedida, O.MB1, O.MB4, O.MB3, O.FechaOp2, O.FechaEj, O.FechaEx1, O.FechaPrecan, O.TipoCambio3, O.MB2, O.RB9 ")
+   SQL.ADD("Union All ")
+   *- Step Swap
+   SQL.ADD("Select O.TipoOp, O.UMedida, O.MB1, O.MB4, ")
+   SQL.ADD("O.MB3, O.FechaOp2, O.FechaEj, O.FechaEx1, O.FechaPrecan, O.TipoCambio3,")
+   SQL.ADD("O.MB2, O.RB9, Sum(C.Cantidad2) Cant, C.Precio3 Precio, 0 Precio2,0 PrecioMer  ")
+   SQL.ADD(" from "~DBO~".OPERACIONES  O,"~DBO~".CUOTAS C ")
+   SQL.ADD(" where O.NrOperacion=C.NrOperacion ")
+   SQL.ADD(" and O.FechaEj>='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaOp2<='"~IdxDate(Dialogo.Fecha2)~"' ")
+   SQL.ADD(" and O.TipoOp In ('DPSS') ")
+   SQL.ADD(" and (DATEPART(YEAR,O.FechaEj)>="~Fstr(&i,0,0)~" and DATEPART(YEAR,O.FechaOp2)<="~Fstr(&i,0,0)~") ")
+   SQL.ADD(" and DATEPART(YEAR,C.Fecha1)>="~Fstr(&i,0,0)~"  ")
+   if NoVacio(Dialogo.Vehiculo1)
+      SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'")
+   endif
+   if NoVacio(Dialogo.Especie1)
+      SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+   endif
+   if NoVacio(Dialogo.TipoOp1)
+      SQL.ADD(" and  O.TipoOp = '"~Dialogo.TipoOp1~"' ")
+   endif
+   SQL.ADD("group by O.TipoOp, O.UMedida, O.MB1, O.MB4, O.MB3, O.FechaOp2, O.FechaEj, O.FechaEx1, O.FechaPrecan, O.TipoCambio3, O.MB2, O.RB9,C.Precio3 ")
+   SQL.ADD("Union All ")
+   *- Step Option
+   SQL.ADD("Select O.TipoOp, O.UMedida, O.MB1, O.MB4,O.MB3,O.FechaOp2, ")
+   SQL.ADD("O.FechaEj, O.FechaEx1, O.FechaPrecan, O.TipoCambio3,")
+   SQL.ADD("O.MB2, O.RB9, Sum(C.Cantidad2) Cant, C.Precio3 Precio, O.TipoCambio2 Precio2,O.PrecioMer ")
+   SQL.ADD(" from "~DBO~".OPERACIONES  O,"~DBO~".CUOTAS C ")
+   SQL.ADD(" where O.NrOperacion=C.NrOperacion ")
+   SQL.ADD(" and O.FechaEj>='"~IdxDate(Dialogo.Fecha1)~"' and O.FechaOp2<='"~IdxDate(Dialogo.Fecha2)~"' ")
+   SQL.ADD(" and O.TipoOp In ('DPSO') ")
+   SQL.ADD(" and (DATEPART(YEAR,O.FechaEj)>="~Fstr(&i,0,0)~" and DATEPART(YEAR,O.FechaOp2)<="~Fstr(&i,0,0)~") ")
+   SQL.ADD(" and DATEPART(YEAR,C.Fecha1)>="~Fstr(&i,0,0)~"  ")
+   if NoVacio(Dialogo.Vehiculo1)
+      SQL.ADD(" and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'")
+   endif
+   if NoVacio(Dialogo.Especie1)
+      SQL.ADD(" and O.Especie = '"~Dialogo.Especie1~"'")
+   endif
+   if NoVacio(Dialogo.TipoOp1)
+      SQL.ADD(" and  O.TipoOp = '"~Dialogo.TipoOp1~"' ")
+   endif
+   SQL.ADD("group by O.TipoOp, O.UMedida, O.MB1, O.MB4,O.MB3,O.FechaOp2,O.FechaEj,O.FechaEx1, O.FechaPrecan, O.TipoCambio3,O.MB2, O.RB9, C.Precio3,O.TipoCambio2,O.PrecioMer ")
+   SQL.ADD("order by O.TipoOp, O.UMedida, O.MB1, O.MB4, O.MB3, O.FechaOp2, O.FechaEj, O.FechaEx1, O.FechaPrecan, O.TipoCambio3, O.MB2, O.RB9 ")
+
+   Recorrer SQL 
+      Message('Listando Tipos de Operacion '~fbn['TipoOp'])
+      ACT(a:FAC, BuscarCampo('TiposOperacion','Nombre','Codigo',FBN['TipoOp']))
+
+      act(l:fac, "UMedida='"~fbn['UMedida']~"' and FechaEj='"~IdxDate(fbn['FechaEj'])~"' ")
+
+      If Incluido(fbn['TipoOp'],'DPOS|DPOGS')
+         act(l:fac, val(l:fac)~" and FechaOp='"~IdxDate(fbn['FechaOp2'])~"' ")
+      Else 
+         act(l:fac, val(l:fac)~" and FechaOp2='"~IdxDate(fbn['FechaOp2'])~"' ")
+      EndIf
+
+      If NoVacio(FBN['RB9'])
+         act(l:fac,val(l:fac)~" and RB9='"~fbn['RB9']~"' ")
+      EndIf
+      If NoVacio(FBN['MB2'])
+         act(l:fac,val(l:fac)~" and MB2='"~fbn['MB2']~"' ")
+      EndIf
+      If NoVacio(fbn['FechaEx1'])
+         act(m:fac,val(m:fac)~" and FechaEx1='"~IdxDate(fbn['FechaEx1'])~"' ")
+      EndIf
+      If NoVacio(fbn['FechaPrecan'])
+         act(m:fac,val(m:fac)~" and FechaPrecan='"~IdxDate(fbn['FechaPrecan'])~"' ")
+      EndIf
+      If NoVacio(fbn['TipoCambio3'])
+         act(m:fac," and TipoCambio3="~Fstr(fbn['TipoCambio3'],0,2)~" ")
+      EndIf
+      If NoVacio(fbn['Precio']) y Not Incluido(fbn['TipoOp'],'DPSO|DPSS|DPRS|DPRRS|DPSN|DPDSS|DPDSO|DPS|DPRS|DPRRS')
+         act(m:fac," and PrecioEj="~Fstr(fbn['Precio'],0,2)~" ")
+      EndIf
+      if Incluido(FBN['TipoOp'],'DPBOA|DPBOD|DPBOS|DPOA|DPOAV|DPOD|DPOGA|DPOGD|DPOGS|DPOS|DPSO')
+         act(b:fac,iif(fbn['MB3']=0,'Compra','Venta'))
+         act(b:fac,val(b:fac)~'  '~iif(fbn['MB1']=0,'Call','Put'))
+         act(l:fac,val(l:fac)~" and MB1='"~fbn['MB1']~"' and MB3='"~fbn['MB3']~"' ")
+      endif
+      if Incluido(FBN['TipoOp'],'DPBOA|DPBOD|DPBOS')
+         act(b:fac,val(b:fac)~'  '~iif(fbn['MB4']=0,'Up&In',iif(fbn['MB4']=1,'Up&Out',iif(fbn['MB4']=2,'Down&In','Down&Out'))))
+         act(l:fac,val(l:fac)~" and MB4='"~fbn['MB4']~"' ")
+      endif
+      if Incluido(FBN['TipoOp'],'DPC|DPFW')
+         act(b:fac,iif(fbn['MB3']=0,'Compra','Venta'))
+      endif
+      if Incluido(FBN['TipoOp'],'DPDSO|DPRC|DPRRS|DPRS|DPS|DPSS|DPSV|DPDSS')
+         act(b:fac,iif(fbn['MB1']=0,'Consumer','Producer'))
+         act(l:fac,val(l:fac)~" and MB1='"~fbn['MB1']~"' ")
+      endif
+      if Incluido(FBN['TipoOp'],'DPRC|DPRRS|DPRS')
+         act(b:fac,val(b:fac)~'  '~iif(fbn['RB9']=0,'Diaria','Mensual'))
+      endif
+      if Incluido(FBN['TipoOp'],'DPSN')
+         act(b:fac,iif(fbn['MB1']=0,'Consumer','Producer'))
+         act(b:fac,val(b:fac)~'  '~iif(fbn['MB3']=0,'Compra','Venta'))
+         act(l:fac,val(l:fac)~" and MB1='"~fbn['MB1']~"' and MB3='"~fbn['MB3']~"' ")
+      endif
+      if Incluido(FBN['TipoOp'],'DPOGS|DPOGA|DPOGD')
+         act(l:fac,val(l:fac)~" and PrecioMer="~Fstr(fbn['PrecioMer'],0,2)~" " )
+      endif
+
+      acn(c:fac,fbn['Cant'])
+      act(d:fac,fbn['UMedida'])
+
+      if Incluido(FBN['TipoOp'],'DPFW')
+         acn(e:fac,fbn['Precio'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPSN|DPDSS|DPDSO|DPS|')
+         acn(e:fac,fbn['Precio']/fbn['Cant'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPSS')
+         acn(e:fac,fbn['Precio'])
+      endif
+
+      if Incluido(FBN['TipoOp'],'DPRS|DPRRS')
+         acn(e:fac,fbn['Precio2']/fbn['Cant'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPBOA|DPBOD|DPBOS|DPOA|DPOAV|DPOD|DPOGS|DPOGA|DPOGD|DPOS|DPSO')
+         if fbn['MB1'] = 0
+            acn(g:fac,fbn['Precio'])
+         else
+            acn(f:fac,fbn['Precio'])
+         endif
+      endif
+      if Incluido(FBN['TipoOp'],'DPRC')
+         acn(g:fac,fbn['Precio2'])
+         acn(f:fac,fbn['TipoCambio3'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPRRS')
+         acn(h:fac,fbn['Precio'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPRS|DPRC')
+         acn(i:fac,fbn['Precio'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPBOD|DPBOA|DPBOS')
+         if fbn['MB4'] = 0 o fbn['MB4'] = 2
+            acn(j:fac,fbn['Precio2'])
+         else
+            acn(i:fac,fbn['Precio2'])
+         endif
+      endif
+      if Not Incluido(FBN['TipoOp'],'DPBOS')
+         act(k:fac,'F.Inicio: '~fbn['FechaOp2']~'F.Final: '~fbn['FechaEj'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPOGS|DPOS')
+         act(k:fac,'F.Ej: '~fbn['FechaEj'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPC|DPF')
+         act(k:fac,val(k:fac)~'  F.Ejercicio: '~fbn['FechaEx1'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPDSS|DPSN')
+         act(k:fac,val(k:fac)~'  F.Ejercicio: '~fbn['FechaPrecan'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPBOS|DPOGS|DPOS')
+         act(k:fac,'F.Exp.Ej.: '~fbn['FechaEj'])
+      endif
+      if Incluido(FBN['TipoOp'],'DPOGS|DPOGA|DPOGD')
+         act(k:fac,val(k:fac)~' PayOff: '~Fstr(fbn['PrecioMer'],0,2) )
+      endif
+
+* MessageBox(val(l:fac))
+* MessageBox(val(m:fac))
+
+      * l:fac Condicion de Link Auxiliar
+      acl(a:fac,'DER161',Vehiculo1=Dialogo.Vehiculo1,Especie1=Dialogo.Especie1,TipoOp1=Fbn['TipoOp'],Fecha1=Dialogo.Fecha1,Fecha2=Dialogo.Fecha2,Entero1=&i,String1=val(l:fac),String2=val(m:fac))
+
+      SetFont(a:FAC..r:FAC,1)
+      FormatoCeldas(f:fac..g:fac,Exe('F2'))
+      FormatoCeldas(j:fac..i:fac,Exe('F2'))
+   proximo
+   ifa
+   ifa
+Proximo
+
+ACO(1,20)
+ACO(2,20)
+ACO(3,12)
+ACO(4,12)
+ACO(5,12)
+ACO(6,12)
+ACO(7,12)
+ACO(8,8)
+ACO(9,12)
+ACO(10,12)
+ACO(11,30)
+
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(k:FAC)
+*RangoTitulo(a1..k:8,36)
+

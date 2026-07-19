@@ -1,0 +1,120 @@
+﻿CrearDialogo
+   Fecha1    : 'Fecha Vigencia'                         ;1;1;;;;Dialogo.Fecha1>0;'Debe ingresaruna fecha valida';NO;FSYS
+   Lista1    : 'Vehiculo'                               ; ; ;;;;;;;;;IIF(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS Where (Status='HAB' or Status Is Null or Status='')"),SQLSET("Select U.Vehiculo from "~DBO~".USRVEHICULO U,"~DBO~".VEHICULOS V where U.Codigo='"~UsuarioActivo~"' and U.Vehiculo=V.Codigo and (Status='HAB' or Status Is Null or Status='') "))
+   Radio1    : 'Consolidado|NO|SI'                      ; ; ;;;;;;;0;
+   Precio1   : 'Cot.USD/ARP'                            ; ; ;;;;Dialogo.Precio1>0;'La cotizacion del USD contra el peso debe ser mayor a cero';NO;0;
+   Radio2    : 'Plazo|Corto|Largo|Corto+Largo|Variacion'; ; ;;NO;NO;;;;2;
+   Vehiculo1 : 'Grupo'                                  ;;;;NO;NO;;;;;;;;;"TipoVehiculo <> 'DIV'";
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,2)
+
+*-- Encabezado Gral
+SetFilaActual(2)
+ACT(a:FAC, 'Resumen de Operaciones Financieras: '~IIF(Dialogo.Radio2=0, 'Corto Plazo',IIF(Dialogo.Radio2=1,'Largo Plazo',IIF(Dialogo.Radio2=2,'Corto+Largo Plazo','Variacion'))) )
+SetFont(a:FAC..a:FAC, 3)
+IFA
+IFA
+ACT(a:FAC, 'Fecha: '~Dialogo.Fecha1)
+IFA
+ACT(a:FAC, 'Vehiculos: '~IIF(Vacio(Dialogo.Lista1), 'Todos', Dialogo.Lista1))
+IFA
+ACT(a:FAC, 'Consolidado: '~IIF(Dialogo.Radio1=0, 'NO', 'SI'))
+IFA
+ACT(a:FAC, 'Cotizacion: '~Dialogo.Precio1)
+SetFont(a4..a:FAC, 2)
+IFA
+IFA
+
+ACN(fi1, FAC)
+(.'FILASINF1'.)
+
+ACD(fe1, HABILES(Dialogo.Fecha1,-1, VAR('FERIADODEF'),SI))
+
+*- Llamo al informe de Corto+Largo Plazo del dia anterior a la fecha de dialogo
+LinkearHoja('LEERES',1,String1='OPFIAU',Fecha1=Val(fe1),Lista1=Dialogo.Lista1,Radio1=Dialogo.Radio1,Radio2=2,Check1=0, Radio3 = 1)
+
+*- Me fijo si existe informe del dia anterior para ejecutar la variacion
+ACN(ff0, LinkH(1, ga4))
+
+If Val(ff0)=1
+   HojaVisible(NO)
+   CerrarLink(1)
+Else
+   HojaVisible(SI)
+   *- Llamo al informe de Corto+Largo Plazo paara la fecha de dialogo
+   LinkearHoja('OPFIAU',2,Fecha1=Dialogo.Fecha1,Lista1=Dialogo.Lista1,Radio1=Dialogo.Radio1,Precio1=Dialogo.Precio1,Radio2=2,Check1=0,Check2=0, Radio3=1,Vehiculo1=Dialogo.Vehiculo1)
+
+   *- Recorro ambos y voy calculando la variacion
+   *- Calculo para el primer bloque de inversiones, desde Depositos a Plazo hasta Dinero en Transito
+   ACN(ff1, Val(fi2)+11)
+   Recorrer&i Val(fi2), Val(ff1) 
+      Recorrer&j 2, 17
+         ACN(&j:&i, LinkH(2, &j:&i)-LinkH(1, &j:&i) )
+         SetFont(&j:&i, 1)
+      Proximo
+      ACN(e:&i, 0)
+      ACN(f:&i, 0)
+      ACN(j:&i, 0)
+      ACN(k:&i, 0)
+   Proximo
+
+   *- Calculo para el segundo bloque de inversiones: Collateral Operaciones
+   ACN(fi20, LinkH(1, fi11)+LinkH(1, fi18))
+   ACN(fi21, LinkH(2, fi11)+LinkH(2, fi18))
+   ACN(fa20, LinkH(1, fi18))
+   ACN(fa21, LinkH(2, fi18))
+   ACN(fa22, Val(fi18))
+
+   (.'ORDENLIST'.)
+   
+   *- Calculo para el tercer bloque de inversiones: Cartera de titulos
+   ACN(fi20, LinkH(1, fi10)+LinkH(1, fi3))
+   ACN(fi21, LinkH(2, fi10)+LinkH(2, fi3))
+   ACN(fa20, LinkH(1, fi3))
+   ACN(fa21, LinkH(2, fi3))
+   ACN(fa22, Val(fi3))
+
+   (.'ORDENLIST'.)
+
+   *- Calculo para el primer bloque de pasivos: desde Prestamos Terceros Locales hasta WHT a Pagar
+   ACN(ff2, Val(fi6)+9)
+   Recorrer&i Val(fi6), Val(ff2) 
+      Recorrer&j 2, 17
+         ACN(&j:&i, LinkH(2, &j:&i)-LinkH(1, &j:&i) )
+         SetFont(&j:&i, 1)
+      Proximo
+      ACN(e:&i, 0)
+      ACN(f:&i, 0)
+      ACN(j:&i, 0)
+      ACN(k:&i, 0)
+   Proximo
+
+   *- Calculo para el segundo bloque de pasivos: ON's
+   ACN(fi20, LinkH(1, fi12)+LinkH(1, fi7))
+   ACN(fi21, LinkH(2, fi12)+LinkH(2, fi7))
+   ACN(fa20, LinkH(1, fi7))
+   ACN(fa21, LinkH(2, fi7))
+   ACN(fa22, Val(fi7))
+
+   (.'ORDENLIST'.)
+
+
+   CerrarLink(1)
+   CerrarLink(2)
+Endif
+
+RangoTitulo(a1..q:fac, 8)
+LimitesVision(r:FAC+3)
+Impresion(1,2)
+SetPrintFit(3,52)

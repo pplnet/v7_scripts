@@ -1,0 +1,107 @@
+﻿MostrarCuadrodeMensajes
+CrearDialogo
+    Fecha1:          'D.F.Gener.'        ;;;;;;;;;Fsys
+    Fecha2:          'H.F.Gener.'        ;;;;;;;;;Fsys
+FinDialogo
+
+If Not OK
+  Cancelar
+Endif
+
+Message('Chequeando importes de asientos ...')
+
+SQL.ADD(" SELECT A.NrUnicoAsiento, SUM(A1.Cantidad1) Cantidad1, Sum(A1.Cantidad2) Cantidad2, ")
+SQL.ADD(" Sum(A1.Cantidad3) Cantidad3, A1.Especie1, A1.DebitoCredito, A1.NrOperacion, A1.Detalle, A1.CentroCosto, A1.Alias5, A1.Cuenta ")
+SQL.ADD(" FROM "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1  ")
+SQL.ADD(" Where A.NrUnicoAsiento = A1.NrUnicoAsiento ")
+SQL.ADD("   and A.Fecha1 >= "~IdxDate2(Dialogo.Fecha1) )
+SQL.ADD("   and A.Fecha1 <= "~IdxDate2(Dialogo.Fecha2) ) 
+SQL.ADD("   and A1.DebitoCredito = 'DEB' ")
+
+SQL.ADD(" group by A.NrUnicoAsiento, A1.Especie1, A1.DebitoCredito, A1.NrOperacion, A1.Detalle, A1.CentroCosto, A1.Alias5, A1.Cuenta ")
+
+SQL.ADD(" UNION ")
+
+SQL.ADD(" SELECT A.NrUnicoAsiento, SUM(A1.Cantidad1) Cantidad1, Sum(A1.Cantidad2) Cantidad2, ")
+SQL.ADD(" Sum(A1.Cantidad3) Cantidad3, A1.Especie1, A1.DebitoCredito, A1.NrOperacion, A1.Detalle, A1.CentroCosto, A1.Alias5, A1.Cuenta ")
+SQL.ADD(" FROM "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1  ")
+SQL.ADD(" Where A.NrUnicoAsiento = A1.NrUnicoAsiento ")
+SQL.ADD("   and A.Fecha1 >= "~IdxDate2(Dialogo.Fecha1) )
+SQL.ADD("   and A.Fecha1 <= "~IdxDate2(Dialogo.Fecha2) ) 
+SQL.ADD("   and A1.DebitoCredito = 'CRE' ")
+
+SQL.ADD(" group by A.NrUnicoAsiento, A1.Especie1, A1.DebitoCredito, A1.NrOperacion, A1.Detalle, A1.CentroCosto, A1.Alias5, A1.Cuenta ")
+
+SQL.ADD(" order by 1 ")
+
+
+ACT(aa:1,'')
+ACN(ab:1, 0)
+ACN(ac:1, 0)
+
+Recorrer SQL
+   IF Eqstr(fbn('NrUnicoAsiento'),Val(aa:1))
+      dfa
+      ACN(ab:1,1)
+   Else
+      message(fbn('NrUnicoAsiento'))
+      ACN(ab:1,0)
+   ENDIF
+   
+   IF Vacio(fbn('Cuenta'))
+        ACT(kk:11, SQL("Select Codigo from CONTABILIDAD where Moneda = '"~fbn('Especie1')~"' and CuentaAjuste ='SI' "))
+        SQL.ADD(" Update ASIENTOSCON1 set cuenta = '"~val(kk:11)~"' where NrUnicoAsiento = '"~fbn('NrUnicoAsiento')~"' and cuenta = '' ")
+        SQL.NEW
+        SQL.EXEC
+   ENDIF
+
+   ACT(a:fac, fbn('NrUnicoAsiento'))
+   IF Eqstr(fbn('DebitoCredito'),'DEB')
+        ACN(b:fac,  NUM(FSTR(fbn('Cantidad1'),0,8))*(-1))
+        ACN(BA:fac, NUM(FSTR(fbn('Cantidad2'),0,8))*(-1))
+        ACN(BB:fac, NUM(FSTR(fbn('Cantidad3'),0,8))*(-1))
+        ACT(c:fac, fbn('Especie1'))
+   ELSE
+        ACN(d:fac,  NUM(FSTR(fbn('Cantidad1'),0,8)))
+        ACN(DA:fac, NUM(FSTR(fbn('Cantidad2'),0,8)))
+        ACN(DB:fac, NUM(FSTR(fbn('Cantidad3'),0,8)))
+        ACT(e:fac, fbn('Especie1'))
+   ENDIF
+
+   ACN(h:fac, Val(B:fac)+Val(D:fac))
+   ACN(I:fac, Val(BA:fac)+Val(DA:fac))
+   ACN(J:fac, Val(BB:fac)+Val(DB:fac))
+
+   IF Val(ab:1)=1
+      IF NUM(FSTR(Val(h:fac),0,2))<>0 O NUM(FSTR(Val(I:fac),0,2))<>0 O NUM(FSTR(Val(J:fac),0,2))<>0 O NUM(FSTR(Val(K:fac),0,2))<>0
+         message('El asiento '~fbn('NrUnicoAsiento')~' no está  balanceado, se procede a su corrección.')
+         If NUM(FSTR(Val(h:fac),0,2)) > 0 O NUM(FSTR(Val(I:fac),0,2)) > 0 O NUM(FSTR(Val(J:fac),0,2)) > 0 O NUM(FSTR(Val(K:fac),0,2)) > 0
+            ACT(kk:9, 'DEB')
+         ELSE
+            ACT(kk:9, 'CRE')
+            ACN(h:fac,Val(h:fac)*(-1))
+            ACN(i:fac,Val(i:fac)*(-1))
+            ACN(j:fac,Val(j:fac)*(-1))
+         ENDIF
+         
+         ACT(kk:10, SQL("Select Codigo from CONTABILIDAD where Moneda = '"~fbn('Especie1')~"' and CuentaAjuste ='SI' "))
+         
+         SQL.ADD(" Insert into ASIENTOSCON1 (NrUnicoAsiento, Cuenta, DebitoCredito,  Especie1, Cantidad1, Cantidad2, Cantidad3, NrOperacion, ")
+         SQL.ADD("                          Detalle, CentroCosto, Alias5, NrItem) values ('"~fbn('NrUnicoAsiento')~"', '"~val(kk:10)~"',     ")
+         SQL.ADD("                          '"~val(kk:9)~"', '"~fbn('Especie1')~"', '"~val(h:fac)~"', '"~val(i:fac)~"', '"~val(j:fac)~"',    ")                                                                      
+         SQL.ADD("                          '"~fbn('NrOperacion')~"', '"~fbn('Detalle')~"', '"~fbn('CentroCosto')~"', '"~fbn('Alias5')~"', 1)")                                                 
+         
+         SQL.NEW
+         SQL.EXEC
+      ENDIF
+   ENDIF
+   ACN(i:fac, fbn('Cantidad3'))
+   ACT(aa:1, fbn('NrUnicoAsiento'))
+   ACN(ac:1, 1)
+Proximo
+
+If fac = 0
+    Messagebox('No hay asientos para balancear')
+EndIf
+
+

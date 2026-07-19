@@ -1,0 +1,300 @@
+﻿MostrarcuadrodeMensajes
+CrearDialogo
+   Fecha1   : 'FechaValor'  ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;Habiles(FSys,-0,'ARG',SI)
+   Fecha2   : 'FechaConf'   ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar la Fecha de Confirmacion';NO;FSys
+   Cliente1 : 'Contraparte' ;;;;;;
+   Cuenta1  : 'Cuenta'      ;;;;;;[NoVacio(Dialogo.Cliente1) y NoVacio(Dialogo.Cuenta1) y EqStr(BuscarCampo('CUENTAS','Cliente','Codigo',Dialogo.Cuenta1),Dialogo.Cliente1)] o [Vacio(Dialogo.Cliente1)] o [Vacio(Dialogo.Cuenta1)];'La cuenta no pertenece al cliente';NO;
+   Especie1 : 'Moneda'      ;;;;;;;;;;
+   Vehiculo1: 'Vehiculo'    ;;;;;;NoVacio(Dialogo.Vehiculo1);'Ingrese un vehiculo';NO;VAR('VEHICULODE');
+   Mercado1 : 'Mercado'     ;;;;;;NoVacio(Dialogo.Mercado1);'Debe ingresar un Mercado';NO;VAR('MERNETEODE');;;;;" NETEA='SI' "
+   NrTrans1 : 'Voucher'     ;;;;;;;;;;;
+   Check1   : 'Batch'       ;1;;;NO;NO;;;;0;
+FinDialogo
+
+IF NOT OK
+   Cancelar
+Endif
+
+ACN(z1, 0)
+
+* LA CUENTA ES CUENTA2 DE TR CUANDO MERCADO1 <> 'AC' Y ES CUENTA1 CUANDO MERCADO1='AC'
+* que tambien tome de la inst de fallas
+* que tambien tome las fallas
+Message('Generando datos de confirmacion')
+
+SQL.ADD(" SELECT DISTINCT T.Cuenta2, T.Cuenta1, T.NrTrans, T.Fecha1, T.Fecha2, T.Cliente1, T.Especie,           ")
+SQL.ADD(" T.Cantidad1, T.RB6, T.TipoTr2, T.Ley4 Rueda                                                           ")
+SQL.ADD(" FROM "~DBO~".TRANSACCIONES2 T INNER JOIN "~DBO~".OPERACIONESBITS B ON T.NrTrans = B.NrOperacion       ")
+SQL.ADD(" INNER JOIN "~DBO~".ESPECIES E ON T.Especie = E.Codigo     ")
+SQL.ADD(" INNER JOIN "~DBO~".MERCADOS M2 ON T.Mercado1 = M2.Codigo  ")
+SQL.ADD(" WHERE  E.Tipo    = 'MON'                           ")
+SQL.ADD(" AND    B.Valor   = '1'                             ")
+SQL.ADD(" AND    B.NrBit in (3,6,8)                          ")
+SQL.ADD(" AND    T.TipoTr2 in ('DEP','RET')                  ")
+SQL.ADD(" AND    T.Mercado1 = '"~Dialogo.Mercado1~"'         ") 
+SQL.ADD(" AND   (T.RB6 IN (0, -1, 2) OR T.RB6 IS NULL) ")
+SQL.ADD(" AND   T.Fecha1 <= '"~IdxDate(Dialogo.Fecha1)~"'    ")
+SQL.ADD(" AND ((M2.Netea='SI') OR (M2.Netea='NO' AND T.Ley4 IN ("~Pipe2Comillas(VAR('RUECPC1'))~"))) ")
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD("AND T.Cliente1 = '"~Dialogo.Cliente1~"'          ")
+Endif
+If NoVacio(Dialogo.Cuenta1)
+   SQL.ADD("AND (T.Cuenta1 = '"~Dialogo.Cuenta1~"' or T.Cuenta2 = '"~Dialogo.Cuenta1~"')")
+Endif
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("AND T.Especie = '"~Dialogo.Especie1~"'           ")
+Endif
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("AND T.Vehiculo1 = '"~Dialogo.Vehiculo1~"'        ")
+Endif
+If NoVacio(Dialogo.NrTrans1)
+   SQL.ADD("AND T.NrTrans = '"~Dialogo.NrTrans1~"'          ")
+Endif
+
+SQL.ADD(" ORDER BY T.Cuenta2, T.Cuenta1                      ")
+watch(SQL.BATCH())
+Recorrer SQL
+   If Novacio(fbn('Cuenta2'))
+      ACT(a:fac, fbn('Cuenta2'))
+   Else
+      ACT(a:fac, fbn('Cuenta1'))
+   Endif
+   ACT(b:fac, fbn('NrTrans'))
+   ACD(c:fac, fbn('Fecha1'))
+   ACD(d:fac, fbn('Fecha2'))
+   ACT(e:fac, fbn('Cliente1'))
+   ACT(f:fac, fbn('Especie'))
+   ACN(g:fac, fbn('Cantidad1'))
+   ACN(u:fac, fbn('RB6'))
+   ACT(v:fac, fbn('TipoTr2'))
+   ACT(y:fac,FBN['Rueda'])
+   If fbn('RB6')=1
+      ACT(t:fac,'Confirmada')
+   Else
+      If fbn('RB6')=2
+         ACT(t:fac,'Falla')
+      Else
+         ACT(t:fac,'Pendiente')
+      Endif
+   Endif
+   ACN(w:fac, 0)
+   IF Eqstr(fbn('TipoTr2'), 'RET')
+      if Incluido(val(y:fac),VAR('RUECPC1'))
+         ACT(SG:fac, 'Pago')
+      else
+         ACT(SG:fac, 'Cobro')
+      endif   
+   ELSE
+   if Incluido(val(y:fac),VAR('RUECPC1'))
+         ACT(SG:fac, 'Cobro')
+      else
+         ACT(SG:fac, 'Pago')
+      endif   
+   ENDIF
+   If Dialogo.Check1=1
+      acn(w:fac,1)
+   Endif
+   SCN(z1, 1)
+Proximo
+
+IF Dialogo.Check1=0
+    If Val(z1)=0
+       Cancelar('No se encontraron Movimientos para Confirmar')
+    Endif
+
+    CrearListBox ; 'Arial,8,';'Movimientos a Confirmar'
+          'Procesa'      ; w1..w:fac;SI;SI; ;80 ;CHECK;RGB(220,220,193)
+          'Accion'       ; x1..x:fac;SI;[Val(w:flb)=0 o Val(x:flb)=0 o Val(x:flb)=2] o [Val(x:flb)=1 y Val(c:flb)<Dialogo.Fecha2]; 'No se pueden Fallar Vouchers del Dia';80 ;COMBO;'Confirma|Falla|Pendiente';RGB(220,220,193)
+          'Estado'       ; t1..t:fac;NO;SI; ;80 ;STRING;;RGB(180,180,193)
+          ''             ;SG:1..SG:FAC;NO;;;50;STRING;;RGB(180,180,193)
+          'Cuenta'       ; a1..a:fac;NO;SI; ;100;STRING;;RGB(180,180,193)
+          'Nr. Trans'    ; b1..b:fac;NO;SI; ;100;STRING;;RGB(180,180,193)
+          'F.Ingreso'    ; c1..c:fac;NO;SI; ;80 ;FECHA;RGB(180,180,193)
+          'F.Cobro'      ; d1..d:fac;NO;SI; ;80 ;FECHA;RGB(180,180,193)
+          'Cliente'      ; e1..e:fac;NO;SI; ;100;STRING;;RGB(180,180,193)
+          'Especie'      ; f1..f:fac;NO;SI; ;100;STRING;;RGB(180,180,193)
+          'Cantidad'     ; g1..g:fac;NO;SI; ;80 ;NUMERO;'##,###,###.####';RGB(180,180,193)
+    FinListBox
+
+    IF Not Ok
+       Cancelar
+    ENDIF
+Else
+    If Val(z1)=0
+       Cancelar
+    Endif
+Endif
+    
+Message('Procesando datos')
+Recorrer&j 1,fac
+   IF Val(w:&j)=1 
+      *- Paso a instancia Terminal o Fallas o la dejo donde estaba
+      *- Modifico la transaccion
+      Message(val(b:&j))
+      IF Val(x:&j)=0
+         *- Cofirma
+         *** busco las operaciones y desafecto los limites, siempre tomo los pagos ***
+         SQL.ADD("Select NrOperacion from "~DBO~".MOVEJECUTADOS ")
+         SQL.ADD(" where NrTrans2     = '"~val(b:&j)~"' ")
+         SQL.ADD("   and NrOperacion <> '"~val(b:&j)~"'")
+         SQL.ADD("   and Cantidad     < 0 ")
+         SQL.ADD(" order by NrOperacion ")
+
+         Recorrer SQL
+           Message('1-Actualiza '~fbn['NrOperacion'])
+           dfa
+           SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+           SQL.ADD("  SET RB10        = '1',  ")
+           SQL.ADD("      FechaPrecan = '"~IdxDate(Dialogo.Fecha1)~"' ")  
+           SQL.ADD("Where NrOperacion = '"~fbn['NrOperacion']~"' ")
+           SQL.ADD("  and TipoOp     In ('TIC','TIV','TIFC','TIFV','TICO','TIPO','TCOPRI') ")
+           SQL.NEW
+           SQL.EXEC
+ 
+           Message('2-Recalcula datos '~fbn['NrOperacion'])
+           ModificarOperacion(fbn['NrOperacion'],0,NO,NO,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,0)
+           Message('3-fin recalculo '~fbn['NrOperacion'])
+         Proximo
+         Message('Actualizacion limites')
+         ****if Val(u:&j)=2
+            *** si viene de una falla se dan vuelta los movimientos de limites ****
+            SQL.ADD("Insert Into "~DBO~".MOVLIMITES ")
+            SQL.ADD(" (FechaMov, Cliente, Limite, Especie, FechaLim, Monto, NrOperacion,  ")
+            SQL.ADD("  Descripcion, Bits, Vehiculo ) ") 
+            SQL.ADD(" Select M.FechaMov, M.Cliente, M.Limite, M.Especie, ")
+            SQL.ADD("        M.FechaLim, (M.Monto*(-1)), M.NrOperacion,  ")
+            SQL.ADD("        'Desafectacion Falla', M.Bits, M.Vehiculo ")
+            SQL.ADD("   from "~DBO~".MOVLIMITES M ")
+            SQL.ADD("Where NrOperacion = '"~val(b:&j)~"' ")
+            SQL.NEW
+         ****endif
+
+         * --- FO 28/04/2006 ----------------------------------------------------- *
+         * --- Borra los Movs generados por la falla para desafectar el saldo de liq
+         Message('Actualizacion falla')
+         SQL.ADD(" DELETE FROM "~DBO~".MOVEJECUTADOS ")
+         SQL.ADD(" WHERE NrOperacion = '"~Val(b:&j)~"' AND Transaccion = 'Falla' ")
+         SQL.NEW
+         * ----------------------------------------------------------------------- *
+
+         Message('Actualizacion instancias '~val(b:&j))
+         SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS SET Valor = 1 WHERE NrOperacion = '"~val(b:&j)~"' and NrBit=70 ")
+         SQL.NEW
+         SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS SET Valor = 0 WHERE NrOperacion = '"~val(b:&j)~"' and NrBit in (3,6,8) ")
+         SQL.NEW
+         SQL.ADD("UPDATE "~DBO~".TRANSACCIONES2 SET RB6 = 1, ")
+         SQL.ADD("                               Fecha5 = '"~IdxDate(Dialogo.Fecha2)~"', ")
+         * Agrego esto ara saber la fecha de confirmacion en el sistema para poder contabilizar el dia que se confirma
+         SQL.ADD("                               FechaConfir = '"~IdxDate(fsys)~"' ")
+         SQL.ADD(" WHERE NrTrans = '"~val(b:&j)~"' ")
+         SQL.NEW
+         SQL.EXEC    
+      Else 
+        IF Val(x:&j)=1
+           *- Falla
+*XXX           IF NO
+           *** busco las operaciones y afecto los limites que seran del voucher ***
+           Message('Afectacion limites')
+           SQL.ADD("Select NrOperacion from "~DBO~".MOVEJECUTADOS ")
+           SQL.ADD(" where NrTrans2     = '"~val(b:&j)~"' ")
+           SQL.ADD("   and NrOperacion <> '"~val(b:&j)~"'")
+           SQL.ADD("   and Cantidad     < 0 ")
+           SQL.ADD(" order by NrOperacion ")
+ 
+           Recorrer SQL
+             dfa
+             Message('Afectando limites '~val(b:&j))
+             SQL.ADD("Insert Into "~DBO~".MOVLIMITES ")
+             SQL.ADD(" (FechaMov, Cliente, Limite, Especie, FechaLim, Monto, NrOperacion,  ")
+             SQL.ADD("  Descripcion, Bits, Vehiculo ) ") 
+             SQL.ADD(" Select M.FechaMov, M.Cliente, M.Limite, M.Especie, ")
+             SQL.ADD("        '"~IdxDate(Dialogo.Fecha2)~"', M.Monto, '"~val(b:&j)~"',  ")
+             SQL.ADD("        'Afectacion Falla', M.Bits, M.Vehiculo ")
+             SQL.ADD("   from "~DBO~".MOVLIMITES M ")
+             SQL.ADD("Where NrOperacion = '"~fbn['NrOperacion']~"' ")
+             SQL.ADD("  and FechaLim is not Null ")
+             SQL.NEW
+             SQL.EXEC
+           Proximo
+*XXX           ENDIF
+
+           * --- FO 27/04/2006 - Agrego Mov al voucher para que desafecten el Saldo --- *
+           Message('Afectando movimientos de fallas '~Val(b:&j))
+           SQL.ADD("INSERT INTO "~DBO~".MOVEJECUTADOS ")
+           SQL.ADD("(NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+           SQL.ADD("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+           SQL.ADD("Leyenda, Bits, NrGrupo, Concepto, NrGrupo2, ")
+           SQL.ADD("NrMov, NrLiq, Status, NrInstan, FechaEje, ")
+           SQL.ADD("UsuarioEje, Cuenta, Transaccion, Cantidad, Cupon")
+           SQL.ADD(") ")
+           SQL.ADD("select ")
+           SQL.ADD("NrOperacion, FechaMov, Cliente, Especie, CallPut, ")
+           SQL.ADD("FechaEj, PrecioEj, EnteCustodia, NrSaldo, Mercado, ")
+           SQL.ADD("'"~'Falla AC'~Val(b:&j)~"', Bits, NrGrupo, Concepto, NrGrupo2, ")
+           SQL.ADD("NrMov, NrLiq, Status, -1, '"~IdxDate(FSys)~"', ")
+           SQL.ADD("'"~UsuarioActivo~"', Cuenta, 'Falla', -Cantidad, Cupon")
+           SQL.ADD("from "~DBO~".MOVEJECUTADOS ")
+           SQL.ADD("where NrOperacion = '"~Val(b:&j)~"' ")
+           SQL.NEW  
+           * -------------------------------------------------------------------------- *
+
+           Message('Actualizacion instancias de fallas '~val(b:&j))
+           SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS SET Valor = 1 WHERE NrOperacion = '"~val(b:&j)~"' and NrBit=8 ")
+           SQL.NEW
+           SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS SET Valor = 0 WHERE NrOperacion = '"~val(b:&j)~"' and NrBit in (3,6) ")
+           SQL.NEW
+           SQL.ADD("UPDATE "~DBO~".TRANSACCIONES2 SET RB6      = 2, ")
+           SQL.ADD("                               FechaTransp = '"~IdxDate(Dialogo.Fecha2)~"', ")
+           SQL.ADD("                               FechaFalla  = '"~IdxDate(FSYS)~"' ")
+           SQL.ADD(" WHERE NrTrans = '"~val(b:&j)~"' ")
+           SQL.NEW
+           SQL.EXEC    
+        Else
+           *- Si vuelve a pendiente de una falla ***
+           if Val(u:&j)=2
+*XXX              IF NO
+              *** si viene de una falla se dan vuelta los movimientos de limites ****
+              Message('Re afectando limites '~val(b:&j))
+              SQL.ADD("Insert Into "~DBO~".MOVLIMITES ")
+              SQL.ADD(" (FechaMov, Cliente, Limite, Especie, FechaLim, Monto, NrOperacion,  ")
+              SQL.ADD("  Descripcion, Bits, Vehiculo ) ") 
+              SQL.ADD(" Select M.FechaMov, M.Cliente, M.Limite, M.Especie, ")
+              SQL.ADD("        M.FechaLim, (M.Monto*(-1)), M.NrOperacion,  ")
+              SQL.ADD("        'Desafectacion Falla', M.Bits, M.Vehiculo ")
+              SQL.ADD("   from "~DBO~".MOVLIMITES M ")
+              SQL.ADD("Where NrOperacion = '"~val(b:&j)~"' ")
+              SQL.NEW
+*XXX              ENDIF
+
+              * --- FO 28/04/2006 ----------------------------------------------------- *
+              * --- Borra los Movs generados por la falla para desafectar el saldo de liq
+              Message('Actualizando movimientos por fallas '~val(b:&j))
+              SQL.ADD(" DELETE FROM "~DBO~".MOVEJECUTADOS ")
+              SQL.ADD(" WHERE NrOperacion = '"~Val(b:&j)~"' AND Transaccion = 'Falla' ")
+              SQL.NEW
+              * ----------------------------------------------------------------------- *
+
+              Message('Actualizando movimientos por fallas '~val(b:&j))
+              if EqStr(Val(v:&j),'DEP')
+                 SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS SET Valor = 1 WHERE NrOperacion = '"~val(b:&j)~"' and NrBit=3 ")
+                else
+                 SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS SET Valor = 1 WHERE NrOperacion = '"~val(b:&j)~"' and NrBit=6 ")
+              endif
+              SQL.NEW
+              SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS SET Valor = 0 WHERE NrOperacion = '"~val(b:&j)~"' and NrBit=8 ")
+              SQL.NEW
+              SQL.ADD("UPDATE "~DBO~".TRANSACCIONES2 SET RB6 = 0, FechaFalla = Null WHERE NrTrans = '"~val(b:&j)~"' ")
+              SQL.NEW
+              SQL.EXEC    
+           endif
+        Endif
+      EndIf
+   EndIf
+Proximo
+
+IF Dialogo.Check1=1
+   Message('Fin del Matcheo.')
+else
+   Messagebox('Fin del Matcheo.')
+Endif
+   

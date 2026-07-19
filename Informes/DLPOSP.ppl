@@ -1,0 +1,143 @@
+﻿CrearDialogo
+  Cliente1 : 'Cliente'
+  Fecha1   : 'Fecha';;;;;;;;;FSys
+  Vehiculo1 : 'Vehiculo';;;;;;;;;;;iif(Vacio(UsrVehiculos(UsuarioActivo)),SQLSET("Select Codigo from "~DBO~".VEHICULOS"),SQLSET("Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"' "))
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+if Not Vacio(Dialogo.Vehiculo1)
+   If Not Incluido(Dialogo.Vehiculo1, UsrVehiculos(UsuarioActivo)) y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+  else
+   If [SQL("Select Count(*) from "~DBO~".VEHICULOS ") <> SQL("Select Count(*) from "~DBO~".USRVEHICULO where Codigo = '"~UsuarioActivo~"' ")] y Not Vacio(UsrVehiculos(UsuarioActivo))
+      Cancelar('El Operador no esta habilitado para operar con el Vehiculo ')
+   endif
+endif
+
+ACT(a3, 'Detalle Limites Pasivos por contraparte')
+ACT(a4, 'Cliente : '~Dialogo.Cliente1)
+ACT(a5, 'Fecha : '~Dialogo.Fecha1)
+
+if NoVacio(Dialogo.Vehiculo1)
+  ACT(a6, 'Vehiculo: '~Dialogo.Vehiculo1)
+  ACT(z10, Descendientes('Vehiculos', Dialogo.Vehiculo1))
+  if NoVacio(Val(z10))
+    ACT(z11, "'"~Dialogo.Vehiculo1~"',"~Pipe2Comillas(Val(z10)))
+  else
+    ACT(z11, "'"~Dialogo.Vehiculo1~"'")
+  endif
+else
+  ACT(a6, 'Vehiculo: Todos')
+endif
+
+ACT(a8, 'Instrumento')
+ACT(b8, 'Valor(000s)')
+ACT(c8, '% Total')
+ACT(d8, '% ARP')
+ACT(e8, '% M.E.')
+AlinearCeldas(b8..e8, 'D')
+ACT(a9, 'Prestamos Locales')
+ACT(a10, 'Prestamos Off-shore')
+ACT(a11, 'Prestamos Trade')
+ACT(a12, 'Oblig. Negociab.')
+ACT(a13, 'FRN/P.Sindicados')
+ACT(a14, 'Total')
+
+
+AgregarMarco(a8..e8,1,0,Exe("COLOR"))
+AgregarMarco(a14..e14,1,0,Exe("COLOR"))
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+
+SetFont(a1..z8, 1)
+
+SetFilaActual(8)
+
+If Not EqStr(Dialogo.Cliente1,'MERCADO')
+   SQL.ADD("Select NrOperacion, Cliente1, Especie, Cantidad, TipoOp, Vehiculo1 from "~DBO~".OPERACIONES ")
+   SQL.ADD(" where FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' and (TipoOp in ('MMFRNP','MMPCL','MMPCLM','MMPLME','MMPCOS','MMPE','MMPEM','MMPI','MMPIM','MMPOSM','MMPSI','MMFIMV','MMSIMV')")
+   SQL.ADD(" and FechaVto > '"~IdxDate(Dialogo.Fecha1)~"')")
+   SQL.ADD(" and Cliente1='"~Dialogo.Cliente1~"'")
+Else 
+   SQL.ADD("Select NrOperacion, 'MERCADO' As Cliente1, Especie, Cantidad, TipoOp, Vehiculo1 from "~DBO~".OPERACIONES ")
+   SQL.ADD(" where FechaOp<='"~IdxDate(Dialogo.Fecha1)~"' and (TipoOp in ('MMON','MMONM')")
+   SQL.ADD(" and FechaVto > '"~IdxDate(Dialogo.Fecha1)~"')")
+EndIf
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("and Vehiculo1 in ("~Val(z11)~")")
+Endif
+SQL.ADD("order by TipoOp")
+
+Recorrer SQL
+  dfa
+  if Incluido(fbn('TipoOp'),'MMPIM|MMPEM|MMPOSM|MMPCLM|MMSIMV|MMFIMV|MMONM')
+    ACN(z4, SQL("Select Cantidad2 from "~DBO~".CUOTAS where NrOperacion='"~fbn('NrOperacion')~"' and Fecha1<= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha2>'"~IdxDate(Dialogo.Fecha1)~"'"))
+  else
+    ACN(z4, fbn('Cantidad'))
+  endif
+  if Incluido(fbn('Especie'), 'USD|USB') 
+    ACN(z3, Val(z4)/1000)
+    ACN(y1, 1)
+  else
+    ACN(z3, Val(z4)*CotizacionC(fbn('Especie'),,,,FSys,1,SI,'USD')/1000)
+    if Incluido(fbn('Especie'),'ARP')
+      ACN(y1, 0)
+    else
+      ACN(y1, 1)
+    endif
+  endif
+  if Incluido(fbn('TipoOp'), 'MMPCL|MMPCLM|MMPLME')
+    ACN(y2, 9)
+  endif
+  if Incluido(fbn('TipoOp'), 'MMPCOS|MMPOSM')
+    ACN(y2, 10)
+  endif
+  if Incluido(fbn('TipoOp'), 'MMPE|MMPEM|MMPI|MMPIM')
+    ACN(y2, 11)
+  endif
+  if Incluido(fbn('TipoOp'), 'MMON|MMONM')
+    ACN(y2, 12)
+  endif
+  if Incluido(fbn('TipoOp'), 'MMFRNP|MMFIMV|MMPSI|MMSIMV')
+    ACN(y2, 13)
+  endif
+  SCN(b:Val(y2), Val(z3))
+  SCN(15+Val(y1):Val(y2), Val(z3))
+proximo
+
+ACN(b14, sum(b9..b13))
+ACN(o14, sum(o9..o13))
+ACN(p14, sum(p9..p13))
+
+ACO(1, 17)
+ACO(2, 10)
+ACO(3, 10)
+ACO(4, 10)
+ACO(5, 10)
+ACO(6, 10)
+ACO(7, 10)
+ACO(8, 10)
+AgregarMarco(a8..a14,1)
+AgregarMarco(b8..b14,1)
+AgregarMarco(c8..e14,1)
+AgregarMarco(d8..d8,1)
+*AgregarMarco(a:fac+1..e:fac+1,1,0,Exe('COLOR'))
+
+
+recorrer&i 9, 14
+  ACN(c:&i, Val(b:&i)/Val(b14)*100)
+  ACN(d:&i, Val(o:&i)/Val(b:&i)*100)
+  ACN(e:&i, Val(p:&i)/Val(b:&i)*100)
+proximo
+
+
+SetFont(a9..a14, 1)
+SetFont(b9..z13, 2)
+SetFont(a14..z14, 1)
+LimitesVision(f:15)
+Impresion(1,1)

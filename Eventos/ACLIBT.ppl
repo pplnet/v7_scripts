@@ -1,0 +1,39 @@
+﻿require 'IntegracionBIND.dll'
+import ServCuenta, 'IntegracionBIND.ServiciosBT'
+let &ServicioCuenta new ServCuenta(GetDataBase())
+
+CrearDialogo
+String1       : 'AliasBt';;;;;;;;;;;;;'999999999'
+FinDialogo
+
+IF NOT OK
+   Cancelar
+Endif
+
+if NOT SQL("Select Count(*) from dbo.CLIENTES where Aliasbt ='" ~Dialogo.String1~ "'") = 0
+    MessageBox('El Cliente ya fue dado de alta')
+endif   
+
+let &Cliente &ServicioCuenta.GetCliente(""~Dialogo.String1~"")
+ACT(aa:4, &Cliente.GetPerfilConsumo)
+ACT(aa:3, &Cliente.GetSectorFinanciero)
+* Jerarquia
+if EqStr(COPY(VAL(aa:3),1,1),'0')
+    ACT(aa:5,SQL("select valor from dbo.ConfigValExternos where codigoproceso='ALTCBT' and atributo='JERARQUIA'and len(valorsistemaexterno)=1 and substring(valorsistemaexterno,1,1)='"~Val(aa:4)~"'" ))
+else
+    ACT(aa:5,SQL("select valor from dbo.ConfigValExternos where codigoproceso='ALTCBT' and atributo='JERARQUIA'and substring(valorsistemaexterno,1,1)='"~Val(aa:4)~"' and (len(Valorsistemaexterno)<> 3 or (len(Valorsistemaexterno)=3 and substring(valorsistemaexterno,3,1)='"~Val(aa:3)~"'))"))
+endif
+if not EqStr(VAL(aa:5),'')
+    ACT(aa:6,SQL("select jerarquia from dbo.clientes where codigo='"~Val(aa:5)~"'" ))
+    ACT(aa:7,"'"~GenerarJerarquiaByRef('CLIENTES',Val(aa:6) ,1)~ "',")
+else
+    SQL("Insert into DBO.LOGINFORMES values('"~USUARIOACTIVO~"',GETDATE(),'EVE','ALTCBT','Archivo: " ~VAL(bb:1)~ " Cliente: " ~VAL(cc:1)~ " Jerarquia: " ~Val(aa:4)~"."~Val(aa:3)~"')")
+    ACT(aa:7,"'" ~GenerarJerarquiaByRef('CLIENTES','003000000000000' ,1)~ "'")
+endif
+
+
+
+&ServicioCuenta.ConsultaIntegrantesCuentaYProductos(""~Dialogo.String1~"",""~Val(aa:7)~"")
+MessageBox('El evento ha finalizado')
+
+

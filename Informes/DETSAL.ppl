@@ -1,0 +1,171 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1:    'Fecha'     ;1;1;;;;;;;FSYS;
+  Especie1:  'Moneda'    ;1;2;;;;Vacio(Dialogo.Especie1) o Eqstr(BuscarCampo('ESPECIES','Tipo','Codigo',Dialogo.Especie1),'MON');'Moneda Invalida';NO;;;;;;" Tipo = 'MON' "
+  Vehiculo1: 'Vehiculo'  ;2;1;;;;NOVACIO(Dialogo.Vehiculo1) y [Incluido(Dialogo.Vehiculo1, UsrVehiculos(USUARIOACTIVO)) o Vacio(UsrVehiculos(UsuarioActivo))] ;'Vehiculo Invalido';NO;BuscarCampo('USRVEHICULO','Vehiculo','Codigo',USUARIOACTIVO);;;;;iif(NoVacio(UsrVehiculos(UsuarioActivo)), " Codigo in (Select Vehiculo From "~DBO~".USRVEHICULO Where Codigo = '"~UsuarioActivo~"') ");
+* Lista1:    'Cuentas'   ;5;1;1;;;;;;;;SQLSet(" Select Codigo From "~DBO~".CUENTAS  WHERE Cliente = '"~Dialogo.Vehiculo1~"' "~IIF(NoVacio(Dialogo.Cliente1)," AND Comitente = '"~Dialogo.Cliente1~"' "));
+  Cuenta1:   'Cuenta'    ;2;2;;;;
+FinDialogo
+
+If Not Ok
+  Cancelar
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+CrearFont(4,"Arial,8,BI")
+
+ACT(f:fac+2, 'Detalle de Saldos al '~Dialogo.Fecha1)
+
+*ACT(a:fac+3, 'Fecha: '~Dialogo.Fecha1)
+If NoVacio(Dialogo.Especie1)
+  ACT(a:fac+4, 'Moneda: '~Dialogo.Especie1)
+Else
+  ACT(a:fac+4, 'Moneda: Todas')
+EndIf
+ACT(a:fac+5, 'Vehiculo: '~Dialogo.Vehiculo1)
+ACT(a:fac+6, 'Cuenta: '~Dialogo.Cuenta1)
+
+SetFont(a:fac+1..z:fac+6,2)
+SetFont(f:fac+2,3)
+SetFilaActual(8)
+
+ACT(a:fac, 'Operacion')
+ACT(b:fac, 'Fecha')
+ACT(c:fac, 'TipoOp')
+ACT(d:fac, 'Concepto')
+ACT(e:fac, 'Especie')
+ACT(e:fac+1, 'Cuenta')
+ACT(f:fac, 'Esp. Op.')
+ACT(g:fac, 'Cont. Esp.')
+ACT(h:fac, 'Cantidad')
+ACT(i:fac, 'PrecioOp')
+ACT(j:fac, 'Monto')
+ACT(k:fac, 'Mon. Fuerte')
+ACT(l:fac, 'Mon. Grupo')
+ACT(m:fac, 'Mon. Local')
+
+SQL.ADD(" SELECT Alias4 FROM VEHICULOS WHERE Codigo = '"~Dialogo.Vehiculo1~"' ")
+Recorrer SQL
+  ACT(m:fac, '('~FBN('Alias4')~')' )
+Proximo
+
+ACT(k:fac, '('~Var('MONEFUERTE')~')' )
+ACT(l:fac, '('~Var('MONEGRUPO')~')' )
+
+AlinearCeldas(A:fac-1..M:fac, 'C')
+SetFont(A:fac-1..Z:fac,2)
+AgregarMarco(A:fac-1..M:fac,0,0,EXE('COLOR6'))
+
+SQL.ADD(" SELECT M.NrOperacion, M.EnteCustodia, M.FechaMov, M.Especie AS EspMov, M.Leyenda, M.Cantidad, M.Cliente, M.NrSaldo, M.Cuenta, M.NrTrans2, ")
+SQL.ADD(" O.Especie, O.TipoOp, O.ContraEspecie, O.Precio1, O.TotalBrutoCli1, O.TotalNetoCli1, ")
+*SQL.ADD(" CASE WHEN O.ContraEspecie = '' THEN O.Especie ELSE O.ContraEspecie END AS Moneda, ")
+SQL.ADD(" CASE WHEN E.Tipo = 'MON' THEN O.Especie ELSE O.ContraEspecie END AS Moneda, ")
+SQL.ADD(" V.Alias4 ")
+SQL.ADD(" FROM OPERACIONES O, VEHICULOS V , MOVEJECUTADOS M ")
+SQL.ADD(" , ESPECIES E ")
+*, ESPECIES E2 ")
+SQL.ADD(" WHERE O.Vehiculo1 = V.Codigo ")
+
+SQL.ADD(" AND O.Especie = E.Codigo ")
+*SQL.ADD(" AND O.ContraEspecie = E2.Codigo ")
+
+SQL.ADD(" AND O.NrOperacion = M.NrOperacion ")
+SQL.ADD(" AND M.Cliente <> '"~Dialogo.Vehiculo1~"' ")
+If NoVacio(Dialogo.Especie1)
+  SQL.ADD(" AND   M.Especie  = '"~Dialogo.Especie1~"' ")
+EndIf
+SQL.ADD(" AND   M.NrSaldo  = 1 ")
+SQL.ADD(" AND   M.Cuenta = '"~Dialogo.Cuenta1~"' ")
+SQL.ADD(" AND   M.FechaMov <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND   M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ") 
+SQL.ADD(" ORDER BY M.FechaMov ")
+
+Recorrer SQL
+
+  ACD(fv:1, fbn('FechaMov'))
+
+  ACT(a:fac, fbn('NrOperacion'))
+  ACLO(a:fac, fbn('NrOperacion'))
+  ACD(b:fac, fbn('FechaMov'))
+  ACT(c:fac, fbn('TipoOp'))
+  ACT(d:fac, fbn('Leyenda'))
+  ACT(e:fac, fbn('EspMov'))
+  ACT(f:fac, fbn('Especie'))
+  ACT(g:fac, fbn('ContraEspecie'))
+  ACN(h:fac, fbn('Cantidad') * -1)
+  SCN(xx:1, val(h:fac))
+  ACN(i:fac, fbn('Precio1'))
+  If Eqstr(Copy(fbn('TipoOp'),1,2),'SE') Y NOT DesciendeDeEspecie(fbn('EspMov'),'MONEDA')
+     ACN(j:fac, fbn('TotalBrutoCli1'))
+  Else
+     If Eqstr(Copy(fbn('TipoOp'),1,2),'FC') Y NOT DesciendeDeEspecie(fbn('EspMov'),'MONEDA')
+        ACN(j:fac, fbn('TotalNetoCli1'))
+     Else
+        ACN(j:fac, val(h:fac))
+     Endif
+  EndIf
+
+  If Incluido(fbn('TipoOp'), Var('OPEACT'))
+    ACN(k:fac, val(j:fac) * #COTMONFUEC)
+    SCN(xx:2, val(k:fac))
+    ACN(l:fac, val(j:fac) * #COTMONGRUC)
+    SCN(xx:3, val(l:fac))
+    ACN(m:fac, val(j:fac) * #COTMONLOCC)
+    SCN(xx:4, val(m:fac))
+  Else
+    If Incluido(fbn('TipoOp'), Var('OPEVIN'))
+      ACN(k:fac, val(j:fac) * #COTMONFUEP)
+      SCN(xx:2, val(k:fac))
+      ACN(l:fac, val(j:fac) * #COTMONGRUP)
+      SCN(xx:3, val(l:fac))
+      ACN(m:fac, val(j:fac) * #COTMONLOCP)
+      SCN(xx:4, val(m:fac))
+    Else
+      ACN(k:fac, val(j:fac) * #COTMONFUEV)
+      SCN(xx:2, val(k:fac))
+      ACN(l:fac, val(j:fac) * #COTMONGRUV)
+      SCN(xx:3, val(l:fac))
+      ACN(m:fac, val(j:fac) * #COTMONLOCV)
+      SCN(xx:4, val(m:fac))
+    EndIf
+  EndIf
+
+  AlinearCeldas(B:FAC..C:fac,'C')
+  AlinearCeldas(E:FAC..G:fac,'C')
+  SetFont(A:fac..Z:fac,1)
+  FormatoCeldas(H:fac..M:fac,EXE('F2'))
+  FormatoCeldas(I:fac..I:fac,EXE('F8'))
+
+Proximo
+
+*ACT(A:fac+1, 'Total'))
+ACN(H:fac+1, val(xx:1))
+ACN(K:fac+1, val(xx:2))
+ACN(L:fac+1, val(xx:3))
+ACN(M:fac+1, val(xx:4))
+
+SetFont(a:fac+1..M:fac+1,2)
+FormatoCeldas(a:fac+1..M:fac+1,EXE('F2'))
+AgregarMarco(A:fac+1..M:fac+1,0,0,EXE('COLOR6'))
+
+ACT(a:fac+3, 'Fin del Informe.')
+SetFont(a:fac+3, 2)
+
+ACO(1,7)
+ACO(2,7)
+ACO(3,7)
+ACO(4,26)
+ACO(5,7)
+ACO(6,7)
+ACO(7,7)
+ACO(8,10)
+ACO(9,8)
+ACO(10,9)
+ACO(11,9)
+ACO(12,9)
+ACO(13,9)
+
+LimitesVision(M:fac+3)
+SetPrintFit(3, 61)
