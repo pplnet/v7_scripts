@@ -1,0 +1,635 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:       'Fecha'       ; 1;;;;;;;;fsys
+  Vehiculo1:   'Vehiculo'     ;2;;;NO;;;;;Var('VEHICON')
+  ListaTabla1: 'Operaciones'  ;1;2;;;;;;;;;;;;;'NrOperacion'; 'NrOperacion;Cliente1;FechaOp;Especie;FechaVto'; 'OPERACIONES' 
+  Check1:      'Contab.Procesada' ;;;;NO;NO;
+  Radio1:       'Tipo|Sec|Fx Spot|Fx Fut|MM|Todos'   ; 4;1;;NO;NO;;;;4;
+FinDialogo
+
+If Not Ok
+   Raise('Evento Cancelado')
+Endif
+
+IF Dialogo.Radio1 = 0 O Dialogo.Radio1 = 4
+    Message('--- Asientos Corte de Cupon ---')
+    ACT(ML:1, Var('MONELOCA'))
+    ACT(ME:1, Var('MONEEXTR'))
+    ACN(NA:1, Var('ASINUM'))
+    ACT(VC:1, Dialogo.Vehiculo1)
+    ACD(FE:1, Habiles(Dialogo.Fecha1,-Var('FVALORCONT'),'ARG'))
+    IF Eqstr(Var('INSTALACIO'),'MLASA')
+        ACT(TA:1, Var('TIPASICACU'))
+        Message('--- Cambio de Cupon ---')
+        SQL.ADD(" Select T.NrTrans, T.Especie, T.Vehiculo1, T.Cupon1, T.Fecha1, T.Precio2 PorRenta, T.Precio1+T.Precio3 PorAmort, T.Fecha3, ")
+        SQL.ADD(" T.Especie4 Moneda, T.TipoTr2, 'TIC' TipoOp, T.Cambio2 VT ")
+        SQL.ADD(" From "~DBO~".TRANSACCIONES2 T ")
+        SQL.ADD(" Where T.TipoTr2 = 'ACUPON' ")
+        ***---SQL.ADD(" AND MA.TipoAsiento IN ("~Pipe2Comillas(Var('TIPASICACU'))~") ")
+        SQL.ADD(" AND T.FechaCargaSys = '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD(" AND T.Fecha1 >= '"~IdxDate(Val(FE:1))~"' ")
+        IF NoVacio(Dialogo.ListaTabla1)
+           SQL.ADD(" AND T.NrTrans IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+        ENDIF
+        SQL.ADD(" ORDER BY T.NrTrans ")
+        watch(SQL.batch)
+        Recorrer SQL
+            ACD(FV:1, fbn('Fecha3'))
+            ACD(FD:1, Dialogo.Fecha1)
+            ACT(VH:1, fbn('Vehiculo1'))
+            *ACT(TA:1, fbn('CodAsi'))
+            ACT(TI:1, fbn('TipoTr2'))
+            ACN(RT:1, fbn('PorRenta'))
+            ACN(AM:1, fbn('PorAmort'))
+            ACT(NR:1, '')
+            ACT(NR:2, fbn('NrTrans'))
+            ACT(ES:1,fbn('Especie')) 
+            (.'CONT6AUX'.)
+        Proximo
+        Message('--- Revaluo Diario Cambio de Cupon---')
+        ACT(TA:1, Var('TIPASIREVC'))
+        ***---Recupero Asientos ACUPON para revaluarlos
+        SQL.ADD(" Select Distinct A1.Cantidad2 Cantidad, A.NrTrans2, A.NrUnicoAsiento, A1.Alias3 Cliente, T.Especie,T.NrTrans, ")
+        SQL.ADD(" T.Vehiculo1, MA.Codigo CodAsi,T.Especie4 Moneda, T.Cupon1, 'TIC' TipoOp, 'Revaluo ACUPON - ' Leyenda ")
+        SQL.ADD(" From "~DBO~".ASIENTOSCON A ")
+        SQL.ADD("       INNER JOIN "~DBO~".ASIENTOSCON1 A1 ON A.NrUnicoAsiento = A1.NrUnicoAsiento ") 
+        SQL.ADD("       INNER JOIN "~DBO~".TRANSACCIONES2 T ON T.NrTrans = A.NrTrans2  ") 
+        SQL.ADD("       INNER JOIN "~DBO~".MODELOSASIENTO MA ON T.TipoTr2 = MA.TipoTr2 ") 
+        SQL.ADD(" Where T.TipoTr2 = 'ACUPON' ")
+        SQL.ADD(" AND T.Especie4 <> '"~Val(ML:1)~"' ")
+        SQL.ADD(" AND A.FechaValor >= '"~IdxDate(Habiles(Dialogo.Fecha1, -VAR('DIASLIQ'), 'ARG'))~"' ")
+        SQL.ADD(" AND A.FechaValor < '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD(" AND MA.TipoAsiento = '"~Val(TA:1)~"' ")
+        SQL.ADD(" AND A1.Cantidad2 > 0 ")
+        SQL.ADD(" AND '"~IdxDate(Dialogo.Fecha1)~"' >= '"~IdxDate(Val(FE:1))~"' ")
+        IF NoVacio(Dialogo.ListaTabla1)
+           SQL.ADD(" AND T.NrTrans IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+        ENDIF
+        SQL.ADD(" AND '|'+RTrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+        SQL.ADD(" AND MA.Habilitado = 'SI' ")
+        SQL.ADD(" ORDER BY T.NrTrans ")
+        watch(SQL.batch)
+        Recorrer SQL
+            ACD(FV:1, Dialogo.Fecha1)
+            ACD(FD:1, Dialogo.Fecha1)
+            ACT(VH:1, fbn('Vehiculo1'))
+            ACT(TA:1, fbn('CodAsi'))
+            ACT(TO:1, fbn('CodAsi'))
+            ACT(TI:1, '')
+            ACT(NR:1, '')  
+            ACT(NR:2, fbn('NrTrans'))  
+            ACN(CK:1, 0)
+            IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+                ACN(CK:1, 1)
+                IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrTrans2 = '"~fbn('NrTrans')~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~fbn('Vehiculo1')~"' "))
+                    ACN(CK:1, 0)
+                 ENDIF
+            ENDIF
+            IF Val(CK:1) = 0
+                Message(fbn('NrTrans')~'  - Modelo: '~fbn('CodAsi'))
+                SQL.GenerarAsientoOp(fbn('CodAsi'),'','','',Val(NA:1),Val(FV:1),fbn('Vehiculo1'),,,,,,fbn('TipoOp'),,fbn('NrTrans'),,,,,fsys,Dialogo.Fecha1)
+                SQL.EXEC
+            ENDIF
+        Proximo
+    ENDIF
+    ACT(TA:1, Var('TIPASICORT'))
+    ACN(BD:1,0)
+    Message('--- Corte de Cupon ---')
+    SQL.ADD(" Select T.NrTrans, T.Especie4 Moneda, T.Vehiculo1, T.Cupon1, T.Fecha1, T.Precio2 PorRenta, T.Precio1+T.Precio3 PorAmort, ")
+    SQL.ADD(" CASE WHEN M.NrSaldo = "~Var('BLOQMAE')~" THEN 'GTIAMAE' WHEN M.NrSaldo = "~Var('BLOQGROFEX')~" THEN 'GTIAROFEX' ELSE 'CARTERA' END Saldo, ")
+    SQL.ADD(" M.Cantidad, MA.Codigo CodAsi, T.Cambio2 VT, M.Cliente, C.Jerarquia,T.Especie Especie, 'TIC' TipoOp, C.CategDepositante, ")
+    SQL.ADD(" T.Especie4 ContraEspecie, T.Especie2 EspecieCupon, E.MonedaEmision, E.Tipo TipoEspecie, T.Book1, M.NrSaldo, E.Issuer, M.Cliente Cliente1, ")
+    SQL.ADD(" E.Fecha FMaduracion, T.Fecha1 FCorte, M.Cuenta CuentaCustodia, '' Concepto ")
+    SQL.ADD(" From "~DBO~".TRANSACCIONES2 T ")
+    SQL.ADD("       INNER JOIN "~DBO~".MOVEJECUTADOS M ON  T.NrTrans = M.NrOperacion and T.Especie2 = M.Especie") 
+    SQL.ADD("       INNER JOIN "~DBO~".MODELOSASIENTO MA ON T.TipoTr2 = MA.TipoTr2  ") 
+    SQL.ADD("       INNER JOIN "~DBO~".CLIENTES C ON C.Codigo  = M.Cliente ")
+    SQL.ADD("       INNER JOIN dbo.ESPECIES E ON E.Codigo  = T.Especie ")
+    SQL.ADD(" Where T.TipoTr2 = 'CUPON' ")
+    SQL.ADD(" AND MA.TipoAsiento = '"~Val(TA:1)~"' ")
+    SQL.ADD(" AND T.FechaCargaSys = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND T.Fecha1 >= '"~IdxDate(Val(FE:1))~"' ")
+    IF NoVacio(Dialogo.ListaTabla1)
+       SQL.ADD(" AND T.NrTrans IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+    ENDIF
+    SQL.ADD(" AND '|'+RTrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+    SQL.ADD(" AND MA.Habilitado = 'SI' ")
+    SQL.ADD(" ORDER BY T.NrTrans ")
+    watch(SQL.batch)
+    ACT(NT:1,'')
+    Recorrer SQL
+        ACT(SL:1,fbn('Saldo'))
+        ACN(BD:1,1)
+        
+        If vacio(val(NT:1)) 
+            ACT(NT:1,fbn('NrTrans')) 
+            ACD(FV:1, fbn('Fecha1'))
+            ACD(FD:1, Dialogo.Fecha1)
+            ACT(VH:1, fbn('Vehiculo1'))
+            ACT(NR:1, '')
+            ACT(NR:2, fbn('NrTrans'))
+            ACT(TO:1, fbn('CodAsi'))
+            ACT(TI:1, '')  
+            ACT(CL:1,fbn('Cliente'))
+            ACT(CA:1,fbn('CodAsi'))
+            ACT(CE:1, fbn('ContraEspecie'))
+            ACT(ME:1,fbn('MonedaEmision'))
+            ACT(TE:1,fbn('TipoEspecie'))  
+            ACT(EP:1,fbn('Especie'))          
+            ACT(IS:1,fbn('Issuer'))
+            ACT(MN:99, fbn('Moneda'))
+            ACT(BK:1,fbn('Book1'))
+            ACT(CU:1,fbn('CuentaCustodia'))
+            ACT(CO:1,fbn('Concepto'))
+            let &fechaMaduracion fbn('FMaduracion')
+            let &fechaCorte fbn('FCorte')
+            *****Conta Dollar Link
+            If NOT #ESDLLINK
+                let &monedaCobro fbn('ContraEspecie')
+                let &monedaPago fbn('Especie4')
+            ELSE
+                let &monedaCobro VAR('MONELOCA')
+            ENDIF
+
+        EndIf
+        
+        If Not EqStr(fbn('NrTrans'),val(NT:1))
+            ***Antes de cambiar de Transaccion genero contabilidad 
+            
+            **Calculo de Renta para CP
+            ACN(RC:2, val(RC:1) * Val(RT:1) / 100)
+            **Calculo de Amortizacion para CP
+            ACN(AC:2, Val(AC:1) * Val(AM:1) / 100)
+            
+            **Calculo de Renta para 3ros no bloqueados
+            ACN(R3:2, val(R3:1) * Val(RT:1) / 100)
+            **Calculo de Amortizacion para 3ros no bloqueados
+            ACN(A3:2, val(A3:1) * Val(AM:1) / 100) 
+
+            **Calculo de Renta para 3ros bloqueados
+            ACN(RT:2, val(RB:1) * Val(RT:1) / 100)
+            **Calculo de Amortizacion para 3ros bloqueados
+            ACN(AT:2, Val(AB:1) * Val(AM:1) / 100)
+            
+            ACN(CK:1, 0)
+            IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+               ACN(CK:1, 1)
+               IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrTrans2 = '"~val(NT:1)~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~Val(VH:1)~"' "))
+                   ACN(CK:1, 0)
+               ENDIF
+            ENDIF
+            ACT(MN:99, fbn('Moneda'))
+            let &codAsi fbn('CodAsi')
+            ****Dollar Link
+            let &nrTrans val(NR:2)
+            let &TCContable #TCCONTABLE
+            let &tcDllink &TCContable
+            ****Estos totales van sin Comisiones
+            let &totalCP #AMORTIZACIONCP+#RENTACP
+            let &total3ros #AMORTIZACION3R+#RENTA3R
+            let &tipoEspecie val(TE:1)
+            (.'ACTCUPON'.)
+            IF Val(CK:1) = 0
+               If No Vacio(VAL(NR:1))
+                 Message(val(NR:1)~' - Modelo: '~val(TO:1))
+               Else
+                 Message(val(NR:2)~' - Modelo: '~val(TO:1))
+               EndIf
+               **Este bloque es para los fbn de las formulas del modelo
+               SQL.ADD("Select '"~val(VH:1)~"' as Vehiculo1, '"~val(CL:1)~"' as Cliente, '"~val(SL:1)~"' as NrSaldo, '"~val(CE:1)~"' as ContraEspecie, ")
+               SQL.ADD("'"~val(ME:1)~"' as MonedaEmision, '"~val(TE:1)~"' as TipoEspecie, '"~val(EP:1)~"' as Especie, '"~val(IS:1)~"' as Issuer, ")
+               SQL.ADD("'"~val(CL:1)~"' as Cliente1, '"~val(BK:1)~"' as Book1,'TIC' as TipoOp, '"~val(CU:1)~"' as CuentaCustodia,'"~val(CO:1)~"' as Concepto ")
+               Recorrer SQL               
+                    SQL.GenerarAsientoOp(&codAsi, val(NR:1),'','',Val(NA:1),Val(FV:1),Val(VH:1),,,,,,val(TI:1),,val(NR:2),,,,,fsys,Dialogo.Fecha1)              
+                    SQL.EXEC
+               Proximo
+               
+            ENDIF  
+            
+            ACT(NT:1,fbn('NrTrans'))
+            ACD(FV:1, fbn('Fecha1'))
+            ACD(FD:1, Dialogo.Fecha1)
+            ACT(VH:1, fbn('Vehiculo1'))
+            ACT(NR:1, '')
+            ACT(NR:2, fbn('NrTrans'))
+            ACT(TO:1, fbn('CodAsi'))
+            ACT(CL:1,fbn('Cliente'))
+            ACT(CA:1,fbn('CodAsi'))
+            ACT(CE:1, fbn('ContraEspecie'))
+            ACT(ME:1,fbn('MonedaEmision')) 
+            ACT(TE:1,fbn('TipoEspecie')) 
+            ACT(EP:1,fbn('Especie'))
+            ACT(IS:1,fbn('Issuer'))
+            ACT(BK:1,fbn('Book1'))
+            ACT(CU:1,fbn('CuentaCustodia'))
+            ACT(CO:1,fbn('Concepto'))
+            let &fechaMaduracion fbn('FMaduracion')
+            let &fechaCorte fbn('FCorte')
+            *****Conta Dollar Link
+            If NOT #ESDLLINK
+                let &monedaCobro fbn('ContraEspecie')
+                let &monedaPago fbn('Especie4')
+            ELSE
+                let &monedaCobro VAR('MONELOCA')
+            ENDIF
+            ACT(TI:1, '')            
+            ACN(RC:1,0)
+            ACN(RC:2,0)
+            ACN(RB:1,0)
+            ACN(AC:1,0)
+            ACN(AC:2,0)
+            ACN(AB:1,0)
+            ACN(R3:1,0)
+            ACN(R3:2,0)
+            ACN(A3:1,0)
+            ACN(A3:2,0)            
+        EndIf
+        ACN(SL:1,fbn('NrSaldo'))
+        ACN(RT:1, fbn('PorRenta'))
+        ACN(AM:1, fbn('PorAmort'))
+        If #ESCP
+            **Carter Propia
+            ACN(RC:1, fbn('Cantidad')+val(RC:1))
+            ACN(AC:1, fbn('Cantidad')+val(AC:1))
+        Else
+            If #TERSALDONOBLOQ
+                **Saldo No Bloqueado
+                ACN(R3:1, fbn('Cantidad')+val(R3:1))
+                ACN(A3:1, fbn('Cantidad')+val(A3:1))                
+            EndIf
+            If #ESSALDOBLOQUE
+                **Saldo Bloqueado
+                ACN(RB:1, fbn('Cantidad')+val(RB:1))
+                ACN(AB:1, fbn('Cantidad')+val(AB:1))  
+            EndIf
+        EndIf
+         
+    Proximo
+    
+    If val(BD:1)=1
+        **Si el ultimo registro fue CP o Tercero no bloqueado tengo que generar la conta por el acumulado
+        SQL.ADD("Select '"~val(VH:1)~"' as Vehiculo1, '"~val(CL:1)~"' as Cliente, '"~val(SL:1)~"' as NrSaldo, '"~val(CE:1)~"' as ContraEspecie, ")
+        SQL.ADD("'"~val(ME:1)~"' as MonedaEmision, '"~val(TE:1)~"' as TipoEspecie, '"~val(EP:1)~"' as Especie, '"~val(IS:1)~"' as Issuer, ")
+        SQL.ADD("'"~val(CL:1)~"' as Cliente1, '"~val(BK:1)~"' as Book1,'TIC' as TipoOp, '"~val(CU:1)~"' as CuentaCustodia,'"~val(CO:1)~"' as Concepto ")
+        Recorrer SQL
+            ***---Calculo de Renta para CP
+            ACN(RC:2, val(RC:1) * Val(RT:1) / 100)
+            ***---Calculo de Amortizacion para CP
+            ACN(AC:2, Val(AC:1) * Val(AM:1) / 100)
+            
+            ***---Calculo de Renta para 3ros no bloqueados
+            ACN(R3:2, val(R3:1) * Val(RT:1) / 100)
+            ***---Calculo de Amortizacion para 3ros no bloqueados
+            ACN(A3:2, val(A3:1) * Val(AM:1) / 100) 
+
+            **Calculo de Renta para 3ros no bloqueados
+            ACN(RT:2, val(RB:1) * Val(RT:1) / 100)
+            ***---Calculo de Amortizacion para 3ros bloqueados
+            ACN(AM:2, Val(AB:1) * Val(AM:1) / 100)
+            
+            ACN(CK:1, 0)
+            ****Dollar Link
+            let &nrTrans val(NR:2)
+            let &TCContable #TCCONTABLE
+            let &tcDllink &TCContable
+            ****Estos totales van sin Comisiones
+            let &totalCP #AMORTIZACIONCP+#RENTACP
+            let &total3ros #AMORTIZACION3R+#RENTA3R
+            let &tipoEspecie val(TE:1)
+            (.'ACTCUPON'.)
+            IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+               ACN(CK:1, 1)
+               IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrTrans2 = '"~val(NT:1)~"' AND Modelo = '"~val(CA:1)~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~Val(VH:1)~"' "))
+                   ACN(CK:1, 0)
+               ENDIF
+            ENDIF
+            let &codAsi val(CA:1)
+            IF Val(CK:1) = 0
+               If No Vacio(VAL(NR:1))
+                 Message(val(NR:1)~' - Modelo: '~val(TO:1))
+               Else
+                 Message(val(NR:2)~' - Modelo: '~val(TO:1))
+               EndIf
+               SQL.GenerarAsientoOp(&codAsi, val(NR:1),'','',Val(NA:1),Val(FV:1),Val(VH:1),,,,,,val(TI:1),,val(NR:2),,,,,fsys,Dialogo.Fecha1)              
+               SQL.EXEC
+            ENDIF           
+        Proximo
+    EndIf
+    ACT(TA:1, Var('TIPASIPACU'))
+    Message('--- Cobro de Cupon ---')
+    ACN(BD:1,0)
+    **RENTA, AMORITZACION y COMISION
+    *3/5/2022 - Tenemos los movimientos discriminados por concepto asi que levantamos directo el importe de ahi
+    ***---Los mov de moneda no están discriminados por concepto, o sea que no sabemos cuánto corresponde a renta y cuanto a amortizacion, entonces levantamos los VN para calcular los montos de renta y amortizacion que se cobran
+    ***---Pero levantamos los mov de moneda para obtener la cuenta bancaria donde se liquidan y en NrGrupo2 del mov de moneda tenemos los nominales que corresponden a cada mov de moneda.
+    SQL.ADD(" Select T.NrTrans, E.Alias9 Especie, T.Vehiculo1, T.Cupon1, T.Fecha1, M.NrSaldo, ")
+    **3/5/2022 , T.Precio2 PorRenta, T.Precio1+T.Precio3 PorAmort, M.NrSaldo, ")
+    SQL.ADD(" MA.Codigo CodAsi, T.Especie4 Moneda,M.Cliente, C.Jerarquia, ")
+    SQL.ADD(" 'TIC' TipoOp, C.CategDepositante,T.Cuenta1 Cuenta,T.Especie4 as ContraEspecie, ")
+    SQL.ADD(" M.Cantidad Cantidad, M.Cuenta Cuenta1, E.MonedaEmision, M.NrGrupo, E.Issuer, M.Cliente Cliente1, Cuenta1 Cuenta2, M.Mercado, T.PrecioEj Cotizacion, '' Book1,  ")
+    SQL.ADD(" T.Cantidad12, T.Cantidad13 ")
+    *SQL.ADD(" T.Cantidad10 ComisionBco, T.Cantidad11 IvaComisionBco, T.Cantidad12 DerechosMerBco, T.Cantidad13 IvaDerechosMerBco, T.Cantidad14 DerechosMerCli, T.Cantidad15 IvaDerechosMerCli, E.MonedaEmision ")
+    *M.Cantidad,
+    SQL.ADD(" From "~DBO~".TRANSACCIONES2 T ")
+    SQL.ADD("       INNER JOIN "~DBO~".MODELOSASIENTO MA ON T.TipoTr2 = MA.TipoTr2 ") 
+    SQL.ADD("       INNER JOIN "~DBO~".MOVEJECUTADOS M ON T.NrTrans = M.NrOperacion and M.Especie = T.Especie4 ") 
+    SQL.ADD("       INNER JOIN "~DBO~".CLIENTES C ON M.Cliente = C.Codigo ") 
+    SQL.ADD("       INNER JOIN "~DBO~".ESPECIES E ON T.Especie = E.Codigo ") 
+    *SQL.ADD("       INNER JOIN "~DBO~".MOVEJECUTADOS MM ON MM.NrOperacion = M.NrOperacion and MM.Especie = T.Especie4 ") 
+    SQL.ADD(" Where T.TipoTr2 = 'LCUPON' ")
+    SQL.ADD(" AND MA.TipoAsiento = '"~Val(TA:1)~"' ")
+    SQL.ADD(" AND T.FechaCargaSys = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND T.Fecha1 >= '"~IdxDate(Val(FE:1))~"' ")
+    *12/12/2022 Pasamos a levantar CP y 3ros
+    *SQL.ADD(" AND M.Cliente <> T.Vehiculo1 ")
+    *3/5/2022 Tenemos que levantar todos los movimientos haciendo misma logica que en corte
+    *OLD - Pasamos a levantar Movimientos de NrGrupo 2 que son los de renta porque se hizo apertura entre rentra y amort y si no duplicamos registros
+    *OLD - SQL.ADD(" AND M.NrGrupo = 2 ")
+    *SQL.ADD(" AND MM.NrGrupo = 1 ")
+    **issue 6770 - se está duplicando los importes porque ahora se generan duplicados con saldo 1 y 81.
+    SQL.ADD(" AND M.NrSaldo = 1 ")
+    IF NoVacio(Dialogo.ListaTabla1)
+       SQL.ADD(" AND T.NrTrans IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+    ENDIF
+    SQL.ADD(" AND '|'+RTrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+    SQL.ADD(" AND MA.Habilitado = 'SI' ")
+
+    SQL.ADD(" UNION ALL ")
+
+    SQL.ADD(" Select T.NrTrans, E.Alias9 Especie, T.Vehiculo1, T.Cupon1, T.Fecha1, M.NrSaldo, ")
+    **3/5/2022 T.Precio2 PorRenta, T.Precio1+T.Precio3 PorAmort, M.NrSaldo, ")
+    SQL.ADD(" MA.Codigo CodAsi, T.Especie4 Moneda, M.Cliente, C.Jerarquia,  ")
+    SQL.ADD(" 'TIC' TipoOp,T.Cuenta1 Cuenta,C.CategDepositante,T.Especie4 as ContraEspecie, ")
+    SQL.ADD(" M.Cantidad Cantidad, M.Cuenta Cuenta1, E.MonedaEmision, M.NrGrupo, E.Issuer, M.Cliente Cliente1, Cuenta1 Cuenta2, M.Mercado, T.PrecioEj Cotizacion, '' Book1, ")
+    SQL.ADD(" T.Cantidad12, T.Cantidad13 ")
+    *SQL.ADD(" T.Cantidad10 ComisionBco, T.Cantidad11 IvaComisionBco, T.Cantidad12 DerechosMerBco, T.Cantidad13 IvaDerechosMerBco, T.Cantidad14 DerechosMerCli, T.Cantidad15 IvaDerechosMerCli, E.MonedaEmision ")    
+    **M.Cantidad, 
+    SQL.ADD(" From "~DBO~".TRANSACCIONES2 T ")
+    SQL.ADD("       INNER JOIN "~DBO~".MODELOSASIENTO MA ON T.TipoTr2 = MA.TipoTr2 ") 
+    SQL.ADD("       INNER JOIN "~DBO~".MOVPENDIENTES M ON T.NrTrans = M.NrOperacion and M.Especie = T.Especie4 ") 
+    SQL.ADD("       INNER JOIN "~DBO~".CLIENTES C ON M.Cliente = C.Codigo ") 
+    SQL.ADD("       INNER JOIN "~DBO~".ESPECIES E ON T.Especie = E.Codigo ") 
+    *SQL.ADD("       INNER JOIN "~DBO~".MOVPENDIENTES MM ON MM.NrOperacion = M.NrOperacion and MM.Especie = T.Especie4 ") 
+    SQL.ADD(" Where T.TipoTr2 = 'LCUPON' ")
+    SQL.ADD(" AND MA.TipoAsiento = '"~Val(TA:1)~"' ")
+    SQL.ADD(" AND T.FechaCargaSys = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND T.Fecha1 >= '"~IdxDate(Val(FE:1))~"' ")
+    *12/12/2022 Pasamos a levantar CP y 3ros 
+    *SQL.ADD(" AND M.Cliente <> T.Vehiculo1 ")
+    *3/5/2022 Tenemos que levantar todos los movimientos haciendo misma logica que en corte
+    *OLD-Pasamos a levantar Movimientos de NrGrupo 2 que son los de renta porque se hizo apertura entre rentra y amort y si no duplicamos registroas    
+    *OLD-SQL.ADD(" AND M.NrGrupo = 2 ")
+    *SQL.ADD(" AND MM.NrGrupo = 1 ")
+    **issue 6770 - se está duplicando los importes porque ahora se generan duplicados con saldo 1 y 81.
+    SQL.ADD(" AND M.NrSaldo = 1 ")
+    IF NoVacio(Dialogo.ListaTabla1)
+       SQL.ADD(" AND T.NrTrans IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+    ENDIF
+    SQL.ADD(" AND '|'+RTrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+    SQL.ADD(" AND MA.Habilitado = 'SI' ")
+    *3/5/2022 - Como pasamos a levantar todos los movimientos, las comisiones pasan al asiento principal y se levantan desde Movimientos
+    *SQL.ADD(" UNION ")
+    ***COMISIONES
+    ****Se genera un asiento por la suma de las comisiones por eso no tenemos un cliente determinado
+    *SQL.ADD(" Select T.NrTrans, T.Especie, T.Vehiculo1, T.Cupon1, T.Fecha1, T.Precio2 PorRenta, T.Precio1+T.Precio3 PorAmort, 0, ")
+    *SQL.ADD(" MA.Codigo CodAsi, T.Especie4 Moneda, '' as Cliente, '' as Jerarquia,  ")
+    *SQL.ADD(" 'TIC' TipoOp,T.Cuenta1 Cuenta,'',T.Especie4 as ContraEspecie, 0 Cantidad,'' Cuenta1,  ")
+    *SQL.ADD(" IsNull(T.Cantidad10,0) ComisionBco, IsNull(T.Cantidad11,0) IvaComisionBco, IsNull(T.Cantidad12,0) DerechosMerBco, ")
+    *SQl.ADD(" IsNull(T.Cantidad13,0) IvaDerechosMerBco, IsNull(T.Cantidad14,0) DerechosMerCli, IsNull(T.Cantidad15,0) IvaDerechosMerCli, E.MonedaEmision ")    
+    *SQL.ADD(" From "~DBO~".TRANSACCIONES2 T ")
+    *SQL.ADD("       INNER JOIN "~DBO~".MODELOSASIENTO MA ON T.TipoTr2 = MA.TipoTr2 ") 
+    *SQL.ADD("       INNER JOIN "~DBO~".ESPECIES E ON T.Especie = E.Codigo ") 
+    *SQL.ADD(" Where T.TipoTr2 = 'LCUPON' ")
+    *SQL.ADD(" AND MA.TipoAsiento = 'COMCUP' ")
+    *SQL.ADD(" AND T.FechaCargaSys = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    *SQL.ADD(" AND T.Fecha1 >= '"~IdxDate(Val(FE:1))~"' ")
+    *SQL.ADD(" AND (T.Cantidad10 > 0 OR T.Cantidad12 > 0 OR T.Cantidad14 > 0) ")
+    *IF NoVacio(Dialogo.ListaTabla1)
+    *   SQL.ADD(" AND T.NrTrans IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+    *ENDIF
+    *SQL.ADD(" AND '|'+RTrim(MA.Vehiculo)+'|' like '%|"~VAL(VC:1)~"|%' ")
+    *SQL.ADD(" AND MA.Habilitado = 'SI' ")
+
+    SQL.ADD(" ORDER BY T.NrTrans ")
+    watch(SQL.batch)
+    ACT(NT:1,'')
+    Recorrer SQL
+        ACN(BD:1,1)
+        *3/5/2022 - Nros de Grupo
+        *1 - Liquidacion Amortizacion
+        *2 - Liquidacion Renta
+        *41 - Comision
+        *42 - IVA Comision
+        *51 - Comision CV
+        *52 - IVA Comision CV
+        If vacio(val(NT:1)) 
+            ACT(NT:1,fbn('NrTrans')) 
+            ACD(FV:1, fbn('Fecha1'))
+            ACD(FD:1, Dialogo.Fecha1)
+            ACT(VH:1, fbn('Vehiculo1'))
+            ACT(NR:1, '')
+            ACT(NR:2, fbn('NrTrans'))
+            ACT(TO:1, fbn('CodAsi'))
+            ACT(TI:1, '')  
+            ACT(CL:1,fbn('Cliente'))
+            ACT(CA:1,fbn('CodAsi'))
+            ACT(CE:1, fbn('ContraEspecie'))
+            ACT(ME:1,fbn('MonedaEmision')) 
+            ACT(EP:1,fbn('Especie')) 
+            ACT(CT:1,fbn('Cuenta'))  
+            ACT(CT:2,fbn('Cuenta2'))  
+            ACT(MO:1,fbn('Moneda'))  
+            ACT(IS:1,fbn('Issuer')) 
+            ACT(MN:99, fbn('Moneda'))   
+            ACT(TO:1,fbn('TipoOp')) 
+            ACN(CO:1,fbn('Cotizacion'))   
+            ACN(RC:2,0)
+            ACN(AC:2,0)
+            ACN(CC:2,0)
+            ACN(IC:2,0)
+            ACN(R3:2,0)
+            ACN(A3:2,0)
+            ACN(C3:2,0)
+            ACN(I3:2,0)            
+        EndIf
+        let &merCtaPte fbn('Mercado')
+        let &derechoMercado fbn('Cantidad12')
+        let &ivaDerechoMercado fbn('Cantidad13')
+        
+        *****Conta Dollar Link
+        If NOT #ESDLLINK
+            let &monedaCobro fbn('ContraEspecie')
+            let &monedaPago fbn('Especie4')
+        ELSE
+            let &monedaCobro VAR('MONELOCA')
+        ENDIF        
+        If Not EqStr(fbn('NrTrans'),val(NT:1))
+            ***Antes de cambiar de Transaccion genero contabilidad 
+            ACN(CK:1, 0)
+            IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+               ACN(CK:1, 1)
+               IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrTrans2 = '"~val(NT:1)~"' AND Modelo = '"~fbn('CodAsi')~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~Val(VH:1)~"' "))
+                   ACN(CK:1, 0)
+               ENDIF
+            ENDIF
+            ACT(MN:99, fbn('Moneda'))
+            let &codAsi fbn('CodAsi')
+            IF Val(CK:1) = 0
+               If No Vacio(VAL(NR:1))
+                 Message(val(NR:1)~' - Modelo: '~val(TO:1))
+               Else
+                 Message(val(NR:2)~' - Modelo: '~val(TO:1))
+               EndIf
+               
+               *****Conta Dollar Link
+               SQL.ADD("SELECT PrecioEj,Cantidad1,Cantidad2 FROM "~DBO~".TRANSACCIONES2 ")
+               SQL.ADD("Where NrTransRef4 = '"~val(NR:1)~"' ")
+               Recorrer SQL
+                    let &tccontabCorte fbn('PrecioEj')
+                    let &totalCP fbn('Cantidad1')
+                    let &total3ros fbn('Cantidad2')
+               Proximo
+               let &cotLcupon fbn('Cotizacion')
+               let &tcDllink &cotLcupon
+               If Eqstr(&monedaCobro, Var('MONELOCA'))
+                    let &tccontabCorte 1
+               EndIf
+               let &totalCorteCP &totalCP*&tccontabCorte
+               let &totalCorte3R &total3ros*&tccontabCorte
+               let &totalLCuponCP (#RENTACP+#AMORTIZACIONCP)*&cotLcupon
+               let &totalLCupon3R (#RENTA3R+#AMORTIZACION3R)*&cotLcupon
+               let &tipoEspecie val(TE:1)
+               let &ajusteDllink 0
+               If &tccontabCorte <> &cotLcupon 
+                    let &ajusteDllinkCP &totalCorteCP-&totalLCuponCP
+                    let &ajusteDllink3R &totalCorte3R-&totalLCupon3R
+               EndIf
+               
+               **Este bloque es para los fbn de las formulas del modelo
+               SQL.ADD("Select '"~val(VH:1)~"' as Vehiculo1, '"~val(CL:1)~"' as Cliente, '"~val(SL:1)~"' as NrSaldo, '"~val(CE:1)~"' as ContraEspecie, ")
+               SQL.ADD("'"~val(ME:1)~"' as MonedaEmision, '"~val(TE:1)~"' as TipoEspecie, '"~val(EP:1)~"' as Especie, '"~val(CT:1)~"' as Cuenta, ")
+               SQL.ADD("'"~val(MO:1)~"' as Moneda,'"~val(IS:1)~"' as Issuer,'"~val(CL:1)~"' as Cliente1, '"~val(CT:2)~"' as Cuenta2, '"~val(TO:1)~"' as TipoOp, '' Book1  ")
+               Recorrer SQL
+                   SQL.GenerarAsientoOp(&codAsi, val(NR:1),'','',Val(NA:1),Val(FV:1),Val(VH:1),,,,,,val(TI:1),,val(NR:2),,,,,fsys,Dialogo.Fecha1)              
+                   SQL.EXEC
+               Proximo
+            ENDIF  
+            
+            ACT(NT:1,fbn('NrTrans'))
+            ACD(FV:1, fbn('Fecha1'))
+            ACD(FD:1, Dialogo.Fecha1)
+            ACT(VH:1, fbn('Vehiculo1'))
+            ACT(NR:1, '')
+            ACT(NR:2, fbn('NrTrans'))
+            ACT(TO:1, fbn('CodAsi'))
+            ACT(CL:1,fbn('Cliente'))
+            ACT(CA:1,fbn('CodAsi'))
+            ACT(CE:1, fbn('ContraEspecie'))
+            ACT(ME:1,fbn('MonedaEmision')) 
+            ACT(EP:1,fbn('Especie'))
+            ACT(CT:1,fbn('Cuenta'))
+            ACT(CT:2,fbn('Cuenta2'))  
+            ACT(MO:1,fbn('Moneda'))  
+            ACT(IS:1,fbn('Issuer')) 
+            ACT(TO:1,fbn('TipoOp')) 
+            ACN(CO:1,fbn('Cotizacion'))   
+            ACT(TI:1, '')            
+            ACN(RC:2,0)
+            ACN(AC:2,0)
+            ACN(CC:2,0)
+            ACN(IC:2,0)
+            ACN(R3:2,0)
+            ACN(A3:2,0)
+            ACN(C3:2,0)
+            ACN(I3:2,0)
+            *****Conta Dollar Link
+            If NOT #ESDLLINK
+                let &monedaCobro fbn('ContraEspecie')
+            ELSE
+                let &monedaCobro VAR('MONELOCA')
+            ENDIF
+        EndIf
+
+        ACN(SL:1,fbn('NrSaldo'))
+        ACN(NG:1,fbn('NrGrupo'))   
+        If #ESCP
+            **Carter Propia
+            If val(NG:1) = 1
+                ACN(AC:2, fbn('Cantidad')+val(AC:2))
+            Else
+                If val(NG:1) = 2
+                    ACN(RC:2, fbn('Cantidad')+val(RC:2))
+                else    
+                    If val(NG:1)= 51 o val(NG:1)=41
+                        ACN(CC:2, fbn('Cantidad')+val(CC:2)) 
+                    else    
+                        ACN(IC:2, fbn('Cantidad')+val(IC:2)) 
+                    EndIf
+                EndIf                
+            EndIf
+        Else
+            If #TERSALDONOBLOQ
+                **Saldo No Bloqueado
+                If val(NG:1) = 1
+                    ACN(A3:2, fbn('Cantidad')+val(A3:2))
+                Else
+                    If val(NG:1) = 2
+                        ACN(R3:2, fbn('Cantidad')+val(R3:2))
+                    else    
+                        If val(NG:1)= 51 o val(NG:1)=41
+                            ACN(C3:2, fbn('Cantidad')+val(C3:2)) 
+                        else    
+                            ACN(I3:2, fbn('Cantidad')+val(I3:2)) 
+                        EndIf
+                    EndIf
+                EndIf
+            EndIf
+        EndIf 
+    Proximo
+    If val(BD:1)=1
+        **Si el ultimo registro fue Tercero no bloqueado tengo que generar la conta por el acumulado, dejo CP por las dudas
+        SQL.ADD("Select '"~val(VH:1)~"' as Vehiculo1, '"~val(CL:1)~"' as Cliente, '"~val(SL:1)~"' as NrSaldo, '"~val(CE:1)~"' as ContraEspecie, ")
+        SQL.ADD("'"~val(ME:1)~"' as MonedaEmision, '"~val(TE:1)~"' as TipoEspecie, '"~val(EP:1)~"' as Especie, '"~val(CT:1)~"' as Cuenta, ")
+        SQL.ADD("'"~val(MO:1)~"' as Moneda,'"~val(IS:1)~"' as Issuer,'"~val(CL:1)~"' as Cliente1, '"~val(CT:2)~"' as Cuenta2, '"~val(TO:1)~"' as TipoOp,  ")
+        SQL.ADD("'"~val(CO:1)~"' as Cotizacion, '' Book1")
+        Recorrer SQL
+            *****Conta Dollar Link
+            SQL.ADD("SELECT PrecioEj,Cantidad1,Cantidad2 FROM "~DBO~".TRANSACCIONES2 ")
+            SQL.ADD("Where NrTransRef4 = '"~val(NR:1)~"' ")
+            Recorrer SQL
+                 let &tccontabCorte fbn('PrecioEj')
+                 let &totalCP fbn('Cantidad1')
+                 let &total3ros fbn('Cantidad2')
+            Proximo
+            let &cotLcupon fbn('Cotizacion')
+            let &tcDllink &cotLcupon
+            let &totalCorteCP &totalCP*&tccontabCorte
+            let &totalCorte3R &total3ros*&tccontabCorte
+            let &totalLCuponCP (#RENTACP+#AMORTIZACIONCP)*&cotLcupon
+            let &totalLCupon3R (#RENTA3R+#AMORTIZACION3R)*&cotLcupon
+            let &tipoEspecie val(TE:1)
+            let &ajusteDllink 0
+            If &tccontabCorte <> &cotLcupon 
+                 let &ajusteDllinkCP &totalCorteCP-&totalLCuponCP
+                 let &ajusteDllink3R &totalCorte3R-&totalLCupon3R
+            EndIf
+            ACN(CK:1, 0)
+            IF Dialogo.Check1 = 1 O Dialogo.Fecha1 < Fsys
+               ACN(CK:1, 1)
+               IF Vacio(SQL(" Select NrUnicoAsiento From "~DBO~".ASIENTOSCON Where NrTrans2 = '"~val(NT:1)~"' AND Modelo = '"~val(CA:1)~"' AND Estado IN ('E','A') AND (NrAsiento Is Null OR NrAsiento = '' OR NrAsiento = ' ') AND FechaValor = '"~IdxDate(Val(FV:1))~"' AND Vehiculo = '"~Val(VH:1)~"' "))
+                   ACN(CK:1, 0)
+               ENDIF
+            ENDIF
+            let &codAsi val(CA:1)
+            IF Val(CK:1) = 0
+               If No Vacio(VAL(NR:1))
+                 Message(val(NR:1)~' - Modelo: '~val(TO:1))
+               Else
+                 Message(val(NR:2)~' - Modelo: '~val(TO:1))
+               EndIf
+               SQL.GenerarAsientoOp(&codAsi, val(NR:1),'','',Val(NA:1),Val(FV:1),Val(VH:1),,,,,,val(TI:1),,val(NR:2),,,,,fsys,Dialogo.Fecha1)              
+               SQL.EXEC
+            ENDIF           
+        Proximo
+    EndIf
+ENDIF

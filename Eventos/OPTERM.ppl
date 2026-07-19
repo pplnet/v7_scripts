@@ -1,0 +1,324 @@
+﻿HojaVisible(SI)
+CrearDialogo
+    Fecha1: 'Fecha'      ;1;1;;  ;;Dia(Dialogo.Fecha1)=7 o Dia(Dialogo.Fecha1)=15 o Dia(Dialogo.Fecha1)=23 o Dia(Dialogo.Fecha1)=Dia(FinDeMes(Dialogo.Fecha1,SI));'Debe indicar ultimo dia de semana estadistica';NO;IIF(Dia(FSYS)<8, PriDeMes(FSYS,SI)+6, IIF(Dia(FSYS)<16,PriDeMes(FSYS,SI)+14,IIF(Dia(FSYS)<24, PriDeMes(FSYS,SI)+22,FinDeMes(FSYS,SI))));
+    Fecha2: 'F.Desde'    ;2;1;;NO;;;;;IIF(Dia(Dialogo.Fecha1)<8, PriDeMes(Dialogo.Fecha1,SI), IIF(Dia(Dialogo.Fecha1)<16,PriDeMes(Dialogo.Fecha1,SI)+7,IIF(Dia(Dialogo.Fecha1)<24,PriDeMes(Dialogo.Fecha1,SI)+15,PriDeMes(Dialogo.Fecha1,SI)+23)));IIF(Dia(Dialogo.Fecha1)<8, PriDeMes(Dialogo.Fecha1,SI), IIF(Dia(Dialogo.Fecha1)<16,PriDeMes(Dialogo.Fecha1,SI)+7,IIF(Dia(Dialogo.Fecha1)<24,PriDeMes(Dialogo.Fecha1,SI)+15,PriDeMes(Dialogo.Fecha1,SI)+23)));
+    String1: 'Archivo'   ;3;1;;NO;;;;;VAR('OPTERM');;
+    Check1 : 'Rectifica' ;;;;;;;;;0
+FinDialogo
+
+If Not OK
+   Cancelar
+EndIf
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,12,B')
+CrearFont(4, 'Arial,8,BI')
+
+BorrarArchivo(Dialogo.String1)
+ACN(RE:1, 0)
+ACN(CT:1, 0)
+
+ACT(XZ1, SQL("SELECT CodigoBCRA FROM "~DBO~".CLIENTES WHERE Codigo='"~VAR('VEHICULODE')~"' "))
+
+*Tucu 9/01/2025 
+*SQL.ADD("SELECT '4601' as Campo1, CL.CodigoBCRA as Campo2,  CASE WHEN O.TipoOp = 'FXCF' THEN '2' ELSE '3' END as Campo4,  ")
+SQL.ADD("SELECT '4601' as Campo1, CL.CodigoBCRA as Campo2,  CASE WHEN O.TipoOp = 'FXCF' THEN '1' ELSE '1' END as Campo4,  ")
+** AA 23-06-2025 circ BCRA 8258 OPTERMA3=SI por fusion MAE-ROFEX --> A3
+If EqStr(VAR('OPTERMA3'),'SI')
+   SQL.ADD(" CASE WHEN O.Mercado = 'ROFEX' THEN '11' WHEN O.Mercado = 'MAE' THEN '11' WHEN O.Mercado = 'A3' THEN '11' WHEN O.Mercado = 'BYMA' THEN '10' ELSE '00' END as Campo5,")
+Else
+   SQL.ADD(" CASE WHEN O.Mercado = 'ROFEX' THEN '02' WHEN O.Mercado = 'MAE' THEN '03' ELSE '00' END as Campo5,")
+Endif
+SQL.ADD(" O.Especie as Campo7, O.ContraEspecie as Campo8, O.FechaVto as Campo9, ")
+** AA 23-06-2025 circ BCRA 8258 OPTERMA3=SI por fusion MAE-ROFEX --> A3
+If EqStr(VAR('OPTERMA3'),'SI')
+   SQL.ADD(" CASE WHEN O.Mercado = 'ROFEX' THEN '1' WHEN O.Mercado = 'MAE' THEN '1' WHEN O.Mercado = 'A3' THEN '1'ELSE '2' END as Campo10,")
+else
+   SQL.ADD(" CASE WHEN O.Mercado = 'ROFEX' THEN '1' WHEN O.Mercado = 'MAE' THEN '1' ELSE '2' END as Campo10,")
+endif
+SQL.ADD(" CASE WHEN O.TipoOp = 'FXCF' THEN '1' WHEN O.TipoOp = 'FXVF' THEN '3' ELSE '0' END as Campo11,")
+SQL.ADD(" O.Cantidad as Campo12, O.TotalBrutoCli1 as Campo13, ")
+SQL.ADD(" O.NrOperacion3, O.Cliente1, O.CB10, O.TipoOp, O.NrOperacion, ")
+SQL.ADD(" CL.Nacionalidad, CL.Sector, E1.ISO as ISO1, E2.ISO as ISO2, ")
+SQL.ADD(" O.FechaOp as Campo14, CASE when O.Cliente1 = '"~VAR('VEHICULODE')~"' then '00000000000' else CL.CUIT end as Campo15,")
+SQL.ADD(" CASE when O.Cliente1 = '"~VAR('VEHICULODE')~"' then '' else CL.RazonSocial end as Campo16, CL.Pais ")
+SQL.ADD("FROM "~DBO~".OPERACIONES O, "~DBO~".CLIENTES CL,"~DBO~".ESPECIES E1,"~DBO~".ESPECIES E2 ")
+SQL.ADD("WHERE O.TipoOp IN ('FXCF','FXVF') ")
+SQL.ADD("AND 0=(Select count(*) from OPERACIONESBITS B where B.NrOperacion=O.NrOperacion  AND ((B.NrBit = 1 and B.Valor = '1') or (B.NrBit = 31 and B.Valor = '1') or (B.NrBit = 30 and B.Valor = '1'))) ")
+SQL.ADD("AND O.FechaCargaSys >= "~IdxDate2(Dialogo.Fecha2)~" AND O.FechaCargaSys <= "~IdxDate2(Dialogo.Fecha1))
+*SQL.ADD("AND O.FechaOp >= "~IdxDate2(Dialogo.Fecha2)~" AND O.FechaOp <= "~IdxDate2(Dialogo.Fecha1))
+*SQL.ADD("AND O.FechavTO = '20241230' ")
+SQL.ADD("AND CL.Codigo = O.Cliente1 AND  E1.Codigo = O.Especie AND  E2.Codigo = O.ContraEspecie ")
+SQL.ADD("order by Campo5,Cliente1,Campo9,Campo14 ")
+WATCH(sql.batch())
+
+Recorrer SQL
+  SCN(RE:1, 1)
+  ACT(AA:FAC, FBN['Campo1'])
+  ACT(AB:FAC, PAD0(val(XZ1),5))
+  ACT(AC:FAC, Fecha(Dialogo.Fecha1,'YYYY-MM-DD'))
+  
+  ACT(AD:FAC, FBN['Campo4'])
+  ACT(AE:FAC, FBN['Campo5'])
+  
+  *- Analizo campo5
+  If EqStr(Val(AE:FAC),'0') O  EqStr(Val(AE:FAC),'00')
+     *- Si Campo5 es cero => analizo que codigo tiene que tener
+     *- obtengo lugar de residencia
+     ACT(ZZ:1, FBN['Nacionalidad'])
+     *- veo que sector le corresponde
+     
+     
+     If Not EqStr(Val(ZZ:1),'80')
+        *- si es extranjero informo 8-Otros
+        ACT(AE:FAC, '08')
+     Else
+**      IND:Industria|COM:Comercio|BAN:Banca|PUB:Publico|STA:Staff|OTR:Otro|"     
+        If EqStr(FBN['Sector'],'BAN')
+           *- sector financiero
+           ACT(AE:FAC, '05')
+        Else
+           *- sector NO financiero
+           ACT(AE:FAC, '06')
+        EndIf
+     EndIf
+  EndIf
+
+* Campo6 siempre va 1
+  ACT(AF:FAC, '1')
+        
+  ACT(AG:FAC, Copy(FBN['ISO1'],1,3))
+
+  ACT(AH:FAC, Copy(FBN['ISO2'],1,3))
+
+  ACT(AI:FAC, Fecha(FBN['Campo9'],'YYYY-MM-DD'))
+
+  ACT(AJ:FAC, FBN['Campo10'])
+
+  *- ANALIZO CAMPO11
+  ACT(AK:FAC, FBN['Campo11'])
+
+  ACN(AL:FAC, FBN['Campo12'])
+
+  ACN(AM:FAC, FBN['Campo13'])
+
+  ACT(AN:FAC, IIF(Dialogo.Check1=0, 'N','R'))
+
+  ACT(AO:FAC, FBN['NrOperacion'])
+  ACT(AP:FAC, FBN['Cliente1'])
+  ACT(AQ:FAC, FBN['TipoOp'])
+
+  ACT(AR:FAC, Fecha(FBN['Campo14'],'YYYY-MM-DD'))
+
+  ** AA 23-06-2025 circ BCRA 8258 OPTERMA3=SI por fusion MAE-ROFEX --> A3 
+  ** AA 22-09-2025 Si es cartera propia va siempre ceros
+  IF EqStr(FBN['Cliente1'],VAR('VEHICULODE'))
+     ACT(AS:FAC, FBN['Campo15'])
+  ELSE
+     If EqStr(VAR('OPTERMA3'),'SI')
+        If Incluido(Val(AE:FAC),'05|06|11')
+           ACT(AS:FAC, FBN['Campo15'])
+        else
+           If Incluido(Val(AE:FAC),'07|08')
+              SCN(CT:1,1)
+              ACT(AS:FAC, PAD0(Val(XZ:1),5)~PAD0(FBN['Pais'],2)~PAD0(val(CT:1),4))
+           else
+              ACT(AS:FAC, '00000000000')
+           endif
+        endif   
+     Else
+        If Incluido(Val(AE:FAC),'03|05|06')
+           ACT(AS:FAC, FBN['Campo15'])
+        else
+           If Incluido(Val(AE:FAC),'07|08')
+              SCN(CT:1,1)
+              ACT(AS:FAC, PAD0(Val(XZ:1),5)~PAD0(FBN['Pais'],2)~PAD0(val(CT:1),4))
+           else
+              ACT(AS:FAC, '00000000000')
+           endif
+        endif        
+     Endif   
+  ENDIF   
+  ** AA 23-06-2025 circ BCRA 8258 OPTERMA3=SI por fusion MAE-ROFEX --> A3 
+  If EqStr(VAR('OPTERMA3'),'SI') 
+     If Incluido(Val(AE:FAC),'05|06|07|08|11')
+        ACT(AT:FAC, iif(longitud(FBN['Campo16'])>50,Copy(FBN['Campo16'],1,50),FBN['Campo16']))
+     Endif
+  Else
+     If Incluido(Val(AE:FAC),'05|06|07|08')
+        ACT(AT:FAC, iif(longitud(FBN['Campo16'])>50,Copy(FBN['Campo16'],1,50),FBN['Campo16']))
+     Endif
+
+  Endif
+
+Proximo
+
+ACN(FI:10, fac)
+
+If Val(RE:1)=0
+  *- NO encontro ningun registro, informo Campos 1 a 3 y el resto ceros o blancos segun corresp.
+  SCN(RE:1, 1)
+  SetFilaActual(1)
+  ACT(AA:FAC, '4601')
+  ACT(AB:FAC, PAD0(val(XZ1),5))
+  ACT(AC:FAC, Fecha(Dialogo.Fecha1,'YYYY-MM-DD'))
+  ACT(AD:FAC, '')
+  ACT(AE:FAC, '')
+  ACT(AF:FAC, '')
+  ACT(AG:FAC, '')
+  ACT(AH:FAC, '')
+  ACT(AI:FAC, '')
+  ACT(AJ:FAC, '')
+  ACT(AK:FAC, '')
+  ACN(AL:FAC, 0)
+  ACN(AM:FAC, 0)
+  ACN(AO:FAC, 0)
+  ACT(AR:FAC, Fecha(Dialogo.Fecha1,'YYYY-MM-DD'))
+  ACN(AS:FAC, 0)
+  ACT(AT:FAC, '')
+  ACT(AN:FAC, IIF(Dialogo.Check1=0, 'N','R'))
+EndIf
+
+ACT(G:2, 'COMUNICACION A 5595 - BCRA')
+SetFont(G2, 3)
+ACT(A:4, 'Fecha desde: ')
+ACD(B:4, Dialogo.Fecha2)
+ACT(A:5, 'Fecha hasta: ')
+ACD(B:5, Dialogo.Fecha1)
+ACT(A:6, 'Archivo: ')
+ACT(B:6, Dialogo.String1)
+ACT(A:8, 'Rectifica: ')
+ACT(B:8, IIF(Dialogo.Check1=0, 'NO','SI'))
+SetFont(a:4..b:8, 2)
+
+SetFilaActual(10)
+*- titulos
+ACT(A:FAC, 'Codigo')
+ACT(A:FAC+1, 'Diseno')
+ACT(B:FAC, 'Codigo')
+ACT(B:FAC+1, 'Entidad')
+ACT(C:FAC, 'Fecha')
+ACT(C:FAC+1, 'Info')
+ACT(D:FAC, 'TipoOp')
+
+ACT(E:FAC, 'Ambito')
+ACT(E:FAC+1, 'Negociacion')
+ACT(F:FAC, 'Activo')
+ACT(F:FAC+1, 'Subyacente')
+ACT(G:FAC, 'Moneda')
+ACT(G:FAC+1, 'del Activo')
+ACT(H:FAC, 'Moneda')
+ACT(H:FAC+1, 'Liq')
+
+ACT(I:FAC, 'Fecha')
+ACT(I:FAC+1, 'Vto')
+ACT(J:FAC, 'Liquidacion')
+ACT(K:FAC, 'Concepto')
+ACT(L:FAC, 'Cantidad')
+ACT(M:FAC, 'Importe')
+ACT(N:FAC, 'Fecha')
+ACT(N:FAC+1, 'Conc')
+ACT(O:FAC, 'CUIT')
+ACT(P:FAC, 'Cliente')
+ACT(Q:FAC, 'Razon')
+ACT(Q:FAC+1, 'Social')
+ACT(R:FAC, 'Rectifica')
+SetFont(A:FAC..R:FAC+1, 2)
+AgregarMarco(A:fac..R:fac+1,1,0,EXE('COLOR6'))
+AlinearCeldas(A:fac..R:fac+1, 'C')
+SetFilaActual(fac+2)
+ACN(FI:2, fac)
+
+*- MUESTRO LOS DATOS EN PANTALLA
+Recorrer&i 1, Val(RE:1)
+   If &i=1
+      *-Campo1
+      ACT(A:Val(FI:2), Val(AA:&i))
+      ACT(B:Val(FI:2), Val(AB:&i))
+      ACT(C:Val(FI:2), Val(AC:&i))
+      ACT(D:Val(FI:2), Val(AD:&i))
+      *-Campo5
+      ACT(E:Val(FI:2), Val(AE:&i))
+      ACT(F:Val(FI:2), Val(AF:&i))
+      ACT(G:Val(FI:2), Val(AG:&i))
+      ACT(H:Val(FI:2), Val(AH:&i))
+      ACT(I:Val(FI:2), Val(AI:&i))
+      *-Campo10
+      ACT(J:Val(FI:2), Val(AJ:&i))
+      ACT(K:Val(FI:2), Val(AK:&i))
+      ACN(L:Val(FI:2), Val(AL:&i))
+      ACN(M:Val(FI:2), Val(AM:&i))
+      ACT(R:Val(FI:2), Val(AN:&i))
+      FormatoCeldas(L:Val(FI:2)..M:Val(FI:2), EXE('F0'))
+      *- fila de datos a imprimir
+      ACN(FI:1, Val(FI:2))
+      ACT(N:Val(FI:1), Val(AR:&i))
+      ACT(O:Val(FI:1), Val(AS:&i))
+      ACT(P:Val(FI:1), Val(AP:&i))
+      ACT(Q:Val(FI:1), Val(AT:&i))
+   Else
+      ACN(AZ:1, 0)
+      Recorrer&j Val(FI:2),Val(FI:1)
+      *- si campo4 a 11 son iguales y 14, sumo cantidad e importe, sino genero un nuevo registro a informar
+         *- no pregunto por tipo de op porque son todas a termino, es decir siempre son 1.
+         If EqStr(Val(AD:&i),Val(D:&j)) y EqStr(Val(AE:&i),Val(E:&j)) y EqStr(Val(AF:&i),Val(F:&j)) y EqStr(Val(AG:&i),Val(G:&j)) y EqStr(Val(AH:&i),Val(H:&j)) Y EqStr(Val(AI:&i),Val(I:&j)) Y EqStr(Val(AJ:&i),Val(J:&j)) Y EqStr(Val(AK:&i),Val(K:&j))  Y EqStr(Val(AR:&i),Val(N:&j))  Y EqStr(Val(AP:&i),Val(P:&j))
+            SCN(L:&j, Val(AL:&i))
+            SCN(M:&j, Val(AM:&i))
+            ACN(AZ:1, 1)
+            Break             
+         EndIf
+      Proximo
+      If Val(AZ:1)=0
+         *- no encontre registro iguales => creo uno nuevo
+         SCN(FI:1, 1)
+         *-Campo1
+         ACT(A:Val(FI:1), Val(AA:&i))
+         ACT(B:Val(FI:1), Val(AB:&i))
+         ACT(C:Val(FI:1), Val(AC:&i))
+         ACT(D:Val(FI:1), Val(AD:&i))
+         *-Campo5
+         ACT(E:Val(FI:1), Val(AE:&i))
+         ACT(F:Val(FI:1), Val(AF:&i))
+         ACT(G:Val(FI:1), Val(AG:&i))
+         ACT(H:Val(FI:1), Val(AH:&i))
+         ACT(I:Val(FI:1), Val(AI:&i))
+         *-Campo10
+         ACT(J:Val(FI:1), Val(AJ:&i))
+         ACT(K:Val(FI:1), Val(AK:&i))
+         ACN(L:Val(FI:1), Round(Val(AL:&i),11))
+         ACN(M:Val(FI:1), Round(Val(AM:&i),11))
+         FormatoCeldas(L:Val(FI:1)..M:Val(FI:1), EXE('F0'))
+         ACT(R:Val(FI:1), Val(AN:&i))
+         ACT(N:Val(FI:1), Val(AR:&i))
+         ACT(O:Val(FI:1), Val(AS:&i))
+         ACT(P:Val(FI:1), Val(AP:&i))
+         ACT(Q:Val(FI:1), Val(AT:&i))
+      EndIf
+   EndIf
+Proximo
+
+ACO(1,8)
+ACO(15,8)
+ACO(17,25)
+
+*-GRABO EL ARCHIVO
+AbrirASCII(Dialogo.String1,0)
+Recorrer&i Val(FI:2), Val(FI:1)
+*   EscribirASCII(Val(A:&i)~Val(B:&i)~Val(C:&i)~Val(D:&i)~Val(E:&i)~Val(F:&i)~Val(G:&i)~Val(H:&i)~Val(I:&i)~Val(J:&i)~Val(K:&i)~PAD0(FStr(Round(Val(L:&i)),0,0),11)~PAD0(FStr(Round(Val(M:&i)),0,0),11)~Val(N:&i)~Val(O:&i)~PAD(Val(P:&i),50)~Val(Q:&i))
+   EscribirASCII(Val(A:&i)~';'~Val(B:&i)~';'~Val(C:&i)~';'~Val(D:&i)~';'~Val(E:&i)~';'~Val(F:&i)~';'~Val(G:&i)~';'~Val(H:&i)~';'~Val(I:&i)~';'~Val(J:&i)~';'~Val(K:&i)~';'~IIF(Val(L:&i)=0,'',FStr(Round(Val(L:&i)),0,0))~';'~IIF(Val(L:&i)=0,'',FStr(Round(Val(M:&i)),0,0))~';'~Val(N:&i)~';'~IIF(Val(L:&i)=0,'',Val(O:&i))~';'~TRIM(MIRT(Val(Q:&i)))~';'~Val(R:&i))
+Proximo
+CerrarASCII
+
+Impresion(1,2)
+SetFilaActual(Val(FI:1)+2)
+ACT(A:FAC, 'Cantidad de registros: ')
+ACT(C:FAC, FStr(Val(FI:1)-Val(FI:2)+1,0,0))
+SetFont(A:FAC..C:FAC, 2)
+SetPrintFit(3,83)
+LimitesVision(S:Val(FI:1)+5)
+*if (Val(fi:1)+5) > Val(fi:10)
+*LimitesVision(AZ:Val(FI:1)+5)
+*else
+*LimitesVision(AZ:Val(FI:10))
+*endif

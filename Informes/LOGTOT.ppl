@@ -1,0 +1,194 @@
+﻿ModoReproceso(SinDialogo)
+MostrarCuadrodeMensajes
+CrearDialogo
+  Fecha1 : 'Desde';1;1;;;;Dialogo.Fecha1>0;;NO;FSys
+  Fecha2 : 'Hasta';2;1;;;;Dialogo.Fecha1<=Dialogo.Fecha2;'Fecha Hasta debe er mayor o igual a Fecha Desde!';NO;FSys
+  String1: 'Tabla' ;3;1;
+  String2: 'Codigo'
+  String : 'Campo'
+  Operador: 'Usuario';;;;;;;;;
+  Check1  : 'Resumido'  ;;;;;;;;;0;
+  Radio1  : 'Muestra|Separado|Junto';;;;NO;NO;;;;0;
+  Lista2  : 'Todas_las_tablas';4;2;;NO;NO;;;;'ARANCELES|EVENTOS|FILTROS|FORMULAS|FUNCIONES|GASTOS|INFORMES|INSTANCIAS|LINEASPRESTAMO|MODELOSASIENTO|MODELOSASIENTO1|PERFILES2|PRODUCTOS|RELACIONCUENTA|TIPOSARANCEL|TIPOSEVENTO|TIPOSEXCEPCION|TIPOSFACTURA|TIPOSGASTO|TIPOSIMPUESTO|TIPOSIMPUESTO1|TIPOSINFORME|TIPOSMINUTABOLSA|TIPOSOPERACION|TIPOSORDEN|TIPOSPOSICION|TIPOSTASA|TIPOSTRANSACCION2|VARIABLES|';
+  Lista1  : 'Tablas:'   ;-2;2;;;;;;;'EVENTOS|FORMULAS|FUNCIONES|INFORMES|INSTANCIAS|MODELOSASIENTO|MODELOSASIENTO1|RELACIONCUENTA|TIPOSEVENTO|TIPOSINFORME|TIPOSMINUTABOLSA|TIPOSOPERACION|TIPOSORDEN|TIPOSPOSICION|TIPOSTRANSACCION2|VARIABLES|';;Dialogo.Lista2
+  Check2  : 'Exporta PDF'      ;;1;;NO;NO;;;;0;
+  String3 : 'Parametro Informe';; ;;NO;NO
+FinDialogo
+
+If not Ok
+  Cancelar
+endif
+
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+CrearFont(3, 'Arial,12,B')
+
+
+If Vacio(Dialogo.String3)
+    ACT(d3, 'Log Total de Modificaciones')
+    ACT(a6, 'Filtros : '~Dialogo.String1~' '~Dialogo.String2~' '~Dialogo.String)
+else
+    ACT(d3, SQL("Select Nombre from "~DBO~".INFORMES where codigo = '"~Dialogo.String3~"' ")) 
+endif
+
+SetFont(d3,3)
+
+ACT(a5, 'Desde: '~Dialogo.Fecha1~'    Hasta: '~Dialogo.Fecha2)
+
+ACT(a8, 'Usuario')
+ACT(b8, 'Fecha')
+ACT(c8, 'Accion')
+ACT(d8, 'Tabla')
+ACT(e8, 'Codigo')
+If Dialogo.Check1=1
+  ACT(f8, 'Nombre/Descripcion')
+  AgregarMarco(a8..f8,1,0,Exe('COLOR6'))
+Else
+  ACT(f8, 'Campo')
+  ACT(g8, 'Val.Anterior')
+  ACT(h8, 'Val.Actual')
+  AgregarMarco(a8..h8,1,0,Exe('COLOR6'))
+Endif
+SetFont(a5..h8, 1)
+
+SetFilaActual(8)
+
+message('Recuperando auditoria de Script...')
+If Dialogo.Check1=1
+  SQL.ADD("Select Distinct Tabla,Codigo ")
+Else
+  SQL.ADD("Select Tabla,Codigo,Accion,Fecha,ValorAnterior,ValorActual,Operador,Campo ")
+*  SQL.ADD("Select Tabla,Codigo,Accion,Fecha,ValorAnterior,ValorActual,Operador,Campo,TO_CHAR(Fecha,'YYYYMMDDHH24Mi') Fechita")
+Endif
+SQL.ADD("  From "~DBO~".PMAUDIT  ")
+SQL.ADD(" where Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha <= '"~IdxDate(Dialogo.Fecha2+1)~"' ")
+If NoVacio(Dialogo.String1)
+    SQL.ADD(" and Tabla = '"~Dialogo.String1~"' ")
+    if Eqstr(Dialogo.String1 , 'VARIABLES')
+        SQL.ADD(" and Codigo NOT IN ("~Pipe2Comillas(VAR('VARNOLOG'))~") ")
+    EndIf
+Else
+  IF Dialogo.Radio1 = 1
+    If NoVacio(Dialogo.Lista1)
+      SQL.ADD(" and Tabla in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    Else
+      If NoVacio(Dialogo.Lista2)
+        SQL.ADD(" and Tabla in ("~Pipe2Comillas(Dialogo.Lista2)~") ")
+      Endif 
+    Endif
+  Endif 
+Endif
+IF NoVacio(Dialogo.String2)
+   SQL.ADD(" and Codigo Like '"~Dialogo.String2~"%' ")
+Endif
+IF NoVacio(Dialogo.String)
+   SQL.ADD(" and Campo = '"~Dialogo.String~"' ")
+Endif
+IF NoVacio(Dialogo.Operador)
+   SQL.ADD(" and Operador = '"~Dialogo.Operador ~"' ")
+Endif
+If Dialogo.Check1=0
+   SQL.ADD("order by Fecha, Tabla, Codigo, Accion  ")
+Endif
+
+
+Recorrer SQL
+
+  message('...'~fbn('Tabla')~'-'~fbn('Codigo'))
+  acn(x1, 0)
+
+  If Dialogo.Check1 = 0
+
+    if Not EqStr(Val(z1), fbn('Tabla')~fbn('Codigo')~fbn('Accion')~fbn('Fecha'))
+      ACT(z1,    fbn('Tabla')~fbn('Codigo')~fbn('Accion')~fbn('Fecha'))
+      ACT(a:fac, fbn('Operador'))
+      ACT(b:fac, fbn('Fecha'))
+      ACT(c:fac, fbn('Accion'))
+      ACT(d:fac, fbn('Tabla'))
+      ACT(e:fac, fbn('Codigo'))
+      scn(x1, 1)
+    endif
+    if [EqStr(fbn('Accion'),'A') y NoVacio(fbn('ValorActual'))] o [EqStr(fbn('Accion'),'M') y Not EqStr(fbn('ValorActual'),fbn('ValorAnterior'))] o [EqStr(fbn('Accion'),'B') y NoVacio(fbn('ValorAnterior'))]
+      ACT(f:fac, fbn('Campo'))
+      ACT(g:fac, fbn('ValorAnterior'))
+      ACT(h:fac, fbn('ValorActual'))
+    else
+      if Val(x1) = 0
+        dfa
+      endif
+    endif
+
+  Else
+
+
+    ACT(d:fac, fbn('Tabla'))
+    ACT(e:fac, fbn('Codigo'))
+
+    If Incluido(fbn('Tabla'),'INFORMES|EVENTOS|TIPOSOPERACION|TIPOSORDEN|TIPOSMINUTABOLSA|TIPOSTRANSACCION2|VARIABLES|TIPOSEXCEPCION|PERFILES2|FILTROS|TIPOSTASA|') 
+      ACT(f:fac, BuscarCampo(fbn['Tabla'],'Nombre','Codigo',fbn('Codigo')) )
+      If Vacio(val(f:fac))  
+        ACT(f:fac,'BAJA') 
+      Endif 
+    Else
+      If Incluido(fbn('Tabla'),'FUNCIONES|FORMULAS|MODELOSASIENTO|TIPOSIMPUESTO|TIPOSARANCEL|TIPOSPOSICION|TIPOSFACTURA|PRODUCTOS|ARANCELES|GASTOS|LINEASPRESTAMO|TIPOSEVENTO|TIPOSGASTO|TIPOSINFORME|TIPOSMINUTABOLSA|TIPOSTRANSACCION2|') 
+        ACT(f:fac, BuscarCampo(fbn['Tabla'],'Descripcion','Codigo',fbn('Codigo')) )
+        If Vacio(val(f:fac))  
+          ACT(f:fac,'BAJA') 
+        Endif 
+      Else
+        If Eqstr(fbn['Tabla'],'MODELOSASIENTO1') 
+           ACT(f:fac, BuscarCampo('MODELOSASIENTO','Descripcion','Codigo',fbn('Codigo')) )
+           If Vacio(val(f:fac))  
+             ACT(f:fac,'BAJA') 
+           Endif 
+        Endif  
+      Endif  
+    Endif  
+     
+
+  Endif
+
+
+Proximo
+
+SetFont(a9..z:fac, 2)
+
+
+SetFilaActual(fac+2)
+ACT(a:fac, 'Fin del Informe')
+SetFont(a:fac,1)
+
+RangoTitulo(a1..h:fac, 7)
+
+ACO(1,8)
+ACO(3,5)
+ACO(4,16)
+ACO(5,14)
+
+if Dialogo.Check2=1
+   act(ar:1,VAR('PATHLOGAUD')~'Log_total_de_modificaciones_'~IIF(NoVacio(Dialogo.String2),Dialogo.String2,IIF(NoVacio(Dialogo.String1),Dialogo.String1,'SCRIPT'))~Fecha(FECHASYS,'YYYYMMDD')~'.pdf')
+endif
+
+If Dialogo.Check1=1
+  ACO(6,30)
+  ACO(7,1)
+  LimitesVision(g:fac+1)
+  SetPrintFit(3,90)
+Else
+  ACO(2,13)
+  ACO(6,12)
+  ACO(7,14)
+  ACO(8,14)
+  ACO(9,1)
+  LimitesVision(i:fac+1)
+  SetPrintFit(3,80)
+Endif
+
+if Dialogo.Check2=1
+   HojaVisible(NO)
+   *act(ar:1,VAR('PATHLOGAUD')~'Log_total_de_modificaciones_'~IIF(NoVacio(Dialogo.String2),Dialogo.String2,IIF(NoVacio(Dialogo.String1),Dialogo.String1,'SCRIPT'))~Fecha(FECHASYS,'YYYYMMDD')~'.pdf')
+   BorrarArchivo(val(ar:1))
+   ExportarPdf(val(ar:1))
+endif

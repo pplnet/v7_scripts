@@ -1,0 +1,627 @@
+﻿*ImprimeTitulos(NO)
+CrearDialogo
+  NrTrans1:'Voucher'   ;
+  Check1  :'Re-Emision';
+  Check3  :'Impresora' ;
+FinDialogo
+if Not OK
+  Cancelar
+endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+CrearFont(4, 'Arial,12,B')
+CrearFont(5, "Arial,5,")
+
+act(a:3,'Emision Vouchers CRYL')
+act(a:4,'Fecha :'~Fecha(FSys))
+
+AgregarBMP(A:1,EXE('LOGO'),EXE('ESCALOGO'))
+
+*-----------------------------
+If Dialogo.Check1 = 0
+  ACT(e:1, 'ORIGINAL')
+else
+  ACT(e:1, 'COPIA')
+endif
+SetFont(e:1..e:1,3)
+
+
+*------------------------------
+
+SetFont(a:1..z:4,2)
+
+SQL.ADD("SELECT * FROM "~DBO~".TRANSACCIONES2 ")
+SQL.ADD("WHERE NrTrans='"~Dialogo.NrTrans1~"'")
+acn(l:1,0)
+Recorrer SQL
+
+  ACT(g:1, BuscarCampo('CLIENTES','RazonSocial','Codigo',fbn('Vehiculo1')))
+  ACT(g:2, 'C.U.I.T. Nro. '~BuscarCampo('CLIENTES','CUIT','Codigo',fbn('Vehiculo1')))    
+  if BuscarCampo('CLIENTES','NrMAE','Codigo',fbn('Vehiculo1')) > 0
+    ACT(g:3, 'Agente de Mercado Abierto Nro. '~BuscarCampo('CLIENTES','NrMAE','Codigo',fbn('Vehiculo1')))
+  endif
+  if BuscarCampo('CLIENTES','NrAgenteBolsa','Codigo',fbn('Vehiculo1')) > 0
+    ACT(g:4, 'Cuenta en Caja de Valores Nro. '~BuscarCampo('CLIENTES','NrAgenteBolsa','Codigo',fbn('Vehiculo1')))
+  endif
+  SetFont(g:1..g:1,2)
+  SetFont(g:2..g:4,2)
+
+  if EqStr(fbn['Mercado1'],'CRYL')
+    scn(l:1,1)
+    ACT(Z:10,Copy(FBN['Ley1'],1,8))
+    SetFilaActual(1)
+    AgregarBMP(A:FAC,EXE('LOGO'),EXE('ESCALOGO'))
+*    ACT(v1, BuscarCampo('TiposOperacion','Nombre','Codigo',fbn['TipoTr2']))
+    ACT(v1, BuscarCampo('TIPOSTRANSACCION2','Nombre','Codigo',fbn['TipoTr2']))
+
+    SQL.ADD("SELECT * FROM "~DBO~".OPERACIONES")
+    SQL.ADD("WHERE NrOperacion='"~Copy(FBN['NrOperacionRef1'],1,8)~"'")
+    Recorrer SQL
+    if Incluido(FBN['TipoOp'],'TIC|TIV|TIFC|TIFV|TIADJ|TIRES|TCPCEM')
+        if [Incluido(FBN['TipoOp'],'TIC|TIV|TIADJ|TIRES') y FBN['FormaLiquidacion2']<2] o [Incluido(fbn['TipoOp'],'TIFC|TIFV') y fbn['FormaLiquidacion1']<2]
+           ACN(w1,1)
+        else
+           ACN(w1,2)
+        endif
+        if Incluido(fbn['TipoOp'],'TIC|TIFC|TIADJ|TIRES|TCPCEM')
+           ACT(v2, 'Comprada')
+           ACT(v3, 'DEBITAR')
+           ACT(v4, 'ACREDITAR')
+           ACN(v5, 1)
+        endif
+        if Incluido(fbn['TipoOp'],'TIV|TIFV')
+           ACT(v2, 'Vendida')
+           ACT(v3, 'ACREDITAR')
+           ACT(v4, 'DEBITAR')
+           ACN(v5, -1)
+         endif
+      endif
+      if Incluido(fbn['TipoOp'],'TICO|TICT|TIPO|TIDE')
+        ACN(w1,3)
+      endif
+      act(v:10, fbn['TipoOp'])
+      act(v:11,fbn['PaseCB'])
+      ACT(V:15,FBN['OperacionRef'])
+    Proximo
+    if Incluido(val(v:10),'TIC|TIV|TIFC|TIFV|TIADJ|TIRES') y EqStr(val(v:11),'1')
+       SQL.ADD("SELECT * FROM "~DBO~".OPERACIONES")
+       SQL.ADD("WHERE NrOperacion='"~VAL(V:15)~"'")
+    ELSE
+       SQL.ADD("SELECT * FROM "~DBO~".OPERACIONES")
+       SQL.ADD("WHERE NrOperacion='"~Copy(FBN['NrOperacionRef1'],1,8)~"'")
+    ENDIF
+    Recorrer SQL
+       *--- Esta confirmado si/no?  
+       act(n:1,SQL("SELECT NrOperacion FROM "~DBO~".OPERACIONESBITS WHERE NrOperacion='"~fbn['NrOperacion']~"' AND NrBit=4 AND Valor='1'"))
+       if NoVacio(fbn['Observac3']) y Not CeldaVacia(n:1)
+       else
+         ACN(w2,1)
+       endif
+    Proximo 
+    ACT(T:1,Copy(FBN['NrOperacionRef1'],1,8))
+  Endif
+Proximo
+
+IF VAL(l:1)>0
+  SetFilaActual(FAC+2)
+  SQL.ADD("SELECT O.* , T.Especie TESP , T.Cliente1 TCL1 , T.TipoTr2 , T.NrTrans , T.Cuenta1 TCUE1, T.Cantidad1 , T.NrOperacionRef1 , T.UsrInput , T.Fecha2 , T.CB1 , T.CB2 , T.Mercado1, ")  
+  
+  *Se agregan campos para verificar Trans. falladas
+  SQL.ADD('T.Cantidad4 as CantPagada, T.CB3 as CBFallas ')
+  
+  SQL.ADD("FROM "~DBO~".OPERACIONES O, "~DBO~".TRANSACCIONES2 T ")
+  SQL.ADD("WHERE O.NrOperacion='"~VAL(T:1)~"' AND T.NrTrans='"~Dialogo.NrTrans1~"'")
+  Recorrer SQL
+*******************************************************************************
+    if Val(w1)=1
+      ACT(a:FAC+4, 'Voucher de liquidacion Nro. : '~fbn['NrTrans'])
+      ACT(g:FAC+4, 'Liquidacion del : '~fbn['Fecha2'])
+      SetFont(a:FAC..i:FAC+4,2)
+      SetFilaActual(FAC+4)
+      if EqStr(fbn['TipoTr2'],'MATCH')
+        ACT(c:FAC+2, 'Liquidar por CRYL - DVP')
+      else
+        if EqStr(FBN['TipoTr2'],'RET')
+           ACT(c:FAC+2, 'Pagar ')
+        else
+           ACT(c:FAC+2, 'Cobrar ')
+        Endif
+        if DesciendeDeEspecie(FBN['TESP'],'TITULO')
+           ACT(c:FAC+2, Val(c:FAC+2)~'Titulos')
+           ACT(T:2,BuscarCampo('Especies','Codigo','Codigo',fbn['TESP']))
+        else
+           ACT(c:FAC+2, Val(c:FAC+2)~FBN['TESP'])
+           **CAMBIA A OPS.ESPECIE
+           ACT(T:2,BuscarCampo('Especies','Codigo','Codigo',fbn['Especie']))
+        endif
+        **Guardo en t:2 el codigo de especie a usar + abajo***********
+        ACT(c:FAC+2, Val(c:FAC+2)~' por CRYL - FD&P')
+      Endif
+      AgregarMarco(a:FAC+2..j:FAC+3, 2)
+      SetFont(c:FAC+2,4)
+      SetFilaActual(FAC+4)
+      ACT(a:FAC, 'Cliente : '~BuscarCampo('Clientes','RazonSocial','Codigo',fbn['TCL1']))
+      ACT(a:FAC+1, 'Custodia : ')
+      act(z:11,BuscarCampo('Cuentas','Comitente','Codigo',fbn['TCUE1']))
+      act(z:12,BuscarCampo('Cuentas','Cliente','Codigo',fbn['TCUE1']))
+      if Not CeldaVacia(z:11)   
+         ACT(a:FAC+1, Val(a:FAC+1)~BuscarCampo('Clientes','RazonSocial','Codigo',val(z:11)))
+      endif 
+      ACT(a:FAC+2, 'Tipo Operacion : '~Val(v1))
+      ACT(a:FAC+3, 'Clase de Operacion : ')
+      if EqStr(val(z:12),val(z:11)) o CeldaVacia(z:11) 
+         ACT(a:FAC+3, Val(a:FAC+3)~'MERCADO')
+      else
+         ACT(a:FAC+3, Val(a:FAC+3)~'CUSTODIA')
+      endif
+      ACT(a:FAC+4, 'Nro Operacion: '~fbn['NrOperacionRef1'])
+      ACT(a:FAC+5, 'Fecha Concertacion: '~FBN['FechaOp'])
+      ACT(a:FAC+6, 'Fecha Liquidacion: '~FBN['Fecha2'])
+      SetFont(a:FAC..a:FAC+8,2)
+      SetFilaActual(FAC+8)      
+      ACT(b:FAC, Pad('',5)~'Especie '~Val(v2))
+      ACT(d:FAC, Pad('',20)~'Numero de')
+      ACT(f:FAC, Pad('',25)~'Importe')
+      ACT(a:FAC+1, 'Cod.')
+      ACT(b:FAC+1, 'Denominac.')
+      ACT(c:FAC+1, 'Val.Nominal')
+      ACT(c:FAC+2, 'Residual')
+      ACT(d:FAC+1, 'Cta.de Registro')
+      ACT(d:FAC+2, 'a '~Val(v3))
+      ACT(e:FAC+1, 'Cta.Corriente')
+      ACT(e:FAC+2, 'a '~Val(v4))
+      ACT(f:FAC+1, 'Pesos')
+      ACT(g:FAC+1, 'Dolares')
+      ACT(g:FAC+2, 'estadounidenses')
+      ACT(i:FAC+1, 'Confir.')
+      AgregarMarco(a:FAC..c:FAC, 2,0,EXE('COLOR'))
+      AgregarMarco(d:FAC..e:FAC, 2,0,EXE('COLOR'))
+      AgregarMarco(f:FAC..g:FAC, 2,0,EXE('COLOR'))
+      AgregarMarco(a:FAC+1..g:FAC+2, 2,2,EXE('COLOR'))
+      AgregarMarco(h:FAC..j:FAC+2, 2,2,EXE('COLOR'))
+      AlinearCeldas(c:FAC+1..i:FAC+2, 'C')      
+      SetFont(a:FAC..i:FAC+3,2)
+      SetFont(j:FAC..j:FAC+2,4)
+      SetFilaActual(FAC+3)
+
+      ACN(BD:1, 0)
+      SQL.ADD("Select Leyenda, NrMov From "~DBO~".MOVEJECUTADOS ")
+      SQL.ADD("where  NrTrans2 = '"~fbn['NrTrans']~"' ")
+      SQL.ADD("and  NrOperacion <> '"~fbn['NrTrans']~"' ")
+      SQL.ADD(" AND NrMov = 1000 ")
+      SQL.ADD(" AND Leyenda Like '%Corte de Cupon%' ")
+      Recorrer SQL
+          DFA
+          ACN(BD:1, 1)
+      Proximo
+
+      ACT(a:FAC, FStr(BuscarCampo('Especies','Valor10','Codigo',VAL(t:2)),1,0))
+
+      IF Val(BD:1) = 1
+         ACT(b:FAC, 'Corte '~VAL(t:2) )
+      ELSE
+         ACT(b:FAC, BuscarCampo('Especies','Nombre','Codigo',VAL(t:2)))
+      ENDIF
+
+      ACN(c:FAC, Fbn['Cantidad']*Val(v5))
+
+      if EqStr(FBN['TipoTr2'],'MATCH')
+         ACT(d:FAC, BuscarCampo('Cuentas','NrDepositante','Codigo',fbn['TCUE1']))
+         ACT(e:FAC, BuscarCampo('Cuentas','Numero','Codigo',fbn['TCUE1']))
+      else
+        if EqStr(fbn['TESP'],fbn['Especie'])
+          ACT(d:FAC, BuscarCampo('Cuentas','NrDepositante','Codigo',fbn['TCUE1']))
+        else
+          ACT(e:FAC, BuscarCampo('Cuentas','Numero','Codigo',fbn['TCUE1']))
+        endif
+      Endif
+
+      IF Val(BD:1) = 1
+         
+         if EqStr(FBN['ContraEspecie'],'ARP')
+
+            ACN(f:FAC, fbn('Cantidad1'))
+         else
+
+            ACN(g:FAC, fbn('Cantidad1'))
+            
+         endif
+         
+      else
+      
+         if EqStr(FBN['ContraEspecie'],'ARP')
+            *Si es una trans. fallada, se muestra el importe pagado. Si no, el total. CAL 24/11/2022
+            If(FBN['CBFallas'] = 1)
+                ACN(f:FAC, -FBN['CantPagada']*Val(v5))
+            Else
+                ACN(f:FAC, -FBN['TotalNetoCli1']*Val(v5))
+            Endif
+            
+         else
+            *Si es una trans. fallada, se muestra el importe pagado. Si no, el total. CAL 24/11/2022
+            If(FBN['CBFallas'] = 1)
+                ACN(g:FAC, -FBN['CantPagada']*Val(v5))
+            Else
+                ACN(g:FAC, -FBN['TotalNetoCli1']*Val(v5))
+            Endif
+            
+         endif
+      Endif  
+
+      ACT(i:FAC, Val(v7))
+      AlinearCeldas(d:FAC..e:FAC, 'C')
+      AgregarMarco(a:FAC..j:FAC, 2)
+      SetFont(a:FAC..i:FAC,1)
+      FormatoCeldas(c:FAC..c:FAC,EXE('F2'))
+      FormatoCeldas(f:FAC..g:FAC,EXE('F2'))
+      ACT(j:FAC, '|')
+      SetFont(j:FAC,4)
+      SetFilaActual(FAC+1)
+      ACT(c:FAC+1, 'Total:')
+      SetFont(c:FAC+1,2)
+      AgregarMarco(c:FAC..f:FAC+2, 2,0,EXE('COLOR'))
+      if EqStr(FBN['TESP'],FBN['Especie'])
+        ACT(d:FAC, 'Val.Nominal')
+        ACN(d:FAC+1, fbn['Cantidad']*Val(v5))
+        ACT(e:FAC, 'Val.Residual')
+        ACN(e:FAC+1,fbn['Cantidad']*BuscarCampo('Especies','VTeorico','Codigo',VAL(T:2))*Val(v5))
+      endif
+      if EqStr(FBN['TipoTr2'],'MATCH') o EqStr(fbn['TESP'],fbn['ContraEspecie'])
+
+        if EqStr(fbn['ContraEspecie'],'ARP')
+          ACT(f:FAC, 'Pesos')
+          IF Val(BD:1) = 1
+             *Si es una trans. fallada, se muestra el importe pagado. Si no, el total. CAL 24/11/2022
+            If(FBN['CBFallas'] = 1)
+                ACN(f:FAC+1, FBN['CantPagada'])
+            Else
+                ACN(f:FAC+1,  fbn('Cantidad1') ) 
+            Endif
+          else
+            *Si es una trans. fallada, se muestra el importe pagado. Si no, el total. CAL 24/11/2022
+            If(FBN['CBFallas'] = 1)
+                ACN(f:FAC+1, -FBN['CantPagada']*Val(v5))
+            Else
+                ACN(f:FAC+1, -fbn['TotalNetoCli1']*Val(v5))
+            Endif
+            
+          Endif
+        else
+          ACT(f:FAC, 'Dolares')
+          IF Val(BD:1) = 1
+          *Si es una trans. fallada, se muestra el importe pagado. Si no, el total. CAL 24/11/2022
+            If(FBN['CBFallas'] = 1)
+                ACN(f:FAC+1, FBN['CantPagada'])
+            Else
+                ACN(f:FAC+1,  fbn('Cantidad1') ) 
+            Endif
+            
+          else
+            
+            *Si es una trans. fallada, se muestra el importe pagado. Si no, el total. CAL 24/11/2022
+            If(FBN['CBFallas'] = 1)
+                ACN(f:FAC+1, -fbn['CantPagada']*Val(v5))
+            Else
+                ACN(f:FAC+1, -fbn['TotalNetoCli1']*Val(v5))
+            Endif
+                
+          Endif
+          
+        endif
+      endif
+      AlinearCeldas(d:FAC..g:FAC, 'D')
+      SetFont(d:FAC..g:FAC+1,2)
+      FormatoCeldas(d:FAC+1..g:FAC+1,EXE('F2'))
+      SetFilaActual(FAC+3)
+      if Incluido(FBN['TipoTr2'],'MATCH|RET')
+        ACT(a:FAC+1, 'Aprobacion desembolso')
+        AgregarMarco(a:FAC+1..d:FAC+5,2,0)
+        SetFont(a:FAC+1,2)
+      endif
+      if Val(w2)=1
+        ACT(e:FAC+1, 'Regularizacion Excepciones')
+        AgregarMarco(e:FAC+1..j:FAC+5,2,0)
+        SetFont(e:FAC+1,2)
+      endif        
+      SetFilaActual(FAC+8)
+      ACT(A:FAC, 'Preparado por : '~BuscarCampo('Usuarios','Nombre','Codigo',USUARIOACTIVO))
+      SetFont(a:FAC,2)
+
+      ACT(c:fac+10,'   '~BuscarCampo('CLIENTES','Direccion','Codigo',fbn('Vehiculo1'))~' - '~BuscarCampo('CLIENTES','CodigoPostal','Codigo',fbn('Vehiculo1'))~' - '~BuscarCampo('CLIENTES','Localidad','Codigo',fbn('Vehiculo1'))~' - '~BuscarCampo('CLIENTES','Telefono','Codigo',fbn('Vehiculo1')))
+  
+      SetFont(c:fac+10..c:fac+10,1)
+      SetFilaActual(FAC+10)
+      FormatoCeldas(c:1..f:FAC,Exe('F2'))
+      SetFont(x1..z2,1)
+
+
+      ACO(1,3)
+      ACO(2,7)
+      ACO(3,7)
+      ACO(4,10)
+      ACO(5,10)
+      ACO(6,9)
+      ACO(7,10)
+      ACO(8,1)
+      ACO(9,8)
+      LimitesVision(i:FAC)
+    endif   
+
+    If Val(w1)=2
+      ACT(a:FAC+4, 'Voucher de liquidacion Nro. : '~Dialogo.NrTrans1)
+      ACT(f:FAC+4, 'Liquidacion del : '~FBN['Fecha2'])
+      SetFont(a:FAC..f:FAC+4,2)
+      SetFilaActual(FAC+4)
+      if EqStr(FBN['TipoTr2'],'RET')
+        ACT(c:FAC+2, 'Pagar ')
+        ACT(u1, 'Entregar')
+        ACN(u2, -1)
+        if DesciendeDeEspecie(fbn['TESP'],'TITULO')
+          ACT(c:FAC+2, Val(c:FAC+2)~'Titulos')
+        else
+          ACT(c:FAC+2, Val(c:FAC+2)~fbn['TESP'])
+        endif
+        ACT(c:FAC+2, Val(c:FAC+2)~' por CRYL - FOP')
+      else
+        ACT(c:FAC+2, 'Cobrar ')
+        ACT(u1, 'Recibir')
+        ACN(u2, 1)
+        if DesciendeDeEspecie(fbn['TESP'], 'TITULO')
+          ACT(c:FAC+2, Val(c:FAC+2)~'Titulos')
+        else
+          ACT(c:FAC+2, Val(c:FAC+2)~fbn['TESP'])
+        endif
+        ACT(c:FAC+2, Val(c:FAC+2)~' por CRYL - FOP')
+      Endif
+      AgregarMarco(a:FAC+2..i:FAC+3, 2)
+      SetFont(c:FAC+2,4)
+      SetFilaActual(FAC+4)    
+      act(z:12,BuscarCampo('Cuentas','Cliente','Codigo',fbn['TCUE1']))
+      act(z:11,BuscarCampo('Cuentas','Comitente','Codigo',fbn['TCUE1']))  
+      ACT(a:FAC, 'Cliente : '~BuscarCampo('Clientes','RazonSocial','Codigo',FBN['TCL1']))
+      ACT(a:FAC+1, 'Custodia : ')
+      ACT(a:FAC+1, Val(a:FAC+1)~BuscarCampo('Clientes','RazonSocial','Codigo',val(z:11))) 
+      ACT(a:FAC+2, 'Tipo Operacion : '~Val(v1))
+      ACT(a:FAC+3, 'Clase de Operacion : ')
+      if EqStr(val(z:11),val(z:12)) o CeldaVacia(z:11)
+        ACT(a:FAC+3, Val(a:FAC+3)~'MERCADO')
+      else
+        ACT(a:FAC+3, Val(a:FAC+3)~'CUSTODIA')
+      Endif
+      ACT(a:FAC+4, 'Nro Operacion: '~FBN['NrOperacionRef1'])
+      ACT(a:FAC+5, 'Fecha Concertacion: '~fbn['FechaOp'])
+      ACT(a:FAC+6, 'Fecha Liquidacion: '~fbn['Fecha2'])
+      SetFont(a:FAC..a:FAC+8,2)
+      SetFilaActual(FAC+8)
+      ACT(c:FAC, 'Especie a '~Val(u1))
+      *ACT(g:FAC, 'Compl.')
+      ACT(h:FAC, 'Confir.')
+      ACT(a:FAC+1, 'Cod.')
+      ACT(b:FAC+1, 'Denominacion')
+      if DesciendeDeEspecie(fbn['TESP'],'TITULO')
+        ACT(c:FAC+1, 'Val.Nominal Resid.')
+        ACT(e:FAC, 'Nro. de Cuenta de')
+        ACT(e:FAC+1, 'Registro a '~Val(v3))
+      else
+        ACT(c:FAC+1, 'Cantidad')
+        ACT(e:FAC, 'Numero de Cuenta')
+        ACT(e:FAC+1, 'Corriente a '~Val(v3))
+      endif
+      AgregarMarco(a:FAC..c:FAC, 2,0,EXE('COLOR'))
+      AgregarMarco(a:FAC+1..c:FAC+1, 2,2,EXE('COLOR'))
+
+      AgregarMarco(d:FAC..g:FAC+1, 2,0,EXE('COLOR'))
+      AgregarMarco(g:FAC..i:FAC+1, 2,2,EXE('COLOR'))
+      AlinearCeldas(c:FAC+1, 'D')
+      AlinearCeldas(e:FAC..h:FAC+1, 'C')
+      SetFont(a:FAC..h:FAC+1,2)
+      ACT(i:FAC, '|')
+      ACT(i:FAC+1, '|')
+      SetFont(i:FAC..i:FAC+1,4)
+      SetFilaActual(FAC+2)
+      if DesciendeDeEspecie(fbn['TESP'],'TITULO')
+        ACT(a:FAC,FStr(BuscarCampo('Especies','Valor10','Codigo',FBN['TESP']),1,0))
+      Endif
+      ACT(b:FAC, BuscarCampo('Especies','Nombre','Codigo',fbn['TESP']))
+      ACN(c:FAC, FBN['Cantidad1']*Val(u2)) 
+      if DesciendeDeEspecie(FBN['TESP'],'TITULO')   
+        act(e:fac,BuscarCampo('Cuentas','NrDepositante','Codigo',FBN['TCUE1']))
+      else
+        act(e:fac,BuscarCampo('Cuentas','Numero','Codigo',FBN['TCUE1']))
+      Endif
+
+      ACT(h:FAC, Val(v7))
+      AlinearCeldas(e:FAC..h:FAC, 'C')
+      AgregarMarco(a:FAC..i:FAC, 2)
+      SetFont(a:FAC..h:FAC,1)
+      FormatoCeldas(c:FAC,EXE('F2'))
+      ACT(i:FAC, '|')
+      SetFont(i:FAC,4)
+      SetFilaActual(FAC+1)
+      if DesciendeDeEspecie(FBN['TESP'],'TITULO')
+        ACT(d:FAC, 'Val.Nominal Resid.')
+      else
+        if EqStr(FBN['TESP'],'ARP')
+          ACT(d:FAC, 'Pesos')
+        else
+          ACT(d:FAC, 'Dolares')
+        Endif
+      Endif
+      AlinearCeldas(c:FAC, 'D')
+      ACT(c:FAC+1, 'Total:')
+      SetFont(C:FAC+1,2)
+      ACN(d:FAC+1, FBN['Cantidad1']*Val(u2))
+      SetFont(c:FAC..d:FAC+1,2)
+      FormatoCeldas(d:FAC+1,EXE('F2'))
+      AgregarMarco(c:FAC..e:FAC+2,2,0,EXE('COLOR'))
+      SetFilaActual(FAC+3)
+      if EqStr(FBN['TipoTr2'],'RET')
+        ACT(a:FAC+1, 'Aprobacion desembolso')
+        AgregarMarco(a:FAC+1..c:FAC+6,2,0)
+        SetFont(a:FAC+1,2)
+      Endif
+
+      SetFilaActual(FAC+8)  
+      ACT(A:FAC, 'Preparado por : '~BuscarCampo('Usuarios','Nombre','Codigo',USUARIOACTIVO))
+      SetFont(a:FAC,2)
+      SetFilaActual(FAC+4)
+      if Not DesciendeDeEspecie(fbn['TESP'],'TITULO')
+        ACT(a:FAC, 'Realizar ')
+        if EqStr(FBN['TipoTr2'],'RET')
+          ACT(a:FAC, Val(a:FAC)~'Pago ')
+        else
+          ACT(a:FAC, Val(a:FAC)~'Cobro ')
+        Endif
+        ACT(a:FAC, Val(a:FAC)~'por Mercado Alternativo')
+        AgregarMarco(a:FAC..E:FAC+5,2,0)
+        SetFont(a:FAC..a:FAC+1,2)
+        ACT(f:FAC, 'Supervisado por :')
+        SetFont(f:FAC,2)
+        SetFilaActual(FAC+5)
+
+        ACT(c:fac+10,'   '~BuscarCampo('CLIENTES','Direccion','Codigo',fbn('Vehiculo1'))~' - '~BuscarCampo('CLIENTES','CodigoPostal','Codigo',fbn('Vehiculo1'))~' - '~BuscarCampo('CLIENTES','Localidad','Codigo',fbn('Vehiculo1'))~' - '~BuscarCampo('CLIENTES','Telefono','Codigo',fbn('Vehiculo1')))
+  
+        SetFont(c:fac+10..c:fac+10,1)
+        SetFilaActual(FAC+10)
+        FormatoCeldas(c:1..f:FAC,Exe('F2'))
+        SetFont(x1..z2,1)
+        ACT(a:FAC,' ')
+      Endif
+      ACO(1,3)
+      ACO(2,8)
+      ACO(3,15)
+      ACO(4,6)
+      ACO(5,5)
+      ACO(6,5)
+      ACO(7,1)
+      ACO(8,5)
+      LimitesVision(h:FAC)
+    Endif
+
+    if Val(w1)=3
+      ACT(a:FAC+4, 'Voucher de liquidacion Nro. : '~Dialogo.NrTrans1)
+      ACT(e:FAC+4, 'Liquidacion del : '~fbn['Fecha2'])
+      SetFont(a:FAC..f:FAC+4,2)
+      SetFilaActual(FAC+4)
+      if EqStr(fbn['TipoTr2'],'RET')
+        ACT(c:FAC+2, 'Pagar ')
+        ACT(u1, 'Entregar')
+        ACN(u2, -1)
+        ACT(u3, 'ACREDITAR')
+      else
+        ACT(c:FAC+2, 'Cobrar ')
+        ACT(u1, 'Recibir')
+        ACN(u2, 1)
+        ACT(u3, 'DEBITAR')
+      endif
+      if DesciendeDeEspecie(fbn['TESP'], 'TITULO')
+        ACT(c:FAC+2, Val(c:FAC+2)~'Titulos')
+      else
+        ACT(c:FAC+2, Val(c:FAC+2)~fbn['TESP'])
+      endif
+      ACT(c:FAC+2, Val(c:FAC+2)~' por CRYL - Transferencia Libre')
+      if FBN['PaseCB']=1
+        ACT(c:FAC+2, Val(c:FAC+2)~' Conformada / FTC')
+      else
+        ACT(c:FAC+2, Val(c:FAC+2)~' / FT')
+      endif
+      AgregarMarco(a:FAC+2..h:FAC+3, 2)
+      SetFont(c:FAC+2,4)
+      SetFilaActual(FAC+4)
+      ACT(a:FAC, 'Cliente : '~BuscarCampo('Clientes','RazonSocial','Codigo',FBN['TCl1']))
+      act(z:12,BuscarCampo('Cuentas','Cliente','Codigo',FBN['TCUE1']))
+      act(z:11,BuscarCampo('Cuentas','Comitente','Codigo',FBN['TCUE1']))
+      ACT(a:FAC+1, 'Custodia : ')
+      ACT(a:FAC+1, Val(a:FAC+1)~BuscarCampo('Clientes','RazonSocial','Codigo',val(z:11)))
+      ACT(a:FAC+2, 'Tipo Operacion : '~Val(v1))
+      ACT(a:FAC+3, 'Clase de Operacion : ')
+      if EqStr(val(z:11),val(z:12)) o CeldaVacia(z:11)
+        ACT(a:FAC+3, Val(a:FAC+3)~'MERCADO')
+      else
+        ACT(a:FAC+3, Val(a:FAC+3)~'CUSTODIA')
+      endif
+      ACT(a:FAC+4, 'Nro Operacion: '~fbn['NrOperacionRef1'])
+      ACT(a:FAC+5, 'Fecha Concertacion: '~fbn['FechaOp'])
+      ACT(a:FAC+6, 'Fecha Liquidacion: '~fbn['Fecha2'])
+      SetFont(a:FAC..a:FAC+8,2)
+      SetFilaActual(FAC+8)
+      ACT(c:FAC, 'Especie a '~Val(u1))
+      ACT(d:FAC, 'Cuenta de Registro')
+      ACT(e:FAC, 'Numero Interno de')
+
+      ACT(g:FAC, 'Confir.')
+      ACT(a:FAC+1, 'Cod.')
+      ACT(b:FAC+1, 'Denominacion')
+      ACT(c:FAC+1, 'Val.Nominal Residual')
+      ACT(d:FAC+1, 'a '~Val(u3))
+      ACT(e:FAC+1, 'Cuenta de Terceros')
+      AgregarMarco(a:FAC..C:FAC, 2,0,EXE('COLOR'))
+      AgregarMarco(a:FAC+1..C:FAC+1, 2,2,EXE('COLOR'))
+      AgregarMarco(d:FAC..h:FAC+1, 2,2,EXE('COLOR'))
+      AlinearCeldas(c:FAC+1, 'D')
+      AlinearCeldas(d:FAC..g:FAC+1, 'C')
+      SetFont(a:FAC..g:FAC+1,2)
+      SetFont(h:FAC..h:FAC+1,4)
+
+      SetFilaActual(FAC+2)  
+      ACT(a:FAC, FStr(BuscarCampo('Especies','Valor10','Codigo',fbn['TESP']),1,0))
+      ACT(b:FAC, BuscarCampo('Especies','Nombre','Codigo',fbn['TESP']))
+      ACN(c:FAC, FBN['Cantidad1']*Val(u2))
+      ACT(d:FAC, BuscarCampo('Cuentas','NrDepositante','Codigo',FBN['TCUE1']))
+
+      ACT(g:FAC, Val(v7))
+      AlinearCeldas(d:FAC..g:FAC, 'C')
+      AgregarMarco(a:FAC..h:FAC, 2)
+      SetFont(a:FAC..g:FAC,1)
+      FormatoCeldas(c:FAC,EXE('F2'))
+      ACT(h:FAC, '|')
+      SetFont(h:FAC,4)
+
+      SetFilaActual(FAC+1)
+      ACT(c:FAC, 'Valor Nominal Residual')
+      ACT(d:FAC, 'Valor Residual')
+      AlinearCeldas(c:FAC..d:FAC, 'D')
+      ACT(b:FAC+1, 'Total:')
+      ACN(c:FAC+1, FBN['Cantidad1']*Val(u2))
+      ACN(d:FAC+1, FBN['Cantidad1']*BuscarCampo('Especies','VTeorico','Codigo',fbn['TESP'])*Val(u2))
+      SetFont(b:FAC+1,2)
+      SetFont(c:FAC..d:FAC+1,2)
+      FormatoCeldas(c:FAC+1..d:FAC+1,EXE('F2'))
+      AgregarMarco(b:FAC..e:FAC+2, 2,0,EXE('COLOR'))
+      SetFilaActual(FAC+3)
+
+      if EqStr(FBN['TipoTr2'],'RET')
+        ACT(a:FAC+1, 'Aprobacion desembolso')
+        AgregarMarco(a:FAC+1..C:FAC+6,2,0)
+        SetFont(a:FAC+1,2)
+      endif
+
+      SetFilaActual(FAC+8)
+      ACT(a:fac, 'Preparado por : '~BuscarCampo('Usuarios','Nombre','Codigo',USUARIOACTIVO))
+      SetFont(a:FAC,2)
+
+      ACT(c:fac+10,'   '~BuscarCampo('CLIENTES','Direccion','Codigo',fbn('Vehiculo1'))~' - '~BuscarCampo('CLIENTES','CodigoPostal','Codigo',fbn('Vehiculo1'))~' - '~BuscarCampo('CLIENTES','Localidad','Codigo',fbn('Vehiculo1'))~' - '~BuscarCampo('CLIENTES','Telefono','Codigo',fbn('Vehiculo1')))
+      SetFont(c:fac+10..c:fac+10,1)
+      SetFilaActual(FAC+10)
+      FormatoCeldas(c:1..f:FAC,Exe('F2'))
+      SetFont(x1..z2,1)
+
+      ACO(1,3)
+      ACO(2,9)
+      ACO(3,12)
+      ACO(4,13)
+      ACO(5,13)
+      ACO(6,1)
+      ACO(7,4)
+      LimitesVision(g:FAC)
+    Endif
+    SetFont(u1..z7,1)
+    if Dialogo.Check3=1
+      ImprimirHoja
+    endif
+  Proximo
+else
+  Cancelar('El Voucher '~Dialogo.NrTrans1~' no puede imprimirse')
+Endif

@@ -1,0 +1,165 @@
+﻿ACT(LS:1, 'DNI|CUIT|CUIL|CDI|LE|OTR')
+ACT(LS:2, 'Titular|Co-Titular|Apoderado|Autorizado')
+ACT(LS:3, 'TIT|CTI|APO|AUT')
+                
+CrearListBox ; 'MS Sans SerIf,8,'; '                                                  Alta de Cuentas Comitentes'
+   'OK'         ;X:1..X:8;SI;;;40;CHECK
+   'Titularidad';H:1..H:8;SI;Val(X:FLB)=0 O NoVacio(Val(H:FLB));'Tipo de Poder Invalido';100;COMBO;Val(LS:2);RGB(232,232,255); 
+   'TipoDoc'    ;A:1..A:8;SI;Val(X:FLB)=0 O NoVacio(Val(A:FLB));'Tipo Documento Invalido';50;COMBO;Val(LS:1);RGB(232,232,255); 
+   'NroDoc'     ;B:1..B:8;SI;Val(X:FLB)=0 O NoVacio(Val(B:FLB));'Nro de Documento Invalido';100;STRING;;RGB(232,232,255); 
+   'Nombre'     ;C:1..C:8;NO;;;100;STRING;;RGB(180,180,193);SQL(" Select Nombre From "~DBO~".PERSONASCOBIS Where TipoDocumento = '"~ItemLista(Val(LS:1), Val(A:FLB)+1)~"' AND NrDocumento = '"~Val(B:FLB)~"' ");
+   'Apellido'   ;D:1..D:8;NO;;;100;STRING;;RGB(180,180,193);SQL(" Select Apellido From "~DBO~".PERSONASCOBIS Where TipoDocumento = '"~ItemLista(Val(LS:1), Val(A:FLB)+1)~"' AND NrDocumento = '"~Val(B:FLB)~"' ");
+   'CUIT/CUIL'  ;E:1..E:8;SI;Val(X:FLB)=0 O NoVacio(Val(C:FLB)) O NoVacio(Val(D:FLB)) O NoVacio(Val(E:FLB));'Cliente con TipoDoc '~ItemLista(Val(LS:1), Val(A:FLB)+1)~' NrDocumento '~Val(B:FLB)~' Inexistente';100;STRING;;RGB(180,180,193);SQL(" Select CUIT From "~DBO~".PERSONASCOBIS Where TipoDocumento = '"~ItemLista(Val(LS:1), Val(A:FLB)+1)~"' AND NrDocumento = '"~Val(B:FLB)~"' ");
+FinListBox
+
+if not ok
+   Cancelar('Evento Cancelado.')
+Endif
+
+ACN(FL:1, 0)
+ACN(FL:2, 0)
+ACN(BD:2, 0)
+ACN(BD:3, 0)
+Recorrer&k 1, 8
+    IF Val(X:&k) = 1
+        IF Val(FL:1) = 0
+        ACT(NU:1, Copy(GetNumerador(299), 2, 7))
+        ENDIF
+        SCN(FL:1, 1)        
+        SCN(FL:2, 1)        
+        ACT(NM:Val(FL:1), Val(NU:1))
+        ACT(AA:Val(FL:1), ItemLista(Val(LS:1), Val(A:&k)+1))
+        ACT(BB:Val(FL:1), Val(B:&k))
+        ACT(HH:Val(FL:1), ItemLista(Val(LS:2), Val(H:&k)+1))
+        ACT(RR:Val(FL:2), Val(NM:Val(FL:1)))
+        ACT(SS:Val(FL:2), Val(AA:Val(FL:1)))
+        ACT(TT:Val(FL:2), Val(BB:Val(FL:1)))
+        ACN(BD:1, 0)
+        SQL.ADD(" Select Codigo, Numero, Especie, TipoCuenta ")
+        SQL.ADD(" From "~DBO~".CUENTASCOBIS ")
+        SQL.ADD(" Where TipoDocumento = '"~Val(AA:Val(FL:1))~"' ")
+        SQL.ADD(" AND NrDocumento = '"~Val(BB:Val(FL:1))~"' ")
+        SQL.ADD("  ")
+        Recorrer SQL
+            ***---Traigo las cuentas de cada Integrante
+            DFA
+            ACT(CC:Val(FL:1), fbn('Codigo'))
+            ACT(DD:Val(FL:1), fbn('TipoCuenta'))
+            ACT(EE:Val(FL:1), fbn('Numero'))
+            ACT(FF:Val(FL:1), fbn('Especie'))
+            ACT(HH:Val(FL:1), ItemLista(Val(LS:3), Val(H:&k)+1))
+            ACN(BD:1, 1)
+            SCN(FL:1, 1)
+        Proximo
+        IF Val(BD:1) = 0
+            MessageBox('El Integrante con TipoDoc '~Val(AA:Val(FL:1))~' NrDocumento '~Val(BB:Val(FL:1))~' No Tiene Cuentas Monetarias para Confirmar')
+        ELSE
+            ACN(BD:2, 1)
+        ENDIF
+        SCN(FL:1, -1)
+    ENDIF
+Proximo
+IF Val(BD:2) = 1
+    CrearListBox ; 'MS Sans SerIf,8,'; '                                       Confirmacion de Cuentas Monetarias'
+        'OK'       ;Z:1..Z:Val(FL:1);SI;;;40;CHECK;
+        ***---'Comitente' ;NM:1..NM:Val(FL:1);NO;;;100;STRING;;RGB(232,232,255);
+       'TipoDoc'   ;AA:1..AA:Val(FL:1);NO;;;70;STRING;;RGB(232,232,255); 
+       'NroDoc'    ;BB:1..BB:Val(FL:1);NO;;;100;STRING;;RGB(232,232,255);
+       'Codigo'    ;CC:1..CC:Val(FL:1);NO;;;100;STRING;;RGB(232,232,255); 
+       'TipoCta'   ;DD:1..DD:Val(FL:1);NO;;;100;STRING;;RGB(232,232,255); 
+       'Moneda'    ;FF:1..FF:Val(FL:1);NO;;;100;STRING;;RGB(232,232,255); 
+       'Numero'    ;EE:1..EE:Val(FL:1);NO;;;100;STRING;;RGB(232,232,255);
+    FinListBox
+    IF Not ok
+        Cancelar('Confirmacion de Cuentas Monetarias Cancelada')
+    Endif
+    ***---Inicializo Contador cuenta Pesos y Dolar
+    ACN(CP:1, 0)
+    ACN(CU:1, 0)
+    Recorrer&k 1, Val(FL:1)
+        IF Not CeldaVacia(AA:&k) Y Not CeldaVacia(BB:&k)
+            ***---Guardo TipoDoc y NroDoc
+            ACT(XX:1, Val(AA:&k))
+            ACT(XX:2, Val(BB:&k))
+            ***---Bandera para indicar si la persona ya fué dada de alta
+            ACN(XX:3, 0)
+        ENDIF
+        IF Val(Z:&k) = 1
+            SCN(BD:3, 1)
+            ***---Codigo de Cuenta
+            IF Eqstr(Val(FF:&k), 'ARP')
+                ACT(MO:1, 'P')
+                SCN(CP:1, 1)
+                ACN(CT:2, Val(CP:1))
+            ELSE
+                ACT(MO:1, 'D')
+                SCN(CU:1, 1)
+                ACN(CT:2, Val(CU:1))
+            ENDIF
+            IF Eqstr(Val(DD:&k), 'CC')
+                ACT(CT:1, 'C')
+                ACT(TX:1, 'Cuenta Corriente')
+            ELSE
+                ACT(CT:1, 'A')
+                ACT(TX:1, 'Caja de Ahorro')
+            ENDIF
+            ACT(CD:1, Val(CT:1)~Val(NU:1)~Val(MO:1)~Fstr(Val(CT:2), 0, 0))
+            ***---MessageBox(Val(CD:1))
+            IF Val(BD:3) = 1
+                ACT(JE:1, GenerarJerarquiaPorCodigo('CLIENTES','MINORISTAS', SI,NO))
+                ACT(CD:2, 'CU'~Val(NU:1)~'T')
+                ***---Creo la Cuenta custodia y el Cliente
+                SQL.ADD(" Insert Into "~DBO~".CUENTAS ")
+                SQL.ADD(" (Codigo, Comitente, Cliente, TipoCuenta, NrDepositante, ")
+                SQL.ADD(" Nombre, Numero, Especies, Estado, Mercado) ")
+                SQL.ADD(" Values ")
+                SQL.ADD(" ('"~Val(CD:2)~"', '"~Var('VEHICULODE')~"', '"~Val(NU:1)~"', 'CUS', '"~Val(NU:1)~"', ")
+                SQL.ADD(" 'Cuenta Custodia Comitente ' + '"~Val(NU:1)~"', '"~Val(NU:1)~"', 'TITULO' + '|', 'PEN', 'CV') ")
+                SQL.NEW
+                SQL.EXEC
+                SQL.ADD(" Insert Into "~DBO~".CLIENTES ")
+                SQL.ADD(" (Jerarquia, Codigo, RazonSocial, Persona, ")
+                SQL.ADD(" Status, FechaApertura) ")
+                SQL.ADD(" Values ")
+                SQL.ADD(" ('"~Val(JE:1)~"', '"~Val(NU:1)~"', 'Cliente Comitente '+'"~Val(NU:1)~"', 'SI', ")
+                SQL.ADD(" 'DES', '"~IdxDate(Fsys)~"') ")
+                SQL.NEW
+                SQL.EXEC
+            ENDIF
+            ***---Creo las cuentas monetarias
+            SQL.ADD(" Insert Into "~DBO~".CUENTAS ")
+            SQL.ADD(" (Codigo, Comitente, Cliente, TipoCuenta, ")
+            SQL.ADD(" Nombre, Numero, Especies, Estado) ")
+            SQL.ADD(" Values ")
+            SQL.ADD(" ('"~Val(CD:1)~"', '"~Var('VEHICULODE')~"', '"~Val(NU:1)~"', '"~Val(DD:&k)~"', ")
+            SQL.ADD(" '"~Val(TX:1)~"' + ' ' + '"~Val(NU:1)~"', '"~Val(EE:&k)~"', '"~Val(FF:&k)~"' + '|', 'PEN') ")
+            SQL.NEW
+            SQL.EXEC
+            ***---IF Not CeldaVacia(AA:&k) Y Not CeldaVacia(BB:&k)
+            IF Val(XX:3) = 0
+                ***---Creo IntegrantesCuenta e IntegrantesCli
+                SQL.ADD(" Insert Into "~DBO~".INTEGRANTESCTA ")
+                SQL.ADD(" (Codigo, Cliente, TipoPoder, ")
+                SQL.ADD(" TipoDocumento, NrDocumento) ")
+                SQL.ADD(" Values ")
+                SQL.ADD(" ('"~Val(CD:2)~"', '"~Val(NU:1)~"', '"~Val(HH:&k)~"', ")
+                SQL.ADD(" '"~Val(XX:1)~"', '"~Val(XX:2)~"') ")
+                SQL.NEW
+                SQL.EXEC
+                ACN(IT:1, SQL(" Select Max(NrIntegrante) From "~DBO~".INTEGRANTESCLI Where Codigo = '"~Val(NU:1)~"' ")+1)
+                SQL.ADD(" Insert Into "~DBO~".INTEGRANTESCLI ")
+                SQL.ADD(" (Codigo, TipoDocumento, NrDocumento, ")
+                SQL.ADD(" TipoPoder, Status, NrIntegrante) ")
+                SQL.ADD(" Values ")
+                SQL.ADD(" ('"~Val(NU:1)~"', '"~Val(XX:1)~"', '"~Val(XX:2)~"', ")
+                SQL.ADD(" '"~Val(HH:&k)~"', 'VEN', "~Fstr(Val(IT:1), 0, 0)~") ")
+                SQL.NEW
+                SQL.EXEC
+                ACN(XX:3, 1)
+            ENDIF
+        ENDIF
+    Proximo
+ENDIF
+IF Not CeldaVacia(CD:2)
+    MessageBox('Cuenta Comitente '~Val(CD:2)~' creada')
+ENDIF

@@ -1,0 +1,334 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1   :'Fecha'  ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys
+FinDialogo
+
+If Not OK
+  Cancelar
+Endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+SetFilaAcTual(2)
+
+ACT(a:FAC, "Inventario de Partidas Vigentes al  "~Dialogo.Fecha1~" ")
+SetFont(a:1..a:FAC ,3)
+
+AlinearCeldas(a:FAC..g:FAC,'I')
+AlinearCeldas(h:FAC..i:FAC,'D')
+AlinearCeldas(j:FAC..n:FAC,'I')
+
+SetFilaAcTual(FAC)
+
+**--Acumuladores, flags y demas variables usadas--**
+*   cc1: Total de nominales
+*   dd1: Total Disponible
+*   ee1: Total Efectivo
+**------------------------------------------------**
+
+**-- Pido que tenga disponible o que el disponible se haya utilizado
+**-- en el mes corriente o posterior
+ACD(au1,PriDeMes( Dialogo.Fecha1, NO,'ARG') )
+
+SQL.ADD("SELECT *                 ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES OP ")
+SQL.ADD("WHERE  OP.TipoOp in ('PARTID') ")
+* SQL.ADD(" and OP.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       and (OP.TotalNetoCli1 > 0 or ")
+SQL.ADD("      '"~IdxDate(Val(au1))~"' <= (SELECT Max(P.FechaDesde) FROM "~DBO~".PARTIDAS P WHERE P.NrPartida=OP.NrOperacion AND TipoAct='TIV') )  ")
+SQL.ADD("ORDER BY OP.Especie,OP.NrOperacion                    ")
+
+ACN(z2,0)
+
+Recorrer SQL
+  SCN(z2,1)
+  If Not Eqstr(Val(es1),FBN['Especie'])
+     If Val(cc1)>0
+        *IFA
+        **-- Imprimo totales --** 
+        ACT(a:fac, 'Total')
+        ACN(c:fac, Val(cc1))
+        ACN(d:fac, Val(dd1))
+        ACN(e:fac, Val(ee1)/Val(cc1))
+        ACN(f:fac, Val(ff1))
+        ACN(g:fac, Val(gg1))
+        ACN(i:fac, Val(tt1)/Val(ff1))
+        ACN(h:fac, Val(gg1)/Val(ee1)*Val(vt1))
+        ACN(j:fac, Val(ti1)/Val(ff1))
+                          
+        ACN(cc1,0)
+        ACN(dd1,0)
+        ACN(ee1,0)
+        ACN(ff1,0)
+        ACN(gg1,0)
+        ACN(tt1,0)
+        ACN(ti1,0)
+       
+        SetFont(a:fac..o:FAC,2)
+        AgregarMarco(a:FAC..o:FAC,2,0)
+        IFA  
+     Endif
+
+     **-- Corte de control por especie --**
+     IFA
+     ACT(a:FAC, 'Especie: '~FBN['Especie'])
+     SetFont(a:fac..o:FAC,2)
+     AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR'))
+     IFA
+     ACT(es1,FBN['Especie'])
+
+     **-- Tasa de Interes Vigente de la especie
+     ACN(tv1,BuscarCampo('ESPECIES','TasaIntVigente','Codigo',val(es1)) )
+
+     **-- Valor Residual
+     ACN(vt1,ValorTeorico2(val(es1),Dialogo.Fecha1) )
+
+     **-- InteresesC de la Especie
+     ACT(ic1, BuscarCampo('ESPECIES','InteresesC','Codigo',FBN['Especie'])) 
+  Endif
+
+  ACT(a:FAC, 'Partida')
+  ACT(b:FAC, 'F.Ingreso')
+  ACT(c:FAC, 'Nominales')
+  ACT(d:FAC, 'Disponible')
+  ACT(e:FAC, 'PPP')
+  ACT(f:FAC, 'Efectivo')
+  ACT(g:FAC, 'Cupon')
+  ACT(h:FAC, 'C.Yield')
+  ACT(i:FAC, 'T Transf.')
+  ACT(j:FAC, 'TIR')
+  SetFont(a:fac..o:FAC,2)
+  AgregarMarco(a:FAC..o:FAC,2,0,EXE('COLOR6'))
+  IFA
+  *-- Linea de Detalle
+  ACT(a:FAC, FBN['NrOperacion'])
+  ACLO(a:FAC, FBN['NrOperacion'])
+  ACD(b:FAC, FBN['FechaOp'])
+  ACN(c:FAC, FBN['Cantidad'])
+  ACN(d:FAC, FBN['TotalNetoCli1'])
+
+  **-- Precio: PPP de la Partida
+  ACN(e:FAC, FBN['Precio1'])
+
+  **-- Cupon: Tasa de Interes vigente de la especie
+  ACN(g:FAC, val(tv1))  
+
+  **-- C.Yield: Cupon/(PPP*VResidual)
+  ACN(h:FAC, val(g:fac)/(val(e:fac)*val(vt1)) )
+
+  **-- Tasa Transf
+  ACN(i:FAC, FBN['TipoCambio2'] )
+
+  **-- TIR
+  ACN(j:FAC, FBN['TipoCambio']) 
+  ACN(fi1, FAC)
+
+  **-- Acumuladores
+  SCN(cc1,Val(c:fac))
+  SCN(dd1,Val(d:fac))
+  SCN(ee1, Val(e:fac)*Val(c:fac))
+  ACN(gg1, Val(g:fac))
+   
+  FormatoCeldas(h:fac..h:fac,Exe('F7'))
+  FormatoCeldas(e:fac..e:fac,Exe('F7'))
+  FormatoCeldas(g:fac..g:fac,Exe('F7'))
+  FormatoCeldas(n:fac..n:fac,Exe('F7'))
+  FormatoCeldas(m:fac..m:fac,Exe('F2'))
+  FormatoCeldas(o:fac..o:fac,Exe('F2'))
+
+  SetFont(a:fac..n:FAC,1)
+  SetFont(d:fac..d:FAC,2)
+
+  **-- Encabezados 
+  IFA
+  IFA
+  ACN(fa1, FAC)
+  ACN(xx1,0)
+  ACN(xx2,0)
+
+  **-- Compras realizadas para dichas partidas --**
+  SQL.ADD(" SELECT P.*, O.FechaOp,O.Especie,O.Cantidad as Cant,O.Precio1 as Pre,O.TipoOp,O.NrOperacion, O.TotalBrutoCli1, O.TotalNetoCli1  ")
+  SQL.ADD(" FROM   "~DBO~".OPERACIONES O, "~DBO~".PARTIDAS P  ")
+  SQL.ADD(" WHERE  O.NrOperacion=P.NrOperacion  and P.NrPartida = '"~FBN['NrOperacion']~"' ")
+  SQL.ADD("        and P.TipoAct  In ('TIC','TIPA','CTP','CTC','PABC','TCOPRI') ")
+  SQL.ADD(" UNION ALL ")
+  SQL.ADD(" SELECT P.*, T.Fecha1 as FechaOp,T.Especie,T.Cantidad1 as Cant,T.Precio1 as Pre, T.TipoTr2 as TipoOp,T.NrTrans NrOperacion, T.Cambio4 as TotalBrutoCli1, T.Cambio1 as TotalNetoCli1  ")
+  SQL.ADD(" FROM   "~DBO~".TRANSACCIONES2 T, "~DBO~".PARTIDAS P ")
+  SQL.ADD(" WHERE  T.NrTrans=P.NrOperacion and P.NrPartida = '"~FBN['NrOperacion']~"'  ")
+  SQL.ADD("        and P.TipoAct In ('DTP') ")
+  SQL.ADD(" ORDER BY 7")
+  dfa
+  Recorrer SQL
+     If Val(xx1) = 0
+        ACT(c:FAC, 'Compras')
+        ACT(a:FAC+1, 'NrOperacion')
+        ACT(b:FAC+1, 'Tipo Op.')
+        ACT(c:FAC+1, 'Cantidad')
+        ACT(d:FAC+1, 'Afectados')
+        ACT(e:FAC+1, 'Precio')
+        ACT(f:FAC+1, 'Monto')
+        ACN(xx1, 1)
+        AgregarMarco(a:FAC..f:FAC,2,0)
+        AgregarMarco(a:FAC+1..f:FAC+1,2,0)
+        SetFont(a:FAC..l:FAC+1,2)
+        SetFilaActual(FAC+2)
+     Endif
+     
+     ACT(a:FAC, FBN['NrOperacion'])
+     ACLO(a:FAC, FBN['NrOperacion'])
+     ACT(b:FAC, FBN['TipoOp'])
+     ACN(c:FAC, FBN['Cant'])
+     ACN(d:FAC, FBN['Cantidad'])
+     ACN(e:FAC, FBN['Pre'])
+
+     If EqStr(Val(ic1), 'CLE')
+        ACN(f:FAC, FBN['TotalNetoCli1'])
+     Else
+        ACN(f:FAC, FBN['TotalBrutoCli1'])
+     Endif
+
+     ACN(f:fac, val(f:fac)*val(d:fac)/val(c:fac))
+
+
+     **-- Total Efectivo de la Partida
+     SCN(te1, Val(f:FAC))
+  
+     SetFont(a:FAC..g:FAC, 1)
+     FormatoCeldas(e:fac..e:fac,Exe('F7'))
+     AgregarMarco(a:FAC..f:FAC,1,0)
+  Proximo   
+
+  **-- Ventas realizadas para dichas partidas --**
+  SQL.ADD(" SELECT P.*, O.FechaOp,O.Especie,O.Cantidad as Cant,O.Precio1 as Pre,O.TipoOp,O.NrOperacion, O.TotalBrutoCli1, O.TotalNetoCli1  ")
+  SQL.ADD(" FROM   "~DBO~".OPERACIONES O, "~DBO~".PARTIDAS P  ")
+  SQL.ADD(" WHERE  O.NrOperacion=P.NrOperacion and P.NrPartida = '"~FBN['NrOperacion']~"' ")
+  SQL.ADD("        and P.TipoAct  In ('TIV','TIPP','VTP','VTC','PABC') ")
+  SQL.ADD(" UNION ALL ")
+  SQL.ADD(" SELECT P.*, T.Fecha1 as FechaOp,T.Especie,T.Cantidad1 as Cant,T.Precio1 as Pre, T.TipoTr2 as TipoOp,T.NrTrans NrOperacion, T.Cambio4 as TotalBrutoCli1, T.Cambio1 as TotalNetoCli1  ")
+  SQL.ADD(" FROM   "~DBO~".TRANSACCIONES2 T, "~DBO~".PARTIDAS P ")
+  SQL.ADD(" WHERE  T.NrTrans=P.NrOperacion and P.NrPartida = '"~FBN['NrOperacion']~"' ")
+  SQL.ADD("        and P.TipoAct In ('RTP') ")
+  SQL.ADD(" ORDER BY 7 ")
+
+  Recorrer SQL
+     If Val(xx2) = 0
+        ACT(i:Val(fa1), 'Ventas ')
+        ACT(g:Val(fa1)+1, 'NrOperacion')
+        ACT(h:Val(fa1)+1, 'Tipo Op.')
+        ACT(i:Val(fa1)+1, 'Cantidad')
+        ACT(j:Val(fa1)+1, 'Afectados')
+        ACT(k:Val(fa1)+1, 'Precio')
+        ACT(l:Val(fa1)+1, 'Monto')
+        SetFont(a:Val(fa1)..l:Val(fa1)+1,2)
+        AgregarMarco(g:Val(fa1)..l:Val(fa1),2,0)
+        AgregarMarco(g:Val(fa1)+1..l:Val(fa1)+1,2,0) 
+        ACN(xx2, 1)
+        SCN(fa1, 2)
+     Endif
+     ACT(g:Val(fa1), FBN['NrOperacion'])
+     ACLO(g:Val(fa1), FBN['NrOperacion'])
+     ACT(h:Val(fa1), FBN['TipoOp'])
+     ACN(i:Val(fa1), FBN['Cant'])
+     ACN(j:Val(fa1), FBN['Cantidad'])
+     ACN(k:Val(fa1), FBN['Pre'])
+
+     If EqStr(Val(ic1), 'CLE')
+        ACN(l:Val(fa1), FBN['TotalNetoCli1'])
+     Else
+        ACN(l:Val(fa1), FBN['TotalBrutoCli1'])
+     Endif
+     
+     **-- Total Efectivo de la Partida
+     SCN(te1, -Val(l:Val(fa1)))
+
+     SetFont(a:Val(fa1)..l:Val(fa1), 1)
+     FormatoCeldas(e:Val(fa1)..e:Val(fa1),Exe('F7'))
+     AgregarMarco(a:Val(fa1)..f:Val(fa1),1,0)
+     AgregarMarco(g:Val(fa1)..l:Val(fa1),1,0)
+     SCN(fa1, 1)
+  Proximo 
+  
+  **-- Efectivo de la Partida  
+  ACN(f:Val(fi1), val(te1))
+  SetFont(f:Val(fi1)..f:Val(fi1), 1)
+
+  **-- Sumatoria: Tasa Transferencia * Efectivo
+  SCN(tt1, Val(i:Val(fi1))*Val(f:Val(fi1)))
+
+  **-- Sumatoria: TIR * Efectivo
+  SCN(ti1, Val(j:Val(fi1))*Val(f:Val(fi1)))  
+    
+  **-- Acumulador Efectivo
+  SCN(ff1, Val(f:Val(fi1)))
+
+  SetFilaActual(FAC+1)
+
+  ACN(te1, 0)
+Proximo
+
+If Val(cc1)>0
+   ifa
+   **-- Imprimo totales --**
+   ACT(a:fac, 'Total')
+   ACN(c:fac, Val(cc1))
+   ACN(d:fac, Val(dd1))
+   ACN(e:fac, Val(ee1)/Val(cc1))
+   ACN(f:fac, Val(ff1))
+   ACN(g:fac, Val(gg1))
+   ACN(i:fac, Val(tt1)/Val(ff1))
+   ACN(h:fac, Val(gg1)/Val(ee1)*Val(vt1))
+   ACN(j:fac, Val(ti1)/Val(ff1))
+                         
+   ACN(cc1,0)
+   ACN(dd1,0)
+   ACN(ee1,0)
+   ACN(ff1,0)
+   ACN(gg1,0)
+   ACN(tt1,0)
+   ACN(ti1,0)
+       
+   FormatoCeldas(h:fac..h:fac,Exe('F7'))
+   FormatoCeldas(e:fac..e:fac,Exe('F7'))
+   FormatoCeldas(g:fac..g:fac,Exe('F7'))
+   FormatoCeldas(n:fac..n:fac,Exe('F7'))
+   FormatoCeldas(m:fac..m:fac,Exe('F2'))
+   FormatoCeldas(o:fac..o:fac,Exe('F2'))
+
+   SetFont(a:fac..o:FAC,2)
+   
+   AgregarMarco(a:FAC..l:FAC,2,0)
+Endif
+
+IFA
+IFA
+
+ACO(1,14)
+ACO(2,7)
+ACO(3,7)
+ACO(4,7)
+ACO(5,8)
+ACO(6,9)
+ACO(7,8)
+ACO(8,8)
+ACO(9,8)
+ACO(10,8)
+ACO(11,8)
+ACO(12,9)
+ACO(13,9)
+ACO(14,9)
+
+Impresion(1,2)
+SetFilaACTual(FAC)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:FAC..a:FAC,2)
+LimitesVision(l:FAC)
+SetPrintFit(3,95)
+
+CrearFont(6,"Arial,6,B")
+*RangoTitulo(a:10..l:FAC, 1)
+Impresion(2, 1) 
+Impresion(3, 1) 
+Impresion(4, 1) 
+

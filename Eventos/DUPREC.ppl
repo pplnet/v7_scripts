@@ -1,0 +1,117 @@
+﻿HojaVisible(SI)
+MostrarCuadroDeMensajes
+
+CrearDialogo
+    Directorio1:    'Path '        ;;;;SI;SI;;;;
+    String1:    'Archivo '         ;;;;SI;SI;;;;
+FinDialogo
+
+If not ok
+    Cancelar
+Endif
+
+*Reviso si existe el directorio y si el archivo existe en el mismo.
+If ExisteDirectorio(Dialogo.Directorio1)
+    If EqStr(Copy(Dialogo.Directorio1,Longitud(Dialogo.Directorio1),1),'\')
+        If Not ExisteArchivo(Dialogo.Directorio1~Dialogo.String1)
+            Cancelar('1.El Archivo '~Dialogo.String1~' no existe en el directorio: '~Dialogo.Directorio1)
+        EndIf
+    Else
+        If Not ExisteArchivo(Dialogo.Directorio1~'\'~Dialogo.String1)
+            Cancelar('2.El Archivo '~Dialogo.String1~' no existe en el directorio: '~Dialogo.Directorio1)
+        EndIf
+    Endif
+Else
+    Cancelar('El directorio '~Dialogo.Directorio1~' no existe')
+EndIf
+
+*Agrego \ al final si el directorio no lo tiene
+let &pf ''
+If EqStr(Copy(Dialogo.Directorio1,Longitud(Dialogo.Directorio1),1),'\')
+    let &pf Dialogo.Directorio1~Dialogo.String1
+Else
+    let &pf Dialogo.Directorio1~'\'~Dialogo.String1
+Endif
+
+*Importo el excel de RelacionesCuenta
+ImportarXLS(A:2..G:1000,AA:2..AG:1000, &pf)
+
+CrearFont(1, 'Arial,12,B')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,8,')
+
+ACT(C:1,'Nuevas Relaciones Cuenta')
+SetFont(C:1,1)
+
+ACT(A:2,'Nueva - Original')
+SetFont(A:2,2)
+
+SetFilaActual(2)
+
+Recorrer&I 2,1000
+    *Me fijo si hay RelacionCuenta
+    IF NoVacio(Val(AA:&I))
+        *Voy a tomar los campos TiposOperacion, TiposGrupoEsp, Tabla, Moneda
+        SQL.ADD(" SELECT TiposOperacion, TiposGrupoEsp, Tabla, Moneda ")
+        SQL.ADD(" FROM "~DBO~".RELACIONCUENTA ")
+        SQL.ADD(" WHERE Codigo = '"~Fstr(Val(AA:&I),0,0)~"' ")
+        Recorrer SQL
+            *Si entra al recorrer es porque la relación existe
+            *Paso los datos a variables
+            let &TiposOperacion fbn('TiposOperacion')
+            let &TiposGrupoEsp fbn('TiposGrupoEsp')
+            let &Tabla fbn('Tabla')
+            let &Moneda fbn('Moneda')
+            
+            *El vehiculo siempre es BACS
+            let &Vehiculos 'BACS|'
+            
+            *Tomo los campos Cuenta y Books del excel. El Book puede estar vacío
+            let &Cuenta Val(AC:&i)
+            IF NoVacio Val(AF:&i)
+                let &Book IIF(Eqstr(Copy(Val(AF:&i),Longitud(Val(AF:&i)),1),'|'),Val(AF:&i),Val(AF:&i)~'|')
+            ELSE 
+                let &Book ''
+            ENDIF
+            
+            *Obtener el Código con valor más alto sumandole uno para el Codigo
+            SQL.ADD(" SELECT MAX(TRY_CAST(Codigo AS INT))+1 Codigo ")
+            SQL.ADD(" FROM "~DBO~".RELACIONCUENTA ")
+            Recorrer SQL
+                dfa
+                let &Codigo fbn('Codigo')
+            Proximo
+            
+            *Armo el Insert
+            SQL.ADD(" INSERT INTO "~DBO~".RELACIONCUENTA ")
+            IF NoVacio &Book
+                SQL.ADD(" (Codigo,TiposOperacion,TiposGrupoEsp,Tabla,Moneda,Vehiculos,Cuenta,Book) ")
+                SQL.ADD(" VALUES ")
+                SQL.ADD(" ('"~Fstr(&Codigo,0,0)~"','"~&TiposOperacion~"','"~&TiposGrupoEsp~"','"~&Tabla~"','"~&Moneda~"','"~&Vehiculos~"','"~Fstr(&Cuenta,0,0)~"','"~&Book~"') ")
+            ELSE
+                SQL.ADD(" (Codigo,TiposOperacion,TiposGrupoEsp,Tabla,Moneda,Vehiculos,Cuenta) ")
+                SQL.ADD(" VALUES ")
+                SQL.ADD(" ('"~Fstr(&Codigo,0,0)~"','"~&TiposOperacion~"','"~&TiposGrupoEsp~"','"~&Tabla~"','"~&Moneda~"','"~&Vehiculos~"','"~Fstr(&Cuenta,0,0)~"') ")
+            ENDIF
+            SQL.NEW
+            SQL.EXEC
+            *ACT(A:FAC,Fstr(&Codigo,0,0))
+            ACT(A:FAC,Fstr(&Codigo,0,0)~' - '~Fstr(Val(AA:&I),0,0))
+            SetFont(A:FAC,3)
+            
+            *A la Relacion que dupliqué le tengo que poner Vehiculo BIND
+            SQL.ADD(" UPDATE "~DBO~".RELACIONCUENTA ")
+            SQL.ADD(" Set Vehiculos = 'BIND|' ")
+            SQL.ADD(" WHERE Codigo = '"~Fstr(Val(AA:&I),0,0)~"' ")
+            SQL.NEW
+            SQL.EXEC
+        Proximo
+    ELSE
+        *No hay RelacionCuenta. Salgo
+        break
+    ENDIF
+Proximo
+
+ACT(A:FAC+2,'Fin del informe')
+LimitesVision(G:FAC+3)
+ACO(1,12)

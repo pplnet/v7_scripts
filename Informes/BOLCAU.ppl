@@ -1,0 +1,845 @@
+﻿*Se utiliza la celda TX:1 para guardar los datos del pie de página. CAL 18/11/2022
+
+MostrarCuadroDeMensajes
+CrearDialogo
+  NrOperacion1   : "NrOperacion"             ;;;;;;;;;;;;;;"TipoOp IN ('CAUC')"
+  String         : "Leyenda"                 ;;;;;;;;;;;;;;    
+  Radio2         : "|Impresora|Pantalla|PDF" ;;;;;;;;;1;;;;;
+  Radio1         : "|Spot|Futuro"            ;;;;;;;;;0;;;;;
+FinDialogo
+If Not OK
+   Cancelar
+Endif
+ 
+CrearFont(4, "Arial,6,")
+CrearFont(1, "Arial,8,")
+CrearFont(2, "Arial,8,B")
+CrearFont(3, "Arial,14,B")
+CrearFont(5, "Arial,10,BU")
+CrearFont(6, "Arial,10,B")
+
+
+** Datos de Cliente Vehiculo
+SQL.ADD("SELECT CUIT, NrIngBrutos, RazonSocial, CodigoCNV, NrMAE, NrBYMA ")
+SQL.ADD("FROM   "~DBO~".CLIENTES ")
+SQL.ADD("WHERE  Codigo  = '"~Var('VEHICULO')~"'")
+Recorrer SQL
+   
+   If [NoVacio(FBN('CUIT')) y Not EqStr(FBN('CUIT'), '000000000000000')]
+      If [EqStr(Copy(FBN('CUIT'), 01, 04), '0000')]
+         ACT(ZB:10, Copy(FBN('CUIT'), 05, 11))
+      Else  
+         If [[EqStr(Copy(FBN('CUIT'), 03, 01), '-')] y [EqStr(Copy(FBN('CUIT'), 12, 01), '-')]]
+            ACT(ZB:10, Copy(FBN('CUIT'), 01, 13))
+            ACT(ZB:11, Copy(FBN('CUIT'), 01, 13))
+         Else           
+            ACT(ZB:10, Copy(FBN('CUIT'), 01, 11))
+            ACT(ZB:11, Copy(FBN('CUIT'), 01, 02)~'-'~Copy(FBN('CUIT'), 03, 08)~'-'~Copy(FBN('CUIT'), 11, 01))
+         EndIf      
+      EndIf
+      ACT(vh:1,Val(ZB:10))
+   Else
+      ACT(ZB:10, '')
+      ACT(vh:1,Var('VEHICULO'))
+   EndIf
+   
+   ACT(vh:2,FBN['NrIngBrutos'])
+   ACT(vh:3,FBN['RazonSocial'])
+   ACT(vh:4,FBN['CodigoCNV'])
+   ACT(vh:5,FBN['NrMAE'])
+   ACT(vh:6,FBN['NrBYMA'])
+
+Proximo
+
+** AA 13/07/2023 se incorpora Radio1 para dar solucion a pagina en blanco en core 6.7.5
+
+* 1er Select
+if Dialogo.Radio1=0
+SQL.ADD("SELECT 1 Qry, 1 TpBoleto,     O.NrOperacion,  C.Codigo Cliente1, O.Cantidad,     O.Especie,       O.ContraEspecie,     O.Precio1,           ")
+SQL.ADD("       O.TotalBrutoCli1,      O.TotalNetoCli1,   O.TotalAux2,    O.TotalAux4,     O.TotalIntereses,  O.TotalComisiones,  ") 
+SQL.ADD("       O.CB5,          O.CB8,                 O.PorAforo,        O.EsAforado,    O.TipoOp,        O.Convenio,          O.FechaOp,           ")
+SQL.ADD("       O.FechaVto,     O.FechaAltaSisExterno, O.FechaEnvioMAE,   O.FechaAltaMAE, O.FechaCarga,    O.Cuenta1,           O.NrBoleto,          ")
+SQL.ADD("       O.NrOperacion3, O.Plazo,               O.NroAltaMAE,      O.NrOrden1,     O.NrOrden,       Convert(Char(12), O.FechaAltaMAE, 14) as HoraMAE,       ")
+SQL.Add("       C.Codigo,       C.RazonSocial,         C.Direccion Dire,  C.Localidad,    C.CodigoPostal,  C.CUIT,              ")
+SQL.Add("       C.NrMAE,        C.CondicionIVA,        C.TipoInscripcion, C.Sucursal,     C.Telefono,      C.CategDepositante,  ")
+SQL.Add("       C.Calle,        C.Altura,              C.Piso,            C.Depto,        E.ISO,                                ")
+SQL.Add("       C.Alias1,       C.NrCuenta,            E.Alias5,          E.InteresesC,   E.Extendido,     E.CodMAEContado,     ")
+SQL.ADD("       O.TotalCaucion, E.CotizaMAE,           E.VTeorico,        O.TipoCambio2,  O.PaseCB,        E.CodNumCajaValores, ")
+SQL.ADD("       O.FechaPago,    0 Valor,               O.Precio1,         O.Precio2,      O.Precio3,       O.Precio4,           ")
+SQL.ADD("       O.Mercado2 MercadoMon,                 O.Mercado MercadoTit,              O.Mercado4 MercadoNeg")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O,"~DBO~".CLIENTES C ,"~DBO~".ESPECIES E,"~DBO~".OPERACIONESBITS OB ")
+SQL.ADD("WHERE  O.NrOperacion  = '"~Dialogo.NrOperacion1~"'")
+SQL.ADD("       and ((O.Cliente1 = '"~VAR('VEHICULODE')~"' and O.Mercado4='"~VAR('AMBMAE')~"' and '"~VAR('CLIENTEMAE')~"'=C.Codigo) or ((O.Cliente1 <> '"~VAR('VEHICULODE')~"' or O.Mercado4<>'"~VAR('AMBMAE')~"') and O.Cliente1=C.Codigo)) ")
+SQL.ADD("       and E.Codigo   = O.Especie ")
+*SQL.ADD("       and (O.Mercado4 not in ("~Pipe2Comillas(VAR('AMBBYMA'))~") OR (O.Mercado4 in ("~Pipe2Comillas(VAR('AMBBYMA'))~") )) ")
+SQL.ADD("       and OB.NrOperacion = O.NrOperacion ")
+SQL.ADD("       and OB.NrBit  NOT IN (30,31) AND OB.Valor=1 ")
+
+****SQL.ADD("  UNION ALL")
+*2do Select
+Else
+
+*O.NroAltaMae->O.Observac2
+SQL.ADD("SELECT 2 Qry, 2 TpBoleto,     O.NrOperacion,  C.Codigo Cliente1, O.Cantidad,     O.Especie,       O.ContraEspecie,     O.Precio1,           ")
+SQL.ADD("       O.TotalBrutoCli1,      O.TotalNetoCli1,   O.TotalAux2,    O.TotalAux4,     O.TotalIntereses,   O.TotalComisiones,  ") 
+SQL.ADD("       O.CB5,          O.CB8,                 O.PorAforo,        O.EsAforado,    O.TipoOp,        O.Convenio,          O.FechaOp,           ")
+SQL.ADD("       O.FechaVto,     O.FechaAltaSisExterno, O.FechaEnvioMAE,   O.FechaAltaMAE, O.FechaCarga,    O.Cuenta1,           O.NrBoleto2 as NrBoleto,          ")
+SQL.ADD("       O.NrOperacion3, O.Plazo,               O.Observac2 NroAltaMAE,       O.NrOrden1,     O.NrOrden,       Convert(Char(12),   O.FechaAltaMAE, 14) as HoraMAE,       ")
+SQL.Add("       C.Codigo,       C.RazonSocial,         C.Direccion Dire,  C.Localidad,    C.CodigoPostal,  C.CUIT,              ")
+SQL.Add("       C.NrMAE,        C.CondicionIVA,        C.TipoInscripcion, C.Sucursal,     C.Telefono,      C.CategDepositante,  ")
+SQL.Add("       C.Calle,        C.Altura,              C.Piso,            C.Depto,        E.ISO,                                ")
+SQL.Add("       C.Alias1,       C.NrCuenta,            E.Alias5,          E.InteresesC,   E.Extendido,     E.CodMAEContado,     ")
+SQL.ADD("       O.TotalCaucion, E.CotizaMAE,           E.VTeorico,        O.TipoCambio2,  O.PaseCB,        E.CodNumCajaValores, ")
+SQL.ADD("       O.FechaPago,    0 Valor,               O.Precio1,         O.Precio2,      O.Precio3,       O.Precio4,           ")
+SQL.ADD("       O.Mercado2 MercadoMon,                 O.Mercado MercadoTit,              O.Mercado4 MercadoNeg")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O,"~DBO~".CLIENTES C ,"~DBO~".ESPECIES E,"~DBO~".OPERACIONESBITS OB ")
+SQL.ADD("WHERE  O.NrOperacion  = '"~Dialogo.NrOperacion1~"'")
+SQL.ADD("       and ((O.Cliente1 = '"~VAR('VEHICULODE')~"' and O.Mercado4='"~VAR('AMBMAE')~"' and '"~VAR('CLIENTEMAE')~"'=C.Codigo) or ((O.Cliente1 <> '"~VAR('VEHICULODE')~"' or O.Mercado4<>'"~VAR('AMBMAE')~"') and O.Cliente1=C.Codigo)) ")
+SQL.ADD("       and E.Codigo   = O.Especie ")
+*SQL.ADD("       and O.Mercado4 ='"~VAR('AMBBYMA')~"'")
+SQL.ADD("       and OB.NrOperacion = O.NrOperacion ")
+SQL.ADD("       and OB.NrBit  NOT IN (30,31) AND OB.Valor=1 ")
+endif
+SQL.ADD("Order by Qry")
+
+watch(SQL.BATCH())
+
+
+SetFilaActual(0)
+Recorrer SQL
+    if(FAC >1)
+        SetFilaActual(FAC+11)
+        SaltarHoja()
+    else
+        SetFilaActual(1)
+    endif
+   
+    (.'LOGO2'.)
+    
+    SetFilaActual(FAC+9)
+
+    If EqStr(Fbn['Qry'],'1')
+        *Apertura: Qry 1 -> NrBoleto 
+        let &Apertura Si
+    Else
+        let &Apertura No
+        *Cierre:   Qry 2 -> NrBoleto2 
+    EndIf
+    
+   
+   If [NoVacio(FBN('CUIT')) y Not EqStr(FBN('CUIT'), '000000000000000')]
+      If [EqStr(Copy(FBN('CUIT'), 01, 04), '0000')]
+         ACT(ZB:10, Copy(FBN('CUIT'), 05, 11))
+      Else  
+         If [[EqStr(Copy(FBN('CUIT'), 03, 01), '-')] y [EqStr(Copy(FBN('CUIT'), 12, 01), '-')]]
+            ACT(ZB:10, Copy(FBN('CUIT'), 01, 13))
+            ACT(ZB:11, Copy(FBN('CUIT'), 01, 13))
+         Else           
+            ACT(ZB:10, Copy(FBN('CUIT'), 01, 11))
+            ACT(ZB:11, Copy(FBN('CUIT'), 01, 02)~'-'~Copy(FBN('CUIT'), 03, 08)~'-'~Copy(FBN('CUIT'), 11, 01))
+         EndIf      
+      EndIf
+      ACT(CU:1,Val(ZB:10))
+   Else
+      ACT(ZB:10, '')
+      ACT(CU:1,FBN['Cliente1'])
+   EndIf
+   ACT(op:1,FBN['NrOperacion'])
+   
+
+   * ---> Impresion Del Titulo De Referencia
+   *Ver contra que validar 13/06/23
+   IF &Apertura
+        ACT(f:FAC, 'Operación de Apertura de Caución Colocadora')
+    ELSE 
+        ACT(f:FAC, 'Operación de Cierre de Caución Colocadora')
+    Endif
+    
+    AlinearCeldas(f:FAC+&ajustarTitulo, 'C')
+    SetFont(f:FAC+&ajustarTitulo, 3)
+
+    If Eqstr(fbn('Convenio'),'1')
+        ACD(fv:1, fbn['FechaPago'])
+    Else
+        ACD(fv:1, fbn['FechaVto'])
+    Endif
+   
+
+   SetFont(d:FAC-2, 3)
+   
+    AFI(FAC+2,0.1)
+    AFI(FAC+3,0.1)
+    AFI(FAC+4,0.1)
+    AFI(FAC+5,0.1)
+    AFI(FAC+6,0.1)
+    
+   SetFilaActual(fac+2)   
+   
+   #ifdef BACS
+   
+   #else
+        ACT(c:fac,  '        Agente de Liquidacion y Compensacion Propio registrado en CNV bajo el Nro. de matricula '~Val(vh:4)~' - ALyC y AN Propio')
+        #ifdef MLASA
+            ACT(c:fac+1, '                                         ')
+            ACT(c:fac+2, '                CUIT '~Val(vh:1)~' - IVA No Responsable - Ingresos Brutos n# '~Val(vh:2))
+        #else
+            if EqStr(fbn['MercadoNeg'],var('AMBMAE'))
+                ACT(d:fac+1, '                              Agente de Mercado Abierto N# '~Val(vh:5)~'  CUIT '~Val(vh:1))
+            else
+                ACT(d:fac+1, '                              Numero Agente N# '~Val(vh:6)~'  CUIT '~Val(vh:1))
+            endif
+                ACT(d:fac+2, '                                IVA Resp. Inscripto - Ingresos Brutos n# '~Val(vh:2))
+        #endif
+    #endif
+   
+   If FBN['Valor']=1
+    Act(d:fac-3,Pad('',16)~'A    N    U    L    A    D    O')    
+    SetFont(d:FAC-3, 3)
+   Endif
+   
+      SetFilaActual(fac+3)
+   acn(w1,fac)
+
+   **********************
+   ** Datos Orden   
+   **********************
+   ACD(ZB:09, FSys)
+   
+   #ifdef MLASA
+      ACT(a:FAC, 'Orden/Order')
+   #else
+      ACT(a:FAC, 'Orden')
+   #endif
+   SetFont(a:FAC, 2)
+   IFA
+   **iF EQSTR(fbn('TipoOp'), 'TCOPRI')
+   iF NoVacio(fbn('NrOrden1'))
+     ACT(a:fac, fbn('NrOrden1'))   
+   else
+     ACT(a:fac, fbn('NrOrden'))   
+   endif
+   AgregarMarco(a:FAC,2,0)
+
+   * ---> Impresion De La Fecha De Emision
+   #ifdef MLASA
+      ACT(a:FAC+1, 'Fecha Orden/Order Date')
+   #else
+      ACT(a:FAC+1, 'Fecha Orden')
+   #endif
+   SetFont(a:FAC, 2)
+     
+   AgregarMarco(a:FAC+2,2,0)
+
+   
+   *ACT(a:FAC+2, SQL("SELECT FechaOrden FROM "~DBO~".ORDENES WHERE NrOperacion = '"~fbn['NrOperacion']~"' ")  )
+   *ACT(a:FAC+2, Fecha(Trunc2(SQL("SELECT FechaOrden FROM "~DBO~".ORDENES WHERE NrOperacion = '"~fbn('NrOperacion')~"' "))))
+   ACT(a:FAC+2, SQL("SELECT top 1 FechaOp FROM "~DBO~".LIBORDENES WHERE NrOperacionRef='"~Dialogo.NrOperacion1~"' "))
+
+
+   ACD(ZB:09, FSys)
+   *-i
+   IF NoVacio(FBN['CodMAEContado']) y novacio(fbn('FechaAltaMAE'))
+      ACT(xy5, Fecha(Trunc2(fbn('FechaAltaMAE'))))
+   ELSE
+      ACT(xy5, FBN['FechaOp'])
+   ENDIF
+   IF Vacio(val(a:fac+2)) o Eqstr(val(a:fac+2),'00/00/0000')
+      ACT(a:fac+2, val(xy5))
+   endif
+   *-f
+   ifa
+   #ifdef MLASA
+      ACT(c:FAC, 'Hora Orden / Time Date')
+   #else
+      ACT(c:FAC, 'Hora Orden')
+   #endif
+   SetFont(c:FAC, 2)
+
+   *   ACT(C:FAC+1, Copy(Hora(SQL("SELECT FechaOrden FROM "~DBO~".ORDENES WHERE NrOperacion = '"~fbn['NrOperacion']~"' ")),1,8))
+   * Para las TMANIF
+   *ACT(C:FAC+1, Hora(SQL("SELECT FechaOrden FROM "~DBO~".ORDENES WHERE NrOperacion = '"~fbn['NrOperacion']~"' ")))  
+   *ACT(C:FAC+1, Copy(Hora(SQL("SELECT FechaOrden FROM "~DBO~".ORDENES WHERE NrOperacion = '"~fbn['NrOperacion']~"' ")),1,8))
+   ACT(C:FAC+1, SQL("SELECT Top 1 HoraOp FROM "~DBO~".LIBORDENES WHERE NrOperacionRef='"~Dialogo.NrOperacion1~"' "))   
+   AgregarMarco(c:FAC+1,2,0) 
+
+* FJL 05/11/18 - Para igualar con Copiativo
+*   IF NoVacio(FBN['CodMAEContado'])
+*     IF Vacio(FBN['NrOrden1'])
+*       ACT(xy6,Copy(FBN['HoraMAE'],1,8))
+*     else
+*       ACT(xy6, Copy(Hora(SQL("SELECT FechaAltaMae FROM "~DBO~".ORDENES WHERE NrOperacion2 = '"~fbn['NrOperacion']~"' ")),1,8))     
+*     endif
+*   ELSE
+*     ACT(xy6,Copy(HORA(FBN['FechaCarga']),1,8))
+*   ENDIF
+* FJL 05/12/18 - Nuevo criterio
+*   IF NoVacio(fbn('FechaAltaMAE'))
+*     ACT(xy:6, Copy(FBN['HoraMAE'],1,8))
+*   ELSE
+*     ACT(xy:6, Copy(HORA(FBN['FechaCarga']),1,8))
+*   ENDIF
+   IF NoVacio(FBN['CodMAEContado']) y NoVacio(fbn('FechaAltaMAE'))
+     IF fbn('CB5') = 1
+       ACT(xy:6, Hora(fbn['FechaAltaMAE']))
+     ELSE
+* FJL 05/12/18 - Esto de restar un valor fijo se acordo con Alcira y Gustavo en BofA
+       IF fbn['FechaEnvioMAE']<fbn['FechaAltaMAE']
+         ACT(xy:6, Hora(fbn['FechaEnvioMAE']))
+       ELSE
+         IF fbn['FechaEnvioMAE']-0.001<fbn['FechaAltaMAE']
+           ACT(xy:6, Hora(fbn['FechaEnvioMAE']-0.001))
+         ELSE
+           ACT(xy:6, Hora(fbn['FechaAltaMAE']-0.001))
+         ENDIF
+       ENDIF
+     ENDIF
+   ELSE
+     ACT(xy:6, HORA(FBN['FechaCarga']-0.001))
+   ENDIF
+
+   IF Vacio(val(c:fac+1)) o Eqstr(val(c:fac+1),'00:00:00')
+      ACT(c:fac+1, val(xy6))
+   ENDIF
+
+   
+   ACT(i:FAC, 'N# Minuta')
+   ACT(j:FAC,FBN['NrOperacion'])
+   ACLO(j:fac,FBN['NrOperacion'])   
+   AgregarMarco(j:FAC,2,0)
+   AlinearCeldas(i:fac..j:fac,'D')
+   SetFont(a:FAC..i:FAC, 2)
+   IFA
+
+   IFA
+   **********************
+   ** Datos Operacion
+   **********************
+   **-horadate fecha date 
+   #ifdef MLASA
+      ACT(a:FAC+1, 'Fecha / Date')
+   #else
+      ACT(a:FAC+1, 'Fecha')
+   #endif
+   SetFont(a:FAC+1, 2)
+   #ifdef MLASA
+      ACT(c:FAC+1, 'Hora / Time')
+   #else
+      ACT(c:FAC+1, 'Hora')
+   #endif
+   SetFont(c:FAC+1, 2)
+   IF NoVacio(FBN['CodMAEContado']) y novacio(fbn('FechaAltaMAE'))
+      ACT(A:FAC+2, Fecha(Trunc2(fbn('FechaAltaMAE'))))
+   ELSE
+      ACT(A:FAC+2, FBN['FechaOp'])
+   ENDIF
+   SetFont(a:FAC+2, 1)
+   AgregarMarco(a:FAC+2,2,0)
+
+* FJL 02/11/18 - Para igualar con Copiativo
+*   IF NoVacio(FBN['CodMAEContado'])
+*      ACT(c:FAC+2,Copy(FBN['HoraMAE'],1,8))
+*   ELSE
+*      ACT(c:FAC+2,Copy(HORA(FBN['FechaCarga']),1,8))
+*   ENDIF
+* FJL 05/12/18 - Nuevo criterio
+*   IF fbn('CB8') = 1 o  fbn('CB5') = 1
+*     ACT(c:FAC+2, Hora(fbn['FechaAltaMAE']))
+*   ELSE
+*     ACT(c:FAC+2, Hora(fbn['FechaEnvioMAE']))
+*   ENDIF
+   *IF NoVacio(FBN['CodMAEContado']) y NoVacio(fbn('FechaAltaMAE'))
+   IF NoVacio(fbn('FechaAltaMAE'))
+     ACT(c:FAC+2, Hora(fbn['FechaAltaMAE']))
+   ELSE
+     ACT(c:FAC+2, HORA(FBN['FechaCarga']))
+   ENDIF
+
+   SetFont(c:FAC+2, 1)
+   AgregarMarco(c:FAC+2,2,0)
+   SetFilaActual(FAC+2)
+    
+   ifa
+   If EqStr(FBN['CategDepositante'],'CLI')
+      * ---> Impresion Del Codigo Y Nombre De La Sucursal
+      ACT(A:FAC+1, 'Sucursal')
+      ACT(C:FAC+1, fbn['Sucursal']~'- '~BuscarCampo('Sucursales', 'Nombre', 'Codigo', FBN('Sucursal')) )
+      SetFont(A:FAC+1..C:FAC+1, 2)
+
+      * ---> Impresion Del Numero De  Cuenta
+      ACT(A:FAC+2, 'Cuenta Nro. ')
+      ACT(C:FAC+2, 'Comitente Nro.')
+      SetFont(A:FAC+2..C:FAC+2, 2)
+      ACT(A:FAC+3, fbn['Cliente1'])
+
+      ACT(C:FAC+3, BuscarCampo('CUENTAS', 'NrDepositante', 'Codigo', FBN('Cuenta1')))
+      AgregarMarco(c:FAC+3,2,0)
+      AlinearCeldas(a:fac+3..c:fac+3,'D')
+   Endif
+
+   ACT(i:FAC-3, 'Nr. Boleto')
+   SetFont(i:FAC-3, 2)
+   ACT(j:FAC-3, fbn['NrBoleto'])
+   AlinearCeldas(i:fac-3..j:fac-3,'D')
+   AgregarMarco(j:FAC-3,2,0)
+
+   SetFilaActual(FAC+2)
+   IF NoVacio(FBN['CodMAEContado'])
+      if EqStr(fbn['MercadoNeg'],var('AMBMAE'))
+         ACT(i:FAC-3,'Referencia M.A.E.')
+      else
+         if EqStr(fbn['MercadoNeg'],var('AMBBYMA'))
+            ACT(i:FAC-3,'Referencia BYMA')
+         else
+            ACT(i:FAC-3,'Referencia')
+         endif  
+      endif  
+      SetFont(i:FAC-3, 2)
+      IF NoVacio(FBN['NroAltaMAE'])
+**     Por auditoria MAE secuencia en el formato ddmmaa+hhmmss+secuencia.
+* FJL 05/12/18 -Invierto formato fecha
+         ACT(xy1, Copy(Fstr(Anio(FBN['FechaAltaMAE']),0,0),3,2)~Pad0(Fstr(Mes(FBN['FechaAltaMAE']),0,0),2)~Pad0(Fstr(Dia(FBN['FechaAltaMAE']),0,0),2) )
+         ACT(xy2, Copy(Hora(fbn('FechaAltaMAE')),1,2)~Copy(Hora(fbn('FechaAltaMAE')),4,2)~Copy(Hora(fbn('FechaAltaMAE')),7,2))
+         ACT(xy3, Copy(PAD0(fbn('NroAltaMAE'),5),1,5))
+         ACT(j:fac-3,Val(xy1)~Val(xy2)~Val(xy3))       
+      ENDIF
+      AlinearCeldas(i:fac-3..j:fac-3,'D')   
+      AgregarMarco(j:FAC-3,2,0)
+   ENDIF
+
+   If Eqstr(fbn('CB8'),'1') 
+      ACT(cl:1, '')
+      SQL.ADD(" SELECT O.Cliente1, C.CategDepositante, C.AFJP, C.Alias2, C.NrCuenta ")
+      SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".CLIENTES C ")
+      SQL.ADD(" WHERE O.Cliente1 = C.Codigo ")
+      SQL.ADD(" AND   O.NrOperacion3 = '"~fbn('NrOperacion3')~"' ")
+      SQL.ADD(" AND   O.TipoOp IN ('CAUC') AND O.CB8='1'      ")
+      SQL.ADD(" AND   O.NrOperacion3 <> null AND O.NrOperacion3 <> ''  ")
+      SQL.ADD(" AND   O.NrOperacion3 <> '     ' AND O.NrOperacion3 <> '00000' ")
+      SQL.ADD(" AND   O.NrOperacion <> '"~fbn('NrOperacion')~"'  ")
+      SQL.ADD(" AND   O.FechaOp = "~idxdate2(fbn('FechaOp'))~" ")
+      SQL.ADD(" AND   O.Especie = '"~fbn('Especie')~"' ") 
+      Recorrer SQL
+         dfa
+         ACT(cl:1, fbn('Cliente1'))
+         act(cl:3, fbn('CategDepositante'))
+         act(cl:4, fbn('AFJP'))
+         act(cl:6, fbn('Alias2'))
+         act(cl:5, fbn('NrCuenta'))
+      Proximo
+   Endif
+
+   SetFilaActual(FAC+1)
+   If Eqstr(fbn('CB8'),'1') 
+      IFA
+      ACT(j:FAC, 'Contraparte:')
+
+      If NoVacio(Val(cl:1))
+         If novacio(fbn('NrMAE')) y Not eqstr(fbn('NrMAE'),'000')
+            * SOLO SE INDICA EL TIPO DE CONTRAPARTE EN EL BOLETO DEL AGENTE MAE
+            IF Eqstr(Val(cl3),'BAN') 
+               act(k:fac,'Banco') 
+            Endif
+            IF Eqstr(Val(cl3),'ABO') 
+               act(k:fac,'Soc.Bolsa ') 
+            Endif
+            IF Eqstr(Val(cl3),'AME') 
+               act(k:fac,'Age.MAE ') 
+            Endif
+            IF Eqstr(Val(cl3),'FON') Y [Vacio(Val(cl4)) o  Eqstr(Val(cl4),'NO')]
+               act(k:fac,'FCI') 
+            Endif
+            IF Eqstr(Val(cl3),'FON') Y Eqstr(Val(cl4),'SI')
+               act(k:fac,'AFJP Fondo') 
+            Endif
+            IF [Not Eqstr(Val(cl3),'FON') o Vacio(val(cl3))] Y Eqstr(Val(cl4),'SI')
+               act(k:fac,'AFJP Encaje') 
+            Endif
+            IF Eqstr(Val(cl3),'OTR')
+               act(k:fac,'Otros') 
+            Endif
+            IF Eqstr(Val(cl3),'OTR') y Eqstr(Val(cl4),'SI')
+               act(k:fac,'AFJP') 
+            Endif
+            act(k:fac,Val(k:fac) )  
+            act(k:fac+1,Val(cl:6) )  
+            Else
+              act(k:fac,Val(cl:1))
+         Endif
+      Else
+         ACT(k:FAC, 'Cartera Propia')
+      Endif
+      SetFont(a:FAC..j:FAC+1, 2)
+      AlinearCeldas(K:fac..K:fac+1, 'D')
+      AgregarMarco(k:FAC..k:fac+1,2,0)
+      ifa
+      ifa
+   Endif
+   
+    
+   * ---> Impresion De La Razon Social
+   SetFilaActual(FAC-3)
+   #ifdef MLASA
+     ACT(A:FAC, 'Apellido y Nombre/s o Razon Social / Customer ')
+   #else
+      ACT(A:FAC, 'Apellido y Nombre/s o Razon Social ')
+   #endif
+   If EqStr(FBN['CategDepositante'],'CLI')
+    ACT(j:FAC, 'Documento   (Tipo y Numero)')
+   Endif
+   SetFont(A:FAC..j:FAC, 2)
+   
+   IFA
+   ACT(ZB:01, FBN('RazonSocial'))
+   ACT(ZB:20, FBN('RazonSocial'))
+   (.'ELIBLANCOS'.)
+   ACT(A:FAC, Val(ZB:03))
+   If EqStr(FBN['CategDepositante'],'CLI')
+      ACT(i:FAC, BuscarCampo('INTEGRANTESCLI', 'TipoDocumento', 'Codigo', FBN['Cliente1'] ))
+      ACT(j:FAC, Val(i:fac))
+      If EqStr(Val(i:FAC),'CUI')
+          ACT(j:FAC, 'CUIT')
+      Endif
+      If EqStr(Val(i:FAC),'CIL')
+         ACT(j:FAC, 'CUIL')
+      Endif
+
+      ACT(j:FAC, Val(j:fac)~'   '~BuscarCampo('INTEGRANTESCLI', 'NrDocumento', 'Codigo', FBN['Cliente1'] ))
+      ACT(i:FAC, '')
+      SetFont(A:FAC..J:FAC, 1)
+      AgregarMarco(j:fac..j:fac,2,0)
+   Endif
+   AgregarMarco(a:fac..i:fac,2,0)
+      
+   
+   * ---> Impresion Del Numero De CUIT/CUIL
+   If [NoVacio(FBN('CUIT')) y Not EqStr(FBN('CUIT'), '000000000000000')]
+      If [EqStr(Copy(FBN('CUIT'), 01, 04), '0000')]
+         ACT(ZB:10, Copy(FBN('CUIT'), 05, 11))
+      Else  
+         If [[EqStr(Copy(FBN('CUIT'), 03, 01), '-')] y [EqStr(Copy(FBN('CUIT'), 12, 01), '-')]]
+            ACT(ZB:10, Copy(FBN('CUIT'), 01, 13))
+         Else           
+            ACT(ZB:10, Copy(FBN('CUIT'), 01, 11))
+         EndIf      
+      EndIf
+   Else
+      ACT(ZB:10, '')
+   EndIf
+   ACT(ZB:11, FBN('TipoInscripcion'))
+   (.'ARMACUIT'.)
+   IFA
+   ACT(A:FAC, Val(ZB:14))
+   * ---> Impresion De La Direccion  - IVA
+
+    If EqStr(fbn('CondicionIVA'),'INS') 
+       ACT(xy1,'Inscripto')
+    Else
+       If EqStr(fbn('CondicionIVA'),'EXE')
+          ACT(xy1,'Exento')
+       Else
+          If EqStr(fbn('CondicionIVA'),'FIN')
+             ACT(xy1,'Consumidor Final')
+          Else
+             If EqStr(fbn('CondicionIVA'),'NRE')
+                ACT(xy1,'No Responsable')
+             Else
+                 If EqStr(fbn('CondicionIVA'),'NOI')
+                    ACT(xy1,'No Inscripto')
+                 Else
+                    If EqStr(fbn('CondicionIVA'),'MON')
+                       ACT(xy1,'Monotributista')
+                    Else
+                       If EqStr(fbn('CondicionIVA'),'NCA')
+                          ACT(xy1,'No Categorizado')
+                       Else
+                          ACT(xy1,'Otra Categorizacion')
+                       Endif
+                    Endif
+                Endif
+             Endif
+          Endif
+       Endif
+    Endif
+
+
+   * ---> Impresion De La Direccion
+   #ifdef MLASA
+      ACT(e:FAC, 'Domicilio / Address')
+   #else
+      ACT(e:FAC, 'Domicilio')
+   #endif
+   ACT(j:FAC, 'Cond. IVA')
+   AlinearCeldas(e:fac,'I')
+   SetFont(A:FAC..j:FAC, 2)
+   IFA
+   ACT(A:FAC, Val(ZB:13))
+   AgregarMarco(a:FAC..b:FAC,2,0)  
+   ACT(ZB:01, FBN('Dire'))
+   if Vacio(val(ZB:01))
+   *ACT(ZB:01, FBN('Calle')~' '~FBN('Altura')~' '~FSTR(FBN('Piso'),1,0)~' '~FBN('Depto'))
+   *AA 05-03-2022 se modifica el piso  Varchar
+      ACT(ZB:01, FBN('Calle')~' '~FBN('Altura')~' '~FBN('Piso')~' '~FBN('Depto'))
+   endif
+   (.'ELIBLANCOS'.)
+
+   ACT(j:FAC, Val(xy:1))
+   AgregarMarco(j:FAC..k:FAC,2,0)  
+   SetFont(A:FAC..c:FAC, 1)
+   
+   
+   ACT(E:FAC, Val(ZB:03))
+   AgregarMarco(e:FAC..h:FAC,2,0)  
+   SetFont(A:FAC..j:FAC, 1)
+   
+   * ---> Impresion Del Codigo Postal Y La Localidad
+   IFA
+   #ifdef MLASA   
+      ACT(A:FAC, 'Localidad / Town')
+      ACT(C:FAC, 'Codigo Postal / Zip Code')
+      ACT(E:FAC, 'Telefono/s / Telephone/s')
+   #else
+      ACT(A:FAC, 'Localidad')
+      ACT(C:FAC, 'Codigo Postal')
+      ACT(E:FAC, 'Telefono/s')
+   #endif
+   SetFont(A:FAC..E:FAC, 2)
+   
+   IFA
+   If [NoVacio(FBN('Localidad'))]
+      ACT(ZB:01, FBN('Localidad'))
+      (.'ELIBLANCOS'.)
+      ACT(A:FAC, Val(ZB:03))
+   EndIf
+   AgregarMarco(a:FAC..b:FAC,2,0)     
+
+   If [NoVacio(FBN('CodigoPostal')) y Not EqStr(FBN('CodigoPostal'), '000000')]
+      If [EqStr(Copy(FBN('CodigoPostal'), 01, 02), '00')]
+         ACT(C:FAC, "(" ~ Copy(FBN('CodigoPostal'), 03, 04) ~ ')')
+      Else  
+         ACT(C:FAC, "(" ~ Copy(FBN('CodigoPostal'), 01, 04) ~ ')')
+      EndIf
+   EndIf
+   AgregarMarco(c:FAC,2,0)  
+   
+   ACT(E:FAC, fbn['Telefono'])
+   AgregarMarco(e:FAC..h:fac,2,0)  
+
+   SetFont(A:FAC..E:FAC, 1)
+   *AgregarMarco(A:Val(w1)..k:FAC,2,0)
+   
+   SetFilaActual(fac+1)
+   acn(w2,FAC)
+   
+   
+    #ifdef MLASA
+       if &Apertura
+          ACT(A:FAC+1, 'POR MEDIO DE LA PRESENTE CONFIRMAMOS QUE EL '~fbn['FechaOp']~' HEMOS EFECTUADO DE NUESTRA CARTERA PROPIA LA OPERACIÓN DE APERTURA DE CAUCION')
+          ACT(A:FAC+2, 'COLOCADORA PARA LIQUIDAR EL DIA '~fbn['FechaOp']~', LOS VALORES QUE SE DETALLAN')
+       else
+          ACT(A:FAC+1, 'POR MEDIO DE LA PRESENTE CONFIRMAMOS QUE EL '~fbn['FechaOp']~' HEMOS EFECTUADO DE NUESTRA CARTERA PROPIA LA OPERACIÓN DE CIERRE DE CAUCION')
+          ACT(A:FAC+2, 'COLOCADORA PARA LIQUIDAR EL DIA '~fbn['FechaVto']~', LOS VALORES QUE SE DETALLAN')
+       endif
+    #else
+       if &Apertura
+          ABT(A:FAC+1..J:FAC+1, 'POR MEDIO DE LA PRESENTE CONFIRMAMOS QUE EL '~fbn['FechaOp']~' HEMOS EFECTUADO DE NUESTRA CARTERA PROPIA LA OPERACIÓN DE APERTURA DE CAUCION COLOCADORA PARA LIQUIDAR EL DIA '~fbn['FechaOp']~', LOS VALORES QUE SE DETALLAN',2,'black','pre-wrap')
+       else
+          ABT(A:FAC+1..J:FAC+1, 'POR MEDIO DE LA PRESENTE CONFIRMAMOS QUE EL '~fbn['FechaOp']~' HEMOS EFECTUADO DE NUESTRA CARTERA PROPIA LA OPERACIÓN DE CIERRE DE CAUCION COLOCADORA PARA LIQUIDAR EL DIA '~fbn['FechaVto']~', LOS VALORES QUE SE DETALLAN',2,'black','pre-wrap')
+       endif
+    #endif
+      
+   *ACT(c:FAC+6,'ESPECIE')
+   ACT(ZB:21, fbn('ESPECIE'))
+   ACT(ZB:22, fbn('CONTRAESPECIE'))
+   SetFont(a:fac+1..c:fac+6,2)
+   SetFilaActual(fac+5)   
+
+   ACT(c:FAC,'Especie')
+   ACT(f:FAC,'Plazo')
+   ACT(J:FAC, 'Monto Contado')
+   ACT(K:FAC, 'Monto Futuro')
+   ACN(W4,FAC)
+   AlinearCeldas(A:FAC..L:FAC,'C')
+   AlinearCeldas(K:FAC,'D')
+   SetFont(a:fac..k:fac,2)
+   
+   IFA   
+   ACT(a:FAC, 'iCA')
+   ACT(b:FAC, fbn('ISO'))
+   if &Apertura
+      ACT(c:FAC, '000'~fbn('CodMAEContado')~'c')
+   else
+      ACT(c:FAC, Pad0(FStr(FBN['Plazo'],1,0),3)~fbn('CodMAEContado')~'c')
+   endif
+
+   ACT(d:FAC, BuscarCampo('Especies', 'Nombre', 'Codigo', fbn['Especie'])) 
+   
+   ACT(f:FAC, fbn('Plazo'))
+   
+   FormatoCeldas(d:FAC,Exe('FE'))
+   ACN(J:FAC, fbn['Cantidad'])
+   ACN(K:FAC, fbn['TotalBrutoCli1'])
+   
+   if &Apertura
+      ACN(Z:11, fbn['Cantidad']) 
+      ACT(f:FAC,'0')
+   else
+      ACN(z:11, fbn['TotalBrutoCli1'])
+      ACT(f:FAC, fbn('Plazo'))
+   endif   
+   
+   * ------------------------------------------------- *
+   SetFont(a:fac..k:fac,1)
+   AgregarMarco(a:fac,2,0)
+   AgregarMarco(b:fac,2,0)
+   AgregarMarco(c:fac,2,0)
+   AgregarMarco(d:fac,2,0)
+   AgregarMarco(f:fac,2,0)
+   AgregarMarco(j:fac,2,0)
+   AgregarMarco(k:fac,2,0)
+  
+   AlinearCeldas(A:FAC..L:FAC,'C')
+   AlinearCeldas(K:FAC,'D')
+
+  SetFilaActual(fac+2) 
+ 
+
+  *Ver esto 
+  AgregarMarco(K:FAC,2,0)
+  ACT(J:fac,'SUBTOTAL')
+  ACN(k:FAC, Val(z:11))
+  
+  ACT(J:fac+1,'Aranceles MAE')
+  ACT(J:fac+2,'Derechos')
+  ACT(J:fac+3,'Comisiones')  
+  ACT(J:fac+4,'Impuestos')
+  ACT(J:fac+5,'Otros')  
+
+  if not &Apertura
+     if fbn('TotalComisiones')<>0
+        ACN(k:FAC+1, fbn('TotalComisiones')*-1)
+     endif   
+     *ACN(k:FAC+2, )
+     *ACN(k:FAC+3, )
+     *ACN(k:FAC+4, )
+     *ACN(k:FAC+5, )
+  Endif
+  *AgregarMarco(K:FAC+1..K:FAC+5,2,3)  
+  
+
+  *Ver esto 
+  AgregarMarco(K:FAC+6,2,0)
+  ACT(J:FAC+6,'TOTAL NETO')
+  ACN(K:FAC+6, VAL(K:FAC)+VAL(K:FAC+1)+VAL(K:FAC+2)+VAL(K:FAC+3)+VAL(K:FAC+4)+VAL(K:FAC+5))
+  
+  AlinearCeldas(J:FAC..k:FAC+6,'D')
+  SetFont(j:fac..k:FAC+6,2)
+  
+  ACT(b:fac+5,'El monto del IVA no puede computarse como credito fiscal.')     
+  SetFont(b:FAC+5,2)
+  
+  
+  SetFilaActual(fac+7)
+  
+
+  * ---> Impresion De La Forma De Pago Y De La Cuenta A Acreditar
+  
+  *Ver contra que validar 13/06/23
+  if &Apertura
+     act(zb:02,'Credito')
+  else
+     act(zb:02,'Debito')
+  endif
+
+    
+  SetFilaActual(fac+1)
+  AgregarMarco(A:FAC..C:FAC+4,2,0)
+  AgregarMarco(A:FAC..k:FAC+4,2,0)
+  
+  #ifdef MLASA
+     ACT(a:FAC+4,Pad('',12)~'Firma y Sello / Signature ')
+  #else
+     ACT(a:FAC+4,Pad('',12)~'Firma y Sello ')
+  #endif
+  
+  SetFont(a:fac+4,2)
+
+  
+  *Modificacion 14/06/23  
+  
+  ACT(j:FAC,  'TNA:')
+  ACT(k:fac,   FStr(Fbn('Precio1'),4, 2)~"%")
+  ACT(j:FAC+1,'TES:')
+  ACT(k:fac+1, FStr(Fbn('Precio2'),4, 2)~"%")
+  ACT(j:FAC+2,'TEA:')
+  ACT(k:fac+2, FStr(Fbn('Precio3'),4, 2)~"%")
+  ACT(j:FAC+3,'CFT:')
+  ACT(k:fac+3, FStr(Fbn('Precio4'),4, 2)~"%")
+  
+  AlinearCeldas(J:FAC..k:FAC+4,'D')
+  SetFont(j:fac..k:fac+4,2)
+  
+  
+  SetFilaActual(FAC+5)
+  SetFont(e:fac-2,2)
+  
+
+
+******************************
+* Pie de página - CAL 5/1/2023
+******************************
+
+*Los valores entre corchetes se reemplazan por los valores de las siguientes celdas:
+
+*[0] : ZB:20 (CLIENTE)
+*[1] : ZB:21 (ESPECIE)
+*[2] : ZB:22 (CONTRAESPECIE)
+
+#ifdef MLASA
+    ACT(A:Fac,'Los valores negociables entregados en garantía por este contrato de compraventa quedarán depositados durante su vigencia en el Mercado, el mismo pone a disposición la')
+    ACT(A:fac+1,'plataforma MAEClear para el seguimiento de estos activos.')
+    AgregarMarco(A:FAC..K:FAC+1, 2, 0)
+    SetFilaActual(fac+1)
+#else
+    ACT(TX:1, FormatSTR(LeerLeyenda('','','','BOLCAU'),Val(ZB:20),Val(ZB:21),Val(ZB:22)))
+    ABT(A:FAC..K:FAC+10,Val(TX1),2,,)
+    AgregarMarco(A:FAC..A:FAC, 2, 0)
+#endif
+
+Proximo
+
+* La Asignacion del nombre del archivo para generar PDF debe estar previo a la definicion de LimiteVision
+ACT(ar:1,VAR('PATHCONFI')~'Boleto_Cliente_'~Val(cu:1)~'_'~Val(op:1)~'_'~Dialogo.String~'.pdf')
+
+LimitesVision(K:FAC)
+SetPrintFit(3,81)
+Impresion(1,0)
+Impresion(2,0)
+Impresion(3,0)
+Impresion(4,0)
+SetMargins(1,0,0,0)
+
+ACO(1, 9)
+ACO(2, 6)
+ACO(3, 7)
+ACO(4, 17)
+ACO(5, 2)
+ACO(6, 4)
+ACO(7, 2)
+ACO(8, 10)
+ACO(9, 10)
+ACO(10,11)
+ACO(11,11)
+ACO(12, 1)
+
+Autofit(si)
+
+If Dialogo.Radio2 = 0
+   ImprimirHoja(SI)
+Else
+   If Dialogo.Radio2 = 2
+      HojaVisible(NO)
+      BorrarArchivo(val(ar:1))
+      ExportarPdf(val(ar:1))
+   endif
+Endif 
+

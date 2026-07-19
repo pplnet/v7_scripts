@@ -1,0 +1,71 @@
+﻿CrearDialogo
+  NrOperacion1 : 'TCPCEM'    ;;;;SI;SI;EqStr(BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion1),'TCPCEM');'Debe ingresar una TCPCEM';NO;;;;;;"TipoOp in ('TCPCEM')"
+  Check1       : 'Procesa'   ;;;;SI;SI;;;;0
+  label1      :  ;;;;SI;SI;;;;'No deben haber TCOPRIs liquidadas para poder procesar la anulacion!!!!'
+FinDialogo
+if not OK
+  Cancelar
+endif   
+
+ACN(x1, SQL("Select Count(*) from "~DBO~".ORDENES WHERE NrOperacion1 = '"~Dialogo.NrOperacion1~"' "))
+if val(x1)=0
+  cancelar('No hay TMANIF para la TCPCEM '~Dialogo.NrOperacion1)  
+endif
+ACN(x2,SQL("select Count(*) from "~DBO~".MOVEJECUTADOS where NrOperacion in (select nroperacion from operaciones where Nroperacion in (select Nroperacion2 from ordenes WHERE NrOperacion1 = '"~Dialogo.NrOperacion1~"')) "))
+if val(x2)>0
+  cancelar('Hay TCOPRI liquidadas , debera anular la liquidacion previamente')  
+endif
+
+SQL.ADD("Select NrOrden,NrOperacion2,fechaorden,Cliente,CantidadTotalOrden,CantidadCompletada  from "~DBO~".ORDENES WHERE NrOperacion1 = '"~Dialogo.NrOperacion1~"' ")
+Recorrer SQL
+  
+  ACT(a:fac,fbn('NrOrden'))
+  ACT(b:fac,fbn('NrOperacion2'))
+  ACT(c:fac,fbn('Cliente'))
+  ACD(d:fac,fbn('FechaOrden'))
+  ACN(e:fac,fbn('Cantidadtotalorden'))
+  ACN(f:fac,fbn('CantidadCompletada'))
+Proximo
+
+  CrearListBox ; 'Arial,8,';'Anulacion ordenes y oepraciones de TCPCEM   '~Dialogo.NrOperacion1
+       'OK'                   ;l:1..l:Fac;SI;;;40 ;CHECK;;
+       'Orden '               ;a:1..a:fac;NO;;;70 ;STRING;;
+       'Operacion '           ;b:1..b:fac;NO;;;70 ;STRING;;
+       'Cliente '             ;c:1..c:fac;NO;;;70 ;STRING;;
+       'Fecha Op  '           ;d:1..d:fac;NO;;;100;FECHA;;
+       'Cantidad  Orden'      ;e:1..e:fac;NO;;;100;NUMERO;'###,###,###,###.##';
+       'Cantidad  Operacion'  ;f:1..f:fac;NO;;;150;NUMERO;'###,###,###,###.##';
+   FinListBox
+
+IF NOT OK 
+   Cancelar('Se cancela proceso')
+ELSE
+** 
+IF Dialogo.Check1=1
+   Recorrer&j 1,Fac
+    if Val(l:&j) = 1
+       SCN(x4,1)
+       SQL.ADD("Select NrOrden,NrOperacion2  from "~DBO~".ORDENES WHERE NrOrden = '"~Val(a:&j)~"' ")
+       **   SQL.ADD("Select NrOrden,NrOperacion2  from "~DBO~".ORDENES WHERE NrOperacion1 = '"~Dialogo.NrOperacion1~"' ")
+       Recorrer SQL
+          SCN(x3, 1)
+     
+          ACT(z1,fbn('NrOperacion2'))
+     
+          SQL.ADD("Delete "~DBO~".OPERACIONES where NrOperacion='"~Val(z1)~"'")
+          SQL.NEW
+     
+          SQL.EXEC     
+    
+          SQL.ADD("Delete "~DBO~".ORDENES ")
+          SQL.ADD(" WHERE NrOrden  = '"~fbn('NrOrden')~"' ")
+          SQL.NEW
+          SQL.EXEC
+       proximo
+    Endif
+   Proximo   
+   MessageBox('Proceso Finalizado. Se eliminaron '~pyc(Val(x4),1,0)~' TMANIF y '~pyc(Val(x3),1,0)~'  TCOPRI')
+else
+   MessageBox('Evento finalizo sin procesar.')
+endif
+ENDIF

@@ -1,0 +1,112 @@
+﻿    ** Generacion apertura saldo posicion por fecha incorporacion
+** ca:2 Coef. valor contable valuado
+** co:1 Rubro contable
+** de:2 fila actual informe 
+** es:1 Especie
+** fe:2 Fecha Informe 
+
+** Actualizo columna z para que no se genere txt con esa fila
+ACT(z:val(de:2),'No se genera')
+
+** AA 09-12-2025 Version previa a funcion fnRelacionCuenta
+*SQL.ADD(" Select fechamov, especie, sum(cantidad) Cantidad, E.MonedaEmision, E.Tipo TipoEspecie,Tipoposicion Concepto, vehiculo Vehiculo1, Estrategia CuentaCustodia, Book ")
+*SQL.ADD(" from MOVPOSEJE M, ESPECIES E ")
+*SQL.ADD(" where E.Codigo=M.Especie")
+*SQL.ADD(" and Nrsaldo = 121 and Cantidad > 0 and especie='"~Val(es:1)~"' and M.FechaMov  <= "~IdxDate2(Val(fe:2))~" ")
+*SQL.ADD(" group by FechaMov,especie,MonedaEmision,E.Tipo,TipoPosicion,Vehiculo,Estrategia,BOOK ")
+*SQL.ADD(" ) as Aux ") 
+*SQL.ADD(" order by fechamov desc ")
+
+SQL.ADD("SELECT * from ")
+SQL.ADD("(SELECT Aux.*, RC.Cuenta AS CuentaCont, (Select RubroContable from CONTABILIDAD CO   where CO.Codigo  = RC.Cuenta) Rubro ")
+SQL.ADD("   FROM ( ")
+SQL.ADD("   SELECT fechamov, especie, SUM(cantidad) Cantidad, E.MonedaEmision MonedaEmision, E.Tipo TipoEspecie,Tipoposicion Concepto, vehiculo Vehiculo1, Estrategia CuentaCustodia, Book ")
+SQL.ADD("   FROM MOVPOSEJE M INNER JOIN ESPECIES E ON E.Codigo=M.Especie ")
+SQL.ADD("WHERE Nrsaldo = 121 and Cantidad > 0 and especie='"~Val(es:1)~"' and M.FechaMov  <= "~IdxDate2(Val(fe:2))~" ")
+SQL.ADD("GROUP BY FechaMov,especie,MonedaEmision,E.Tipo,TipoPosicion,Vehiculo,Estrategia,BOOK ")
+SQL.ADD(" ) AS Aux ")
+SQL.ADD("CROSS APPLY dbo.fnRelacionCuenta('TIC', 'TITULO', Aux.MonedaEmision, Aux.TipoEspecie, Aux.Book, Aux.Vehiculo1, Aux.CuentaCustodia ) RC ")
+SQL.ADD(" ) AS Aux1 ")
+SQL.ADD(" Where Rubro ='"~Val(co:1)~"' ")
+SQL.ADD("ORDER BY fechamov DESC ")
+
+watch(SQL.Batch)
+
+
+ACN(de:2,val(de:2)+1)
+ACN(de:3,5)
+ACN(de:4,0)
+Recorrer SQL
+   DFA
+   ** AA 09-12-2025 Version previa a funcion fnRelacionCuenta
+   **ACT(MS:1,fbn('MonedaEmision'))
+   **ACT(TS:1,fbn('TipoEspecie'))
+   **ACT(BK:1,fbn('Book'))
+   **ACT(ad:Val(de:3),RelacionCuenta('','','','','TIC','','','','TITULO','',val(MS:1),'','','',val(TS:1),'',val(BK:1),fbn('Vehiculo1'),,,,,,fbn('CuentaCustodia'),fbn('Concepto')))
+   **ACT(ae:Val(de:3),SQL(" Select RubroContable from CONTABILIDAD CO   where CO.Codigo  = '"~Val(ad:Val(de:3))~"' "))
+   
+   **if EqStr(val(ae:Val(de:3)),Val(co:1))
+      if Val(aa:Val(de:3)-1)=FBN['Fechamov']
+         ACN(de:3,val(de:3)-1) 
+         ACN(ac:Val(de:3),val(ac:Val(de:3))+FBN['Cantidad'])
+      else   
+         ACD(aa:Val(de:3),FBN['Fechamov'])
+         ACN(ac:Val(de:3),FBN['Cantidad'])
+      endif
+      SCN(de:3,1)   
+   **endif   
+   ACN(de:4,1)
+Proximo
+** Si no Hay Movimientos no se procesa
+** si vacio aa:de3 verificar y restar 1 a de:3
+if  Vacio(Val(aa:Val(de:3)))
+    ACN(de:3,Val(de:3)-1)
+endif
+
+if val(ac:5) >0
+message('Especie '~Val(es:1))
+Recorrer&i 5,Val(de:3)
+  ** Si en informe hay que informar todos los datos por el desagregado, copiar fila anterior y solo debe modificarse valor residual, valor contable y fecha ultima compra
+  
+  if Val(ac:&i) <= Val(ca:1)
+     ACN(xy1,Val(ac:&i)/1000)
+     ACT(h:val(de:2), iif(EqStr(Copy(Fstr(Val(xy1),0),1,1),'-'),'-'~Pad0(Copy(Fstr(Val(xy1),0),2,Longitud(Val(xy1))-1),10),Pad0(Fstr(Val(xy1),0),11)))
+     ACN(xy1,Val(ac:&i)*Val(ca:2)/1000)
+     ACT(i:val(de:2), iif(EqStr(Copy(Fstr(Val(xy1),0),1,1),'-'),'-'~Pad0(Copy(Fstr(Val(xy1),0),2,Longitud(Val(xy1))-1),10),Pad0(Fstr(Val(xy1),0),11)))
+     ACT(j:val(de:2),Fecha(val(aa:&i),'YYYYMMDD'))
+     
+     ACN(ca:1,Val(ca:1)-Val(ac:&i))
+     AlinearCeldas(j:Val(de:2)..l:Val(de:2),'C')  
+     SetFont(a:Val(de:2)..z:Val(de:2), 2)     
+     ACN(xy3,val(de:2))
+     SCN(de:2,1)
+     
+  else
+     ACN(xy1,Val(ca:1)/1000)
+     ACT(h:val(de:2), iif(EqStr(Copy(Fstr(Val(xy1),0),1,1),'-'),'-'~Pad0(Copy(Fstr(Val(xy1),0),2,Longitud(Val(xy1))-1),10),Pad0(Fstr(Val(xy1),0),11)))
+     ACN(xy1,Val(ca:1)*Val(ca:2)/1000)
+     ACT(i:val(de:2), iif(EqStr(Copy(Fstr(Val(xy1),0),1,1),'-'),'-'~Pad0(Copy(Fstr(Val(xy1),0),2,Longitud(Val(xy1))-1),10),Pad0(Fstr(Val(xy1),0),11)))
+     ACT(j:val(de:2),Fecha(val(aa:&i),'YYYYMMDD'))
+     
+     ACN(ca:1,0)
+  endif
+  AlinearCeldas(j:Val(de:2)..l:Val(de:2),'C')  
+  SetFont(a:Val(de:2)..z:Val(de:2), 2)
+  SCN(ha:1,1)
+
+  if Val(ca:1)=0
+     break
+  endif   
+Proximo
+   If Val(ca:1)>0
+     ACN(xy1,(Val(ac:&i)+Val(ca:1))/1000)
+     ACT(h:val(xy3), iif(EqStr(Copy(Fstr(Val(xy1),0),1,1),'-'),'-'~Pad0(Copy(Fstr(Val(xy1),0),2,Longitud(Val(xy1))-1),10),Pad0(Fstr(Val(xy1),0),11)))
+     ACN(xy1,Val(xy1)*Val(ca:2))
+     ACT(i:val(xy3), iif(EqStr(Copy(Fstr(Val(xy1),0),1,1),'-'),'-'~Pad0(Copy(Fstr(Val(xy1),0),2,Longitud(Val(xy1))-1),10),Pad0(Fstr(Val(xy1),0),11)))
+   Endif  
+else
+ACT(z:val(de:2)-1,'')
+endif
+BorrarCeldas(aa:5..ca:100)
+
+

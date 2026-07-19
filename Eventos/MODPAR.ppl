@@ -1,0 +1,169 @@
+﻿CrearDialogo
+  NrOperacion1 : "Nr.Operacion" ;1;1;1;;;NoVacio(Dialogo.NrOperacion1);'Debe ingresar el numero de Operacion';NO;
+  TipoOp1      : 'TipoOp'       ; ; ; ;NO;;Incluido(Dialogo.TipoOp1,'TIC|TIV');'Tipo Operacion invalido. Debe ser TIC o TIV';NO;;BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion1)
+  Cliente1     : 'Cliente'      ; ; ; ;NO;;;;;;BuscarCampo('OPERACIONES','Cliente1','NrOperacion',Dialogo.NrOperacion1)
+  Especie1     : 'Especie'      ; ; ; ;NO;;;;;;BuscarCampo('OPERACIONES','Especie','NrOperacion',Dialogo.NrOperacion1)
+  Cantidad1    : 'Cantidad'     ; ; ; ;NO;;;;;;Num(BuscarCampo('OPERACIONES','Cantidad','NrOperacion',Dialogo.NrOperacion1))
+  Radio1       : '|Desafecta|Afecta'; ; ; ;SI;  ;;;;0;
+  Check1       : 'Procesa'      ;1;2; ;NO;NO;;;;1;
+FinDialogo
+IF NOT OK
+   Cancelar
+ENDIF
+
+IF Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+IF Incluido(BuscarCampo('OPERACIONES','PaseCB','NrOperacion',Dialogo.NrOperacion1),'1')
+  Cancelar('La Operacion NO debe ser pata de un pase.')
+Endif
+
+
+ACT(a:1, 'Operacion')
+ACT(a:2, 'TipoOp')
+ACT(a:3, 'Cliente')
+ACT(a:4, 'Especie')
+ACT(a:5, 'Moneda')
+ACT(a:6, 'Cantidad')
+ACT(a:7, 'Vehiculo')
+ACT(a:8, 'ParkMoneda')
+ACT(a:9, 'ParkTipoDol')
+ACT(a:10, 'ParkJuris')
+ACT(a:11, 'ParkAfecta')
+ACT(a:12, 'MonEmision')
+ACT(a:13, 'Mov Pen')
+ACT(a:14, 'Mov Eje')
+ACT(a:15, 'Movs Parking')
+ACT(a:16, 'Procesa')
+ACT(a:17, 'Accion')
+ACT(a:18, 'Error')
+ACT(a:21, 'Fecha')
+ACT(a:22, 'Leyenda')
+
+SQL.ADD("Select O.* ") 
+SQL.ADD("from "~DBO~".OPERACIONES O")
+SQL.ADD("where O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+recorrer SQL
+  ACT(b:1, fbn('NrOperacion'))
+  ACT(b:2, fbn('TipoOp'))
+  ACT(b:3, fbn('Especie'))
+  ACT(b:4, fbn('ContraEspecie'))
+  ACN(b:5, fbn('Cantidad'))
+  ACT(b:6, fbn('Cliente1'))
+  ACT(b:7, fbn('Vehiculo1'))
+
+  ACT(b:8, fbn('ParkMoneda'))
+  ACT(b:9, fbn('ParkTipoDol'))
+  ACT(b:10, fbn('ParkJuris'))
+  ACT(b:11, fbn('ParkAfecta'))
+  ACT(b:12, BuscarCampo('ESPECIES','MonedaEmision','Codigo',fbn('Especie')))
+    
+  ACD(b:21, fbn('FechaVto'))
+proximo
+
+ACN(b:13, SQL("SELECT Count(*) FROM "~DBO~".MOVPENDIENTES WHERE NrOperacion = '"~Dialogo.NrOperacion1~"' and NrSaldo in (131,132,133) ") )
+ACN(b:14, SQL("SELECT Count(*) FROM "~DBO~".MOVEJECUTADOS WHERE NrOperacion = '"~Dialogo.NrOperacion1~"' and NrSaldo in (131,132,133) ") )
+ACN(b:15, Val(b:13)+Val(b:14))
+* Procesa
+ACN(b:16, Dialogo.Check1)
+
+if Dialogo.Radio1=0
+******************
+* Anula Afectacion
+******************
+  ACT(b:17, 'DES')
+  if Not EqStr(Val(b:11),'SI')
+    ACT(c:11, 'Error')
+    MessageBox('La Operacion no afecta Parking')
+    ACN(b:18, 1)
+  endif
+  if Val(b:15)=0
+    ACT(c:15, 'Error')
+    MessageBox('La Operacion no tiene movimiientos de Parking')
+    ACN(b:18, 1)
+  endif
+  if Val(b:18)=0
+    if Dialogo.Check1=1
+    * Actualizo Operacion, Borra las excepciones y movimientos de Parking
+    SQL.ADD("Update "~DBO~".OPERACiONES ")
+    SQL.ADD("   Set ParkAfecta='NO' ")
+    SQL.ADD(" where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    SQL.NEW
+    SQL.ADD("Delete "~DBO~".EXCEPCIONES ")
+    SQL.ADD(" where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    SQL.ADD("   and Tipo in ('SALDOPARK','SDOPARNOEX') ")
+    SQL.NEW
+    SQL.ADD("Delete "~DBO~".MOVPENDIENTES ")
+    SQL.ADD(" where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    SQL.ADD("   and NrSaldo>130 ")
+    SQL.ADD("   and NrSaldo<140 ")
+    SQL.NEW
+    SQL.ADD("Delete "~DBO~".MOVEJECUTADOS ")
+    SQL.ADD(" where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    SQL.ADD("   and NrSaldo>130 ")
+    SQL.ADD("   and NrSaldo<140 ")
+    SQL.NEW
+    SQL.EXEC
+    endif
+  endif
+endif
+
+if Dialogo.Radio1=1
+******************
+* Recalcula Afectacion
+******************
+  ACT(b:17, 'AFE')
+  if Not EqStr(Val(b:11),'NO')
+    ACT(c:11, 'Error')
+    MessageBox('La Operacion ya afecta Parking')
+    ACN(b:18, 1)
+  endif
+  if Val(b:15)>0
+    ACT(c:15, 'Error')
+    MessageBox('La Operacion ya tiene movimiientos de Parking')
+    ACN(b:18, 1)
+  endif
+  if Val(b:18)=0
+    if Dialogo.Check1=1
+      * Actualizo Operacion
+      SQL.ADD("Update "~DBO~".OPERACiONES ")
+      SQL.ADD("   Set ParkAfecta='SI' ")
+      SQL.ADD(" where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+      SQL.NEW
+      SQL.EXEC
+      if EqStr(Val(b:2),'TIC')
+        ** Regenera Movimientos
+        SQL.ActualizarMovimientos3(Dialogo.NrOperacion1,SI,NO,NO,NO,NO)
+        SQL.EXEC
+*FechaVto;Vehiculo1;Especie;;;;ParkJuris;;ParkNrSaldo;      Cantidad;;'Compra de '~Especie;SI;SI;1;EqStr(ParkAfecta,'SI');;;;1;;;;;;;;Vehiculo1
+      
+      endif
+      if EqStr(Val(b:2),'TIV')
+        ** Realiza Control Parking
+        EjecutarEvento('CONPAR',Radio1=0,NrOperacion1=Dialogo.NrOperacion1,NrTrans1='',Check1=Dialogo.Check1,Check2=0,Check3=1)
+      endif
+    endif
+  endif
+endif
+
+* Almacena log
+if Dialogo.Check1=1
+  SQL.ADD("INSERT INTO "~DBO~".LOGPARKING ( ")
+  SQL.ADD(" NrOperacion, ")
+  SQL.ADD(" Usuario, ")
+  SQL.ADD(" Fecha, ")
+  SQL.ADD(" Accion ")
+  SQL.ADD(" ) Values ( ")
+  * NrOperacion
+  SQL.ADD(" '"~Dialogo.NrOperacion1~"', ")
+  * Usuario
+  SQL.ADD(" '"~UsuarioActivo~"', ")
+  * Fecha
+  SQL.ADD(" "~SQLAhora~", ")
+  * Accion
+  SQL.ADD(" '"~Val(b:17)~"' ")
+  SQL.ADD(" ) ")
+  SQL.NEW
+  SQL.EXEC
+endif

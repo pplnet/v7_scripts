@@ -1,0 +1,156 @@
+﻿*ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1   : 'Fecha'   ;;;;;;;;;FSYS
+  Cliente1 : 'Cliente' ;
+  Vehiculo1: 'Vehiculo';  
+FinDialogo
+If Not OK
+  Cancelar
+Endif
+
+ 
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+
+SetFilaActual(4)
+ACN(W1,FAC)
+
+ACT(A:FAC,'Vouchers Pendientes de Emision')
+ACT(A:FAC+1,'Fecha : '~Dialogo.Fecha1)
+ACT(A:FAC+2,'Cliente: '~iif(NoVacio(Dialogo.Cliente1),Dialogo.Cliente1,'Todos'))
+ACT(A:FAC+3,'Vehiculo: '~iif(NoVacio(Dialogo.Vehiculo1),Dialogo.Vehiculo1,'Todos'))
+
+ACT(A:FAC+5,'Cliente')
+ACT(B:FAC+5,'Especie')
+ACT(C:FAC+5,'Nr.Compr.')
+ACT(D:FAC+5,'Nr.Operac.')
+ACT(E:FAC+5,'Merc.')
+ACT(F:FAC+5,'Fecha')
+ACT(G:FAC+5,'Cantidad')
+ACT(H:FAC+5,'Cont.Liq')
+ACT(I:FAC+5,'Observaciones')
+
+AlinearCeldas(F:FAC+5..G:FAC+5,'D')
+SetFont(A:FAC..I:FAC+5,2)
+AgregarMarco(A:FAC+5..J:FAC+5,2,0,EXE('COLOR'))
+SetFilaActual(FAC+5)
+
+Message('Procesando Transacciones')
+
+SQL.ADD(" Select * from "~DBO~".TRANSACCIONES2 T WHERE ")
+SQL.ADD(" T.Mercado1  not in("~Pipe2Comillas(VAR('MERCAACMC'))~") and ")
+
+If NoVacio(Dialogo.Cliente1)
+  SQL.ADD(" Cliente1='"~Dialogo.Cliente1~"' and ")
+EndIf
+If NoVacio(Dialogo.Vehiculo1)
+  SQL.ADD(" Vehiculo1='"~Dialogo.Vehiculo1~"' and ")
+EndIf
+SQL.ADD(" Fecha2 = '"~IdxDate(DIALOGO.FECHA1)~"' and ")
+SQL.ADD(" (CB1='0' or CB1 IS NULL) and TipoTr2 in ('DEP','RET','COMP','MATCH') ")
+SQL.ADD(" and EXISTS (Select * FROM "~DBO~".OPERACIONESBITS B WHERE ")
+SQL.ADD(" T.NrTrans = B.NrOperacion and ((NrBit=3 and Valor='1')  or (NrBit=6 and Valor='1') or (NrBit=1 and Valor='1') ")
+SQL.ADD(" or (NrBit=70 and Valor='1' and T.CB9='1')) ) ORDER BY Cliente1, Especie, NrTrans ")
+Recorrer SQL
+  If Not EqStr(FBN['Cliente1'],Val(V1)) o Not EqStr(FBN['Especie'],Val(V2))
+    If FAC>Val(W1)+5
+      ACT(F:FAC, 'Total '~Val(V2))
+      ACN(G:FAC, Val(Z1))
+      ACN(Z1,0)
+      SetFont(F:FAC..G:FAC,2)
+      SetFilaActual(FAC+2)
+    EndIf
+    If Not EqStr(FBN['Cliente1'],Val(V1))
+      ACT(V1, FBN['Cliente1'])
+      ACT(A:FAC,Val(V1))
+    Endif
+    ACT(V2,FBN['Especie'])
+    ACT(B:FAC,Val(v2))
+    SetFont(A:FAC..B:FAC,2)
+  EndIf
+  ACT(C:FAC, FBN['NrTrans'])
+  If FBN['CB6']=1
+    ACT(C:FAC, Val(C:FAC)~' DVP')
+  EndIf
+  If FBN['CB7']=1
+    ACT(C:FAC, Val(C:FAC)~' RVP')
+  Endif
+  If FBN['CB8']=1
+    ACT(C:FAC, Val(C:FAC)~' Conf.')
+  EndIf
+  If EqStr(FBN['TipoTr2'],'MATCH')
+    ACT(C:FAC, Val(C:FAC)~' Match')
+  EndIf
+  ACT(d:fac, fbn['NrOperacionRef1'])
+  ACT(E:FAC, FBN['Mercado1'])
+  ACD(F:FAC, FBN['Fecha2'])
+  If EqStr(FBN['TipoTr2'],'DEP')
+    ACN(G:FAC, FBN['Cantidad1'])
+    SCN(Z1, FBN['Cantidad1'])
+  EndIf
+  If EqStr(FBN['TipoTr2'],'RET')
+    ACN(G:FAC, -FBN['Cantidad1'])
+    SCN(Z1, -FBN['Cantidad1'])
+  EndIf
+  If EqStr(FBN['TipoTr2'],'MATCH')
+    ACN(G:FAC, -FBN['Cantidad1'])
+    SCN(Z1, -FBN['Cantidad1'])
+  EndIf
+  ACN(Z5,SQL(" SELECT NrBit FROM "~DBO~".OPERACIONESBITS WHERE '"~FBN['NrTrans']~"' = NrOperacion and Valor='1' "))
+  If Val(Z5)=1
+    ACT(H:FAC, 'Falta')   
+  Endif
+  If Val(Z5)=2
+    ACT(H:FAC, 'Superv.')
+  Endif
+  If Val(Z5)=3 o Val(Z5)=4
+    ACT(H:FAC, 'OK')
+  Endif
+  If FBN['CB10']=0
+    ACT(I:FAC, 'Pend.Ingreso')
+    If FBN['CB9']=1
+      ACT(I:FAC, 'ERROR')
+    EndIf
+  Else
+    ACT(I:FAC, 'Ingresado')
+    If FBN['CB9']=1
+      ACT(I:FAC, 'Confirmado')
+    EndIf
+  EndIf
+  SetFont(C:FAC..I:FAC,1)
+Proximo
+
+If FAC>Val(W1)+5
+  IFA
+  ACT(F:FAC, 'Total '~Val(V2))
+  ACN(G:FAC, Val(Z1))
+  ACN(Z1,0)
+  SetFont(F:FAC..G:FAC,2)
+Endif
+FormatoCeldas(G:Val(W1)+5..G:FAC,EXE('F2'))
+
+SetFont(V1..Z3,1)
+If Val(W2)>0
+  SetFont(AA:1..AE:Val(W2),1)
+Endif
+
+ACO(1,8)
+ACO(2,6)
+ACO(3,12)
+ACO(4,12)
+ACO(5,4)
+ACO(6,8)
+ACO(7,12)
+ACO(8,6)
+ACO(9,15)
+
+SetFilaActual(FAC+2)
+ACT(A:FAC, 'Fin del informe.')
+SetFont(A:FAC, 2)
+AgregarBMP(A1,EXE('LOGO'),EXE('ESCALOGO'))
+
+SetFont(I:3,2)
+Impresion(1,2)
+LimitesVision(I:FAC)
+RangoTitulo(A:1..I:FAC, Val(W1)+4)

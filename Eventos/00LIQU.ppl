@@ -1,0 +1,375 @@
+﻿CrearDialogo
+  **//Habia un parentesis de mas
+  **//NrOperacion1: 'Operacion' ;;;;;;;;;;;;;;"NrOperacion IN (SELECT B.NrOperacion FROM "~DBO~".OPERACIONESBITS B WHERE B.NrOperacion = NrOperacion AND B.NrBit = 7 AND B.Valor = '1') ")
+  NrOperacion1: 'Operacion' ;;;;;;;;;;;;;;"NrOperacion IN (SELECT B.NrOperacion FROM "~DBO~".OPERACIONESBITS B WHERE B.NrOperacion = NrOperacion AND B.NrBit = 7 AND B.Valor = '1') "
+  Vehiculo1:    'Vehiculo'  ;;;;;;;;;VAR('VEHICULODE')
+  Check1: 'Lo llamo desde la Operacion';;;;NO;NO;;;;0
+FinDialogo
+IF NOT OK
+  Cancelar  
+Endif
+** Procesa - 0=NO, 1=SI
+ACN(z:2, 1)
+if Val(z:2)=0
+  HojaVisible(SI)
+endif
+
+SQL.ADD(" SELECT DISTINCT O.Cliente1, O.Especie, O.ContraEspecie, O.Cantidad, O.Vehiculo1, ")
+SQL.ADD(" O.Precio1, O.Precio4, O.NrOperacion, O.TotalNetoCli1, O.TotalIntereses, O.TotalBrutoCli1, O.UDN2, ")
+SQL.ADD(" O.FechaOp, O.FechaVto, O.TipoOp, C.RazonSocial, E.Nombre, O.Cuenta1, O.Cuenta2, O.Cuenta5, O.Cuenta6,")
+SQL.ADD(" O.Cuenta3, O.Cuenta4, O.Mercado, O.Mercado2, O.Especie1, O.RB10, O.RB6,C.CategDepositante, O.FechaPago, ")
+* FJL 07/12/18 - Por Moneda liquidacion en Futuros de moneda
+SQL.ADD(" O.Mercado4, O.TasaEspecie, O.NrBoleto, ")
+** FJL 30/12/19 - Se agregan campos de Tasa y Spread para PICO/PICD
+SQL.ADD(" O.MB1, O.TipoTasa, O.MB2, O.Spread ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E, "~DBO~".OPERACIONESBITS B ")
+SQL.ADD(" WHERE  O.Cliente1    = C.Codigo ")
+SQL.ADD(" AND    O.Especie     = E.Codigo ")
+SQL.ADD(" AND    O.NrOperacion = B.NrOperacion ")
+SQL.ADD(" AND    O.TipoOp NOT IN ('FXOCTC','FXOCTV')  ")
+SQL.ADD(" AND    B.Valor = '1'   ")
+If Dialogo.Check1=0
+   SQL.ADD(" AND    B.NrBit =  7 ")
+Endif
+If NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD(" AND  O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Endif
+If NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD(" AND  O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+Endif
+SQL.ADD(" ORDER BY O.Cliente1, O.TipoOp   ")
+watch(sql.batch())
+ACN(z:1, 0)
+Recorrer SQL
+  ACN(z:1, 1)
+  ACT(a:fac, fbn('Cliente1')~' - '~fbn('RazonSocial'))
+  ACT(aa:fac, fbn('Cliente1'))
+  ACN(ab:fac, IIF(EqStr(fbn('CategDepositante'),'CLI'),1,0) )
+  ACT(b:fac, fbn('NrOperacion'))
+  ACT(c:fac, fbn('TipoOp'))
+  ACD(d:fac, fbn('FechaOp'))
+  ** FJL 31/12/19 - ICL no tiene Vencimiento
+  if Not Incluido(fbn('TipoOp'), 'PICO|PICD|')
+    ACD(e:fac, fbn('FechaVto'))
+  endif
+  ACT(f:fac, fbn('Especie')~' - '~fbn('Nombre'))
+  ACT(ff:fac, fbn('Especie'))
+  ACN(g:fac, fbn('Cantidad'))
+  ** FJL 30/12/19 - Se agregan campos de Tasa y Spread para ICL
+  if Incluido(fbn('TipoOp'), 'PICO|PICD|')
+    ACN(ar:fac, fbn('MB1'))
+    ACT(as:fac, fbn('TipoTasa'))
+    ACN(at:fac, fbn('Precio1'))
+    ACN(au:fac, fbn('MB2'))
+    ACT(av:fac, fbn('Especie1'))
+    ACN(aw:fac, fbn('Spread'))
+    if fbn('MB1')=0
+      ACT(h:fac, FStr(fbn('Precio1'),3,8))
+    else
+      ACT(h:fac, fbn('TipoTasa'))
+    endif
+    if fbn('MB2')=0
+      ACT(ay:fac, FStr(fbn('Spread'),3,8))
+    else
+      ACT(ay:fac, fbn('Especie1'))
+    endif
+  else
+    ** CALCULOS SPREAD
+    if Incluido(fbn('TipoOp'), 'MMCREM|MMCT|')
+        ACN(ay:fac, fbn('Precio4') - fbn('Precio1'))
+    else
+        if Incluido(fbn('TipoOp'), 'MMCO|')
+            ACN(ay:fac, fbn('Precio1') - fbn('Precio4') )
+        endif
+    endif
+    ACT(h:fac, FStr(fbn('Precio1'),3,8))
+  endif
+  ACN(i:fac, fbn('TotalBrutoCli1'))
+  ACN(j:fac, fbn('TotalIntereses'))
+  ACN(k:fac, fbn('TotalNetoCli1'))
+  * En Futuros de Moneda RB10 es 0-Delivery / 1-NDF
+  ACN(RB:fac, fbn('RB10'))
+  iF NOT INCLUIDO(fbn('TipoOp'), 'TIC|TIV|TIFC|TIFV|TIDE|TIPO|TICO|TICT|TCOPRI|TCPCEM|TICF|TIVF|EQC|EQV')
+     ACT(tt:fac, 'MONEDA')
+     ACT(mm:fac, 'MONEDA')
+     ** FJL 30/12/19 - Se agrega ICL a la lista
+     if Incluido(fbn('TipoOp'), 'FXCF|FXVF|PICO|PICD|')
+       * ctas cliente
+       ACT(l:fac, fbn('Cuenta1'))
+       ACT(o:fac, fbn('Cuenta4'))
+       * cta vehiculo
+       ACT(m:fac, fbn('Cuenta2'))
+       ACT(n:fac, fbn('Cuenta3'))
+      else 
+        if Incluido(fbn('TipoOp'), 'MMCREM|')
+         ACT(l:fac, fbn('Cuenta1'))
+         ACT(m:fac, fbn('Cuenta2'))
+        else
+           * ctas cliente
+           ACT(l:fac, fbn('Cuenta3'))
+           ACT(o:fac, fbn('Cuenta4'))
+           * cta vehiculo
+           ACT(m:fac, fbn('Cuenta1'))
+           ACT(n:fac, fbn('Cuenta2'))
+        endif
+     endif
+  Else
+     ACT(tt:fac, 'TITULO')
+     ACT(mm:fac, 'MONEDA')
+     * ctas cliente
+     ACT(l:fac, fbn('Cuenta1'))
+     ACT(o:fac, fbn('Cuenta4'))
+     * cta vehiculo
+     ACT(m:fac, fbn('Cuenta2'))
+     ACT(n:fac, fbn('Cuenta3'))
+     ACT(y:fac,fbn('UDN2'))
+     If EqStr(VAR('LIQCOMMO'),'NO')
+        ACT(v:fac, fbn('Cuenta5'))
+        ACT(w:fac, fbn('Cuenta6'))
+     Endif
+  Endif
+  ACT(p:fac, '')
+  ACT(u:fac, '')
+  ACT(q:fac, fbn('Vehiculo1'))
+  ACT(r:fac, fbn('Mercado'))
+  ACT(s:fac, fbn('Mercado2'))
+  * FJL 07/12/18 - Estos tipos de operacion no existen en STD. Es siempre ContraEspecie
+  IF Incluido(fbn('TipoOp'), 'FXCT|FXVT') Y fbn('RB10') = 1 Y fbn('RB6') = 1
+    ***---NDF Internacional
+    ACT(t:fac, fbn('Especie1'))
+  ELSE
+    ACT(t:fac, fbn('ContraEspecie'))
+  ENDIF
+
+  * FJL 07/12/18 - Por Moneda liquidacion en Futuros de moneda
+  ACT(an:fac, fbn('Mercado4'))
+  ACT(nr:fac, fbn('NrBoleto'))
+  ACT(ao:fac, BuscarCampo('MERCADOS','Regulado','Codigo',fbn('Mercado4')))
+  IF Incluido(fbn('TipoOp'), 'FXCF|FXVF')
+    IF EqStr(Val(ao:FAC),'NO')
+      ACT(ap:fac, fbn('TasaEspecie'))
+    ELSE
+      ACT(ap:fac, Val(t:FAC))
+    ENDIF
+    * Solo para mostrar en la grilla
+    ACT(aq:fac, Val(ap:FAC))
+  ELSE
+    ACT(ap:fac, Val(t:FAC))
+  ENDIF
+
+  ACN(x:fac, 0)
+
+  ** FJL 30/12/19 - Se agrega ICL a la lista
+  if Incluido(fbn('TipoOp'), 'FXC|FXV|FXA|FXCT|FXVT|FXAT|PICO|PICD|')
+    acd(al:fac,FBN['FechaPago'])
+  else
+    acd(al:fac,FBN['FechaVto'])
+  Endif
+
+  * --- Cuenta3 Se busca aca porque en la op puede estar vacio
+  SQL.ADD(" SELECT Comitente, NrDepositante, Numero, Corresponsal, Alias3, Alias1, Alias2 ")
+  SQL.ADD(" FROM "~DBO~".CUENTAS WHERE Codigo = '"~Val(l:fac)~"' ")
+  Recorrer SQL
+    dfa
+    act(ae:fac, fbn('Comitente'))
+    act(af:fac, fbn('NrDepositante'))
+    act(ag:fac, fbn('Numero'))
+    act(ah:fac, fbn('Corresponsal'))
+    act(ai:fac, fbn('Alias3'))
+    act(aj:fac, fbn('Alias1'))
+    act(ak:fac, fbn('Alias2'))
+    break
+  Proximo
+
+**** Cuenta de la ContraEspecie
+  IF Not Eqstr(Val(ff:Fac),Val(T:Fac) )
+     * --- Cuenta4 Se busca aca porque en la op puede estar vacio
+     SQL.ADD(" SELECT Comitente, NrDepositante, Numero, Corresponsal, Alias3, Alias1, Alias2 ")
+     SQL.ADD(" FROM "~DBO~".CUENTAS WHERE Codigo = '"~Val(o:fac)~"' ")
+     Recorrer SQL
+       dfa
+       act(be:fac, fbn('Comitente'))
+       act(bf:fac, fbn('NrDepositante'))
+       act(bg:fac, fbn('Numero'))
+       act(bh:fac, fbn('Corresponsal'))
+       act(bi:fac, fbn('Alias3'))
+       act(bj:fac, fbn('Alias1'))
+       act(bk:fac, fbn('Alias2'))
+       break
+     Proximo
+  ENDIF
+  ** lista cuentas Especie para mercado
+  ACT(cu:0,SQLSet("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente='"~IIF(EqStr(BuscarCampo('MERCADOS','Netea','Codigo',fbn('Mercado')),'SI'),fbn('Vehiculo1'),fbn('Cliente1'))~"' AND (Especies Like '%"~fbn('Especie')~"%' OR Especies LIKE '%TITULO%') AND Estado='HAB' AND TipoCuenta In ('CUS','CCO') AND Mercado='"~fbn('Mercado')~"' and (TiposOperacion is NULL or TiposOperacion like '%"~fbn('TipoOp')~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC"))  
+  ACT(cu:fac,IIF(NoVacio(val(cu:0)),ItemLista(Val(cu:0),1),fbn('Cuenta1')))
+  
+Proximo
+
+If Val(z:1)=0
+  Cancelar('No se encontraron Operaciones para Confirmar.')
+Endif
+
+CrearListBox ; 'MS Sans SerIf,8,'
+   'Cliente'       ; a:1..a:fac ;NO;SI;;100;STRING;;RGB(232,232,255); 
+   'Operacion'     ; b:1..b:fac ;NO;SI;; 70;STRING;;RGB(232,232,255); 
+   'TipoOp'        ; c:1..c:fac ;NO;SI;; 50;STRING;;RGB(232,232,255); 
+   'FechaOp'       ; d:1..d:fac ;NO;SI;; 70;FECHA;RGB(232,232,255); 
+   'FechaVto'      ; e:1..e:fac ;NO;SI;; 70;FECHA;RGB(232,232,255); 
+   'FechaLiq.Mon.' ;al:1..al:fac;NO;SI;; 70;FECHA;RGB(232,232,255); 
+   'Especie'       ; f:1..f:fac ;NO;SI;;100;STRING;;RGB(232,232,255); 
+   'ContraEsp'     ; t:1..t:fac ;NO;SI;;50;STRING;;RGB(232,232,255); 
+   * FJL 07/12/18 - Por Moneda liquidacion en Futuros de moneda
+   'Mon.Liq'       ;aq:1..aq:fac;NO;SI;;50;STRING;;RGB(232,232,255); 
+   'Cantidad'      ; g:1..g:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255); 
+   ** FJL 30/12/19 - Se cambia campo Precio/Tasa a String para ICL
+*  'Precio'        ; h:1..h:fac ;NO;;;70 ;NUMERO;'###.########';RGB(232,232,255); 
+   'Precio/Tasa'   ; h:1..h:fac ;NO;;;90 ;STRING;;RGB(232,232,255); 
+   ** FJL 30/12/19 - Se agregan campo Spread para ICL
+   'Spread'        ;ay:1..ay:fac;NO;;;90 ;NUMERO;;RGB(232,232,255);
+   'TotalBruto'    ; i:1..i:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255);  
+   'TotalInteres'  ; j:1..j:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255); 
+   'TotalNeto'     ; k:1..k:fac ;NO;;;80 ;NUMERO;'##,###,###.##';RGB(232,232,255); 
+   'Merc.Esp.'     ; r:1..r:fac ;Incluido(Val(c:flb),'MMPF|MMPFCE') ;not Incluido(Val(c:flb),'MMPF|MMPFCE') o [NOVACIO(Val(r:flb)) y Incluido('M',BuscarCampo('MERCADOS','Observaciones','Codigo',Val(r:flb)))];'Mercado Invalido'; 70;TABLA ;'MERCADOS';'Codigo';'Codigo;Descripcion';" Observaciones like '%M%' ";RGB(232,232,255);
+   'Merc.Mon.'     ; s:1..s:fac ;Incluido(Val(c:flb),'TCOPRI');SI;; 70;TABLA ;'MERCADOS';'Codigo';'Codigo;Descripcion';" Observaciones like '%M%' ";IIF(Incluido(Val(c:flb),'TCOPRI'),RGB(255,255,213),RGB(232,232,255));
+   'Confirma'      ; x:1..x:fac ;SI;SI;; 30;CHECK ;RGB(255,255,213);
+   ***'Cta.Esp.Cli'   ; l:1..l:fac ;Not Incluido(Val(C:FLB),'TICF|TIVF|FXCF|FXVF|') O Val(RB:FLB)=0;[Incluido(Val(C:FLB),'TICF|TIVF|FXCF|FXVF|') Y Val(RB:FLB)=1] O [Incluido(Val(r:flb),var('MERCAACMC')) y Eqstr(BuscarCampo('CUENTAS','Comitente','Codigo',Val(l:flb)),SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' "))] o [[Val(ab:flb)=1 y [ClienteCuenta(Val(aa:flb),Val(l:flb),Val(ff:flb)) o Vacio(BuscarCampo('CUENTAS','Cliente','Codigo',val(l:flb)))]] o [ClienteCuenta(Val(aa:flb),Val(l:flb),Val(ff:flb)) y Val(ab:flb)=0]] o Val(x:flb)=0 ;'La Cta Especie '~Val(l:FLB)~' del Cliente '~Val(aa:FLB)~' es incorrecta Op.'~Val(b:flb) ;70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';"Cliente='"~IIF(EqStr(BuscarCampo('MERCADOS','Netea','Codigo',Val(r:flb)),'SI'),Val(q:flb),Val(aa:flb))~"' AND (Especies Like '%"~Val(ff:flb)~"%' OR Especies LIKE '%TITULO%') AND Estado='HAB' AND TipoCuenta In ('CUS','CCO') AND Mercado='"~Val(r:flb)~"' and (TiposOperacion is NULL or TiposOperacion like '%"~Val(c:flb)~"|%') ";RGB(255,255,213);IIF(Incluido(Val(c:flb),'MMPF|MMPFCE'), SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(aa:flb)~"' AND Estado='HAB' AND Mercado= '"~Val(r:flb)~"' AND (Especies LIKE '%MONEDA%' OR Especies LIKE '%"~Val(ff:flb)~"%') "),Val(l:flb));NO;NO;r  
+   'Cta.Esp.Cli'   ; l:1..l:fac ;Not Incluido(Val(C:FLB),'TICF|TIVF|FXCF|FXVF|') O Val(RB:FLB)=0;[Incluido(Val(C:FLB),'TICF|TIVF|FXCF|FXVF|') Y Val(RB:FLB)=1] O [Incluido(Val(r:flb),var('MERCAACMC')) y Eqstr(BuscarCampo('CUENTAS','Comitente','Codigo',Val(l:flb)),SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' "))] o [[Val(ab:flb)=1 y [ClienteCuenta(Val(aa:flb),Val(l:flb),Val(ff:flb)) o Vacio(BuscarCampo('CUENTAS','Cliente','Codigo',val(l:flb)))]] o [ClienteCuenta(Val(aa:flb),Val(l:flb),Val(ff:flb)) y Val(ab:flb)=0]] o Val(x:flb)=0 ;'La Cta Especie '~Val(l:FLB)~' del Cliente '~Val(aa:FLB)~' es incorrecta Op.'~Val(b:flb) ;70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';IIF(Incluido(Val(c:flb),'TIC|TIV|'),"Cliente='"~IIF(EqStr(BuscarCampo('MERCADOS','Netea','Codigo',Val(r:flb)),'SI'),Val(q:flb),Val(aa:flb))~"' AND (Especies Like '%"~Val(ff:flb)~"%' OR Especies LIKE '%TITULO%') AND Estado='HAB' AND TipoCuenta In ('CUS','CCO') AND Mercado='"~Val(r:flb)~"' and (TiposOperacion is NULL or TiposOperacion like '%"~Val(c:flb)~"|%') ",IIF(Incluido(Val(r:flb),var('MERCAACMC'))," Comitente = '"~SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' ")~"' and Estado='HAB' AND (Especies like '%"~Val(ff:flb)~"%' OR Especies LIKE '%"~Val(ff:flb)~"%')", IIF(val(ab:flb)=0," (Cliente='"~Val(aa:flb)~"' and Estado='HAB' AND (Especies like '%"~Val(ff:flb)~"%' OR Especies LIKE '%"~Val(tt:flb)~"%') and "~IIF(NoVacio(Val(r:FLB)),"Mercado = '"~Val(r:FLB)~"' "," Codigo=Codigo ")~")"," ((Cliente='"~Val(aa:flb)~"' or Cliente Is Null or Cliente='') and Estado='HAB' AND (Especies like '%"~Val(ff:flb)~"%' OR Especies LIKE '%"~Val(tt:flb)~"%') and "~IIF(NoVacio(Val(r:FLB)),"Mercado = '"~Val(r:FLB)~"' "," Codigo=Codigo ")~")")));RGB(255,255,213);IIF(Incluido(Val(c:flb),'MMPF|MMPFCE'), SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(aa:flb)~"' AND Estado='HAB' AND Mercado= '"~Val(r:flb)~"' AND (Especies LIKE '%MONEDA%' OR Especies LIKE '%"~Val(ff:flb)~"%') "),Val(l:flb));NO;NO;
+   *   'Cta.Mon.Cli'   ; o:1..o:fac ;Not Incluido(Val(c:FLB),'PICO|PICD|');[Incluido(Val(s:flb),var('MERCAACMC')) y ClienteCuenta(SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' "),Val(o:flb))] o [[Val(ab:flb)=0 y ClienteCuenta(Val(aa:flb),Val(o:flb),Val(ap:flb))] o [Val(ab:flb)=1 y [Vacio(BuscarCampo('CUENTAS','Cliente','Codigo',val(l:flb))) o ClienteCuenta(Val(aa:flb),Val(o:flb),Val(ap:flb))]]] o Eqstr(Val(o:flb),VAR('CTAMOD23')) o Val(x:flb)=0 O Eqstr(Copy(Val(C:FLB), 1, 2), 'MM') o Incluido(Val(c:FLB),'PICO|PICD|');'La Cta Moneda '~Val(o:FLB)~' del Cliente '~Val(aa:FLB)~' es incorrecta Op. '~Val(b:flb);70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';IIF(Incluido(Val(r:flb),var('MERCAACMC'))," Cliente='"~SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' ")~"' and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%')",IIF(val(ab:flb)=0," (Cliente='"~Val(aa:flb)~"' and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%') and "~IIF(NoVacio(Val(s:FLB)),"Mercado = '"~Val(s:FLB)~"' "," Codigo=Codigo ")~")"," ((Cliente='"~Val(aa:flb)~"' or Cliente Is Null or Cliente='') and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%') and "~IIF(NoVacio(Val(s:FLB)),"Mercado = '"~Val(s:FLB)~"' "," Codigo=Codigo ")~")"));IIF(Incluido(Val(c:flb),'PICO|PICD|'),RGB(232,232,255),RGB(255,255,213));IIF(Incluido(Val(c:flb),'MMPF|MMPFCE'), SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(aa:flb)~"' AND Estado='HAB' AND Mercado= '"~Val(s:flb)~"' AND (Especies LIKE '%MONEDA%' OR Especies LIKE '%"~Val(ap:flb)~"%') "),Val(o:flb));NO;NO;
+   'Cta.Mon.Cli'   ; o:1..o:fac ;Not Incluido(Val(c:FLB),'PICO|PICD|');[Incluido(Val(s:flb),var('MERCAACMC')) y ClienteCuenta(SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' "),Val(o:flb))] o [[Val(ab:flb)=0 y ClienteCuenta(Val(aa:flb),Val(o:flb),Val(ap:flb))] o [Val(ab:flb)=1 y [Vacio(BuscarCampo('CUENTAS','Cliente','Codigo',val(l:flb))) o ClienteCuenta(Val(aa:flb),Val(o:flb),Val(ap:flb))]]] o Eqstr(Val(o:flb),VAR('CTAMOD23')) o Val(x:flb)=0 O Eqstr(Copy(Val(C:FLB), 1, 2), 'MM') o Incluido(Val(c:FLB),'PICO|PICD|');'La Cta Moneda '~Val(o:FLB)~' del Cliente '~Val(aa:FLB)~' es incorrecta Op. '~Val(b:flb);70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';IIF(Incluido(Val(r:flb),var('MERCAACMC'))," Cliente='"~SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' ")~"' and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%')",IIF(val(ab:flb)=0," (Cliente='"~Val(aa:flb)~"' and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%') and "~IIF(NoVacio(Val(s:FLB)),"Mercado = '"~Val(s:FLB)~"' "," Codigo=Codigo ")~")"," ((Cliente='"~Val(aa:flb)~"' or Cliente Is Null or Cliente='') and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%') and "~IIF(NoVacio(Val(s:FLB)),"Mercado = '"~Val(s:FLB)~"' "," Codigo=Codigo ")~")"));IIF(Incluido(Val(c:flb),'PICO|PICD|'),RGB(232,232,255),RGB(255,255,213));IIF(Incluido(Val(c:flb),'MMPF|MMPFCE'), SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(aa:flb)~"' AND Estado='HAB' AND Mercado= '"~Val(s:flb)~"' AND (Especies LIKE '%MONEDA%' OR Especies LIKE '%"~Val(ap:flb)~"%') "),Val(o:flb));NO;NO;
+   'Cta Com.Cli'   ; v:1..V:fac ;EqStr(VAR('LIQCOMMO'),'NO');[Incluido(Val(s:flb),var('MERCAACMC')) y ClienteCuenta(SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' "),Val(v:flb))] o [[Val(ab:flb)=0 y ClienteCuenta(Val(aa:flb),Val(v:flb),Val(ap:flb))] o [Val(ab:flb)=1 y [Vacio(BuscarCampo('CUENTAS','Cliente','Codigo',val(l:flb))) o ClienteCuenta(Val(aa:flb),Val(v:flb),Val(ap:flb))]]] o Eqstr(Val(v:flb),VAR('CTAMOD23')) o Val(x:flb)=0 O Eqstr(Copy(Val(C:FLB), 1, 2), 'MM') o Incluido(Val(c:FLB),'PICO|PICD|');'La Cta Moneda '~Val(v:FLB)~' del Cliente '~Val(aa:FLB)~' es incorrecta Op. '~Val(b:flb);70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';IIF(Incluido(Val(r:flb),var('MERCAACMC'))," Cliente='"~SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' ")~"' and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%')",IIF(val(ab:flb)=0," (Cliente='"~Val(aa:flb)~"' and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%') and "~IIF(NoVacio(Val(s:FLB)),"Mercado = '"~Val(s:FLB)~"' "," Codigo=Codigo ")~")"," ((Cliente='"~Val(aa:flb)~"' or Cliente Is Null or Cliente='') and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%') and "~IIF(NoVacio(Val(s:FLB)),"Mercado = '"~Val(s:FLB)~"' "," Codigo=Codigo ")~")"));IIF(Incluido(Val(c:flb),'PICO|PICD|'),RGB(232,232,255),RGB(255,255,213));IIF(Incluido(Val(c:flb),'MMPF|MMPFCE'), SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(aa:flb)~"' AND Estado='HAB' AND Mercado= '"~Val(s:flb)~"' AND (Especies LIKE '%MONEDA%' OR Especies LIKE '%"~Val(ap:flb)~"%') "),Val(v:flb));NO;NO;
+   **'Cta.Esp.Vh'    ; m:1..m:fac ;Not Incluido(Val(C:FLB),'TICF|TIVF|FXCF|FXVF|') O Val(RB:FLB)=0;[Incluido(Val(C:FLB),'TICF|TIVF|FXCF|FXVF|') Y Val(RB:FLB)=1] O [Incluido(Val(r:flb),var('MERCAACMC')) y Eqstr(BuscarCampo('CUENTAS','Comitente','Codigo',Val(m:flb)),SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' "))] o ClienteCuenta(Val(q:flb),Val(m:flb),Val(ff:flb)) o Val(x:flb)=0 o Val(ab:flb)=1 ;'La Cta Especie '~Val(m:FLB)~' del Vehiculo '~Val(q:FLB)~' es incorrecta Op.'~Val(b:flb);70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';IIF(Incluido(Val(r:flb),var('MERCAACMC'))," Comitente = '"~SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' ")~"' and Estado='HAB' AND (Especies like '%"~Val(ff:flb)~"%' OR Especies LIKE '%"~Val(ff:flb)~"%')", " (Cliente='"~Val(q:flb)~"'  and Estado='HAB' AND (Especies like '%"~Val(ff:flb)~"%' OR Especies LIKE '%"~Val(tt:flb)~"%') and "~IIF(NoVacio(Val(r:FLB)),"Mercado = '"~Val(r:FLB)~"' "," Codigo=Codigo ")~")");RGB(255,255,213);IIF(Incluido(Val(c:flb),'MMPF|MMPFCE'), SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(q:flb)~"' AND Estado='HAB' AND Mercado= '"~Val(r:flb)~"' AND (Especies LIKE '%MONEDA%' OR Especies LIKE '%"~Val(ff:flb)~"%') "),Val(m:flb));NO;NO;
+   'Cta.Esp.Vh'    ; m:1..m:fac ;Not Incluido(Val(C:FLB),'TICF|TIVF|FXCF|FXVF|') O Val(RB:FLB)=0;IIF(Not Incluido(Val(C:FLB),'MMCREM'),[Incluido(Val(C:FLB),'TICF|TIVF|FXCF|FXVF|') Y Val(RB:FLB)=1] O [Incluido(Val(r:flb),var('MERCAACMC')) y Eqstr(BuscarCampo('CUENTAS','Comitente','Codigo',Val(m:flb)),SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' "))] o ClienteCuenta(Val(q:flb),Val(m:flb),Val(ff:flb)) o Val(x:flb)=0 o Val(ab:flb)=1 );'La Cta Especie '~Val(m:FLB)~' del Vehiculo '~Val(q:FLB)~' es incorrecta Op.'~Val(b:flb);70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';IIF(Incluido(Val(c:flb),'TIC|TIV|'),"Cliente='"~Val(q:flb)~"' and (Especies Like '%"~Val(ff:flb)~"|%' OR Especies LIKE '%TITULO%') and Estado='HAB' AND TipoCuenta In ('CUS', 'CCO') and Mercado='"~Val(r:flb)~"' and (TiposOperacion is NULL or TiposOperacion like '%"~Val(c:flb)~"|%') "       ,IIF(Incluido(Val(r:flb),var('MERCAACMC'))," Comitente = '"~SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' ")~"' and Estado='HAB' AND (Especies like '%"~Val(ff:flb)~"%' OR Especies LIKE '%"~Val(ff:flb)~"%')", " (Cliente='"~Val(q:flb)~"'  and Estado='HAB' AND (Especies like '%"~Val(ff:flb)~"%' OR Especies LIKE '%"~Val(tt:flb)~"%') and "~IIF(NoVacio(Val(r:FLB)),"Mercado = '"~Val(r:FLB)~"' "," Codigo=Codigo ")~")"))   ;RGB(255,255,213)      ;IIF(Incluido(Val(c:flb),'MMPF|MMPFCE'), SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(q:flb)~"' AND Estado='HAB' AND Mercado= '"~Val(r:flb)~"' AND (Especies LIKE '%MONEDA%' OR Especies LIKE '%"~Val(ff:flb)~"%') "),Val(m:flb));NO;NO;
+   'Cta.Mon.Vh'    ; n:1..n:fac ;Not Incluido(Val(c:FLB),'PICO|PICD|');[Incluido(Val(s:flb),var('MERCAACMC')) y ClienteCuenta(SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' "),Val(n:flb))] o ClienteCuenta(Val(q:flb),Val(n:flb),Val(ap:flb)) o Val(x:flb)=0  o Eqstr(Copy(Val(C:FLB), 1, 2), 'MM') o Val(ab:flb)=1 o Incluido(Val(c:FLB),'PICO|PICD|');'La Cta Moneda '~Val(n:FLB)~' del Vehiculo '~Val(q:FLB)~' es incorrecta Op.'~Val(b:flb);70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';IIF(Incluido(Val(r:flb),var('MERCAACMC'))," Cliente   = '"~SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' ")~"' and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%')", " (Cliente='"~Val(q:flb)~"'  and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%') and "~IIF(NoVacio(Val(s:FLB)),"Mercado = '"~Val(s:FLB)~"' "," Codigo=Codigo ")~")");IIF(Incluido(Val(c:flb),'PICO|PICD|'),RGB(232,232,255),RGB(255,255,213));IIF(Incluido(Val(c:flb),'MMPF|MMPFCE'), SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(q:flb)~"' AND Estado='HAB' AND Mercado= '"~Val(s:flb)~"' AND (Especies LIKE '%MONEDA%' OR Especies LIKE '%"~Val(ap:flb)~"%') "),Val(n:flb));NO;NO;
+   'Cta.Com.Vh'    ; w:1..w:fac ;EqStr(VAR('LIQCOMMO'),'NO');[Incluido(Val(s:flb),var('MERCAACMC')) y ClienteCuenta(SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' "),Val(w:flb))] o ClienteCuenta(Val(q:flb),Val(w:flb),Val(ap:flb)) o Val(x:flb)=0  o Eqstr(Copy(Val(C:FLB), 1, 2), 'MM') o Val(ab:flb)=1 o Incluido(Val(c:FLB),'PICO|PICD|');'La Cta Moneda '~Val(w:FLB)~' del Vehiculo '~Val(q:FLB)~' es incorrecta Op.'~Val(b:flb);70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';IIF(Incluido(Val(r:flb),var('MERCAACMC'))," Cliente   = '"~SQL("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(r:flb)~"' ")~"' and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%')", " (Cliente='"~Val(q:flb)~"'  and Estado='HAB' AND (Especies like '%"~Val(ap:flb)~"%'  OR Especies LIKE '%"~Val(mm:flb)~"%') and "~IIF(NoVacio(Val(s:FLB)),"Mercado = '"~Val(s:FLB)~"' "," Codigo=Codigo ")~")");IIF(Incluido(Val(c:flb),'PICO|PICD|'),RGB(232,232,255),RGB(255,255,213));IIF(Incluido(Val(c:flb),'MMPF|MMPFCE'), SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente= '"~Val(q:flb)~"' AND Estado='HAB' AND Mercado= '"~Val(s:flb)~"' AND (Especies LIKE '%MONEDA%' OR Especies LIKE '%"~Val(ap:flb)~"%') "),Val(w:flb));NO;NO;
+   'Depos.'        ;ae:1..ae:fac;NO;;;80 ;STRING;100;RGB(232,232,255);BuscarCampo('CUENTAS','Comitente','Codigo',Val(l:FLB))
+   'Comit.'        ;af:1..af:fac;NO;;;80 ;STRING;100;RGB(232,232,255);BuscarCampo('CUENTAS','NrDepositante','Codigo',Val(l:FLB))
+   'Nro. Cta.'     ;ag:1..ag:fac;NO;;;80 ;STRING;100;RGB(232,232,255);BuscarCampo('CUENTAS','Numero','Codigo',Val(l:FLB))
+
+   'Corresp.'      ;ah:1..ah:fac;NO;;;80 ;STRING;100;RGB(232,232,255);BuscarCampo('CUENTAS','Corresponsal','Codigo',Val(l:FLB))
+   'SWIFT'         ;ai:1..ai:fac;NO;;;80 ;STRING;100;RGB(232,232,255);BuscarCampo('CUENTAS','Alias3','Codigo',Val(l:FLB))
+   'Cta.Bco.Cli.'  ;aj:1..aj:fac;NO;;;80 ;STRING;100;RGB(232,232,255);BuscarCampo('CUENTAS','Alias1','Codigo',Val(l:FLB))
+   'Sub Cta'       ;ak:1..ak:fac;NO;;;80 ;STRING;100;RGB(232,232,255);BuscarCampo('CUENTAS','Alias2','Codigo',Val(l:FLB))
+
+   'Contacto'      ; p:1..p:fac ;SI;;;100 ;STRING;50;RGB(255,255,213);
+   'Observaciones' ; u:1..u:fac ;SI;;;150;STRING;200;RGB(255,255,213); 
+   'Vehiculo'      ; q:1..q:fac ;NO;SI;;70;STRING;;RGB(232,232,255); 
+
+   'Depos.CE'      ;be:1..ae:fac;NO;;;80 ;STRING;100;RGB(232,232,255);IIF(Eqstr(Val(ff:FLB),Val(T:FLB)),'',BuscarCampo('CUENTAS','Comitente','Codigo',Val(o:FLB)) )
+   'Comit.CE'      ;bf:1..af:fac;NO;;;80 ;STRING;100;RGB(232,232,255);IIF(Eqstr(Val(ff:FLB),Val(T:FLB)),'',BuscarCampo('CUENTAS','NrDepositante','Codigo',Val(o:FLB)) )
+   'Nro.Cta. CE'   ;bg:1..ag:fac;NO;;;80 ;STRING;100;RGB(232,232,255);IIF(Eqstr(Val(ff:FLB),Val(T:FLB)),'',BuscarCampo('CUENTAS','Numero','Codigo',Val(o:FLB)) )
+
+   'Corr.CE'       ;bh:1..ah:fac;NO;;;80 ;STRING;100;RGB(232,232,255);IIF(Eqstr(Val(ff:FLB),Val(T:FLB)),'',BuscarCampo('CUENTAS','Corresponsal','Codigo',Val(o:FLB)) )
+   'SWIFT CE'      ;bi:1..ai:fac;NO;;;80 ;STRING;100;RGB(232,232,255);IIF(Eqstr(Val(ff:FLB),Val(T:FLB)),'',BuscarCampo('CUENTAS','Alias3','Codigo',Val(o:FLB)) )
+   'Cta.Bco.Cli.CE';bj:1..aj:fac;NO;;;80 ;STRING;100;RGB(232,232,255);IIF(Eqstr(Val(ff:FLB),Val(T:FLB)),'',BuscarCampo('CUENTAS','Alias1','Codigo',Val(o:FLB)) )
+   'Sub Cta CE'    ;bk:1..ak:fac;NO;;;80 ;STRING;100;RGB(232,232,255);IIF(Eqstr(Val(ff:FLB),Val(T:FLB)),'',BuscarCampo('CUENTAS','Alias2','Codigo',Val(o:FLB)) )
+FinListBox
+
+if not ok
+  if Val(z:2)=1
+    * Procesa
+    Cancelar('Evento Cancelado.')
+  else
+    MessageBox('Evento Cancelado. No Procesa')
+  Endif
+Endif
+
+Recorrer&i 1, fac
+  If Val(x:&i)=1      
+    If Val(z:2)=1  
+      * Procesa
+      * --- Actualiza las cuentas de la operacion
+      SQL.ADD(" UPDATE "~DBO~".OPERACIONES SET ")
+      IF NOT INCLUIDO(Val(c:&i), 'TIC|TIV|TIFC|TIFV|TIDE|TIPO|TICO|TICT|TCOPRI|TCPCEM|TICF|TIVF|EQC|EQV')
+          If Incluido(Val(c:&i), 'MMPF|MMPFCE')
+           SQL.ADD(" Mercado  = '"~Val(r:&i)~"', ")
+           SQL.ADD(" Mercado2 = '"~Val(s:&i)~"', ")
+          Endif
+          if Incluido(Val(c:&i), 'FXCF|FXVF|')
+            * ctas cliente
+            SQL.ADD(" Cuenta1 = '"~Val(l:&i)~"', ")
+            SQL.ADD(" Cuenta4 = '"~Val(o:&i)~"', ")
+            * ctas vehiculo
+            SQL.ADD(" Cuenta2 = '"~Val(m:&i)~"', ")
+            SQL.ADD(" Cuenta3 = '"~Val(n:&i)~"'  ")
+          else
+          ** FJL 02/01/19 - Se agrega opcion para ICL
+            if Incluido(Val(c:&i), 'PICO|PICD|')
+              * cta cliente
+              SQL.ADD(" Cuenta1 = '"~Val(l:&i)~"', ")
+              * cta vehiculo
+              SQL.ADD(" Cuenta2 = '"~Val(m:&i)~"' ")
+            else
+              if Incluido(Val(c:&i), 'MMCREM|')
+                SQL.ADD(" Cuenta1 = '"~Val(l:&i)~"' ")
+                * SQL.ADD(" ,Cuenta2 = '"~Val(m:&i)~"' ")
+              else
+                  * ctas cliente
+                  SQL.ADD(" Cuenta3 = '"~Val(l:&i)~"', ")
+                  SQL.ADD(" Cuenta4 = '"~Val(o:&i)~"', ")
+                  * ctas vehiculo
+                  SQL.ADD(" Cuenta1 = '"~Val(m:&i)~"', ")
+                  SQL.ADD(" Cuenta2 = '"~Val(n:&i)~"'  ")
+              endif
+            endif    
+          endif    
+      Else
+        * ctas cliente
+        SQL.ADD(" Cuenta1 = '"~Val(l:&i)~"', ")
+        SQL.ADD(" Cuenta4 = '"~Val(o:&i)~"', ")
+        * ctas vehiculo
+        SQL.ADD(" Cuenta2 = '"~Val(m:&i)~"', ")
+        SQL.ADD(" Cuenta3 = '"~Val(n:&i)~"'  ")
+        If EqStr(VAR('LIQCOMMO'),'NO')
+           * ctas comisiones Cliente y Vehiculo
+           SQL.ADD(" , ")
+           SQL.ADD(" Cuenta5 = '"~Val(v:&i)~"', ")
+           SQL.ADD(" Cuenta6 = '"~Val(w:&i)~"'  ")
+        Endif
+      Endif
+      SQL.ADD(" WHERE NrOperacion = '"~Val(b:&i)~"' ")
+      SQL.NEW
+      SQL.EXEC
+** FJL 05/07/18 - Por posciones 121/122 
+*      SQL.ActualizarMovimientos3(Val(B:&i),SI,NO,NO,NO,NO)
+      SQL.ActualizarMovimientos3(Val(B:&i),SI,NO,NO,SI,NO)
+      SQL.EXEC
+
+      if Incluido(Val(c:&i), 'FXCF|FXVF|') y Incluido(Val(an:&i),VAR('MENEFFX')) y EqStr(Val(nr:&i),'')
+         EjecutarEvento('NUBNDF',NrOperacion1=Val(b:&i))
+      Endif
+      
+      * --- Inserta Confirmacion
+      ACN(cf:1,0)
+      ACN(cf:1, SQL("SELECT MAX(NrConfirmacion) FROM "~DBO~".CONFIRMACIONESOP WHERE NrOperacion = '"~Val(b:&i)~"' ") )
+      SCN(cf:1,1)
+      SQL.ADD(" INSERT INTO "~DBO~".CONFIRMACIONESOP ( ")
+      SQL.ADD(" NrOperacion, NrConfirmacion, Tabla, ")
+      SQL.ADD(" Contacto, Fecha, Observaciones, Usuario ")
+      SQL.ADD(" ) VALUES ( ")
+      SQL.ADD(" '"~Val(b:&i)~"', "~FSTR(Val(cf:1),0,0)~", 'OPERACIONES', ")
+      SQL.ADD(" '"~Copy(Val(p:&i),1,50)~"', "~SQLAhora~", '"~Val(u:&i)~"', '"~USUARIOACTIVO~"' ) ")
+      SQL.NEW
+      SQL.EXEC
+
+      * --- Modifica Instancia
+
+      
+      if(EqStr(VAL(C:&i), 'MMCREM'))
+        IF Vacio(BuscarCampo('OPERACIONES','NrOperacion3','NrOperacion',Val(b:&i)))
+           SQL.ADD("UPDATE "~DBO~".OPERACIONES SET NrOperacion3=NrOperacion WHERE NrOperacion='"~Val(b:&i)~"'")
+           SQL.New
+           SQL.Exec
+        Endif   
+        SQL.ADD("SELECT NrOperacion, NrOperacion3 from "~DBO~".OPERACIONES where NrOperacion3 ='"~Val(b:&i)~"'")
+        Recorrer SQL
+          EjecutarEvento('CBOINS', String1= FBN['NrOperacion'], Radio1=0, Radio2=2, Entero1=0, Entero2=92)
+        proximo
+      else
+        ACT(AZ:4, 'OPERACIONES')
+        ACT(AZ:3, Val(b:&i) )
+        ACN(AZ:5, 10)
+        ACN(AZ:6,  7)
+        (.'MODIINSTAN'.)
+      endif
+    Endif
+  Endif
+Proximo

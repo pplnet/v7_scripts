@@ -1,0 +1,84 @@
+﻿CrearDialogo
+  NrOperacion1: 'Nr. Operacion' ;1;1;1;  ;  ;Novacio(Dialogo.NrOperacion1) y Incluido(BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion1),'TIC|TIV|TCOPRI') y BuscarCampo('OPERACIONES','PaseCB','NrOperacion',Dialogo.NrOperacion1)=0;'Operacion Invalida.';NO;;;;;;"TipoOp in ('TIC','TIV','TCOPRI') and PaseCB=0 "
+  Check1:       'Procesa'       ;1;2;1;NO;NO;;;;1;
+FinDialogo
+if not Ok
+  Cancelar
+endif
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+
+ACT(a:1, Dialogo.NrOperacion1)
+ACN(a:2, Dialogo.Check1)
+ACT(a:3, BuscarCampo('OPERACIONES','Book1','NrOperacion',Dialogo.NrOperacion1))
+CrearDialogo
+  NrOperacion1: 'Nr. Operacion' ;1;1;1;NO;  ;;;;Val(a:1);
+  Check1:       'Procesa'       ;1;2;1;NO;NO;;;;Val(a:2);
+  Book1:        'Book Actual'   ;2;1;1;NO;SI;;;;Val(a:3);
+  Book2:        'Book Nuevo'    ;3;1;1;SI;SI;NoVacio(Dialogo.Book2) y Not EqStr(Dialogo.Book2,Dialogo.Book1);'Debe ingresar un book distinto al actual.';NO;;
+FinDialogo
+
+if not Ok
+  Cancelar('Evento Cancelado')
+endif
+
+
+(.'BOOKPARTID'.)
+Recorrer SQL
+    ACT(BK:1,Val(BK:1)~'|'~fbn('Books'))
+Proximo
+
+**Cintia 130524 -- Verifico si lo que se quiere hacer es de INVESTMENT a TRADING
+If Incluido(Dialogo.Book1,Val(BK:1)) y Not Incluido(Dialogo.Book2,Val(BK:1)) 
+    ACN(x:1, 1)
+    MessageBox("Evento cancelado. No está contemplado el pasaje de INVESTMENT a TRADING.")
+    *let &opEnPartida SQL("Select 1 from "~DBO~".PARTIDAS Where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+
+    *If &opEnPartida=1
+    *    **Cancela si la operación ya existe en una PARTIDA. 
+    *    Cancelar("Evento cancelado. La operación ingresada ya se encuentra en una partida.")
+    *    **Si la operación no existe en una partida no va a generar nada en la contabilidad por ahora.
+    *Endif
+Endif
+
+**Cintia 130524 -- Verifico que no se haya cambiado el book anteriormente sin anular
+let &opSinAnularCambioBook SQL("Select 1 from "~DBO~".OPERACIONES Where NrOperacion = '"~Dialogo.NrOperacion1~"' and FechaCambioBook is not null and FechaAnulacionCambioBook is null")
+If &opSinAnularCambioBook=1
+    ACN(x:1, 1)
+    MessageBox("Evento cancelado. Debe anular el cambio de book anterior para poder continuar.") 
+Endif
+***
+
+ACT(a:4, Dialogo.Book2)
+ACN(a:5, SQL("Select 1 from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrSaldo <> 1 "))
+if Val(a:5)>0
+  ACN(x:1, 1)
+  MessageBox('La operacion esta liquidada. No se puede modificar el Book.')
+endif
+
+if Val(x:1)=0
+  if Dialogo.Check1=1
+    **Cintia 130524 -- Agrego BookAnterior y FechaCambioBook al Update
+    SQL.ADD("Update "~DBO~".OPERACIONES Set Book1 = '"~Dialogo.Book2~"', ")
+    SQL.ADD(" BookAnterior= '"~Dialogo.Book1~"' WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    SQL.NEW
+    SQL.EXEC
+    
+    IF SQL("Select 1 from "~DBO~".OPERACIONES where NrOperacion='"~Dialogo.NrOperacion1~"' and FechaAnulacionCambioBook='"~IdxDate(Fsys)~"' and  FechaCambioBook<'"~IdxDate(Fsys)~"'")=0
+        SQL.ADD("Update "~DBO~".OPERACIONES Set  FechaCambioBook = '"~IdxDate(Fsys)~"' WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    ELSE
+        SQL.ADD("Update "~DBO~".OPERACIONES Set  FechaAnulacionCambioBook = null WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    ENDIF
+    SQL.NEW
+    SQL.EXEC
+    **Cintia 130524 --  Actualizo tambien movimientos
+    *SQL.ActualizarMovimientos2(Dialogo.NrOperacion1,NO,NO,NO,SI)
+    SQL.ActualizarMovimientos2(Dialogo.NrOperacion1,SI,NO,NO,SI)
+    SQL.EXEC
+
+    MessageBox('La operacion fue actualizada correctamente')
+    
+  endif
+endif

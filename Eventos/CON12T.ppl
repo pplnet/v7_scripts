@@ -1,0 +1,77 @@
+﻿repetir 
+MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1   : 'Fecha'             ;1;;;;;;;;fsys
+  Fecha4   : 'Pri mes Hab'       ; ;;;NO;;;;;;PriDeMes(Dialogo.Fecha1,NO,'ARG')
+  Fecha5   : 'Hasta Fecha'       ; ;;;NO;;;;;;Habiles(Dialogo.Fecha1,1,'ARG',SI)-1
+  *Fecha5   : 'Hasta USA'         ;;;;NO;;;;;;Habiles(Dialogo.Fecha1,1,'USA',SI)-1  
+  Fecha2   : 'Fecha 1Mes'        ; ;;;NO;;;;;;PriDeMes(Dialogo.Fecha1,SI)  
+  Fecha3   : 'Fecha FMes'        ; ;;;NO;;;;;;FinDeMes(Dialogo.Fecha1,SI)
+  Vehiculo1: 'Vehiculo'          ; ;;;;;;;;;Var('VEHICULODE')
+  Fecha6   : 'F.Ant ARG'         ;;;;NO;;;;;;Habiles(Dialogo.Fecha1,-1,'ARG',SI)
+  Fecha7   : 'F.Ant USA'         ;;;;NO;;;;;;Habiles(Dialogo.Fecha1,-1,'USA',SI)
+  Radio1:    'Func.|Autom|Manual'; ;;;;NO;;;;1;
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+message('--- Asientos de Interes Devengado diario ICL ---')
+ACT(TA:1, Var('TIPASDEV'))
+ACT(ML:1, Var('MONELOCA'))
+
+if Dialogo.Fecha6 < Dialogo.Fecha7
+   ACD(FE:0,Dialogo.Fecha7)
+else
+   ACD(FE:0,Dialogo.Fecha1)
+endif
+
+
+if Dialogo.Fecha1 = Dialogo.Fecha4
+   ACD(FE:1,Dialogo.Fecha2)
+   ACD(FE:2,Dialogo.fecha1)
+Else
+   if Dialogo.Fecha5 <= Dialogo.Fecha3
+      ACD(FE:1,Val(FE:0))
+      ACD(FE:2,Dialogo.Fecha5)      
+   Else
+      ACD(FE:1,Val(FE:0))
+      ACD(FE:2,Dialogo.Fecha3)
+   Endif    
+Endif
+
+messagebox(Val(FE:1)~' '~Val(FE:2))
+if no
+SQL.ADD("SELECT *,Especie ContraEspecie, '#Op:' + NrOperacion + ',' + rtrim(TipoOp) + ',' + rtrim(Especie) Leyenda ")
+SQL.ADD(" From (select M.NrOperacion,  M.Vehiculo, Sum(M.Monto) TotalNetoCli1, ")
+** FJL 17/11/20 - Se agrega TipoConu
+SQL.ADD(" MA.Codigo CodAsi, O.TipoOp, M.Especie, M.Book, O.TipoCONU  ")
+SQL.ADD("FROM "~DBO~".MOVDEVENGADOS M, "~DBO~".MODELOSASIENTO MA, "~DBO~".OPERACIONES O ")
+SQL.ADD("WHERE M.TipoDevengado in ('INTICL') ")
+SQL.ADD("AND O.NrOperacion = M.NrOperacion ")
+SQL.ADD("AND M.Fecha >= "~IdxDate2(Val(FE:1))~" ")
+SQL.ADD("AND M.Fecha <= "~IdxDate2(Val(FE:2))~" ")
+SQL.ADD("AND M.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("AND MA.TipoAsiento in("~Pipe2Comillas(Val(TA:1))~") ")
+SQL.ADD("AND MA.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" Group by M.NrOperacion,M.Vehiculo,Codigo,O.TipoOp,M.Especie, M.Book, O.TipoCONU ")
+SQL.ADD(" ) Aux ")
+
+watch(SQL.Batch)
+ACN(XX:2,0)
+ACN(XX:1,0)
+Recorrer SQL
+    ACD(FV:1, Dialogo.Fecha1)
+    ACD(FD:1, Dialogo.Fecha1)
+    ACT(VH:1, fbn('Vehiculo'))
+    ACT(VK:1, fbn('Book'))    
+    ACT(TO:1, fbn('CodAsi'))
+    ACT(TI:1, fbn('TipoOp'))
+    ACT(NR:1, fbn('NrOperacion'))
+    ACT(NR:2, '')
+    ACN(CO:1, COTIZACIONC(fbn('Especie'),,,,Dialogo.Fecha1,25,SI,VAR('MONELOCA')))
+ 
+    (.'GENASIENTO'.)         
+Proximo
+endif
+proximo

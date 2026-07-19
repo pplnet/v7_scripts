@@ -1,0 +1,139 @@
+﻿**Podemos llegar a hacer corte de control para buscar Cotizacion por especie y book.
+
+**VARIABLES**
+*fechaRevaluo: fecha del revaluo
+*fechOp: fecha de la operacion
+*precioAyer: precio de ayer o precio op si coincide fecharevaluo con fechaop
+*precioHoy: precio de hoy
+*monedaDelRevaluo: hoy ARP. Se carga en evento.
+*monedaDelCotizador: hoy cotiza. Se carga en evento.
+*plazo: plazo de la operacion, las spot no generan revaluo
+*precioOp: precio de la operacion
+*especie: para pasarle al cotizador
+*book: para pasarle al cotizador
+*monedaPrecioOp: ContraEspecie o (ver cual es la otra moneda en CONT4)
+*Nueva formula TCCONTABREVAL que reemplaza a TCCONTABCOT
+*CotizacionC(monedaAConvertir,,,,fechaValor,25,SI,monedaExpresion)
+
+*let &fechaRevaluo Dialogo.Fecha1
+*let &fechaOp fbn('FechaOp')
+*let &precioOp fbn('PrecioOp')
+*let &especie fbn('Especie')
+*let &book fbn('Book1')
+*let &cantidad fbn('Cantidad')
+*let &monedaDelCotizador fbn('Cotiza')
+*let &monedaPrecioOp fbn('ContraEspecie')
+*let &monedaDelRevaluo var('Moneloca')
+*let &plazo fbn('Plazo')
+
+let &precioAyer 0
+let &precioHoy 0
+let &difPrecioEnMonCotizador 0
+let &revaluoEnMoneda 0
+let &revaluoEnMonCotizador 0
+let &monedaLocal var('MONELOCA')
+Let &PrecioNIIF CotizacionNIIF(&especie, &fechaRevaluo, &book)
+
+*%%Cambio importante ISSUE 6191 van con los comentarios con *%% para identificarlo
+*%%Esto lo hacemos porque para Revaluo de Op Vigentes debemos tomar la cotizacion de la Operacion como TC para convertir a ARP.
+*%%La variable se llena solo desde el CONT4 en la parte de Op Vigentes.
+If Vacio(&revalOpVig)
+    let &revalOpVig 'NO'
+EndIf
+
+**Para Operaciones SPOT no se tiene que generar revaluo
+If &plazo > 0
+    IF (&fechaRevaluo = &fechaOp Y NOT Incluido(fbn('TipoOp'), 'TICT|TIDE|TICO|TIPO|')) O &fechaRevaluo = &fechaVto
+        IF &fechaOp = &fechaRevaluo Y ((NOT EqStr(&monedaPrecioOp,&monedaLocal) AND EqStr(&monedaDelCotizador,&monedaLocal))  O (NOT EqStr(&monedaPrecioOp,&monedaLocal) AND NOT EqStr(&monedaDelCotizador,&monedaLocal)))
+        *%%Casos especiales Op USD y Cotiza APR O Op USD y Cotiza USD.
+            **Si ejecuto el dia de fechaop, tomo el precio de la op
+            If NOT EqStr(&monedaPrecioOp,&monedaLocal) AND EqStr(&monedaDelCotizador,&monedaLocal)
+                *%%Si Operacion USD cotiza ARP 
+                let &monedaAConvertir &monedaPrecioOp
+                let &monedaExpresion &monedaLocal
+                let &precioAyer &precioOp * #TCCONTABFOP
+                ***---Precio Cierre NIIF
+                IF Vacio(&PrecioNIIF)
+                    let &precioHoy 0
+                ELSE
+                    let &precioHoy &PrecioNIIF.PrecioCotizacionDeterminada
+                ENDIF
+            else
+                If NOT EqStr(&monedaPrecioOp,&monedaLocal) AND NOT EqStr(&monedaDelCotizador,&monedaLocal)
+                    let &monedaAConvertir &monedaPrecioOp
+                    let &monedaExpresion &monedaLocal
+                    *%%Si Operacion USD cotiza USD  
+                    let &precioAyer &precioOp * #TCCONTABFOP
+                    ***---Precio Cierre NIIF
+                    IF Vacio(&PrecioNIIF)
+                        let &precioHoy 0
+                    ELSE
+                    let &precioHoy &PrecioNIIF.PrecioCotizacionDeterminada * #TCCONTABREVAL
+                    ENDIF 
+                ENDIF
+            endif
+        ELSE
+            let &precioAyer &precioOp 
+            IF Not Eqstr(&monedaPrecioOp, &monedaDelCotizador)
+                **Si la moneda del precioOp es distinto que el del cotizador, hago conversion
+                let &monedaAConvertir &monedaDelCotizador
+                let &monedaExpresion &monedaPrecioOp
+                let &antRevalOpVig &revalOpVig
+                If EqStr(&revalOpVig,'SI')
+                    let &revalOpVig 'NO'
+                Endif
+                IF Eqstr(&MonedaLocal, &monedaDelCotizador)
+                    let &precioAyer &precioAyer * #TCCONTABREVAL
+                Else
+                    let &precioAyer &precioAyer / #TCCONTABREVAL
+                EndIf
+                let &revalOpVig &antRevalOpVig
+            ENDIF
+            ***---Precio Cierre NIIF
+            Let &PrecioNIIF CotizacionNIIF(&especie, &fechaRevaluo, &book)
+            IF Vacio(&PrecioNIIF)
+                let &precioHoy 0
+            ELSE
+                let &precioHoy &PrecioNIIF.PrecioCotizacionDeterminada
+            ENDIF
+        ENDIF
+    ELSE
+        ***---Precio NIIF Ayer
+        Let &PrecioNIIF CotizacionNIIF(&especie, Habiles(Fecha(&fechaRevaluo),-1,'ARG'), &book)
+        IF Vacio(&PrecioNIIF)
+            let &precioAyer 0
+        ELSE
+            let &precioAyer &PrecioNIIF.PrecioCotizacionDeterminada
+        ENDIF
+        ***---Precio Cierre NIIF
+        Let &PrecioNIIF CotizacionNIIF(&especie, &fechaRevaluo, &book)
+        IF Vacio(&PrecioNIIF)
+            let &precioHoy 0
+        ELSE
+            let &precioHoy &PrecioNIIF.PrecioCotizacionDeterminada
+        ENDIF
+    ENDIF
+
+
+    **Dif entre PrecioAyer o PrecioOp y PrecioHoy
+    let &difPrecioEnMonCotizador &precioHoy - &precioAyer
+
+    **Revaluo - Cantidad * Dif de precio
+    let &revaluoEnMonCotizador &cantidad * &difPrecioEnMonCotizador
+
+    IF Not Eqstr(&monedaDelCotizador, &monedaDelRevaluo)
+        let &monedaAConvertir &monedaDelCotizador
+        let &monedaExpresion &monedaDelRevaluo
+        let &antRevalOpVig &revalOpVig
+        If EqStr(&revalOpVig,'SI')
+            let &revalOpVig 'NO'
+        EndIf
+        let &revaluoEnMonReval &revaluoEnMonCotizador * #TCCONTABREVAL
+        let &revalOpVig &antRevalOpVig
+    ELSE
+        let &revaluoEnMonReval &revaluoEnMonCotizador
+    ENDIF
+Else
+    let &revaluoEnMonReval 0
+    let &revaluoEnMonCotizador 0
+EndIf

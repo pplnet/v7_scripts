@@ -1,0 +1,644 @@
+﻿*- Parametros de entrada
+*- DT1: Nr.Transaccion a Actualizar los movimientos
+*- FT1: Fecha de Matcheo
+
+*- mp1: Nro. Transaccion mp2: Fecha Movimiento mp3: Cliente 
+*- mp4: Especie mp5: CallPut mp6: FechaEj mp7: PrecioEj mp8: Mercado
+*- mp9: EnteCustodia mp10: Cantidad mp11: Formula mp12: Leyenda mp13: Bits mp14: NrSaldo  mp15: NrGrupo
+*- mp16: Concepto (NrSaldo Original)
+*- mp19: Cuenta mp22: Nro. de Movimiento mp20: NrGrupo2
+*- mp27: Cupon  mp23: Com.Renta mp25: Com.Amortizacion
+*- mp50: Leyendo para ver si viene de movimientos pendientes
+
+* DTP
+* MOVIMIENTOS
+
+*- Datos a Recuperar de la transaccion
+*- vc1: Numerador LD
+ACN(vc1,BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALLIBRECU')))
+
+*- Nr.Transaccion para Mov. y para Posiciones
+ACT(mp1,val(dt1))
+ACT(pp20,val(dt1))
+
+*- vtxt6 Para Insert mov. comision de custodia
+ACT(vc2,VAR('MONELOCA'))
+
+*- vcan12 de rtp=> Saldo de Bloqueos
+ACN(vc3,BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALBLOQVTA'))+100)
+
+*- Cuenta que no genera posicion
+ACT(vc4,BuscarCampo('VARIABLES','Valor','Codigo','CTANOPOS') )
+
+SQL.ADD("SELECT Precio1,RB4,CB6,TipoTr2,CB2,Fecha3,Fecha1,Fecha5,Cliente1,Cliente2,Especie,CB1,Mercado2,Vehiculo1,Precio2,Cantidad3,Mercado1,Cantidad1,RB3,Cuenta3,RB2,RB5,Cuenta2,Cuenta1,Cupon1,Cupon2,RB1 ")
+SQL.ADD("FROM "~DBO~".TRANSACCIONES2 WHERE NrTrans='"~val(dt1)~"' ")
+
+Recorrer SQL
+   dfa
+
+   *- Variables de la Transaccion
+   *- vt9: Especie Arancelada 
+   ACT(vt9,BuscarCampo('ESPECIES','Codigo','CodNumCajaValores',BuscarCampo('Especies','Alias8','Codigo',FBN('Especie'))) )
+
+   *- Escribe los datos en la celdas mp1 .. mp30 para Invocar a la Fc.IMMOVPEND
+   *------------------------------------------------------------------------------------------------
+   *---- Movimiento de DEPOSITO NRO 1
+   *---- IF(NoVacio(Fecha3),Fecha3,Fecha1);Cliente1;IF(NoVacio(VTXT9) y CB1=1,VTXT9,Especie);;;;Mercado1;Vehiculo1;VCAN1; Cantidad1;;'Deposito de '~IF(NoVacio(VTXT9) y CB1=1 ,VTXT9,Especie);SI;Fecha1<Fsys o [CB1=1 y [RB1=0 o RB5<>3]] o RB2=1;;;;Cuenta1;;1;;;Cupon1;
+   *- ACD(mp2,IIf(NoVacio(FBN('Fecha3')),FBN('Fecha3'),FBN('Fecha1')))
+   ACD(mp2,FBN('Fecha5'))
+   ACT(mp3,FBN('Cliente1'))
+   ACT(mp4,IIF(NoVacio(val(vt9)) y EqStr(FBN('CB1'),'1'),val(vt9),FBN('Especie')) )
+
+   If EqStr(FBN['TipoTr2'],'RTP')
+      ACT(mp4,FBN('Especie') )
+   EndIf
+
+   ACT(mp5,'')
+   ACT(mp6,'')
+   ACT(mp7,'')
+   ACT(mp8,FBN('Mercado1'))
+   ACT(mp9,FBN('Vehiculo1'))
+   ACN(mp10,FBN('Cantidad1'))
+
+   If EqStr(FBN['TipoTr2'],'RTP')
+      ACN(mp10,-FBN('Cantidad1'))
+   EndIf
+
+   ACT(mp11,'')
+   ACT(mp12,'Deposito de '~IIF(NoVacio(val(vt9)) y EqStr(FBN('CB1'),'1'),val(vt9),FBN('Especie')) )
+
+   If EqStr(FBN['TipoTr2'],'RTP')
+      ACT(mp12,'Retiro de '~FBN('Especie') )
+   EndIf
+
+   *- Condicion de Automatico
+   *- Fecha1<Fsys o [CB1=1 y [RB1=0 o RB5<>3]] o RB2=1
+   ACT(mp13,'MV')
+   If EqStr(FBN['TipoTr2'],'DTP')
+      IF FBN('Fecha1')<Fsys o [FBN('CB1')=1 y [FBN('RB1')=0 o FBN('RB5')<>3]] o FBN('RB2')=1
+         ACT(mp13,'AV')
+         *- mp17: FechaEje
+         ACD(mp17,val(ft1))
+      EndIf
+   Else 
+      *- Fecha1<Fsys o [CB1=1 y RB1=0] o RB2=1 o RB5<>3
+      IF FBN('Fecha1')<Fsys o [FBN('CB1')=1 y FBN('RB1')=0] o FBN('RB2')=1 o FBN('RB5')<>3 
+         ACT(mp13,'AV')
+         *- mp17: FechaEje
+         ACD(mp17,val(ft1))
+      EndIf
+   EndIf
+
+   *- mp14: Nr.Saldo
+   ACN(mp14,val(vc1))
+
+   *- mp15: NrGrupo Nada, mp16: Concepto nada, mp20: NrGrupo2 nada
+   *- mp19: Cuenta
+   ACT(mp19,FBN('Cuenta1'))
+
+   *- Nro.Mov.
+   ACN(mp22,1)
+
+   *- Cupon 
+   ACT(mp27,FBN('Cupon2'))
+
+   *- mp25: NrLiq = ''
+   ACT(mp25,'')
+
+   *- Elimino el mov. previamente vc5: Tabla
+   ACT(vc5,'MOVPENDIENTES' )
+   IF EqStr(val(mp13),'AV')
+      ACT(vc5,'MOVEJECUTADOS' )
+   ENDIF
+      
+   (.'DELMOVTR'.)
+
+   (.'IMMOVPEND'.)      
+   *------------------------------------------------------------------------------------------------
+   *---- Movimiento de RETIRO NRO 2
+   *---- IF(NoVacio(Fecha3),Fecha3,Fecha1);Cliente2;Especie;;;;Mercado2;Vehiculo1;VCAN1;-Cantidad1;;'Retiro de '~Especie  ;SI;
+   *---- Fecha1<Fsys o RB2=1 o [CB1=1 Y RB5<>3];;EqStr(CB2,'1') ;;Cuenta2;;2;;;Cupon1;
+   IF FBN['CB2']=1
+      *- ACD(mp2,IIf(NoVacio(FBN('Fecha3')),FBN('Fecha3'),FBN('Fecha1')))
+      ACD(mp2,FBN('Fecha5'))
+      ACT(mp3,FBN('Cliente2'))
+      ACT(mp4,FBN('Especie') )
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACT(mp4,IIF(NoVacio(val(vt9)) y Not Incluido(FBN['Cuenta1'],VAR('CTASEMISIO')) y EqStr(FBN('CB1'),'1') y EqStr(FBN('CB2'),'1'),val(vt9),FBN('Especie')) )
+      EndIf
+
+      ACT(mp5,'')
+      ACT(mp6,'')
+      ACT(mp7,'')
+      ACT(mp8,FBN('Mercado2'))
+      ACT(mp9,FBN('Vehiculo1'))
+      ACN(mp10,-FBN('Cantidad1'))
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACN(mp10,FBN('Cantidad1'))
+      EndIf
+
+      ACT(mp11,'')
+      ACT(mp12,'Retiro de  '~FBN('Especie') )
+
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACT(mp12,'Deposito de  '~val(mp4) )
+      EndIf
+ 
+      *- Condicion de Automatico
+      *- Fecha1<Fsys o [CB1=1 y [RB1=0 o RB5<>3]] o RB2=1
+      ACT(mp13,'MV')
+      ACT(mp17,'')
+      IF FBN('Fecha1')<Fsys o FBN('RB2')=1 o [FBN('CB1')=1 y FBN('RB5')<>3] 
+         ACT(mp13,'AV')
+  
+         *- mp17: FechaEje
+         ACD(mp17,val(ft1))
+      EndIf
+ 
+      *- mp14: Nr.Saldo
+      ACN(mp14,val(vc1))
+
+      *- mp15: NrGrupo Nada, mp16: Concepto nada, mp20: NrGrupo2 nada
+      *- mp19: Cuenta
+      ACT(mp19,FBN('Cuenta2'))
+
+      *- Nro.Mov.
+      ACN(mp22,2)
+
+      *- Cupon 
+      ACT(mp27,FBN('Cupon2'))
+
+      *- mp25: NrLiq = ''
+      ACT(mp25,'')
+
+
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPENDIENTES' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVEJECUTADOS' )
+      ENDIF
+      
+      (.'DELMOVTR'.)
+
+      (.'IMMOVPEND'.)      
+   EndIf
+
+   *------------------------------------------------------------------------------------------------
+   *--- Movimiento de COMISION DE CUSTODIA NRO 5 E IVA NRO. 6
+   *--- IF(NoVacio(Fecha3),Fecha3,Fecha1);Cliente1;VTXT6;;;;;Vehiculo1;4; -Precio2;;'Comision CUSTODIA';SI;
+   *--- RB3=1;41;VCAN13=1;;Cuenta3;;5;;;;
+   *--- IF(NoVacio(Fecha3),Fecha3,Fecha1);Cliente1;VTXT6;;;;;Vehiculo1;4; -Cantidad3;;'IVA Comision CUSTODIA';SI;
+   *--- RB3=1;42;VCAN13=1;;Cuenta3;;6;;;;
+
+   *- Verifico condicion para cobrar movimiento de custodia => VCAN13
+   IF Round2(FBN('Precio2'),2)<>0 y NoVacio(FBN['Cliente1']) y 1=SQL("Select 1 from "~DBO~".CLIENTES where CobroMovCustodia='SI' and Codigo='"~FBN['Cliente1']~"' ")
+      ACD(mp2,FBN('Fecha1'))
+      ACT(mp3,FBN('Cliente1'))
+      ACT(mp4,val(vc2) )
+      ACT(mp5,'')
+      ACT(mp6,'')
+      ACT(mp7,'')
+      ACT(mp8,'')
+      ACT(mp9,FBN('Vehiculo1'))
+      ACN(mp10,-FBN('Precio2'))
+      ACT(mp11,'')
+      ACT(mp12,'Comision CUSTODIA')
+  
+      *- Condicion de Automatico
+      ACT(mp13,'MV')
+      ACT(mp17,'')
+
+      IF FBN('RB3')=1 
+         ACT(mp13,'AV') 
+         *- mp17: FechaEje
+         ACD(mp17,val(ft1))
+      EndIf
+ 
+      *- mp14: Nr.Saldo
+      ACN(mp14,4)
+
+      *- mp15: NrGrupo Nada, mp16: Concepto nada, mp20: NrGrupo2 nada
+      *- mp19: Cuenta
+      ACN(mp15,41)
+      ACT(mp19,FBN('Cuenta3'))
+
+      *- Nro.Mov.
+      ACN(mp22,5)
+
+      *- Cupon 
+      ACT(mp27,'')
+
+      *- mp25: NrLiq = ''
+      ACT(mp25,'')
+
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPENDIENTES' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVEJECUTADOS' )
+      ENDIF
+      
+      (.'DELMOVTR'.)
+
+      (.'IMMOVPEND'.)      
+
+      *--------------------------- IVA
+      ACD(mp2,FBN('Fecha1'))
+      ACT(mp3,FBN('Cliente1'))
+      ACT(mp4,val(vc2) )
+      ACT(mp5,'')
+      ACT(mp6,'')
+      ACT(mp7,'')
+      ACT(mp8,'')
+      ACT(mp9,FBN('Vehiculo1'))
+      ACN(mp10,-FBN('Cantidad3'))
+      ACT(mp11,'')
+      ACT(mp12,'IVA Comision CUSTODIA')
+  
+      *- Condicion de Automatico
+      ACT(mp13,'MV')
+      ACT(mp17,'')
+
+      IF FBN('RB3')=1 
+         ACT(mp13,'AV')
+  
+         *- mp17: FechaEje
+         ACD(mp17,val(ft1))
+      EndIf
+ 
+      *- mp14: Nr.Saldo
+      ACN(mp14,4)
+
+      *- mp15: NrGrupo Nada, mp16: Concepto nada, mp20: NrGrupo2 nada
+      *- mp19: Cuenta
+      ACN(mp15,42)
+      ACT(mp19,FBN('Cuenta3'))
+
+      *- Nro.Mov.
+      ACN(mp22,6)
+
+      *- Cupon 
+      ACT(mp27,'')
+
+      *- mp25: NrLiq = ''
+      ACT(mp25,'')
+
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPENDIENTES' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVEJECUTADOS' )
+      ENDIF
+      
+      (.'DELMOVTR'.)
+
+      (.'IMMOVPEND'.)      
+   EndIf
+
+   *- Movimientos de DesBloqueo 
+   If EqStr(FBN['TipoTr2'],'RTP') y FBN['CB6']=1 y Not EqStr(FBN['Cliente1'],FBN['Vehiculo1']) y SQL("Select 1 from "~DBO~".CLIENTES where Codigo='"~FBN['Cliente1']~"' and (CategDepositante='CLI') ")=1
+      *- MOVIMIENTO DE DESBLOQUEO 7
+      *- Fecha1;Cliente1;Especie;;;;Mercado1;Vehiculo1;VCAN12;-Cantidad1;;'Desbloqueo '~Especie;SI;RB2=1;;CB6=1 y Not EqStr(CLIENTE1,VEHICULO1) y VCAN20=1;;Cuenta1;;7;;;Cupon1;
+      ACD(mp2,FBN('Fecha5') )
+      ACT(mp3,FBN('Cliente1'))
+      ACT(mp4,FBN('Especie') )
+      ACT(mp5,'')
+      ACT(mp6,'')
+      ACT(mp7,'')
+      ACT(mp8,FBN('Mercado1'))
+      ACT(mp9,FBN('Vehiculo1'))
+
+      *- mp14: Nr.Saldo
+      ACN(mp14,val(vc3))
+
+      ACN(mp10,-FBN('Cantidad1'))
+
+      ACT(mp11,'')
+      ACT(mp12,'Desbloqueo  '~FBN('Especie') )
+
+      *- Condicion de Automatico 
+      ACT(mp13,'MV')
+      IF FBN('RB2')=1
+         ACT(mp13,'AV')
+         *- mp17: FechaEje
+         ACD(mp17,val(ft1))
+      EndIf
+      *- mp15: NrGrupo Nada, mp16: Concepto nada, mp20: NrGrupo2 nada
+      *- mp19: Cuenta
+      ACT(mp19,FBN('Cuenta1'))
+
+      *- Nro.Mov.
+      ACN(mp22,7)
+
+      *- Cupon 
+      ACT(mp27,FBN('Cupon2'))
+
+      *- mp25: NrLiq = ''
+      ACT(mp25,'')
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPENDIENTES' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVEJECUTADOS' )
+      ENDIF
+      
+      (.'DELMOVTR'.)
+
+      (.'IMMOVPEND'.)      
+      *------------------------------------------------------------------------------------------------
+      *- MOVIMIENTO DE DESBLOQUEO 8
+      *- Fecha1;Cliente1;Especie;;;;Mercado1;Vehiculo1;VCAN1 ; Cantidad1;;'Desbloqueo '~Especie;
+      *-SI;RB2=1;;CB6=1 y Not EqStr(CLIENTE1,VEHICULO1) y VCAN20=1;;Cuenta1;;8;;;Cupon1;
+      ACD(mp2,FBN('Fecha5') )
+      ACT(mp3,FBN('Cliente1'))
+      ACT(mp4,FBN('Especie') )
+      ACT(mp5,'')
+      ACT(mp6,'')
+      ACT(mp7,'')
+      ACT(mp8,FBN('Mercado1'))
+      ACT(mp9,FBN('Vehiculo1'))
+
+      *- mp14: Nr.Saldo
+      ACN(mp14,val(vc1))
+
+      ACN(mp10,FBN('Cantidad1'))
+
+      ACT(mp11,'')
+      ACT(mp12,'Desbloqueo  '~FBN('Especie') )
+
+      *- Condicion de Automatico 
+      ACT(mp13,'MV')
+      IF FBN('RB2')=1
+         ACT(mp13,'AV')
+         *- mp17: FechaEje
+         ACD(mp17,val(ft1))
+      EndIf
+      *- mp15: NrGrupo Nada, mp16: Concepto nada, mp20: NrGrupo2 nada
+      *- mp19: Cuenta
+      ACT(mp19,FBN('Cuenta1'))
+
+      *- Nro.Mov.
+      ACN(mp22,8)
+
+      *- Cupon 
+      ACT(mp27,FBN('Cupon2'))
+
+      *- mp25: NrLiq = ''
+      ACT(mp25,'')
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPENDIENTES' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVEJECUTADOS' )
+      ENDIF
+      
+      (.'DELMOVTR'.)
+
+      (.'IMMOVPEND'.)      
+   EndIf
+
+   *-------- P O S I C I O N E S
+   ACT(mp13,'MV')
+
+   IF FBN('Fecha1')<=Fsys 
+      ACT(mp13,'AV')
+   EndIf
+
+   *- mp13: Pendiente-Ejecutado
+   *- pp1 : FechaMov pp2: Cliente pp3: Vehiculo pp4: Unidad pp5: Centro pp6: Sector
+   *- pp7 : Sucursal pp8: NrSaldo pp9: Especie pp10: PrecioEj  pp11: FechaEj pp12: CallPut
+   *- pp13: Cantidad pp14: Precio pp15: Estrategia pp16: Cartera pp17: Book pp18: Trader,
+   *- pp19: TipoNegocio pp20: NrOperacion pp21: Cupon pp22: Tipo pp23: Responsable pp24: TipoPosicion,
+   *- pp25: Producto pp26: GrupoEspecie pp27: CarteraBCRA
+   If SQL("Select 1 from "~DBO~".CLIENTES where Codigo='"~FBN['Cliente1']~"' and Alias1='CP' ")=1 y FBN['CB6']<>1 Y Not Incluido(FBN['Cuenta1'],val(vc4)) Y Not Incluido(FBN['Cuenta2'],val(vc4))
+      *-  Fecha1;Cliente1;IF(NoVacio(VTXT9) y CB1=1,VTXT9,Especie);;;;Vehiculo1;;;Mercado1;;RB4+2+101;
+      *-  Cantidad1;Precio1;;;;;'TIT';VCAN12=1 y CB6<>1 y Not Incluido(CUENTA1,VAR('CTANOPOS')) y Not Incluido(CUENTA2,VAR('CTANOPOS'));Cupon1;
+      ACD(pp1 ,FBN['Fecha1'])
+      ACT(pp2 ,FBN['Cliente1'])
+      ACT(pp3 ,FBN['Vehiculo1'] )
+      ACT(pp6 ,FBN['Mercado1'] )
+      ACN(pp8 ,FBN['RB4']+2+101 )
+      ACT(pp9 ,IIF(NoVacio(val(vt9)) y EqStr(FBN('CB1'),'1'),val(vt9),FBN('Especie')) )
+      ACT(pp12,'' )
+      ACN(pp10,0 )
+      ACT(pp11,'')
+      ACN(pp13 ,FBN['Cantidad1'])
+
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACN(pp13 ,-val(pp13))
+      EndIf
+
+      ACN(pp14 ,FBN['Precio1'])
+      ACT(pp19,'TIT')
+      ACT(pp21, FBN['Cupon1']) 
+
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPOSPEN' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVPOSEJE' )
+      ENDIF
+      (.'DELMPOSTR'.)
+
+
+      (."INMOVPOSPE".) 
+      *--------------------------------------------------------------
+      *- If(NoVacio(Fecha3),Fecha3,Fecha1);Cliente1;IF(NoVacio(VTXT9) y CB1=1,VTXT9,Especie);;;;Vehiculo1;;;Mercado1;;RB4+5+102;Cantidad1;Precio1;
+      *- ;;;;'TIT';VCAN12=1 y CB6<>1 y Not Incluido(CUENTA1,VAR('CTANOPOS')) y Not Incluido(CUENTA2,VAR('CTANOPOS'));Cupon1;;;;;;;
+      * ACD(pp1 ,IIf(NoVacio(FBN('Fecha3')),FBN('Fecha3'),FBN('Fecha1')))
+      ACD(pp1 ,FBN('Fecha5'))
+      ACT(pp2 ,FBN['Cliente1'])
+      ACT(pp3 ,FBN['Vehiculo1'] )
+      ACT(pp6 ,FBN['Mercado1'] )
+      ACN(pp8 ,FBN['RB4']+5+102 )
+      ACT(pp9 ,IIF(NoVacio(val(vt9)) y EqStr(FBN('CB1'),'1'),val(vt9),FBN('Especie')) )
+      ACT(pp12,'' )
+      ACN(pp10,0 )
+      ACT(pp11,'')
+      ACN(pp13 ,FBN['Cantidad1'])
+
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACN(pp13 ,-val(pp13))
+      EndIf
+
+      ACN(pp14 ,FBN['Precio1'])
+      ACT(pp19,'TIT')
+      ACT(pp21, FBN['Cupon2']) 
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPOSPEN' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVPOSEJE' )
+      ENDIF
+      (.'DELMPOSTR'.)
+
+      (."INMOVPOSPE".) 
+      *--------------------------------------------------------------
+      ACD(pp1 ,FBN['Fecha1'])
+      ACT(pp2 ,FBN['Cliente1'])
+      ACT(pp3 ,FBN['Vehiculo1'] )
+      ACT(pp6 ,FBN['Mercado1'] )
+      ACN(pp8 ,101 )
+      ACT(pp9 ,IIF(NoVacio(val(vt9)) y EqStr(FBN('CB1'),'1'),val(vt9),FBN('Especie')) )
+      ACT(pp12,'' )
+      ACN(pp10,0 )
+      ACT(pp11,'')
+      ACN(pp13 ,FBN['Cantidad1'])
+
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACN(pp13 ,-val(pp13))
+      EndIf
+
+      ACN(pp14 ,FBN['Precio1'])
+      ACT(pp19,'TIT')
+      ACT(pp21, FBN['Cupon1']) 
+
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPOSPEN' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVPOSEJE' )
+      ENDIF
+      (.'DELMPOSTR'.)
+
+      (."INMOVPOSPE".) 
+      *--------------------------------------------------------------
+      * ACD(pp1 ,IIf(NoVacio(FBN('Fecha3')),FBN('Fecha3'),FBN('Fecha1')))
+      ACD(pp1 ,FBN('Fecha5'))
+      ACT(pp2 ,FBN['Cliente1'])
+      ACT(pp3 ,FBN['Vehiculo1'] )
+      ACT(pp6 ,FBN['Mercado1'] )
+      ACN(pp8 ,102 )
+      ACT(pp9 ,IIF(NoVacio(val(vt9)) y EqStr(FBN('CB1'),'1'),val(vt9),FBN('Especie')) )
+      ACT(pp12,'' )
+      ACN(pp10,0 )
+      ACT(pp11,'')
+      ACN(pp13 ,FBN['Cantidad1'])
+
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACN(pp13 ,-val(pp13))
+      EndIf
+
+      ACN(pp14 ,FBN['Precio1'])
+      ACT(pp19,'TIT')
+      ACT(pp21, FBN['Cupon2']) 
+
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPOSPEN' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVPOSEJE' )
+      ENDIF
+      (.'DELMPOSTR'.)
+
+      (."INMOVPOSPE".) 
+   EndIf
+
+   *- Posicion para el Cliente2
+   If SQL("Select 1 from "~DBO~".CLIENTES where Codigo='"~FBN['Cliente2']~"' and Alias1='CP' ")=1 y FBN['CB6']<>1 Y Not Incluido(FBN['Cuenta1'],val(vc4)) Y Not Incluido(FBN['Cuenta2'],val(vc4))
+      ACD(pp1 ,FBN['Fecha1'])
+      ACT(pp2 ,FBN['Cliente2'])
+      ACT(pp3 ,FBN['Vehiculo1'] )
+      ACT(pp6 ,FBN['Mercado2'] )
+      ACN(pp8 ,FBN['RB4']+2+101 )
+      ACT(pp9 ,FBN('Especie') )
+      ACT(pp12,'' )
+      ACN(pp10,0 )
+      ACT(pp11,'')
+      ACN(pp13 ,-FBN['Cantidad1'])
+
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACN(pp13 ,-val(pp13))
+      EndIf
+
+      ACN(pp14 ,FBN['Precio1'])
+      ACT(pp19,'TIT')
+      ACT(pp21, FBN['Cupon1']) 
+
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPOSPEN' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVPOSEJE' )
+      ENDIF
+      (.'DELMPOSTR'.)
+
+      (."INMOVPOSPE".) 
+      *--------------------------------------------------------------
+      * ACD(pp1 ,IIf(NoVacio(FBN('Fecha3')),FBN('Fecha3'),FBN('Fecha1')))
+      ACD(pp1 ,FBN('Fecha5'))
+      ACT(pp2 ,FBN['Cliente2'])
+      ACT(pp3 ,FBN['Vehiculo1'] )
+      ACT(pp6 ,FBN['Mercado2'] )
+      ACN(pp8 ,FBN['RB4']+5+102 )
+      ACT(pp9 ,FBN('Especie') )
+      ACT(pp12,'' )
+      ACN(pp10,0 )
+      ACT(pp11,'')
+      ACN(pp13 ,-FBN['Cantidad1'])
+
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACN(pp13 ,-val(pp13))
+      EndIf
+
+      ACN(pp14 ,FBN['Precio1'])
+      ACT(pp19,'TIT')
+      ACT(pp21, FBN['Cupon2']) 
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPOSPEN' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVPOSEJE' )
+      ENDIF
+      (.'DELMPOSTR'.)
+
+      (."INMOVPOSPE".) 
+      *--------------------------------------------------------------
+      ACD(pp1 ,FBN['Fecha1'])
+      ACT(pp2 ,FBN['Cliente2'])
+      ACT(pp3 ,FBN['Vehiculo1'] )
+      ACT(pp6 ,FBN['Mercado2'] )
+      ACN(pp8 ,101 )
+      ACT(pp9 ,FBN('Especie') )
+      ACT(pp12,'' )
+      ACN(pp10,0 )
+      ACT(pp11,'')
+      ACN(pp13 ,-FBN['Cantidad1'])
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACN(pp13 ,-val(pp13))
+      EndIf
+
+      ACN(pp14 ,FBN['Precio1'])
+      ACT(pp19,'TIT')
+      ACT(pp21, FBN['Cupon1']) 
+
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPOSPEN' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVPOSEJE' )
+      ENDIF
+      (.'DELMPOSTR'.)
+
+      (."INMOVPOSPE".) 
+      *--------------------------------------------------------------
+      *--ACD(pp1 ,IIf(NoVacio(FBN('Fecha3')),FBN('Fecha3'),FBN('Fecha1')))
+      ACD(pp1 ,FBN('Fecha5'))
+      ACT(pp2 ,FBN['Cliente2'])
+      ACT(pp3 ,FBN['Vehiculo1'] )
+      ACT(pp6 ,FBN['Mercado2'] )
+      ACN(pp8 ,102 )
+      ACT(pp9 ,FBN('Especie') )
+      ACT(pp12,'' )
+      ACN(pp10,0 )
+      ACT(pp11,'')
+      ACN(pp13 ,-FBN['Cantidad1'])
+
+      If EqStr(FBN['TipoTr2'],'RTP')
+         ACN(pp13 ,-val(pp13))
+      EndIf
+
+      ACN(pp14 ,FBN['Precio1'])
+      ACT(pp19,'TIT')
+      ACT(pp21, FBN['Cupon2']) 
+      *- Elimino el mov. previamente vc5: Tabla
+      ACT(vc5,'MOVPOSPEN' )
+      IF EqStr(val(mp13),'AV')
+         ACT(vc5,'MOVPOSEJE' )
+      ENDIF
+      (.'DELMPOSTR'.)
+
+      (."INMOVPOSPE".) 
+   EndIf
+Proximo
+
+

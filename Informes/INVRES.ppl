@@ -1,0 +1,709 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+   Fecha1   : 'Part. Vigentes '    ;;;;NO;;Dialogo.Fecha1<>0 ;'Debe Ingresar una Fecha';NO;FSys
+   Radio1   : 'Valuacion|Cupon|TIR';;;;;;;;;1
+   Check1   : "Graba"              ;;;;;;;;;1
+   Radio2   : 'Revalua|NO|SI'      ;;;;NO;NO;;;;0;
+FinDialogo
+
+If Not OK
+  Cancelar
+Endif
+
+*- Pido que tenga disponible o que el disponible se haya utilizado
+*- en el mes corriente o posterior
+ACD(au1 , PriDeMes( Dialogo.Fecha1, NO,'ARG') )
+ACD(FE:1, Dialogo.Fecha1)
+ACN(FE:3, Habiles(Dialogo.Fecha1,-1,'ARG',SI))
+ACN(JC:1, 0)
+ACN(ch1 , Dialogo.Check1)
+
+** guardo la eleccion de valuacion
+ACN(tt1,Dialogo.Radio1)
+
+**-- GRILLA PARA CAMBIAR LA COTIZACION EN EL INFORME --**
+**-- Select para armar la grilla donde se puede modificar la cotizacion
+SQL.ADD(" SELECT Distinct OP.Especie ")
+SQL.ADD(" FROM  "~DBO~".OPERACIONES OP")
+SQL.ADD(" WHERE OP.TipoOp in ('PARTID') ")
+SQL.ADD("       and OP.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD("       and ( OP.TotalNetoCli1 > 0 or ")
+SQL.ADD("      '"~IdxDate(Val(au1))~"' <= (SELECT Max(P.FechaDesde) FROM "~DBO~".PARTIDAS P WHERE P.NrPartida=OP.NrOperacion AND TipoAct='TIV') )  ")
+IF Dialogo.Radio2 = 1
+    ***---Excluyo las partidas ya revaluadas
+    SQL.ADD(" AND OP.Especie Not IN (Select Especie2 From "~DBO~".TRANSACCIONESCONTABLES ")
+    SQL.ADD("                        Where FechaVto = '"~IdxDate(Dialogo.Fecha1)~"') ")
+ENDIF
+SQL.ADD(" ORDER BY OP.Especie ")
+
+SetFilaActual(1)
+
+Recorrer SQL
+    ACN(JC:1, 1)
+    ACT(JA:fac, fbn('Especie'))
+    ACN(JB:FAC, Cotizacion(fbn('Especie'),,,,Val(FE:3),1) )
+Proximo
+
+IF Val(JC:1)=0
+    Cancelar('No hay Especies que tengan partidas en las fechas solicitadas')
+ENDIF
+
+
+ACN(FA:1, fac)
+
+CrearListBox;'Arial,8,N'
+  'Especie'              ;JA:2..JA:fac;NO;;;70;STRING;
+  'Cotizacion '          ;JB:2..JB:fac;SI;Val(JB:FLB)>=0;'Cotizacion Invalida';90;NUMERO;'######.########';
+FinListBox
+
+If Not OK
+   Cancelar
+EndIf
+
+**--------------------------------------------------------------------------------------------**
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+
+SetFilaActual(1)
+
+ACT(A:fac, 'Resultados y Partidas de Investment Vigentes al '~Val(FE:1)~" (En "~VAR('MONELOCA')~" ) Costo de Funding :"~VAR('COSTO') )
+SetFont(a:1..a:FAC ,2)
+
+AlinearCeldas(a:FAC..g:FAC,'I')
+AlinearCeldas(h:FAC..k:FAC,'D')
+AlinearCeldas(i:FAC..n:FAC,'I')
+
+
+*- En rango aa, ab , ac Grabo NroPartida, Monto y Especie Devengado para recuperar por linkeo desde fila 1 hasta val(ad1)
+ACN(ad1,1)
+
+SQL.ADD("SELECT *                 ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES OP")
+SQL.ADD("WHERE  OP.TipoOp in ('PARTID') ")
+SQL.ADD("       and OP.FechaOp <= '"~IdxDate(Val(fe1))~"'  ")
+SQL.ADD("       and ( OP.TotalNetoCli1 > 0 or ")
+SQL.ADD("      '"~IdxDate(Val(au1))~"' <= (SELECT Max(P.FechaDesde) FROM "~DBO~".PARTIDAS P WHERE P.NrPartida=OP.NrOperacion AND TipoAct='TIV') )  ")
+SQL.ADD(" ORDER BY OP.Especie ")
+
+ACN(z2,0)
+
+acn(gg2,0)
+acn(ll2,0)
+acn(nn2,0)
+acn(mm2,0)
+acn(qq2,0)
+
+
+Recorrer SQL
+
+  *- Chequeo si pido el informe para el mismo dia que cerre
+  ACN(dv1, SQL("SELECT 1 FROM "~DBO~".CUOTAS WHERE NrOperacion='"~FBN['NrOperacion']~"' and Fecha1='"~IdxDate(val(fe1))~"' and Check1='1' ") )
+
+  If val(dv1)=1
+     Cancelar('El cierre de Partidas del dia '~val(fe1)~' Fue Ejecutado, Utilice el VISUALIZAR para ver el informe') 
+  EndIf
+ 
+  SCN(z2,1)
+
+  If Not Eqstr(Val(es1),FBN['Especie'])
+     If Val(cc1)>0
+        *-Imprimo totales 
+        ACT(a:fac, 'Totales')
+        ACN(c:fac, Val(cc1))
+        ACN(d:fac, Val(dd1))
+        ACN(g:fac, Val(gg1))
+        ACN(l:fac, Val(ll1))
+        ACN(n:fac, Val(nn1))
+        ACN(m:fac, Val(mm1))
+        ACN(q:fac, Val(qq1))
+
+        acn(ck1, CotizacionC(CotizaEn(Val(es1)),,,,val(fe1),1,SI,VAR('MONELOCA')) )
+
+        scn(gg2,Val(gg1)*val(ck1))
+        scn(ll2,Val(ll1)*val(ck1))
+        scn(nn2,Val(nn1)*val(ck1))
+        scn(mm2,Val(mm1)*val(ck1))
+        scn(qq2,Val(qq1)*val(ck1))
+
+        ACN(cc1,0)
+        ACN(dd1,0)
+        ACN(gg1,0)
+        ACN(ll1,0)
+        ACN(nn1,0)
+        ACN(mm1,0)
+        ACN(qq1,0)
+
+        AlinearCeldas(c:FAC..d:FAC,'D')
+        FormatoCeldas(e:fac..f:fac,Exe('F7'))
+        FormatoCeldas(h:fac..l:fac,Exe('F7'))
+        FormatoCeldas(m:fac..s:fac,Exe('F2'))
+        FormatoCeldas(o:fac..p:fac,Exe('F7'))
+
+        SetFont(a:fac..s:fac,2)
+        AgregarMarco(a:FAC..s:fac,2,0)
+        ifa  
+     endif
+
+     **-- Corte de control por especie --**
+     IFA
+     ACT(a:FAC, 'Especie: '~FBN['Especie'])
+     SetFont(a:fac..s:fac,2)
+     AgregarMarco(a:FAC..s:fac,2,0,Exe('COLOR'))
+     ifa
+     ACT(a:FAC, 'Nro.Partida')
+     ACT(b:FAC, 'F.Ingreso')
+     ACT(c:FAC, 'Nominales')
+     ACT(d:FAC, 'Disponible')
+     ACT(e:FAC, 'PPP Clean')
+     ACT(f:FAC, 'PPP Dirty')
+
+     ACT(g:FAC, 'Efectivo')
+     ACT(h:FAC, 'Cupon')
+     ACT(i:FAC, 'C.Yield')
+     ACT(j:FAC, 'T.Transf.')
+     ACT(k:FAC, 'TIR')
+     ACT(l:FAC, IIF(Val(tt1)=0,'Dev.Cupon','Dev. TIR') )
+     ACT(m:FAC, 'C.Fund Ac')
+     ACT(n:FAC, 'TirAc-FundAc')
+     ACT(o:FAC, 'P.Merc.Clean')
+     ACT(p:FAC, 'P.Merc.Dirty')
+     ACT(q:FAC, 'MK to MKT')
+     ACT(r:FAC, 'Pases')
+     ACT(s:FAC, 'C.Fund Cpa')
+
+     SetFont(a:fac..s:fac,2)
+     AgregarMarco(a:FAC..s:fac,2,0)
+     IFA
+
+     ACT(es1,FBN['Especie'])
+     ACN(tv1,BuscarCampo('ESPECIES','TasaIntVigente','Codigo',Val(es1)) )
+     ACN(vt1,ValorTeorico2(Val(es1), Val(FE:1)) )
+     ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', FBN['Especie']))
+  Endif
+
+  ACT(a:FAC, FBN['NrOperacion'])
+  ACLO(a:FAC, FBN['NrOperacion'])
+  ACT(lp1, Val(lp1)~"|"~FBN['NrOperacion'])
+
+  ACD(b:FAC, FBN['FechaOp'])
+
+  ACN(c:FAC, FBN['Cantidad'])
+  ACL(c:FAC, 'INVCOM',  NrOperacion1=FBN['NrOperacion'])
+
+  ACN(d:FAC, FBN['TotalNetoCli1'])
+
+  *- Precio: PPP Clean de la Partida
+  ACN(e:FAC, FBN['Precio1'])
+
+  *- Precio Dirty
+  ACN(f:FAC, Val(e:FAC))
+  If EqStr(BuscarCampo('ESPECIES','InteresesC','Codigo',FBN['Especie']),'CLE')
+     *- Precio Dirty
+     ACN(f:FAC, PrecioaResidual(FBN['Especie'],FBN['Precio1'],val(FE:1)))
+  EndIf
+
+  *- Efectivo: Disponible * PPP * ValorTeorico + Intereses
+  ACN(g:FAC, val(d:FAC) * Val(f:FAC))
+  
+  *- Cupon: Tasa de Interes vigente de la especie
+  ACN(h:FAC, val(tv1))  
+
+  *- C.Yield: Cupon/PPP Dirty* ValorTeoricoEspecie
+  ACN(i:FAC, (val(h:FAC)/val(f:FAC))*ValorTeorico(FBN['Especie']) )
+
+  *-Tasa Transf
+  ACN(j:FAC, FBN('TipoCambio2') )
+
+  ACN(k:FAC, FBN('TipoCambio'))
+
+  If FBN['FechaVto'] < Val(fe1)
+     **/ Devengamiento del Cupon: Los intereses corriedos se calcularan sobre el Disponible.
+     **/ Si la partida comenzo el mes anterior: Intereses corridos calculados a hoy - intereses corridos calculados hasta el mes anterior 
+     **/ Si la partida comenzo el mes corriente: Intereses corridos calculados a hoy - Intereses corridos calculados al comienzo de la partida.
+
+     **/ Intereses Corridos Hasta el mes anterior o al comienzo de la partida
+     acd(fc1, IIF(Mes(FBN['FechaOp'])=Mes(Fsys),FBN['FechaVto'],PriDeMes(Val(fe1),SI) ))     
+
+     If Val(tt1)=0     
+        *- Valua por Cupon
+        **/ Intereses Corridos Calculados hasta hoy
+        ACT(xa1, FBN['Especie'])
+        ACD(xa2, Val(fe1)+1)
+        ACN(xa3, Val(d:FAC))
+        ACN(xa4, 1)
+   
+        (.'INTERES2'.)
+        dfa
+
+        * Valuacion Cupon
+        ACN(l:FAC,Val(wb:Val(wf1)))
+  
+        ACT(xa1, FBN['Especie'])
+        ACD(xa2, Val(fc1))
+        ACN(xa3, Val(d:fac))
+        ACN(xa4, 1)
+  
+        (.'INTERES2'.)
+        dfa
+
+        * Valuacion Cupon
+        SCN(l:FAC,-Val(wb:Val(wf1)))
+     else
+        ACN(l:FAC,(1+(FBN['TipoCambio']/100))^((val(fe1)-Val(fc1))/365) )
+        ACN(l:FAC,(Val(l:FAC)-1)*Val(f:fac)*val(d:fac) )
+     endif
+
+     ACN(cs1, Exe('COSTO')) 
+
+     *- Costo de Funding: Efectivo*CostoFunding*Cant.Dias corridos del mes o Cantidad de Dias corridos desde el inicio de partida/36500.
+     *- ACN(m:FAC, (val(g:fac)*val(cs1)*(val(fe1)-Val(fc1)))/36500)
+ 
+     *- Costo de Funding Sobre el Efectivo Original 
+     *- Efectivo*CostoFunding*Cant.Dias corridos del mes o Cantidad de Dias corridos desde el inicio de partida/36500.
+
+     *- Obtengo el monto de las ventas de meses anteriores para poder sacar el costo de funding, ya que las de este mes
+     *- se restan por separado
+     SQL.ADD(" Select O.Cantidad,P.FechaDesde  ")
+     SQL.ADD(" From "~DBO~".OPERACIONES O,"~DBO~".CLIENTES C, "~DBO~".PARTIDAS P  Where O.Cliente1=C.Codigo ")
+     SQL.ADD(" and O.NrOperacion = P.NrOperacion and P.NrPartida in ('"~val(a:fac)~"') ")
+     SQL.ADD(" and O.TipoOp  In ('TIV','VTP','VTC') ")
+     SQL.ADD(" and ((O.TipoOp In ('VTP','VTC') and C.Alias1='CP') or O.TipoOp Not In ('VTP','VTC')) ")
+     SQL.ADD(" Union ")
+     SQL.ADD(" Select T.Cantidad1 as Cantidad,P.FechaDesde ")
+     SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".PARTIDAS P Where T.Cliente1=C.Codigo ")
+     SQL.ADD(" and T.NrTrans = P.NrOperacion and P.NrPartida in ('"~val(a:fac)~"') ")
+     SQL.ADD(" and T.TipoTr2 In ('RTP') and C.Alias1='CP' ")
+     SQL.ADD(" and T.RB4 In (1,2) ")
+
+     ACN(vm1,0)
+
+     Recorrer SQL
+       dfa
+       If Mes(FBN['FechaDesde'])<Mes(val(Fe1)) o Anio(FBN['FechaDesde'])<Anio(val(Fe1))
+          SCN(vm1,FBN['Cantidad'])
+       EndIf
+     Proximo
+
+     *- Monto a Aplicar para calcular el costo de funding
+     ACN(vm2, val(c:fac) - val(vm1))
+     ACN(vm2, val(vm2)*val(f:fac))
+
+     ACN(s:FAC, (val(vm2)*val(cs1)*(Val(fe1)-Val(fc1)))/36500)
+  Else
+     ACN(l:FAC, 0)
+     ACN(m:FAC, 0)
+  Endif 
+
+  *- Incremento por el costo de funding de otros meses de la compra
+  SCN(s:FAC,FBN['TotalAux2'])
+
+  ACN(m:FAC, val(s:FAC) )     
+    
+  *-Resultado Neto: Devengamiento Acumulado -Costo de Funding Acumulado
+  *- Recupero la suma de los devengados anteriores
+  SQL.ADD("SELECT Sum(Cantidad3) as DevAcum ")
+  SQL.ADD("FROM   "~DBO~".CUOTAS C")
+  SQL.ADD("WHERE  C.NrOperacion='"~FBN['NrOperacion']~"' and Fecha1< '"~IdxDate(val(fe1))~"'  ")
+
+  Recorrer SQL
+       DFA
+       ACN(dv1,FBN['DevAcum'] )
+  Proximo
+
+  ACN(n:FAC, val(dv1)+val(l:fac)-val(m:fac) )
+
+  *-Precio Mercado
+  Recorrer&k 1, Val(FA:1)
+************************************************************************************
+*      IF Eqstr(fbn('Especie'), Val(JA:&k))
+*         ACN(o:fac, Val(JB:&k))
+*         ACN(p:fac, PrecioaResidual(FBN['Especie'],val(o:fac),val(FE:1)))
+*      ENDIF
+************************************************************************************
+      IF Eqstr(fbn('Especie'), Val(JA:&k))
+         ACN(o:fac, Val(JB:&k))
+         ACN(p:fac, Val(o:fac))
+         If EqStr(BuscarCampo('ESPECIES','InteresesC','Codigo',FBN['Especie']),'CLE')
+            ACN(p:fac, PrecioaResidual(FBN['Especie'],val(o:fac),val(FE:1)))
+         EndIf
+      ENDIF
+************************************************************************************
+  Proximo
+
+  *-Resultado Vta: (PrecioMercado-PPP)*Disponible.
+  ACN(q:FAC, (Val(p:fac)-Val(f:fac))*Val(d:fac))
+
+  *- Pases Afectados a la partida
+  ACN(r:FAC, FBN['TotalNetoCli3'])
+
+  ****- DATOS PARA LINKEAR
+  ACT(aa:val(ad1), val(a:fac))
+  *- Porcentaje de devengamiento del precio 
+  ACN(ab:val(ad1), val(l:fac)/val(d:fac))
+  ACT(ac:val(ad1), FBN['Especie'] )
+  ACN(ae:val(ad1), val(e:fac))
+  ACN(af:val(ad1), val(f:fac))
+  ACN(ag:val(ad1), val(m:fac))
+  ACN(am:val(ad1), val(l:fac))
+
+  ***---Datos para linkear por evento REVINV. Especie-Cartera-Monto.
+  ACT(QA:Val(AD:1), fbn('Especie'))
+  ACT(QB:Val(AD:1), fbn('Cartera'))
+  ACN(QC:Val(AD:1), Val(C:fac))
+
+  *----- Linkeo para POSICION CONSOLIDADA DE SECURITIES VALORIZADA
+  *- ba: VN bb: PcioMercado bc: Mark to Market bd: Dev. Tir Acumulado  be: Rto. Ventas Meses anteriores
+  *- bf: Funding Acumulado bg: Especie  bh: Disponible de Investment  bi: PPP Dirty
+  
+  ACT(bg:val(ad1), FBN['Especie'])
+  ACN(ba:val(ad1), val(c:fac))
+  ACN(bb:val(ad1), val(p:fac))
+  ACN(bc:val(ad1), val(q:fac))
+  ACN(bd:val(ad1), FBN['TotalBrutoCli2']+val(l:fac))
+  ACN(be:val(ad1), FBN['TipoCambio3'])
+  ACN(bf:val(ad1), val(m:fac))
+  ACN(BH:val(AD:1), val(D:fac))
+  ACN(BI:val(AD:1), val(F:fac))
+  SCN(ad1,1)
+
+  *-Acumuladores
+  scn(cc1,Val(c:fac))
+  scn(dd1,Val(d:fac))
+  scn(gg1,Val(g:fac))
+  scn(ll1,Val(l:fac))
+  scn(nn1,Val(n:fac))
+  scn(mm1,Val(m:fac))
+  scn(qq1,Val(q:fac))
+
+  AlinearCeldas(c:FAC..d:FAC,'D')
+  FormatoCeldas(e:fac..f:fac,Exe('F7'))
+  FormatoCeldas(h:fac..l:fac,Exe('F7'))
+  FormatoCeldas(m:fac..s:fac,Exe('F2'))
+  FormatoCeldas(o:fac..p:fac,Exe('F7'))
+
+  SetFont(a:fac..s:fac,1)
+  SetFont(d:fac..d:FAC,2)
+Proximo
+ifa
+
+If Val(cc1)>0
+   *-Imprimo totales 
+   ACT(a:fac, 'Totales')
+   ACN(c:fac, Val(cc1))
+   ACN(d:fac, Val(dd1))
+   ACN(g:fac, Val(gg1))
+   ACN(l:fac, Val(ll1))
+   ACN(n:fac, Val(nn1))
+   ACN(m:fac, Val(mm1))
+   ACN(q:fac, Val(qq1))
+
+   acn(ck1, CotizacionC(CotizaEn(Val(es1)),,,,val(fe1),1,SI,VAR('MONELOCA')) )
+
+   scn(gg2,Val(gg1)*val(ck1))
+   scn(ll2,Val(ll1)*val(ck1))
+   scn(nn2,Val(nn1)*val(ck1))
+   scn(mm2,Val(mm1)*val(ck1))
+   scn(qq2,Val(qq1)*val(ck1))
+
+   AlinearCeldas(c:FAC..d:FAC,'D')
+   FormatoCeldas(e:fac..f:fac,Exe('F7'))
+   FormatoCeldas(h:fac..l:fac,Exe('F7'))
+   FormatoCeldas(m:fac..s:fac,Exe('F2'))
+   FormatoCeldas(o:fac..p:fac,Exe('F7'))
+   
+   SetFont(a:fac..s:fac,2)
+
+   AgregarMarco(a:FAC..s:fac,2,0)
+   ifa  
+   ifa
+
+   *-Imprimo totales 
+   ACT(a:fac, 'Total Cartera Vigente En '~VAR('MONELOCA'))
+
+   *- Fila de Total de Cartera Vigentes
+   ACN(cv1,fac)
+
+   ACN(g:fac, Val(gg2))
+   ACN(l:fac, Val(ll2))
+   ACN(n:fac, Val(nn2))
+   ACN(m:fac, Val(mm2))
+   ACN(q:fac, Val(qq2))
+
+   AlinearCeldas(c:FAC..d:FAC,'D')
+   FormatoCeldas(e:fac..f:fac,Exe('F7'))
+   FormatoCeldas(h:fac..l:fac,Exe('F7'))
+   FormatoCeldas(m:fac..s:fac,Exe('F2'))
+   FormatoCeldas(o:fac..p:fac,Exe('F7'))
+
+   SetFont(a:fac..s:FAC,2)
+   AgregarMarco(a:FAC..s:fac,2,0)
+   ifa  
+Endif
+
+acn(ck2,fac)
+
+*-- Ventas
+ifa
+ACT(a:FAC, 'Ventas Realizadas en el Periodo')
+SetFont(a:FAC..a:FAC +3,3)
+ifa
+
+ACN(ad1,1)
+
+*- Listo solamente las ventas del mes corriente
+SQL.ADD(" Select O.Cartera,O.FechaOp,O.Vehiculo1,O.Especie,O.Cantidad,O.Precio1,O.FechaVto,O.TipoOp,O.NrOperacion,O.TotalNetoCli1,O.TotalCaucion,P.FechaDesde ")
+SQL.ADD(" From "~DBO~".OPERACIONES O,"~DBO~".CLIENTES C, "~DBO~".PARTIDAS P  Where O.Cliente1=C.Codigo ")
+SQL.ADD(" and O.NrOperacion = P.NrOperacion and P.NrPartida in ("~Pipe2Comillas(Val(lp1))~") ")
+SQL.ADD(" and O.TipoOp  In ('TIV','VTP','VTC') ")
+SQL.ADD(" and ((O.TipoOp In ('VTP','VTC') and C.Alias1='CP') or O.TipoOp Not In ('VTP','VTC')) ") 
+SQL.ADD(" Union ")
+SQL.ADD(" Select T.RB4 as Cartera,T.Fecha1 as FechaOp,T.Vehiculo1,T.Especie,T.Cantidad1 as Cantidad,T.Precio1, CASE T.Fecha3 When Null Then T.Fecha1 Else T.Fecha3 End FechaVto,T.TipoTr2 as TipoOp,T.NrTrans NrOperacion,T.Cambio1 as TotalNetoCli1,T.Cambio1 as TotalCaucion,P.FechaDesde  ")
+SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".PARTIDAS P Where T.Cliente1=C.Codigo ")
+SQL.ADD(" and T.NrTrans = P.NrOperacion and P.NrPartida in ("~Pipe2Comillas(Val(lp1))~") ")
+SQL.ADD(" and T.TipoTr2 In ('RTP') and C.Alias1='CP' ")
+SQL.ADD(" and T.RB4 In (1,2) ")
+SQL.ADD(" Order By 4,9 DESC")
+
+
+ACN(z2,0) 
+
+Recorrer SQL
+
+  If Mes(FBN['FechaDesde'])=Mes(val(Fe1)) o Anio(FBN['FechaDesde'])<Anio(val(Fe1))
+     * Solamente listo las ventas del mes
+     SCN(z2,1)
+
+     *- do1: Disponible de la Venta 
+     ACN(do1, FBN('Cantidad'))   
+
+     *- Verifico que no esten asociadas en su totalidad 
+     SQL.ADD(" Select SUM(Cantidad) as Cantidad FROM "~DBO~".PARTIDAS P WHERE P.NrOperacion='"~FBN['NrOperacion']~"' Having SUM(Cantidad)<>0 ") 
+
+     Recorrer SQL
+        dfa
+        ACN(do1, val(do1)-FBN('Cantidad'))   
+     Proximo
+
+     If val(z2)=1
+        *- Titulos 
+        ifa
+        ACT(a:FAC, 'Partida')
+        ACT(b:FAC, 'F.Ingreso')
+        ACT(c:FAC, 'Nom. Part.')
+        ACT(d:FAC, 'Afectados')
+        ACT(e:FAC, 'PrInv Dirty')
+        ACT(f:FAC, 'PrVta Dirty')
+        ACT(g:FAC, 'Resultado')
+        ACT(h:FAC, 'C.Fund Vta')
+
+        SetFont(a:fac..n:FAC,2)
+        AgregarMarco(a:FAC..h:FAC,2,0,Exe('COLOR'))
+     EndIf
+
+     *- Corte de control por Operacion
+     ifa
+     ACT(a:FAC, 'NrOperacion ')
+     ACT(b:FAC, FBN('NrOperacion'))
+     if Incluido('RTP',FBN('TipoOp')) 
+        ACLT(b:FAC, FBN('NrOperacion'))
+     else
+        ACLO(b:FAC, FBN('NrOperacion'))
+     endif
+
+     ACT(d:FAC, 'Especie: '~FBN('Especie')~'   Nominales '~FBN('Cantidad'))
+     ACT(es1,FBN['Especie'])
+
+     acn(ck1, CotizacionC(CotizaEn(Val(es1)),,,,val(fe1),1,SI,VAR('MONELOCA')) )  
+
+     SetFont(a:fac..n:FAC,2)
+     AgregarMarco(a:FAC..h:FAC,2,0)
+
+     ACN(pr1,FBN('TotalNetoCli1')/FBN('Cantidad'))
+
+     If Incluido(FBN['TipoOp'],'TIPP')
+        ACN(pr1,FBN('TotalCaucion')/FBN('Cantidad'))
+     EndIf
+
+     ACN(ef1,FBN('TotalNetoCli1'))
+     ACN(ct1,FBN('Cantidad'))
+     ACD(fv1, IIF(Mes(FBN['FechaOp'])=Mes(Fsys),FBN['FechaVto'],PriDeMes(Val(fe1),SI) ))     
+
+     *- Por Cada Operacion Recupero las partidas 
+     SQL.ADD("Select *  ")
+     SQL.ADD("from "~DBO~".PARTIDAS where ")
+     SQL.ADD("NrOperacion ='"~FBN('NrOperacion')~"' ")
+     SQL.ADD("order by NrPartida                    ")
+  
+     Recorrer SQL
+        ACT(a:FAC, FBN['NrPartida'])
+        ACD(b:FAC, FBN['FechaDesde'])
+        ACN(d:FAC, FBN['Cantidad'])
+        ACN(e:FAC, FBN['Cantidad3'])
+
+        SQL.ADD("Select *                             ")
+        SQL.ADD(" from "~DBO~".OPERACIONES where      ")
+        SQL.ADD(" NrOperacion ='"~FBN('NrPartida')~"' ")
+  
+        Recorrer SQL
+           ACN(cx1, FBN['Cantidad'])
+           ACN(ex2, FBN['Precio1'] )
+           ACN(ex3, Val(ex2))
+           If EqStr(BuscarCampo('ESPECIES','InteresesC','Codigo',FBN['Especie']),'CLE')
+              *- Precio Dirty
+             ACN(ex3, PrecioaResidual(FBN['Especie'],FBN['Precio1'],fbn['FechaOp']) ) 
+           EndIf
+           dfa
+        Proximo
+
+        ACN(c:FAC, Val(cx1))
+        ACN(f:FAC, Val(pr1))
+        ACN(g:FAC, (Val(f:fac)-Val(e:fac))*Val(d:fac))
+
+        *- Calculo del monto proporcional al aplicado en la partida
+        ACN(h:fac, val(d:fac)*val(ex3) )
+
+        *- Costo de Funding: Efectivo Proporcional*CostoFunding*Cant.Dias corridos del mes o Cantidad de Dias corridos desde el inicio de partida/36500.
+        ACN(h:FAC, (val(h:fac)*val(cs1)*(val(fe1)-Val(fv1)))/36500)
+
+        If val(h:fac)<0
+           *- La venta todavia no vencio -> Costo de Funding=0
+           ACN(h:fac,0)
+        EndIf
+
+        *- Incremento por el costo de funding de otros meses de la venta
+        SCN(h:FAC,FBN['Cantidad1'])
+
+        *- Decremento el costo de funding de la compra
+        ACN(ec1,0)
+
+        Recorrer&j 2,val(ck2)
+
+          If EqStr(val(a:&j),val(a:fac))
+             *- Encontro la partida 
+             SCN(m:&j, -val(h:fac) )              
+             SCN(n:&j,  val(h:fac) )              
+             ACN(ec1,1)
+          EndIf
+
+          If val(ec1)=1 y EqStr(val(a:&j),'Totales')
+             *- Decremento los subtotales
+             SCN(m:&j, -val(h:fac) )              
+             SCN(n:&j,  val(h:fac) )      
+
+             *- Decremento el total general
+             acn(ck1, CotizacionC(CotizaEn(Val(es1)),,,,val(fe1),1,SI,VAR('MONELOCA')) )
+             SCN(m:val(cv1), -val(h:fac)*val(ck1))
+             SCN(n:val(cv1), val(h:fac)*val(ck1))
+   
+             FormatoCeldas(m:val(cv1)..s:val(cv1),Exe('F2'))
+             Break       
+          EndIf
+        Proximo
+
+        *- Datos para linkear por ventas = Costo de Funding de las Ventas 
+        *- ai: NrOperacion aj: Partida ak: Costo de Funding al: Resultado de Ventas am: Especie
+        ACT(ai:val(ad1), FBN('NrOperacion'))
+        ACT(aj:val(ad1), val(a:fac) )
+        ACN(ak:val(ad1), val(h:fac))
+        ACN(al:val(ad1), val(g:fac))
+        ACT(an:val(ad1), val(es1))
+
+        SCN(ad1,1)
+
+        *- Acumuladores
+        scn(gg3,Val(g:fac))
+        scn(hh3,Val(h:fac))
+
+        scn(gg4,Val(g:fac)*Val(ck1))
+        scn(hh4,Val(h:fac))
+
+        SetFont(a:fac..n:FAC,1)
+        FormatoCeldas(h:fac,Exe('F7'))
+        FormatoCeldas(k:fac,Exe('F7'))
+        FormatoCeldas(h:fac,Exe('F2'))
+        FormatoCeldas(e:fac..f:fac,Exe('F7'))
+
+        AlinearCeldas(c:FAC..d:FAC,'D')
+        SetFont(a:fac..n:FAC,1)
+     Proximo   
+  
+     *- Imprimo totales 
+     Ifa
+     ACT(a:fac, 'Resultado Venta')
+     ACN(g:fac, Val(gg3))
+     ACN(h:fac, Val(hh3))
+
+     ACN(gg3,0)
+     ACN(hh3,0)
+
+     SetFont(a:fac..n:FAC,2)
+     AgregarMarco(a:FAC..h:FAC,2,0)
+     ifa
+  Else
+     dfa
+  EndIf
+
+Proximo
+Ifa
+
+If Val(cc1)>0
+   */Imprimo totales 
+   ACT(a:fac, 'Resultados por Ventas')
+
+   ACN(g:fac, Val(gg4))
+
+   SetFont(a:fac..n:FAC,2)
+   AgregarMarco(a:FAC..h:FAC,2,0)
+   ifa  
+   ifa
+
+   */Imprimo totales 
+   ACT(a:fac, 'Resultados Total')
+   *- Resultado de Venta - CFunding Acumulado + MtM
+   ACN(g:fac, Val(gg4) - Val(mm2) +  Val(qq2))
+
+   SetFont(a:fac..n:FAC,2)
+   AgregarMarco(a:FAC..h:FAC,2,0)
+   FormatoCeldas(g:fac..g:fac,Exe('F2'))
+   ifa  
+Endif
+
+*****
+ACO(1,14)
+ACO(2,7)
+ACO(3,7)
+ACO(4,7)
+ACO(5,6)
+ACO(6,9)
+ACO(7,8)
+ACO(8,8)
+ACO(9,8)
+ACO(10,8)
+ACO(11,8)
+ACO(12,10)
+ACO(13,10)
+ACO(14,10)
+ACO(15,10)
+ACO(16,10)
+ACO(17,10)
+ACO(18,10)
+
+FormatoCeldas(k:Val(FA1)..k:fac,Exe('F7'))
+Impresion(1,2)
+SetFilaACTual(FAC+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:FAC..a:FAC,2)
+LimitesVision(S:fac)
+
+SetPrintFit(3,73)
+
+CrearFont(6,"Arial,6,B")
+RangoTitulo(a:10..l:FAC, 1)
+Impresion(2, 1) 
+Impresion(3, 1) 
+Impresion(4, 1) 
+
+If val(ch1)=1
+   GrabarGrilla('INVRES',val(fe1))
+EndIf

@@ -1,0 +1,229 @@
+﻿*- Listado de Vencimientos con subtotales por Dia, Semana y Mes
+ModoReproceso(SinDialogo)
+CrearDialogo
+  Vehiculo1  :'Vehiculo'   ;;;;;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar el Vehiculo';NO;Var('VEHICULODE')
+  Fecha1     :'Vto.Desde'  ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys
+  Fecha2     :'Vto.Hasta'  ;;;;;;Dialogo.Fecha2<>0;'Debe Ingresar una Fecha';NO;HABILES(Fsys,30,VAR('FERIDEF')) 
+  Lista1     :'Tipos Op.'  ;;1;;;;;;;;;SQLSet("Select Codigo from "~DBO~".TIPOSOPERACION Where Codigo like 'MM%' ") 
+  Radio1     :'Seleccion|Capital|Cap+Int'  ;;;;;;;;;0;
+FinDialogo
+if Not OK
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,8,B")
+
+SetFilaActual(4)
+
+ACT(j:2,'Fecha y Hora : '~Var('FECHASYS')~' '~HORA(AHORA))
+SetFont(j:2..j:2,1)
+
+ACT(a:FAC, 'Vencimientos De Money Market')
+SetFont(a:FAC..a:FAC,3)
+
+SetFilaActual(FAC+2)
+ACN(w1,FAC)
+
+if NoVacio(Dialogo.Vehiculo1)
+   ACT(a:FAC+1, 'Vehiculo: '~Dialogo.Vehiculo1)
+else
+   ACT(a:FAC+1, 'Vehiculo: Todos')
+endif
+
+ACT(a:FAC+2, 'F.Vto.Desde: '~Dialogo.Fecha1)
+ACT(a:FAC+3, 'F.Vto.Hasta: '~Dialogo.Fecha2)
+
+
+If Dialogo.Radio1=0
+   ACT(a:FAC+5, 'Seleccion: Capital ')
+Else
+   ACT(a:FAC+5, 'Seleccion: Capital+Interes ')
+EndIf
+SetFont(a:FAC+1..a:FAC+5,3)
+SetFilaActual(fac+6)
+
+ACN(w1,FAC)
+SetFilaActual(FAC+1)
+act(a:fac,'Fecha')
+act(b:fac,'Plazo')
+
+SetFont(a:FAC..d:FAC,2)
+acn(y:400,fac)
+
+SetFilaActual(FAC+1)
+
+*** Arma la tabla de dias ***
+Recorrer&i 1, Dialogo.Fecha2-Dialogo.Fecha1+1
+   if EsHabil(Dialogo.Fecha1+&i-1)
+      acd(a:fac+&i-1, Dialogo.Fecha1+&i-1)
+      acn(b:fac+&i-1, &i-1)
+      SetFont(a:fac+&i-1..b:fac+&i-1,2)
+      FormatoCeldas(b:fac+&i-1..b:fac+&i-1, Exe('F0'))
+   else
+*      AgregarMarco(a:fac+&i-1..a:fac+&i-1,2,0)
+   endif
+Proximo
+
+acn(w:400,fac)
+
+ACT(z1, "FechaVto Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"'")
+
+SQL.ADD("Select FechaVto Vto,Especie,")
+If Dialogo.Radio1=1
+   SQL.ADD("SUM(CASE TipoOp When 'MMDCOB' Then TotalBrutoCli1 When 'MMDIVA' Then -Cantidad-IntDevengados1-IntDevengados2 When 'MMPF' Then -Cantidad-TotalIntereses When 'MMPFCE' Then -Cantidad-TotalIntereses When 'MMPFT' Then -Cantidad-TotalIntereses When 'MMPFM' Then -Cantidad-TotalIntereses When 'MMPFTV' Then -Cantidad-TotalIntereses When 'MMEPTA' Then -Cantidad-TotalIntereses When 'MMCT' Then -Cantidad-TotalIntereses When 'MMTO' Then -Cantidad-TotalIntereses Else Cantidad+TotalIntereses End) Cant ")
+Else
+   SQL.ADD("SUM(CASE TipoOp When 'MMDCOB' Then TotalBrutoCli1 When 'MMDIVA' Then -Cantidad When 'MMPF' Then -Cantidad When 'MMPFCE' Then -Cantidad When 'MMPFT' Then -Cantidad When 'MMPFM' Then -Cantidad When 'MMPFTV' Then -Cantidad When 'MMEPTA' Then -Cantidad When 'MMCT' Then -Cantidad When 'MMTO' Then -Cantidad Else Cantidad End) Cant ")
+EndIf
+SQL.ADD(" from "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS B where ")
+SQL.ADD(" O.NrOperacion=B.NrOperacion and B.Valor=0 and B.NrBit=30 and ")
+SQL.ADD(" "~Val(z1)~" ")
+SQL.ADD(" and O.Vehiculo1 =  '"~Dialogo.Vehiculo1~"'")
+SQL.ADD(" and TipoOp Like 'MM%' and TipoOp Not In ('MMONM','MMONR') ")
+if NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and TipoOp In ("~Pipe2Comillas(Dialogo.Lista1)~")")
+endif
+SQL.ADD("Group By Especie,FechaVto ")
+
+SQL.ADD("Union ")
+
+SQL.ADD("Select C.Fecha2 Vto,Especie,")
+If Dialogo.Radio1=1
+   SQL.ADD("SUM(-Cantidad4-Cantidad3) Cant ")
+Else
+   SQL.ADD("SUM(-Cantidad4) Cant ")
+EndIf
+SQL.ADD(" from "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS B,"~DBO~".CUOTAS C where ")
+SQL.ADD(" O.NrOperacion=B.NrOperacion and B.Valor=0 and B.NrBit=30 and ")
+SQL.ADD(" O.NrOperacion=C.NrOperacion and ")
+SQL.ADD(" C.Fecha2 Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' and ")
+SQL.ADD(" "~Val(z1)~" ")
+SQL.ADD(" and O.Vehiculo1 =  '"~Dialogo.Vehiculo1~"'")
+SQL.ADD("  and TipoOp In ('MMONM','MMONR') ")
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and TipoOp In ("~Pipe2Comillas(Dialogo.Lista1)~")")
+EndIf
+SQL.ADD("Group By Especie,C.Fecha2")
+SQL.ADD("Order By Especie,Vto")
+
+
+*** z:400 valor de la columna ***
+acn(z:400,2)
+ACT(X:400,' ')
+
+Recorrer SQL
+
+  Message(fbn['Vto']~'  '~fbn['Cant']~' '~fbn['Especie'])
+
+  if Not EqStr(val(x:400),fbn['Especie'])
+     scn(z:400,1)
+     act(x:400,fbn['Especie'])
+
+     *- Corte por Especies 
+     act(val(z:400):val(y:400)-2,fbn['Especie'])
+
+     act(val(z:400):val(y:400),fbn['Especie'])
+     SetFont(val(z:400):val(y:400)..val(z:400):val(y:400),2)
+     AgregarMarco(val(z:400):val(y:400)..val(z:400):val(y:400),2,0,Exe('COLOR'))
+  endif
+
+  scn(val(z:400):val(w:400)+fbn['Vto']-Dialogo.Fecha1,fbn['Cant'])
+  SetFont(val(z:400):val(w:400)+fbn['Vto']-Dialogo.Fecha1,1)
+  acl(val(z:400):val(w:400)+fbn['Vto']-Dialogo.Fecha1,'OPEVTO',Vehiculo1=Dialogo.Vehiculo1,Fecha1=val(a:val(w:400)+fbn['Vto']-Dialogo.Fecha1),Fecha2=val(a:val(w:400)+fbn['Vto']-Dialogo.Fecha1),Lista1=Dialogo.Lista1,Especie1=val(val(z:400):val(y:400)-2),Radio1=1)
+Proximo
+
+*- x:400 Columna Total
+ACN(x:400,val(z:400)+1)
+act(val(x:400)  :val(w:400)-1,'Total Dia ('~VAR('MONEEXTR')~')')
+act(val(x:400)+1:val(w:400)-1,'Total Mes ')
+
+SetFont(val(x:400):val(w:400)-1..val(x:400)+1:val(w:400)-1,2)
+
+FormatoCeldas(val(x:400):val(w:400)-1..val(x:400)+1:val(w:400)-1,Exe('F2'))
+AgregarMarco(a:val(w:400)-1..val(x:400)+1:val(w:400)-1,2,0,Exe('COLOR'))
+
+Recorrer&j 3, val(z:400)+1
+
+   *- Recorro las Columnas
+   If Not EqStr(val(&j:val(y:400)-2),val(val(x:400):val(y:400)-2)) o val(x:400)=3
+      acn(x:401,CotizacionC(val(&j:val(y:400)-2),,,,Fsys,1,SI,VAR('MONEEXTR')))
+   EndIf
+
+   Message('Cotizacion '~val(&j:val(y:400)-2)~' '~Fstr(val(x:401),0,2))
+
+   acn(x:402,val(y:400))
+
+   *- x:403 Fila para sumar las semanas
+   acn(x:403,val(w:400))
+
+   Recorrer&i 1, Dialogo.Fecha2-Dialogo.Fecha1+1
+      *- Recorro las filas 
+      If EsHabil(Dialogo.Fecha1+&i-1) y &j<=val(z:400)
+         *- Total por Dia
+         scn(val(x:400):val(w:400)+&i-1,val(&j:val(w:400)+&i-1)*val(x401))
+         SetFont(val(x:400):val(w:400)+&i-1..val(x:400):val(w:400)+&i-1,1)
+
+         *- Total por Vehiculo
+         scn(&j:val(y:400)-1,val(&j:val(w:400)+&i-1))
+      EndIf
+      
+
+      If DiaSem(Dialogo.Fecha1+&i-1)=7
+         acn(&j:val(w:400)+&i-1,Sum(&j:val(x:403)..&j:val(w:400)+&i-2))         
+** FJL 13/04/16 - Para Corregir Totales del mes
+         acn(aa:val(w:400)+&i-1,-Sum(&j:val(x:403)..&j:val(w:400)+&i-2))         
+         SetFont(&j:val(w:400)+&i-1..&j:val(w:400)+&i-1,2)
+         acn(x:403,val(w:400)+&i)         
+      EndIf
+   Proximo 
+Proximo
+
+Recorrer&i 1, Dialogo.Fecha2-Dialogo.Fecha1+1
+
+   If FinDeMes(Dialogo.Fecha1+&i-1)=Dialogo.Fecha1+&i-1 o &i=Dialogo.Fecha2-Dialogo.Fecha1+1
+      *- Total por Mes
+      scn(val(x:400)+1:val(w:400)+&i-1,Sum(val(x:400):val(x402)..val(x:400):val(w:400)+&i-1) )
+** FJL 13/04/16 - Para Corregir Totales del mes
+      scn(val(x:400)+1:val(w:400)+&i-1,Sum(aa:val(x402)..aa:val(w:400)+&i-1) )
+      SetFont(val(x:400)+1:val(w:400)+&i-1..val(x:400)+1:val(w:400)+&i-1,3)
+      FormatoCeldas(val(x:400)+1:val(w:400)+&i-1..val(x:400)+1:val(w:400)+&i-1,Exe('F2'))
+
+      *- Fila del Mes Anterior 
+      acn(x:402,val(w:400)+&i)
+   EndIf
+
+Proximo
+
+Recorrer&i 3, val(x:400)+1
+  ACO(&i,12)
+Proximo
+
+Recorrer&j val(z:400)+1,val(x:400)
+   Recorrer&i 1, Dialogo.Fecha2-Dialogo.Fecha1+1
+     * Total General
+     scn(&j:val(y:400)-1,val(&j:val(w:400)+&i-1) )
+** FJL 13/04/16 - Para Corregir Total general en USD
+     scn(&j:val(y:400)-1,val(aa:val(w:400)+&i-1) )
+     FormatoCeldas(&j:val(y:400)-1..&j:val(y:400)-1,Exe('F2'))
+   Proximo
+Proximo
+
+SetFont(a:val(y:400)-1..val(x:400):val(y:400)-1,2)
+FormatoCeldas(c:val(w:400)..val(x:400):val(w:400)+Dialogo.Fecha2-Dialogo.Fecha1,Exe('F2') )
+FormatoCeldas(a:val(y:400)-1..val(x:400):val(y:400)-1,Exe('F2') )
+
+BorrarCeldas(b:val(y:400)-2..val(x:400):val(y:400)-2)
+ACO(1,15)
+ACO(2,3)
+
+*FijarCol(3)
+*FijarFila(val(w:400))
+Impresion(1,2)
+
+SetFilaActual(val(w:400)+Dialogo.Fecha2-Dialogo.Fecha1+2)
+ACT(a:FAC, 'FIN DE LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(val(x:400)+1:FAC)
+*RangoTitulo(a1..k:8,36)
+

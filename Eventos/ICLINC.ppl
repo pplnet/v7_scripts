@@ -1,0 +1,109 @@
+﻿CrearDialogo
+  Fecha1       : 'Fecha'       ;;;;;;;;;;FSYS
+  Fecha2       : 'Fecha FMes'  ;;;;NO;;;;;;FinDeMes(Habiles(Dialogo.Fecha1,-1,'ARG',SI),SI)
+  NrOperacion1 : 'Operacion'   ;;;;;;;;;;;;;;"TipoOp In ('CONU') and   FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' and (FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"'  or CB1=1) "  
+  Cantidad1    : 'Interes'     ;;;;;;Dialogo.Cantidad1>0;'Debe Ingresar Interes a Capitalizar';NO;
+  Vehiculo1    : 'Vehiculo'    ;;;;NO;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar un Vehiculo';NO;Var('VEHICULODE');
+  Check1       : 'Manual'      ;;;;NO;NO;;;;;1
+FinDialogo
+
+if not ok
+  Cancelar
+endif
+
+
+ACN(CO:1, SQL("Select PrecioContable From "~DBO~".COTIZACIONES WHERE Codigo='"~VAR('MONEEXTR')~"' and (CallPut='CON' or CallPut is Null) and Moneda = '"~VAR('MONELOCA')~"' and Fecha= (Select max(C.Fecha) From "~DBO~".COTIZACIONES C WHERE Codigo='"~VAR('MONEEXTR')~"' and (CallPut='CON' or CallPut is Null) and Moneda = '"~VAR('MONELOCA')~"' and C.Fecha <= '"~IdxDate(Dialogo.Fecha2)~"')  "))
+
+** Whitholding Tax
+ACN(wt:1,Round(Dialogo.Cantidad1*VAR('ICLWTH')/100,2))
+
+** IVA
+ACN(iv:1,Round(Dialogo.Cantidad1*VAR('ICLBIVA')/100*VAR('ICLIVA')/100,2))
+ACN(iv:2,Dialogo.Cantidad1*VAR('ICLBIVA')/100)
+
+ACN(fl:1,0)
+
+  If SQL(" Select 1 from "~DBO~".CUOTAS where NrOperacion='"~Dialogo.NrOperacion1~"' and  Fecha1= '"~IdxDate(Dialogo.Fecha1)~"' and Radio1 = '3'  ")>0
+     ** Vertificar que hacemos si ya se liquidaron IVA y WITHOLDING
+     if SQL(" Select 1 from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Dialogo.NrOperacion1~"' and  FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' Group by NrOperacion  ") > 0
+        If  Dialogo.Check1=1
+             Messagebox('Hay Liquidaciones de Impuestos realizadas - debera anularla para porder reprocesar - CONU '~Dialogo.NrOperacion1)
+             Cancelar('Se cancela el proceso de Capitalizacion de Intereses ICL')
+        Else
+            ACN(fl:1,1)
+        Endif     
+     else
+        Message('Borrando devengados del dia ... ')
+        SQL.ADD("DELETE FROM "~DBO~".CUOTAS  ")
+        SQL.ADD(" WHERE Fecha1        = '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD(" AND   Radio1        = '3'  ")
+        SQL.ADD(" AND   NrOperacion   = '"~Dialogo.NrOperacion1~"' ")
+        SQL.NEW
+        Message('Borrando Movimientos del dia ... ')       
+        SQL.ADD("DELETE FROM "~DBO~".MOVPENDIENTES  ")
+        SQL.ADD(" WHERE FechaMov      = '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD(" AND   NrOperacion   = '"~Dialogo.NrOperacion1~"' ")
+        SQL.NEW
+        SQL.EXEC
+      Endif
+
+  Endif
+  
+  If Val(fl:1)=0
+     ACN(CT:1, SQL("Select Max(NrCuota) From "~DBO~".CUOTAS Where NrOperacion='"~Dialogo.NrOperacion1~"' ")+1)  
+  
+     message('Generando CUOTA Interes Capitalizado ... ')
+     SQL.ADD(" INSERT INTO "~DBO~".CUOTAS ( ")
+     SQL.ADD(" NrOperacion, NrCuota, Radio1, Fecha1, Cantidad1, Cantidad5, Cantidad2, ")
+     SQL.ADD(" Cantidad3, Cantidad6, Cantidad4, Precio1,  Precio2, Precio3, ")
+     SQL.ADD("  NrOperacion1")
+     SQL.ADD(" ) VALUES ( ")
+     **SQL.ADD(" '"~Dialogo.NrOperacion1~"', "~Val(CT:1)~",  '3', '"~IdxDate(Dialogo.Fecha1)~"', "~FSTR((Dialogo.Cantidad1-Val(wt:1))*-1,0,2)~", "~FSTR(Dialogo.Cantidad1,0,2)~", "~FSTR((Dialogo.Cantidad1-Val(wt:1)),0,2)~",")
+     SQL.ADD(" '"~Dialogo.NrOperacion1~"', "~Val(CT:1)~",  '3', '"~IdxDate(Dialogo.Fecha1)~"', "~FSTR((Dialogo.Cantidad1-Val(wt:1))*-1,0,2)~", "~FSTR(Dialogo.Cantidad1,0,2)~", "~FSTR(0,0,2)~",")
+     SQL.ADD(" "~FSTR(Val(iv:1),0,2)~", "~FSTR(Val(iv:2),0,2)~","~FSTR(Val(wt:1),0,2)~", "~FSTR(Val(co:1),0,8)~", "~FSTR(VAR('ICLIVA'),0,8)~", "~FSTR(VAR('ICLWTH'),0,8)~", ")
+     SQL.ADD(" '"~Dialogo.NrOperacion1~"' ")
+     SQL.ADD(" ) ")
+     SQL.NEW
+
+     ** de la CONU Cliente2, Especie2, Cuenta2
+     SQL.ADD(" Select NrOperacion, Cliente2, ContraEspecie2, Cuenta1, Cuenta2, Mercado2, Book1 ")
+     SQL.ADD(" from "~DBO~".OPERACIONES ")
+     SQL.ADD(" where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+     watch(SQL.Batch)
+
+     recorrer SQL
+  
+        message('Generando Movimientos IVA - WTH ... ')
+        ** Van en ARP
+        ACT(mp1,Dialogo.NrOperacion1)
+        ACD(mp2,Dialogo.Fecha1)
+        ACD(mp17,Dialogo.Fecha1)     
+        ACT(mp3,FBN['Cliente2'])  
+        ACT(mp4,FBN['ContraEspecie2'])    
+        ACT(mp5,'')      
+        ACT(mp6,'')     
+        ACN(mp7,0)     
+        ACT(mp8,FBN['Mercado2']) 
+        ACT(mp9,Dialogo.Vehiculo1)    
+        ACN(mp10,Val(iv:1)*Val(CO:1))      
+        ACT(mp12,'IVA por Intereses CONU '~val(mp3)~' - '~val(mp1))        
+        ACT(mp13,'MV')
+        ACN(mp14,1)
+        ACN(mp15,1)     
+        ACT(mp16,'MM')     
+        ACT(mp19,FBN['Cuenta2'])
+        ACN(mp22,1)
+        *ACT(mp29,FBN['Book1'])
+        ACT(mp30,Dialogo.Vehiculo1)
+        (.'IMMOVPEND'.)
+
+        ACN(mp10,Val(wt:1)*Val(CO:1))      
+        ACT(mp12,'WTH por CONU '~val(mp3)~' - '~val(mp1))        
+        ACT (mp16,'MM')          
+        ACN(mp22,2)
+        (.'IMMOVPEND'.)
+ 
+     Proximo  
+  
+     SQL.EXEC
+  Endif

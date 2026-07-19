@@ -1,0 +1,47 @@
+﻿CONDICIONES
+EV o EqStr(BuscarCampo('Especies','Status','Codigo',Especie),'HAB');'La especie No esta Habilitada';NO
+EV o [FECHAMADURACION(ESPECIE) >= FECHAOP y FECHAMADURACION(ESPECIE)<>0] o FECHAMADURACION(ESPECIE)=0;'La especie esta vencida';SI;SI;FSys;'CUPONPAG'
+EV o [EqStr(CUPON1,'0')] o [VACIO(CUPON1) o EqStr(BuscarCampo('ESPECIES','ZeroCoupon','Codigo',ESPECIE),'SI') o VFEC4>FECHAOP];'Esta trabajando con un cupon anterior (ZeroCoupon='~BuscarCampo('ESPECIES','ZeroCoupon','Codigo',ESPECIE)~' FechaCorte: '~VFEC4~') ';SI;SI;FSys;'CUPONANT'
+EV o Habiles(PROXCUPON(ESPECIE,FECHAOP),-3,'ARG') <> FECHAOP ;'Antes de cargarse la operacion debe realizarse el corte de cupon correspondiente';SI;SI;FSys;'CUPONPROX'
+EV o ProxCupon(ESPECIE,FECHAOP) <> FSYS ;'Antes de cargarse la operacion debe realizarse el corte de cupon correspondiente';SI;SI;FSys;'CUPONPROX'
+EV o DESCIENDEDEESPECIE(ESPECIE,'PRIVA ') o NoVacio(BuscarCampo('AGENDACUPONES','Especie','Especie',ESPECIE));'Falta Actualizar la Agenda para este Titulo';SI
+EV o Not [DESCIENDEDEESPECIE(ESPECIE,'PRIVA ') y CANTIDAD<BuscarCampo('ESPECIES','VolumenMinimo','Codigo',ESPECIE)];'La Cantidad no puede ser inferior al Volumen Minimo';NO 
+EV o [BuscarCampo('ESPECIES','LaminaMinima','Codigo',ESPECIE)<>0 y [CANTIDAD  Mod2(BuscarCampo('ESPECIES','LaminaMinima','Codigo',ESPECIE))=0]] o BuscarCampo('ESPECIES','LaminaMinima','Codigo',ESPECIE)=0;'La Cantidad debe ser Multiplo de Lamina Minima';NO
+
+EV o Vacio(Cliente1) o EqStr(BuscarCampo('Clientes','Status','Codigo',Cliente1),'HAB');'El Cliente No esta Habilitado';NO
+EV o Not EqStr('DES',BuscarCampo('Clientes','Status','Codigo',CLIENTE1));'El Cliente esta deshabilitado';NO
+EV o Not Eqstr(CLIENTE1, VEHICULO1);'El Cliente no Puede ser el Vehiculo';NO;
+
+EV o HEnBanda('MAE', Copy(Hora(Ahora),1,5));'Esta Operacion No sera informada Hoy al MAE, Horario de Concertacion INCORRECTO ';SI
+EV o VCAN1=0 o [Not Incluido(Mercado,VAR('MERCARGC')) y VCAN1=1];'No Puede Liquidar por ArgenClear un Cliente !!!';NO
+EV o PRECIO1<=PRECIO4*(1+VAR('RPRECIO2')/100) Y PRECIO1>=PRECIO4*(1-VAR('RPRECIO2')/100);'Precio Fuera de Rango: '~FSTR(PRECIO4*(1-VAR('RPRECIO2')/100),1,7)~' y '~FSTR(PRECIO4*(1+VAR('RPRECIO2')/100),1,7);SI;SI;Fsys;'RANGOPRECIO';
+
+EV o [VPRE20 >= 0 y [CARTERA=1 o CARTERA=2]] o [CARTERA<>1 y CARTERA<>2];'La posicion investment no puede quedar vendida';NO
+
+
+EV o FechaOp=FSYS;'Operacion Ingresada con Fecha Valor';SI;SI;FSYS;'FVALOR'
+
+VCAN1=1 o PASECB=1 o Not [[FORMALIQUIDACION1<>1] Y [FORMALIQUIDACION2<>1]] o ExisteLimite('SETTLEMENT',VTXT11,'USD')                                                      ; 'Settlement no asignado' ;SI;SI;FSYS;'SETTLENOAS'
+VCAN1=1 o PASECB=1 o Not [[FORMALIQUIDACION1<>1] Y [FORMALIQUIDACION2<>1]] o Not ExisteLimite('SETTLEMENT',VTXT11,'USD') o VtoLimite('SETTLEMENT',VTXT11,'USD') >= FechaOp; 'Settlement vencido el '~FECHA(VtoLimite('SETTLEMENT',VTXT11,'USD'));SI;SI;FSYS;'SETTLEVENC'
+VCAN1=1 o PASECB=1 o Not [[FORMALIQUIDACION1<>1] Y [FORMALIQUIDACION2<>1]] o Not LimCancelado('SETTLEMENT',VTXT11,'USD'); 'Settlement cancelado' ;SI;SI;FSYS;'SETTLECANC'
+VCAN1=1 o PASECB=1 o Not [[FORMALIQUIDACION1<>1] Y [FORMALIQUIDACION2<>1]] o LimAsignado(VTXT11,'SETTLEMENT','USD') >= (VCAN11+TOTALNETOCLI3); 'Settlement excedido en U$D '~PYC((VCAN11+TOTALNETOCLI3)-LimAsignado(VTXT11,'SETTLEMENT','USD'),1,0)~'.-';SI;SI;FSYS;'SETTLEEXCE'
+
+SI o VCAN1=1 o PASECB=1 o Not [[FORMALIQUIDACION1=0] Y [FORMALIQUIDACION2<>1]] o INCLUIDO(VTXT11,Var('CLINOLIM')) o ExisteLimite('SETTCRE',Vehiculo1,'USD'); 'Settlement Global no asignado' ;SI;SI;FSYS;'SETCRENOAS'
+SI o VCAN1=1 o PASECB=1 o Not [[FORMALIQUIDACION1=0] Y [FORMALIQUIDACION2<>1]] o INCLUIDO(CLIENTE1,Var('CLINOLIM')) o Not ExisteLimite('SETTCRE',Vehiculo1,'USD') o VtoLimite('SETTCRE',Vehiculo1,'USD') >= FechaOp; 'Settlement Global vencido el '~FECHA(VtoLimite('SETTCRE',Vehiculo1,'USD'));SI;SI;FSYS;'SETCREVENC'
+SI o VCAN1=1 o PASECB=1 o Not [[FORMALIQUIDACION1=0] Y [FORMALIQUIDACION2<>1]] o INCLUIDO(CLIENTE1,Var('CLINOLIM')) o Not LimCancelado('SETTCRE',Vehiculo1,'USD')     ; 'Settlement Global cancelado' ;SI;SI;FSYS;'SETCRECANC'
+SI o VCAN1=1 o PASECB=1 o Not [[FORMALIQUIDACION1=0] Y [FORMALIQUIDACION2<>1]] o INCLUIDO(CLIENTE1,Var('CLINOLIM')) o LimAsignado(Vehiculo1,'SETTCRE','USD') >= VCAN19; 'Settlement Global excedido en U$D '~PYC(VCAN19-LimAsignado(Vehiculo1,'SETTCRE','USD'),1,0)~'.-';SI;SI;FSYS;'SETCREEXCE'
+
+PASECB=1 o VCAN1=1 o [FormaLiquidacion1<>1 y FormaLiquidacion2<>1] o ExisteLimite('PRESETTLEM',VTXT11,'USD')   ; 'PreSettlement no asignado' ;SI;SI;FSYS;'PRESETNOAS'
+PASECB=1 o VCAN1=1 o [FormaLiquidacion1<>1 y FormaLiquidacion2<>1] o Not ExisteLimite('PRESETTLEM',VTXT11,'USD') o VtoLimite('PRESETTLEM',VTXT11,'USD') >= FechaOp; 'PreSettlement vencido el '~FECHA(VtoLimite('PRESETTLEM',VTXT11,'USD'));SI;SI;FSYS;'PRESETVENC'
+PASECB=1 o VCAN1=1 o [FormaLiquidacion1<>1 y FormaLiquidacion2<>1] o Not LimCancelado('PRESETTLEM',VTXT11,'USD') ; 'PreSettlement cancelado' ;SI;SI;FSYS;'PRESETCANC'
+PASECB=1 o VCAN1=1 o [FormaLiquidacion1<>1 y FormaLiquidacion2<>1] o MinDerechoBolsa>=0;'Excede el limite de Presettl. a '~VTXT11~' en '~PYC(Abs(MinDerechoBolsa),0,2) ;SI;SI;FECHAOP ;'PRESETEXC';'Excede Presettl.'~VTXT11~' en '~PYC(Abs(MinDerechoBolsa),0,2)
+
+VCAN1=1 o PASECB=1  o [FormaLiquidacion1<>1 y FormaLiquidacion2<>1] o ExisteLimite('MAX'~MERCADO,VEHICULO1,'USD')   ; 'Maximo Monto '~MERCADO~' no Asignado' ;SI;SI;FSYS;'MAX'~MERCADO~'NOAS'
+VCAN1=1 o PASECB=1  o [FormaLiquidacion1<>1 y FormaLiquidacion2<>1] o Not ExisteLimite('MAX'~MERCADO,VEHICULO1,'USD') o VtoLimite('MAX'~MERCADO,VEHICULO1,'USD') >= FechaOp; 'Maximo Monto '~MERCADO~' vencido el '~FECHA(VtoLimite('MAX'~MERCADO,VEHICULO1,'USD'));SI;SI;FSYS;'MAX'~MERCADO~'VENC'
+VCAN1=1 o PASECB=1  o [FormaLiquidacion1<>1 y FormaLiquidacion2<>1] o Not LimCancelado('MAX'~MERCADO,VEHICULO1,'USD') ; 'Maximo Monto '~MERCADO~' Cancelado' ;SI;SI;FSYS;'MAX'~MERCADO~'CANC'
+VCAN1=1 o PASECB=1  o [FormaLiquidacion1<>1 y FormaLiquidacion2<>1] o MinArancel>=0;'Excede el limite de Monto '~MERCADO~' en '~PYC(Abs(MinArancel),0,2) ;SI;SI;FECHAOP ;'MAX'~MERCADO~'EXC';'Excede Monto '~MERCADO~' en '~PYC(Abs(MinArancel),0,2)
+
+BookValido(BOOK1, TIPOOP, ESPECIE, Vehiculo1, OPERADOR, 'HAB');'El Book de seleccionado no corresponde a la Especie, Tipo de Operacion, Operador, Vehiculo o no esta Habilitado ';NO
+BookValido(VAR('BOOKCONTRG'), TIPOOP, CONTRAESPECIE, Vehiculo1, OPERADOR, 'HAB');'El Book de Contraespecie '~VAR('BOOKCONTRG')~' es Invalido.';NO
+
+

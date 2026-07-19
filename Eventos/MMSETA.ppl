@@ -1,0 +1,55 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:    'Fecha'               ;1;;;;;Dialogo.Fecha1<=FSys;'Fecha inválida';NO;Fsys
+  Vehiculo1: 'Vehiculo'           ;3;;;;;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE')
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+***---Setea Vehiculo
+SQL.ADD(" Select 'Vehiculo' as Tipo, O.NrOperacion, O.TipoTasa, C.NrCuota, C.Total3 Spread, C.Cantidad1 Cantidad, C.Precio1 Tasa,")
+SQL.ADD(" C.Fecha1 FechaIni, C.Fecha2 FechaFin, O.RB8 DayCount, O.Especie Moneda ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+SQL.ADD(" AND O.TipoOp = 'MMST' ")
+SQL.ADD(" AND O.TipoTasa <> 'FIJA' ")
+SQL.ADD(" AND C.Fecha5 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" UNION ")
+***---Setea Contraparte
+SQL.ADD(" Select 'Contraparte' as Tipo, O.NrOperacion, O.TipoTasa2 TipoTasa, C.NrCuota, C.Total4 Spread, C.Cantidad2 Cantidadd, ")
+SQL.ADD(" C.Precio2 Tasa, C.Fecha1 FechaIni, C.Fecha2 FechaFin, O.RB5 DayCount, O.ContraEspecie Moneda ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+SQL.ADD(" Where O.NrOperacion = C.NrOperacion ")
+SQL.ADD(" AND O.TipoOp = 'MMST' ")
+SQL.ADD(" AND O.TipoTasa2 <> 'FIJA' ")
+SQL.ADD(" AND C.Fecha6 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+Watch(sql.batch)
+Recorrer SQL
+    SQL.ADD(" Select T.Valor1 From "~DBO~".TASASDIA T ")
+    SQL.ADD(" Where T.TipoTasa = '"~fbn('TipoTasa')~"' ")
+    SQL.ADD(" AND T.Especie = '"~fbn('Moneda')~"' ")
+    SQL.ADD(" AND T.Fecha = (Select Max(Fecha) From "~DBO~".TASASDIA T2 ")
+    SQL.ADD("               Where T.TipoTasa = T2.TipoTasa ")
+    SQL.ADD("               AND T2.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+    Recorrer SQL
+        ACN(TS:1, fbn('Valor1'))
+    Proximo
+    ***---Interes
+    ACN(IT:1, ((fbn('Cantidad') * (Val(TS:1) + fbn('Spread'))) / 100) * FactorDias(fbn('FechaIni'), fbn('FechaFin'), fbn('DayCount') + 1))
+    SQL.ADD(" Update "~DBO~".CUOTAS ")
+    IF Eqstr(fbn('Tipo'), 'Vehiculo')
+        SQL.ADD(" Set Cantidad3 = "~Fstr(Val(IT:1), 0, 2)~", ")
+        SQL.ADD(" Precio1 = "~Fstr(Val(TS:1), 0, 8)~" ")
+    ELSE
+        SQL.ADD(" Set Cantidad4 = "~Fstr(Val(IT:1), 0, 2)~", ")
+        SQL.ADD(" Precio2 = "~Fstr(Val(TS:1), 0, 8)~" ")
+    ENDIF
+    SQL.ADD(" Where NrOperacion = '"~fbn('NrOperacion')~"' ")
+    SQL.ADD(" AND NrCuota = "~Fstr(fbn('NrCuota'), 0, 0)~" ")
+    SQL.NEW
+    SQL.EXEC
+    SQL.ActualizarMovimientos3(fbn('NrOperacion'),SI,NO,NO,NO,SI)
+    SQL.EXEC
+Proximo

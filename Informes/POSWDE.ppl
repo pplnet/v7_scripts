@@ -1,0 +1,243 @@
+﻿CrearDialogo
+  NrOperacion1   : 'Minuta Nro'   ;;;;;;;;;;
+FinDialogo
+
+if not OK
+  Cancelar
+endif
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+CrearFont(3, 'Arial,10,B')
+
+SetFilaActual(1)
+ACT(a:1,'Operaciones Financieras CONFIDENCIAL')
+SetFont(a:1,1)
+
+
+**** PRIMERO HAGO UN SELECT PARA OBTENER LOS DATOS DEL ENCABEZADO ****
+***---RB9 lo pongo en 0 (cero) para los Caps/Floor para que tome la parte del vehiculo como fija
+***---y la de la contraparte como flotante.
+SQL.ADD(" SELECT O.Especie, O.RB5, O.RB8, O.RB9, ")
+SQL.ADD(" O.TipoOp, O.ContraEspecie, ")
+SQL.ADD(" O.Vehiculo1, C.Fecha1, C.Fecha2, C.Plazo1, O.FechaOp, O.Cliente1, O.TipoOp ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+SQL.ADD(" WHERE O.NrOperacion='"~Dialogo.NrOperacion1~"' AND O.NrOperacion = C.NrOperacion ")
+*SQL.ADD(" Order by 1, ")
+SetFilaActual(2)
+
+ACN(nu1,0)
+ACN(in1,0)
+ACN(pl1,0)
+Recorrer SQL
+   if FBN['RB8']=0
+      ACT(dc1,'Act Act')
+   else
+      if FBN['RB8']=1
+         ACT(dc1,'Act 365 F')
+      else
+         if FBN['RB8']=2
+            ACT(dc1,'Act 360')
+         else
+            if FBN['RB8']=3
+               ACT(dc1,'360 360')
+            else
+               if FBN['RB8']=4
+                  ACT(dc1,'30E 360')
+               endif
+            endif
+         endif
+      endif
+   endif
+
+   if FBN['RB5']=0
+      ACT(dc2,'Act Act')
+   else
+      if FBN['RB5']=1
+         ACT(dc2,'Act 365 F')
+      else
+         if FBN['RB5']=2
+            ACT(dc2,'Act 360')
+         else
+            if FBN['RB5']=3
+               ACT(dc2,'360 360')
+            else
+               if FBN['RB5']=4
+                  ACT(dc2,'30E 360')
+               endif
+            endif
+         endif
+      endif
+   endif
+
+   SCN(nu1,1)
+   SCN(pl1, FBN['Plazo1'])
+   ACN(LG:1, Longitud(fbn('Especie')))
+   if Val(nu1)=1
+      if EqStr(Copy(FBN['Especie'], 1, Val(LG:1)), Copy(FBN['ContraEspecie'], 1, Val(LG:1)))
+          *** Es un swap de tasa de interes o Caps
+          ACT(tx1,'TASA')
+          ACN(in1,1)
+      else
+      ACT(tx1,'MONEDA')
+      endif
+      ** Veo como paga el Vehiculo
+      if FBN['RB9']=1
+          ACT(tx2,'FLOTANTE')
+          ACT(tx3,'FIJA')
+      else
+          ACT(tx2,'FIJA')
+          ACT(tx3,'FLOTANTE')
+      endif       
+      ACT(a:fac, 'SWAP DE '~IIF(EqStr(Copy(FBN['Especie'], 1, Val(LG:1)),Copy(FBN['ContraEspecie'], 1, Val(LG:1))),'TASA','MONEDA'))
+      SetFont(a:fac,3)
+      SetFilaActual(fac+2)
+      ACT(a:fac+2, 'Fecha Inicio: '~FBN['Fecha1'])
+      ACT(a:fac,   'MinutaNro: '~Dialogo.NrOperacion1)
+      ACT(a:fac+1, 'Portafolio: '~FBN['Vehiculo1'])
+      ACT(a:fac+5, 'Fecha de Concertacion: '~FBN['FechaOp'])
+      ACT(a:fac+6, 'Calculo de interes:        Vehiculo: '~Val(dc1))
+      ACT(a:fac+7, '                                    Contraparte: '~Val(dc2))
+      ACT(a:fac+8, 'Contraparte: '~FBN['Cliente1'])
+      ACT(mo1, FBN['Especie'])
+      ACT(mo2, FBN['ContraEspecie'])
+   endif
+   ACT(a:fac+3, 'Fecha Vto: '~FBN['Fecha2'])
+   ACT(a:fac+4, 'Plazo de op: '~FStr(Val(pl1),0,0)~' dias')
+   ACT(op1, FBN['TipoOp'] )
+   dfa
+Proximo
+
+
+SetFont(a:fac..a:fac+9,1)
+
+** Si el SELECT es vacio no muestro el informe
+if Val(nu1)=0
+  Messagebox('No dispone de detalle')
+  Cancelar
+endif
+
+SetFilaActual(fac+12)
+ACT(c:fac, 'TEL PAGA/ PARTE '~Val(tx2))
+ACT(d:fac+1, '   ('~Val(mo1)~')')
+ACT(m:fac, 'TEL RECIBE/ PARTE '~Val(tx3))
+ACT(n:fac+1, '   ('~Val(mo2)~')')
+SetFont(b:fac..n:fac+1,1)
+
+
+**** EMPIEZO A IMPRIMIR COLUMNAS Y DATOS SOLICITADOS ****
+
+SetFilaActual(fac+3)
+ACT(a:fac, 'Cap. Res.')
+ACT(b:fac, 'Cuota Amort')
+ACT(c:fac, 'F. Inicio')
+ACT(d:fac, 'Plazo')
+ACT(e:fac, 'F. Fin')
+ACT(f:fac, 'F. Pago')
+ACT(g:fac, 'Tasa '~Val(tx2))
+ACT(h:fac, 'Int a Pagar')
+if Val(in1)=1
+    ACN(co1,9)
+else
+    ACT(i:fac, 'Total a Pagar')
+    ACN(co1,10)
+endif
+ACT(Val(co1)+1:fac, 'Cap. Res.')
+ACT(Val(co1)+2:fac, 'Cuota Amort.')
+ACT(Val(co1)+3:fac, 'F. Inicio')
+ACT(Val(co1)+4:fac, 'Plazo')
+ACT(Val(co1)+5:fac, 'F. Fin')
+ACT(Val(co1)+6:fac, 'F. Pago')
+ACT(Val(co1)+7:fac, 'Tasa '~Val(tx3))
+ACT(Val(co1)+8:fac, 'Int a Recibir')
+if Val(in1)=1
+   ACT(Val(co1)+9:fac, 'Neto/Compens.')
+endif
+AgregarMarco(a:fac..Val(co1)-1:fac,2,1,Exe('COLOR6'))
+AgregarMarco(Val(co1)+1:fac..r:fac,2,1,Exe('COLOR6'))
+AlinearCeldas(a:fac..r:fac,'C')
+ACN(fi1,fac)
+SetFont(a:fac..Val(co1)+9:fac,1)
+
+SQL.ADD(" SELECT C.Total3 VSpread, C.Total4 CSpread, C.Cantidad3 InteresV, C.Cantidad4 InteresC, ")
+SQL.ADD(" C.Fecha1 FInicioV,C.Fecha5 FInicioC,C.Plazo1,C.Plazo2, C.Fecha2 FFinV, C.Fecha6 FFinC, ")
+SQL.ADD(" C.Cantidad1 ResidualV, C.Precio1 TasaV, C.Precio2 TasaC, C.Cantidad2 ResidualC ")
+SQL.ADD(" ,C.Fecha3 FechaPago ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".CUOTAS C ")
+SQL.ADD(" WHERE O.NrOperacion='"~Dialogo.NrOperacion1~"' AND O.NrOperacion = C.NrOperacion ")
+Recorrer SQL
+   ACN(a:fac, FBN['ResidualV'])
+   ACN(b:fac, 0)
+   ACD(c:fac, FBN['FInicioV'])
+   ACN(d:fac, FBN['Plazo1'])
+   ACD(e:fac, FBN['FFinV'])
+   ACD(f:fac, FBN['FechaPago'])
+   ACN(g:fac, FBN['TasaV']+FBN['VSpread'])
+   ACN(h:fac, FBN['InteresV'])
+   if Val(in1)=0
+      ACN(i:fac, FBN['InteresV'])
+   endif 
+   ACN(Val(co1)+1:fac, FBN['ResidualC'])
+   ACN(Val(co1)+2:fac, 0)
+   ACD(Val(co1)+3:fac, FBN['FInicioC'])
+   ACN(Val(co1)+4:fac, FBN['Plazo2'])
+   ACD(Val(co1)+5:fac, FBN['FFinC'])
+   ACD(Val(co1)+6:fac, FBN['FFinC'])
+   ACN(Val(co1)+7:fac, FBN['TasaC']+FBN['CSpread'])
+   ACN(Val(co1)+8:fac, FBN['InteresC'])
+*   if Val(in1)=1
+*      ACT(Val(co1)+9:fac, )
+*   endif
+
+Proximo
+
+AgregarMarco(a:Val(fi1)..Val(co1)-1:fac,2,2)
+AgregarMarco(Val(co1)+1:Val(fi1)..r:fac,2,2)
+FormatoCeldas(g:Val(fi1)..g:fac,Exe('F6'))
+FormatoCeldas(d:Val(fi1)..d:fac,Exe('F0'))
+FormatoCeldas(Val(co1)+4:Val(fi1)..Val(co1)+4:fac,Exe('F0'))
+FormatoCeldas(Val(co1)+7:Val(fi1)..Val(co1)+7:fac,Exe('F6'))
+SetFont(a:Val(fi1)..w:fac,2)
+SetFilaActual(fac+3)
+ACT(a:fac,'           ___________________________')
+ACT(b:fac+1,'Dealer: ')
+ACT(d:fac,'___________________________')
+ACT(e:fac+1,'Aprobado por: ')
+SetFont(a:fac..e:fac+1,1)
+SetFilaActual(fac+4)
+ACT(b:fac,'       ___________________________')
+ACT(c:fac+1,'Liquidado por: ')
+SetFont(b:fac..c:fac+1,1)
+
+ACO(1,9)
+ACO(2,7)
+ACO(3,6)
+ACO(4,3)
+ACO(5,6)
+ACO(6,6)
+ACO(7,8)
+ACO(8,8)
+ACO(9,9)
+ACO(Val(co1),2)
+ACO(Val(co1)+1,9)
+ACO(Val(co1)+2,7)
+ACO(Val(co1)+3,6)
+ACO(Val(co1)+4,3)
+ACO(Val(co1)+5,6)
+ACO(Val(co1)+6,6)
+ACO(Val(co1)+7,8)
+ACO(Val(co1)+8,8)
+ACO(Val(co1)+9,9)
+
+*LimitesVision(t:fac+3)
+Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:FAC,2)
+SetFont(g:3,2)
+LimitesVision(t:fac+3)
+
+*
+*    Esto es lo que agrega Silvia
+*
+RangoTitulo(a:1..t:fac+3, 5)

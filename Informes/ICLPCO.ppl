@@ -1,0 +1,199 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1     : 'Fecha Desde'                  ;1;1;;;;Dialogo.Fecha1 <> 0;'Fecha Desde Invalida';NO;PriDeMes(Fsys,SI);
+  Fecha2     : 'Fecha Hasta'                  ;1;2;;;;Dialogo.Fecha2 <> 0;'Fecha Hasta Invalida';NO;Fsys;
+  Cliente1   : 'Cliente'                      ; ;1
+  Especie1   : 'Especie'                      ; ;
+  Fecha3     : 'Fecha Proc'                   ;;;;NO;NO;;;;Fsys;
+FinDialogo
+if not Ok
+  Cancelar('')
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+
+SetFilaActual(4)
+ACT(f:FAC,'ICL - Prestamos Concertados por Periodo')
+SetFont(f:fac,3)
+acn(w1,fac)
+ACT(a:fac, 'Fecha : '~Dialogo.Fecha2)
+
+if NoVacio(Dialogo.Cliente1)
+  ACT(a:FAC+1, 'Cliente : '~Dialogo.Cliente1)
+else
+  ACT(a:FAC+1, 'Cliente : Todos')
+endif
+
+if NoVacio(Dialogo.Especie1)
+  ACT(a:FAC+2, 'Especie : '~Dialogo.Especie1)
+else
+  ACT(a:FAC+2, 'Especie : Todas')
+endif
+
+act(a:fac+3,'Fecha Concertacion: '~Dialogo.Fecha1~' - '~Dialogo.Fecha2)
+
+SetFont(a:Val(w1)..a:Val(w1)+2,2)
+
+SetFilaActual(fac+5)
+acn(w2,fac)
+
+ACT(a:FAC, 'Operacion')
+ACT(b:FAC, 'Fecha Vto.')
+ACT(b:FAC+1, 'CONU')
+ACT(c:FAC, 'Tipo Op.')
+ACT(d:FAC, 'Cliente')
+ACT(e:FAC, 'Especie')
+ACT(f:FAC, 'Cantidad')
+ACT(g:FAC, 'Tasa')
+ACT(g:FAC+1, 'Variable')
+ACT(h:FAC, 'T.Base')
+ACT(i:FAC, 'Spread')
+ACT(i:FAC+1, 'Variable')
+ACT(j:FAC, 'T.Spread')
+ACT(k:FAC, 'CONU')
+ACT(k:FAC+1, 'Relacionada')
+*13/09/24 Se agrega  OPERACIONES CB9
+ACT(l:FAC, ' Bloqueada')
+ACT(l:FAC+1,'SI/NO')
+* FJL 15/01/20 - Se agrega Termsheet ID
+ACT(m:FAC, 'TermSheet ID')
+* FJL 07/11/20 - Se agrega TipoCONU
+ACT(n:FAC, 'Tipo CONU')
+
+
+SetFont(a:Val(w1)..n:FAC+1,2)
+AgregarMarco(a:Val(w2)..n:Val(w2)+1,2,0,EXE('COLOR'))
+ACN(x1,0)
+SetFilaActual(fac+1)
+acn(w2,fac+1)
+
+SQL.ADD(" Select O.NrOperacion, O.Cliente1, O.Especie, O.TipoOp, O.Cantidad, O.Book1, O.FechaOp, ")
+SQL.ADD("  O.FechaVto, Case When OP.DiasAnio = '0' Then 36000 Else 36500 End Divisor, OP.CB1, OP.FechaVto as Vencimiento, ")
+SQL.ADD("  OP.Precio1 as Tasa, OP.TipoTasa as CodTasa, OP.Spread, OP.Especie1 as CodSpread,")
+* FJL 15/01/20 - Se agrega Termsheet ID
+*SQL.ADD("  O.ObservacDoc as TSID,  ")
+* FJL 07/11/20 - Por Issue 4523 se cambia el campo del TS y se agrega TipoCONU
+SQL.ADD("  O.Termsheet as TSID, O.TipoCONU,")
+SQL.ADD("  O.OperacionRef, ")
+*13/09/2024 Se agrega  Operaciones Bloqueadas
+SQL.ADD(" O.CB9")
+*SQL.ADD("  Case When O.TipoOp = 'CONU' Then O.NrOperacion Else O.OperacionRef end OperacionRef")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONES OP, "~DBO~".OPERACIONESBITS OB ")
+SQL.ADD(" where O.FechaOp Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"' ")
+SQL.ADD("   and O.NrOperacion = OB.NrOperacion ")
+SQL.ADD("   and (OP.NrOperacion = O.OperacionRef  or (O.TipoOp = 'CONU' and OP.NrOperacion = O.NrOperacion))")
+SQL.ADD("   and OB.NrBit in ('10','70') ")
+SQL.ADD("   and OB.Valor = '1' ")
+SQL.ADD("   and O.TipoOp in ('PICD','PICO','CONU')")
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD("   and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+endif
+if NoVacio(Dialogo.Especie1)
+   SQL.ADD("   and O.Especie = '"~Dialogo.Especie1~"' ")
+endif
+SQL.ADD("Order by O.FechaOp, O.Cliente1, O.NrOperacion ")
+watch(SQL.Batch)
+recorrer SQL
+
+ scn(z1,1)
+ If Not EqStr(FBN('Cliente1'),val(z2)) o FBN('FechaOp')<>val(z3)
+  if FBN('FechaOp')<>val(z3)
+     ifa
+     act(a:fac, 'Fecha de Operación: '~FBN('FechaOp'))
+     AgregarMarco(a:fac..d:fac,1,0)   
+     SetFont(a:fac, 2)
+     ifa
+     acd(z3,FBN('FechaOp'))
+  endif
+
+  ifa
+  act(a:fac, BuscarCampo('CLIENTES','RazonSocial','Codigo',FBN('Cliente1')))
+  SetFont(a:fac, 2)
+  SetFilaActual(fac+1)
+  act(z2, FBN('Cliente1'))
+ Endif  
+
+  ACT(a:FAC, FBN('NrOperacion'))
+  ACLO(a:FAC, FBN('NrOperacion'))
+  If FBN('CB1')=1
+     ACT(b:FAC, 'EverGreen')
+  Else     
+    ACD(b:FAC, FBN('Vencimiento'))
+  Endif
+  ACT(c:FAC, FBN('TipoOp'))
+  ACT(d:FAC, FBN('Cliente1'))
+  ACT(e:FAC, FBN('Especie'))
+  if Incluido(FBN('TipoOp'),'PICD')
+    ACN(f:FAC, -FBN('Cantidad'))
+  else
+    ACN(f:FAC, FBN('Cantidad'))
+  endif
+ 
+   if Vacio(fbn('CodTasa'))
+      ACN(h:FAC,fbn('Tasa'))
+   Else
+      ACT(g:FAC, fbn('CodTasa'))
+      ACN(h:FAC,SQL("select Valor1 from "~DBO~".TASASDIA where TipoTasa = '"~fbn('CodTasa')~"' and Especie ='"~fbn('Especie')~"' and Fecha=  (select Max(Fecha) from "~DBO~".TASASDIA where Fecha<= '"~IdxDate(fbn('FechaOp'))~"' and TipoTasa = '"~fbn('CodTasa')~"' and Especie ='"~fbn('Especie')~"') "))
+   Endif
+
+   if Vacio(fbn('CodSpread'))
+      ACN(j:FAC,fbn('Spread'))
+   Else
+      ACT(i:FAC, fbn('CodSpread'))
+      ACN(j:FAC,SQL("Select Precio1 from "~DBO~".COTIZACIONES where Codigo = '"~fbn('CodSpread')~"' and Fecha=  (select Max(Fecha) from "~DBO~".COTIZACIONES where Fecha<= '"~IdxDate(fbn('FechaOp'))~"' and Codigo = '"~fbn('CodSpread')~"') "))
+   Endif
+
+   If Not EqStr(FBN('TipoOp'),'CONU')
+      ACT(k:fac, FBN('OperacionRef') )
+      ACLO(k:fac, FBN('OperacionRef') )  
+   Endif
+* 13/09/24
+    if EqStr(FBN['CB9'], '1') 
+        ACT(l:fac,'SI')
+    else
+        ACT(l:fac,'NO')
+    endif
+* FJL 15/01/20 - Se agrega Termsheet ID (CONU)
+   If Incluido(fbn['TipoOp'],'CONU') 
+     ACT(m:fac, fbn('TSID'))
+* FJL 07/11/20 - Se agrega TipoCONU
+     ACT(n:fac, FBN['TipoCONU'])
+   EndIf
+   If Incluido(fbn['TipoOp'],'PICO|PICD')
+* FJL 07/11/20 - Por Issue 4523 se cambia el campo del TS y se agrega TipoCONU
+*     ACT(l:fac, BuscarCampo('OPERACIONES','ObservacDoc','NrOperacion',fbn('OperacionRef')))
+     ACT(m:fac, fbn('TSID'))
+* FJL 13/11/20 - Se agrega TipoCONU
+     ACT(n:fac, FBN['TipoCONU'])
+   EndIf
+
+   SetFont(a:FAC..n:FAC,1)  
+Proximo
+FormatoCeldas(f:Val(w2)..f:fac,Exe('F2'))
+
+ACO(1,6)
+ACO(2,7)
+ACO(3,6)
+ACO(4,8)
+ACO(5,5)
+ACO(6,10)
+ACO(7,6)
+ACO(8,6)
+ACO(9,6)
+ACO(10,7)
+ACO(11,10)
+ACO(12,7)
+* FJL 07/11/20 - Se agrega TipoCONU
+ACO(13,8)
+ACO(14,7)
+
+*Impresion(1,2)
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:FAC, 2)
+LimitesVision(n:FAC)
+RangoTitulo(a:1..n:FAC, Val(w2))
+SetPrintFit(3, 95)

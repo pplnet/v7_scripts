@@ -1,0 +1,215 @@
+﻿ModoReproceso(SinDialogo)
+
+CrearDialogo:2
+  Vehiculo1: 'Vehiculo' ;;;;;;NoVacio(Dialogo.VEHICULO1);'Debe ingresar un Vehiculo';NO;VAR('VEHICULODE')
+  Fecha1   : 'Fecha'    ;;;;;;;;;FSys
+  Operador : 'Operador' ;;;;;;;;;UsuarioActivo
+  Radio1   : 'Titulos|Publicos|Privados|Todos';;;;;;;;;2
+FinDialogo
+
+if not Ok
+   Cancelar
+endif
+
+ACT(a1, 'Posicion Trading')
+ACT(a2, 'Fecha : '~Dialogo.Fecha1)
+
+if NoVacio(Dialogo.Operador)
+   ACT(a3, 'Operador : '~Dialogo.Operador)
+else
+   ACT(a3, 'Operador : Todos')
+endif
+
+if NoVacio(Dialogo.Vehiculo1)
+   ACT(a4, 'Vehiculo : '~Dialogo.Vehiculo1)
+else
+   ACT(a4, 'Vehiculo : Todos')
+endif
+
+ACT(a6, 'Especie')
+ACT(c6, 'Posicion de Trading')
+ACT(b7, 'CVal')
+ACT(c7, 'Cant. V/N')
+ACT(d7, 'PPP')
+ACT(e6, 'Trading')
+ACT(f6, 'Caja')
+ACT(f7, 'Utilizada')
+ACT(g6, 'Posicion')
+ACT(g7, 'Final')
+ACT(h6, 'Precio')
+ACT(h7, 'Equilibrio')
+
+SetFilaActual(8)
+acn(lc1,0) 
+
+SQL.ADD("SELECT E.Codigo, E.Nombre, E.VTeorico, O.TipoOp, MP.Cantidad as Cantidad, O.Precio1, O.TotalNetoCli1, O.ContraEspecie, E.Tipo, E.Cotiza ")
+SQL.ADD("FROM   "~DBO~".ESPECIES E, "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B,"~DBO~".MOVPOSEJE MP ")
+SQL.ADD("WHERE  O.NrOperacion=B.NrOperacion and ")
+SQL.ADD("       B.Valor=0 and B.NrBit in ('30') and ")
+SQL.ADD("       O.Especie = E.Codigo and O.FechaOp = '"~IdxDate(Dialogo.Fecha1)~"' and (O.PaseCB = '0' or O.PaseCB is NULL) ")
+if NoVacio(BuscarCampo('VARIABLES', 'Valor', 'Codigo', 'LE'~Dialogo.Operador))
+   SQL.ADD("     and E.Codigo in ("~Pipe2Comillas(BuscarCampo('VARIABLES', 'Valor', 'Codigo', 'LE'~Dialogo.Operador))~") ")
+endif
+if NoVacio(Dialogo.Vehiculo1)
+   SQL.ADD("    and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+endif
+SQL.ADD("       and O.TipoOp in ('TIC','TIV','IC','IV','TIADJ','TIRES') and (O.Direccion<>1 or O.Direccion is NULL) ")
+SQL.ADD("       and O.NrOperacion=MP.NrOperacion and MP.NrSaldo IN (103,106) ")
+SQL.ADD(" ORDER BY E.Codigo ")  
+
+Recorrer SQL
+
+ If Not EqStr(fbn('Codigo'), val(zz2)) y val(lc1)<>0  
+    ACN(ae:val(lc1), Val(ae:val(lc1))/Val(ad:val(lc1)))
+    ACN(ai:val(lc1), Val(ai:val(lc1))/Val(ah:val(lc1)))
+
+    * Remanente 
+    ACN(ak:val(lc1), Val(ad:val(lc1))-Val(ah:val(lc1)))
+      
+    if Val(ad:val(lc1))-Val(ah:val(lc1)) > 0
+       ACT(b:val(lc1), 'Comprado')
+    else
+       if Val(ad:val(lc1))-Val(ah:val(lc1)) < 0
+          ACT(b:val(lc1), 'Vendido')
+       else
+          ACT(b:val(lc1), 'Neutro')
+       endif
+    endif
+      
+    ACN(g:val(lc1), Val(aa:val(lc1))+Val(ad:val(lc1))-Val(ah:val(lc1)))
+    ACN(c:val(lc1), Val(ad:val(lc1))-Val(ah:val(lc1)))
+     
+    If Eqstr(BuscarCampo('ESPECIES','InteresesC','Codigo',val(zz2)),'CLE')
+       ACN(am:val(lc1), fbn('VTeorico'))
+       If Val(am:val(lc1)) = 0
+          ACN(am:val(lc1), 1)
+       Endif
+    Else
+       ACN(am:val(lc1), 1)
+    Endif
+
+    If Val(ad:val(lc1)) > Val(ah:val(lc1))
+       ACN(d:val(lc1), Val(ae:val(lc1)))
+       ACN(e:val(lc1), Val(ah:val(lc1))*(Val(ai:val(lc1))-Val(ae:val(lc1))))
+    Else
+       ACN(d:Val(lc1), Val(ai:val(lc1)))
+       ACN(e:Val(lc1), Val(ad:val(lc1))*(Val(ai:val(lc1))-Val(ae:val(lc1))))
+    Endif
+    IF EqStr(Val(b:val(lc1)),'Neutro')
+       ACN(d:Val(lc1), 0)
+    ENDIF
+
+    ACN(h:val(lc1), ((Val(ad:val(lc1))*Val(ae:val(lc1))) - (Val(ah:val(lc1))*Val(ai:val(lc1))))/Val(ak:val(lc1)))
+
+    acn(lc1,0) 
+ Else
+
+    SetFilaActual(FAC-1)
+ EndIf
+
+ If Not EqStr(fbn('Codigo'), val(zz2))  
+    ACT(zz2, fbn('Codigo'))       
+
+    ACT(zz1, BuscarCampo('ESPECIES','Tipo','Codigo',fbn('Codigo')))  
+
+    ACN(z2,-1)
+
+    If DesciendeDeEspecie(fbn('Codigo'),'TITULO') y EsTerminal(fbn('Codigo'), Especie)
+       * determinar tipo de titulo
+       ACN(z2,0)
+       if EqStr(Val(zz1),'PUB')
+          ACN(z2,1)
+       endif
+       if EqStr(Val(zz1),'PRI') o EqStr(Val(zz1),'ONE')
+          ACN(z2,2)
+       endif
+    
+       If [Val(z2)=1 y Dialogo.Radio1=0] o [Val(z2)=2 y Dialogo.Radio1=1] o Dialogo.Radio1=2
+             
+          * por ahora no se arrastra saldo del dia anterior
+          ACT(a:fac, fbn('Codigo')~' - '~BuscarCampo('ESPECIES','Nombre','Codigo',FBN['Codigo']))
+
+          AsignarLink(a:fac, 'WILLI2', Especie1 = FBN['Codigo'], Fecha1 = Dialogo.Fecha1, Operador = Dialogo.Operador, Vehiculo1=Dialogo.Vehiculo1)
+
+          *- lc1: Linea para Listar una Especie 
+          ACN(lc1,fac) 
+       EndIf
+    EndIf
+ EndIf
+
+ If [Val(z2)=1 y Dialogo.Radio1=0] o [Val(z2)=2 y Dialogo.Radio1=1] o Dialogo.Radio1=2    
+    *- Se listan todas las operaciones de esa especie 
+    If Incluido(fbn('TipoOp'),'TIC|IC|TIADJ')
+       ACN(ct:1,iif(Not Eqstr(FBN('ContraEspecie'), fbn('Cotiza')),COTIZACIONC(fbn('ContraEspecie'),,,,Dialogo.Fecha1,1,SI,fbn('Cotiza')),1))
+       SCN(ad:val(lc1), fbn('Cantidad'))
+       SCN(ae:val(lc1), fbn('Cantidad')*fbn('Precio1')*Val(ct:1))
+       SCN(f:val(lc1) , -fbn('TotalNetoCli1')*Val(ct:1))
+    else
+       SCN(ah:val(lc1), -fbn('Cantidad'))
+       SCN(ai:val(lc1), -fbn('Cantidad')*fbn('Precio1')*Val(ct:1))
+       SCN(f:val(lc1),  fbn('TotalNetoCli1')*Val(ct:1))
+    endif
+ Endif
+    
+Proximo
+
+    ACN(ae:val(lc1), Val(ae:val(lc1))/Val(ad:val(lc1)))
+    ACN(ai:val(lc1), Val(ai:val(lc1))/Val(ah:val(lc1)))
+
+    * Remanente 
+    ACN(ak:val(lc1), Val(ad:val(lc1))-Val(ah:val(lc1)))
+      
+    if Val(ad:val(lc1))-Val(ah:val(lc1)) > 0
+       ACT(b:val(lc1), 'Comprado')
+    else
+       if Val(ad:val(lc1))-Val(ah:val(lc1)) < 0
+          ACT(b:val(lc1), 'Vendido')
+       else
+          ACT(b:val(lc1), 'Neutro')
+       endif
+    endif
+      
+    ACN(g:val(lc1), Val(aa:val(lc1))+Val(ad:val(lc1))-Val(ah:val(lc1)))
+    ACN(c:val(lc1), Val(ad:val(lc1))-Val(ah:val(lc1)))
+     
+    If Val(ad:val(lc1)) > Val(ah:val(lc1))
+       ACN(d:val(lc1), Val(ae:val(lc1)))
+       ACN(e:val(lc1), Val(ah:val(lc1))*(Val(ai:val(lc1))-Val(ae:val(lc1))))
+    Else
+       ACN(d:Val(lc1), Val(ai:val(lc1)))
+       ACN(e:Val(lc1), Val(ad:val(lc1))*(Val(ai:val(lc1))-Val(ae:val(lc1))))
+    Endif
+    IF EqStr(Val(b:val(lc1)),'Neutro')
+       ACN(d:Val(lc1), 0)
+    ENDIF
+
+    ACN(h:val(lc1), ((Val(ad:val(lc1))*Val(ae:val(lc1))) - (Val(ah:val(lc1))*Val(ai:val(lc1))))/Val(ak:val(lc1)))
+
+    acn(lc1,0) 
+
+
+* si esta todo en cero no se imprime
+if Val(c:val(lc1))=0 y Val(d:val(lc1))=0 y Val(e:val(lc1))=0 y [Val(f:val(lc1))=0 o Vacio(Val(f:val(lc1)))] y Val(h:val(lc1))=0 y [Val(g:val(lc1))=0 o Vacio(Val(g:val(lc1)))]
+   BorrarCeldas(a:val(lc1)..h:val(lc1))
+   dfa
+endif
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+SetFont(a1..z8, 1)
+SetFont(a8..z:fac+1, 2)
+
+ACO(1,15)
+AgregarMarco(a6..h7,1,0,Exe('COLOR'))
+AgregarMarco(b6..d6,1,0,Exe('COLOR'))
+AgregarMarco(b7..b7,1,0,Exe('COLOR'))
+AgregarMarco(c7..c7,1,0,Exe('COLOR'))
+AgregarMarco(d7..d7,1,0,Exe('COLOR'))
+
+LimitesVision(i:FAC+3)
+FormatoCeldas(c1..i:fac+1,Exe('F0R'))
+FormatoCeldas(d1..d:fac+1,Exe('F7'))
+FormatoCeldas(h1..h:fac+1,Exe('F10'))
+CrearFont(6,"Arial,6,B")
+RangoTitulo(a:6..i:FAC, 7)
+

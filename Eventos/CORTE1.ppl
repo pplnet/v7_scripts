@@ -1,0 +1,478 @@
+﻿MostrarCuadroDeMensajes
+** FJL 28/06/18 - Por tasa Variable
+** Se agrega un dialogo inicial con los datos basicos necesarios para calcular la tasa variable 
+** y despues se muestra el dialogo que ya existia con los campos clave no editables
+
+CrearDialogo
+   Especie1   :'Especie'        ; 1;1;;  ;  ;NoVacio(Dialogo.Especie1) y DesciendeDeEspecie(Dialogo.Especie1,'TITULO') y NOT DesciendeDeEspecie(Dialogo.Especie1,'CUPON');'Debe Ingresar una Especie Valida';NO;;;;;;"Status = 'HAB' "
+   Fecha4     :'F.Actualiz'     ; 1;2;;  ;  ;Dialogo.Fecha4>0;'La fecha de actualizacion ingresada no es valida';NO;Fsys;
+   Fecha1     :'F.Corte'        ; 2;1;;  ;  ;Dialogo.Fecha1>0;'La fecha ingresada no es valida';NO;FSys;SQL(" Select FechaCorte From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1, 0, 0)~"' ");
+   Fecha6     :'F.Pago'         ; 2;2;;NO;SI;Dialogo.Fecha6>0;'La fecha ingresada no es valida';NO;FSys;SQL(" Select FechaPago From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1, 0, 0)~"' ");
+   Fecha3     :'F.Corte'        ; 3;2;;NO;NO;Dialogo.Fecha3>=FSYS;'La Fecha de Corte Esta Vencida';SI;Dialogo.Fecha1;Dialogo.Fecha1
+   Fecha2     :'Valida fecha1'  ; 3;2;;NO;NO;Dialogo.Fecha1 >= SQL(" SELECT FechaCorte FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' ");'La fecha ingresada es anterior a la fecha de corte del proximo cupon.';SI;
+   Entero1    :'Nr.Cupon'       ; 3;1;;  ;  ;Dialogo.Entero1>=0;'Debe Ingresar el Numero de Cupon';NO;0;BuscarCampo('ESPECIES','Cupon','Codigo',Dialogo.Especie1)
+   Vehiculo1  :'Vehiculo'       ; 4;1;;NO;SI;;;;VAR('VEHICULODE');
+   Check1     :'Procesa'        ; 5;1;;NO;NO;;;;1;
+FinDialogo
+If Not OK
+   Cancelar('Evento Cancelado')
+EndIf
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+ACT(x:1, Dialogo.Especie1)
+ACD(x:2, Dialogo.Fecha4)
+ACD(x:3, Dialogo.Fecha1)
+ACD(x:4, Dialogo.Fecha6)
+ACD(x:5, Dialogo.Fecha3)
+ACD(x:6, Dialogo.Fecha2)
+ACN(x:7, Dialogo.Entero1)
+ACT(x:8, Dialogo.Vehiculo1)
+ACN(y:1, Dialogo.Check1)
+
+** FJL 04/07/18 - Por Fecha Devenga Tasa + Tasa Minima y Maxima
+SQL.ADD("SELECT * FROM "~DBO~".ESPECIES WHERE Codigo = '"~Dialogo.Especie1~"'")
+Recorrer SQL
+  ACT(v:1, fbn('Codigo'))  
+  ACT(v:2, fbn('DiasAnio'))
+  ACT(v:3, fbn('TasaCER'))  
+  ACT(v:4, fbn('DevengaTasa'))
+  ACN(v:5, fbn('TasaMax'))  
+  ACN(v:6, fbn('TasaMin'))  
+proximo
+
+** Fecha
+if EqStr(Val(v:4),'COR')
+  ACD(v:7, SQL(" Select FechaCorte From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1, 0, 0)~"' "))
+else
+  if EqStr(Val(v:4),'PAG')
+    ACD(v:7, SQL(" Select FechaPago From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1, 0, 0)~"' "))
+  else
+    ACD(v:7, SQL(" Select FechaPagoOriginal From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1, 0, 0)~"' "))
+  endif
+endif
+** Fecha Anterior
+if Dialogo.Entero1=1
+  ACD(v:8, Buscarcampo('ESPECIES','FEmision','Codigo',Dialogo.Especie1))
+else
+  if EqStr(Val(v:4),'COR')
+    ACD(v:8, SQL(" Select FechaCorte From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1-1, 0, 0)~"' "))
+  else
+    if EqStr(Val(v:4),'PAG')
+      ACD(v:8, SQL(" Select FechaPago From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1-1, 0, 0)~"' "))
+    else
+      ACD(v:8, SQL(" Select FechaPagoOriginal From "~DBO~".AGENDACUPONES Where Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~Fstr(Dialogo.Entero1-1, 0, 0)~"' "))
+    endif
+  endif
+endif
+** Plazo
+ACN(v:9, Val(v:7)-Val(v:8))
+** Base
+if EqStr(Val(v:2),'REA')
+  ACN(v:10 , DiasA(2,Dialogo.Fecha1))
+else
+  if EqStr(Val(v:2),'360')
+    ACN(v:10, 360)
+  else
+    ACN(v:10, 365)
+  endif
+endif
+** Indice de conversion TNA a % Renta
+ACN(v:11, Val(v:9)/(Val(v:10))) 
+
+** Calculo de tasa
+** FJL 16/01/19 -  Le saque el " y NO" que tenia este IF - Nadie sabia xq estaba
+if EqStr(Val(v:3),'FLO')
+  EjecutarEvento('CALTAV', Especie1=Dialogo.Especie1, Entero1=Dialogo.Entero1, Fecha4=Dialogo.Fecha4, Fecha1=Dialogo.Fecha1, Fecha6=Dialogo.Fecha6, Check1=Dialogo.Check1)
+endif
+  
+*** Busco la tasa y el % Renta de la agenda - Si era Variable se acaba de calcular
+ACN(x:9, SQL("SELECT TNA FROM "~DBO~".AGENDACUPONES WHERE Especie='"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"'"))
+ACN(x:10, SQL("SELECT PorRenta FROM "~DBO~".AGENDACUPONES WHERE Especie='"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"'"))
+
+CrearDialogo
+   Especie1   :'Especie'        ; 1;1;;NO;;NoVacio(Dialogo.Especie1) y DesciendeDeEspecie(Dialogo.Especie1,'TITULO') y NOT DesciendeDeEspecie(Dialogo.Especie1,'CUPON');'Debe Ingresar una Especie Valida';NO;Val(x:1);;;;;"Status = 'HAB' "
+   Fecha4     :'F.Actualiz'     ; 1;2;;NO;;Dialogo.Fecha4>0;'La fecha de actualizacion ingresada no es valida';NO;Val(x:2);
+   Fecha1     :'F.Corte'        ; 2;1;;NO;;Dialogo.Fecha1>0;'La fecha ingresada no es valida';NO;Val(x:3);
+** FJL 26/04/18 - Se agrega fecha pago. Se puede modificar en el siguiente dialogo
+   Fecha6     :'F.Pago'         ; 2;2;;NO;SI;Dialogo.Fecha6>0;'La fecha ingresada no es valida';NO;Val(x:4);
+** FJL 27/06/18 - Ingreso de TNA
+   Fecha7     :'F.Pago Orig'    ; 3;2;;NO;NO;Dialogo.Fecha6>0;'La fecha ingresada no es valida';NO;Val(v:7);
+   Fecha8     :'F.Pago Orig Ant'; 4;2;;NO;NO;Dialogo.Fecha6>0;'La fecha ingresada no es valida';NO;Val(v:8);
+*****
+   Fecha3     :'F.Corte'        ; 3;1;;NO;NO;Dialogo.Fecha3>=FSYS;'La Fecha de Corte Esta Vencida';SI;Val(x:5);
+   Fecha2     :'Valida fecha1'  ; 3; ;;NO;NO;Dialogo.Fecha1 >= SQL(" SELECT FechaCorte FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' ");'La fecha ingresada es anterior a la fecha de corte del proximo cupon.';SI;Val(x:6);
+   Entero1    :'Nr.Cupon'       ;  ; ;;NO;  ;Dialogo.Entero1>=0;'Debe Ingresar el Numero de Cupon';NO;Val(x:7);
+   Precio1    :'% Amort.Cap.'   ;  ; ;;  ;  ;Dialogo.Precio1>=0;'El % de Amortizacion debe ser Positivo';NO;SQL("SELECT PorAmCapital FROM "~DBO~".AGENDACUPONES WHERE Especie='"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"'");;;'###.#########'
+** FJL 27/06/18 - Ingreso de TNA - 28/06/18 Tasa variable
+   Precio10   :'TNA'            ;  ; ;;  ;  ;Dialogo.Precio10>=0;'La TNA debe ser Positiva';NO;Val(x:9);;;;'###.#########'
+   Precio12   :'Valido TNA Max' ; 6;1;;NO;NO;Dialogo.Precio10<=Val(v:5) o Val(v:5)=0;'La TNA no debe superar el Maximo '~FStr(Val(v:5),1,4);NO;Val(x:9);Dialogo.Precio10;;;'###.#########'
+   Precio13   :'Valido TNA Min' ; 6;1;;NO;NO;Dialogo.Precio10>=Val(v:6);'La TNA no debe ser inferior al Minimo '~ FStr(Val(v:6),1,4);NO;Val(x:9);Dialogo.Precio10;;;'###.#########'
+   Precio11   :'% Renta Agenda' ; 5;2;;NO;  ;Dialogo.Precio11>=0;'El % de Renta debe ser Positivo';NO;Val(x:10);;;;'###.#########'
+   Precio2    :'% Renta'        ; 6;2;;NO;  ;Dialogo.Precio2>=0 ;'El % de Renta debe ser Positivo';NO;Val(x:10);Dialogo.Precio10*Val(v:11);;;'###.#########'
+*****
+   Precio3    :'% Am.Int.Cap.'  ; 7;1;;;;Dialogo.Precio3>=0;'El % de Amortizacion de Intereses Capitalizados';NO;SQL("SELECT PorAmIntCap FROM "~DBO~".AGENDACUPONES WHERE Especie='"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"'");;;;'###.#########'
+   Precio6    :'% Cap.Interes'  ;  ; ;;;;Dialogo.Precio6>=0;'El % de Cap.Int. debe ser Positivo';NO;SQL("SELECT TasaCapInt FROM "~DBO~".AGENDACUPONES WHERE Especie='"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"'")              ;;;;'###.#########'
+   Precio5    :'V.T.Actual'     ;  ; ;;;;Dialogo.Precio5>0 ;'El % de V.Residual al Corte debe ser Positivo';NO;ValorTeorico(Dialogo.ESPECIE1);ValorTeorico(Dialogo.ESPECIE1);;;'###.#########'
+
+   Check6     :'Aj.Indice'      ; 7;2;;SI;EqStr(BuscarCampo('ESPECIES','Indexado','Codigo',Dialogo.Especie1),'SI');;;;IIF(EqStr(BuscarCampo('ESPECIES','Indexado','Codigo',Dialogo.Especie1),'SI'),1,0);IIF(EqStr(BuscarCampo('ESPECIES','Indexado','Codigo',Dialogo.Especie1),'SI'),1,0);
+   Fecha5     :'F.Inicio'       ;  ; ;;NO;Dialogo.Check6=1;Dialogo.Check6 = 0 o Dialogo.Fecha5>0         ;'Fecha de Inicio de Indice Ivalida';NO;BuscarCampo('ESPECIES','FEmision','Codigo',Dialogo.Especie1);BuscarCampo('ESPECIES','FEmision','Codigo',Dialogo.Especie1);
+   Especie4   :'Indice'         ;  ; ;;NO;Dialogo.Check6=1;Dialogo.Check6 = 0 o NoVacio(Dialogo.Especie4);'Indice Invalido'                  ;NO;BuscarCampo('ESPECIES','Indice','Codigo',Dialogo.Especie1);BuscarCampo('ESPECIES','Indice','Codigo',Dialogo.Especie1);
+   Precio7    :'Indice Corte'   ;  ; ;;NO;Dialogo.Check6=1;Dialogo.Precio7>=0 o Dialogo.Check6=0         ;'Indice Invalido'                  ;NO;IIF(Dialogo.Check6=1, Cotizacion(Dialogo.Especie4,,,,Dialogo.Fecha1,1,SI), 0);IIF(Dialogo.Check6=1, Cotizacion(Dialogo.Especie4,,,,Dialogo.Fecha1,1,SI), 0)
+   Precio8    :'Indice Inicio'  ;  ; ;;NO;Dialogo.Check6=1;Dialogo.Precio8>=0 o Dialogo.Check6=0         ;'Indice Invalido'                  ;NO;IIF(Dialogo.Check6=1, Cotizacion(Dialogo.Especie4,,,,Dialogo.Fecha5,1,SI), 0);IIF(Dialogo.Check6=1, Cotizacion(Dialogo.Especie4,,,,Dialogo.Fecha5,1,SI), 0)
+
+   Vehiculo1  :'Vehiculo'       ;12;1;;NO;SI;;;;Val(x:8);
+   Check1     :'Procesa'        ;12;2;;NO;NO;;;;Val(y:1);
+FinDialogo
+If Not OK
+   Cancelar('Evento Cancelado')
+EndIf
+
+** FJL 27/06/18 - Viejo antes de ingreso de TNA
+**   Precio2    :'% Renta'        ; 6;2;;NO;;Dialogo.Precio2>=0;'El % de Renta debe ser Positivo';NO;;SQL("SELECT PorRenta FROM "~DBO~".AGENDACUPONES WHERE Especie='"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"'")           ;;;'###.#########'
+
+* --- Para pasar el evento de corte --- *
+ACN(ch:6, Dialogo.Check6)
+ACD(fe:5, Dialogo.Fecha5)
+ACT(es:4, Dialogo.Especie4)
+ACN(pr:7, Dialogo.Precio7)
+ACN(pr:8, Dialogo.Precio8)
+* ------------------------ *
+
+acd(ck:1,ProxCupon2(Dialogo.Especie1, Dialogo.Fecha1+1))
+ACD(fa:1, Dialogo.Fecha4)
+
+*** Aviso si existen cupones pendientes
+ACN(az:1,0)
+SQL.ADD(" SELECT * FROM "~DBO~".MOVPENDIENTES WHERE Especie = '"~Dialogo.Especie1~"' and Cupon = "~FStr(Dialogo.Entero1,0,0))
+Recorrer SQL
+   ACN(az:1,1)
+Proximo
+
+If Val(az:1)>0 y Ok
+   ACN(az:1, MessageBox('Existen cupones pendientes de esta especie. Continua?',3,2) )
+Endif
+
+*** Si az:1=7 => el usuario NO Continua.
+If Not Ok o Val(az1)=7
+   Cancelar
+Endif
+*** Fin de Aviso...
+
+If Vacio(BuscarCampo('ESPECIES', 'Alias9', 'Codigo', Dialogo.Especie1))
+   Cancelar('La Especie no tiene el Cupon Asociado')
+Endif
+
+If Not EqStr(BuscarCampo('ESPECIES', 'Status', 'Codigo', Dialogo.Especie1), 'HAB')
+   Cancelar('La Especie debe estar Habilitada')
+Endif
+
+If BuscarCampo('ESPECIES', 'Cupon', 'Codigo', Dialogo.Especie1) <> Dialogo.Entero1
+   Cancelar('No Coincide el Nro. de Cupon corriente')
+Endif
+
+If Dialogo.Precio1 = 0 y Dialogo.Precio2 = 0
+   Cancelar('La Renta o la Amortizacion deben ser Distintos de Cero')
+Endif
+
+ACT(X:100, SQL(" SELECT Estado FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' "))
+If Eqstr(Val(x:100), 'PRO')
+   Cancelar('El cupon ya esta procesado')
+Endif
+
+ACN(z1,0)
+*** Fila 2 especie origen, fila 3 especie nueva, fila 4 cupon ***
+SQL.ADD("SELECT * FROM "~DBO~".ESPECIES WHERE Codigo = '"~Dialogo.Especie1~"'")
+Recorrer SQL
+   DFA
+   *--------------------------- Especie Origen ----------------------------*
+   ACT(a:2, fbn['Jerarquia'])
+   ACT(b:2, fbn['Codigo'])
+
+   * Nr Cupon
+   ACN(c:2, Dialogo.Entero1)
+   ACT(d:2, fbn['Nombre'])
+
+   * VT Corte
+   ACN(e:2, Dialogo.Precio5)
+
+   * Fecha de Corte
+   ACD(g:2, Dialogo.Fecha1)
+   ACT(j:2, Dialogo.Vehiculo1)
+
+   * --- Ajuste Indice
+   If Dialogo.Check6 = 1
+     ACN(aa:31, Dialogo.Precio7/Dialogo.Precio8 )
+   Else
+     ACN(aa:31, 1)
+   Endif
+
+   * Amortizacion
+   ACN(k:2, Dialogo.Precio1)
+** FJL 30/07/20 - Para recalculo de valores
+   ACN(k:6, Dialogo.Precio1/100)
+   ACN(k:7, Dialogo.Precio1/100*Val(aa:31))
+
+** FJL 27/06/18 - Ingreso de TNA
+   * TNA
+   ACN(s:2, Dialogo.Precio10)
+   * Renta
+   ACN(l:2, Dialogo.Precio2)
+** FJL 30/07/20 - Para recalculo de valores
+   ACN(l:6, Dialogo.Precio2/100)
+   ACN(l:7, Dialogo.Precio2/100*Val(aa:31))
+
+   * Amortizacion de Intereses Capitalizados
+   ACN(m:2, Dialogo.Precio3)
+** FJL 30/07/20 - Para recalculo de valores
+   ACN(m:6, Dialogo.Precio3/100)
+   ACN(m:7, Dialogo.Precio3/100*Val(aa:31))
+
+   * Tasa de Capitalizacion de Interes
+   ACN(p:2, Dialogo.Precio6)
+
+   * Factor Actual de la Especie
+   ACN(q:2, fbn('IntsCapitalizados'))
+
+   *Nr Cupon
+   ACN(n:2, Dialogo.Entero1)
+
+   *Tipo de Especie
+   ACT(o:2, fbn['Tipo'])
+
+   *-----------------------------Nuevo Cupon--------------------------------*
+   *Cupon Actual + 1
+   ACN(c:3, Val(c:2)+1)
+
+   ACN(E:99, Round(Val(e:2), 7) - Round((Val(k:2)/100), 7))
+   IF Val(E:99) <= 0
+       ***---Ya Amortizo todo el capital, => no hay proximo cupon
+       ACN(C:3, Val(C:2))
+   ENDIF
+
+   * Plazo
+   IF EspecieDiasAnio(Dialogo.Especie1)=0 y EspecieDiasMes(Dialogo.Especie1)=0
+      ACN(pl:1, Dif360(UltCupon2(Dialogo.Especie1,Dialogo.Fecha1-1),Dialogo.Fecha1,2) )
+   ELSE
+      ACN(pl:1, DifDias(UltCupon2(Dialogo.Especie1,Dialogo.Fecha1-1),Dialogo.Fecha1,'ARG',NO) )
+   ENDIF
+   ACN(pl:2, (DiasAnio2(Dialogo.Especie1,UltCupon2(Dialogo.Especie1,Dialogo.Fecha1),ProxCupon2(Dialogo.Especie1,Dialogo.Fecha1))*100) )
+
+   * Capitalizacion del cupon que se corta
+   ACN(r:3, (100+(fbn('IntsCapitalizados')*100))*Dialogo.Precio6*Val(pl:1)/Val(pl:2)  )
+
+   If Val(r:3)<>0
+      ACN(r:3, Val(r:3)/100 )
+   Endif
+
+   * Nuevo Factor
+   ACN(r:4, fbn('IntsCapitalizados')+Val(r:3))
+
+   * falta acualizar vt
+   *VT Actual - (%Amort /100 )
+   ACN(e:3, Val(e:2)-(Dialogo.Precio1/100))
+
+   * Precio del Cupon 
+   ACN(f:3, (Dialogo.Precio1+Dialogo.Precio2+Dialogo.Precio3)/100*Val(aa:31) )
+
+   *---------------------------- Especie Cupon -----------------------------*
+   ACT(b:4, fbn('Alias9'))
+
+   *Fecha Proximo Corte
+   ACD(H:4, Dialogo.Fecha1)
+
+* FJL 26/04/18 - Se agrega Fecha de pago de la agenda
+   *Fecha Pago
+   ACD(H:5, Dialogo.Fecha6)
+
+   *Cupon Nuevo
+   ACN(c:4, Val(c:3))
+
+** FJL 07/05/20 - Agregado por Issue 3582
+   ** Calculo estimado a cobrar
+   ** En ae:1 devuelve los VN
+   **    ae:2 el estimado a cobrar total
+   **    as:5 el estimado a cobrar de renta
+   **    av:2 el estimado a cobrar amortizacion
+
+   (.'CUPONESTI'.)
+
+   *** Confirma la actualizacion de las nuevas especies ***
+   CrearDialogo
+      Especie1       :'E. Origen'         ; 1;1;;NO;;;;;Val(b2)
+      Entero1        :'Nr.Cupon'          ; 2; ;;NO;;;;;Val(n2)
+      ContraEspecie2 :'Cupon'             ; 3; ;;NO;;EqStr(val(b4),BuscarCampo('ESPECIES','Codigo','Codigo',val(b4)));'La Especie Cupon no ha sido creada !!! ';NO;Val(b4)
+      Fecha1         :'F.Corte'           ; 4; ;;NO;;Dialogo.Fecha1<>0;'Debe ingresar una fecha.';NO;Val(h:4)
+* FJL 26/04/18 - Se agrega Fecha de pago de la agenda
+*      Fecha2         :'Fecha Pago'        ; 5; ;;SI;;Dialogo.Fecha2<>0 y EsHabil(Dialogo.Fecha2);'Debe ingresar una fecha valida';NO;Val(h4)
+      Fecha2         :'Fecha Pago'        ; 5; ;;SI;;Dialogo.Fecha2<>0 y EsHabil(Dialogo.Fecha2);'Debe ingresar una fecha valida';NO;Val(h:5)
+      Precio4        :'V.T.Nuevo'         ; 6; ;;SI;;Dialogo.Precio4>=0;'Nuevo VT negativo.';SI;Val(e:3);;;;'###.#########'
+      Precio5        :'IntsCapitalizados' ; 7; ;;SI;;;;;Val(r:4)
+      Check2         :'Emite Carta'       ; 8; ;;;;;;1;1
+      Mercado1       :'CasaCustodia'      ; 9; ;;Dialogo.Check2=1;Dialogo.Check2=1;
+      Especie2       :'Pago en'           ;10; ;;;;;;;BuscarCampo('ESPECIES','MonedaEmision','Codigo',Dialogo.ESPECIE1)
+      Precio6        :'Pr.Cupon'          ;11; ;;;;;;;Val(f:3);Val(f:3)
+      Precio7        :'Pr.$.Cupon'        ;12; ;;;;;;;IIF(Not Eqstr(Dialogo.Especie2,VAR('MONELOCA')),Dialogo.Precio6*CotizacionC(Dialogo.Especie2,,,,Val(fa:1),25,SI,VAR('MONELOCA')),Dialogo.Precio6 );IIF(Not Eqstr(Dialogo.Especie2,VAR('MONELOCA')),Dialogo.Precio6*CotizacionC(Dialogo.Especie2,,,,Val(fa:1),25,SI,VAR('MONELOCA')),Dialogo.Precio6 )
+      Fecha4         :'F.Actualiz'        ; 1;2;;NO;NO;;;;Val(fa:1)
+** FJL 07/05/20 - Agregado por Issue 3582
+      Cantidad1  :'VN en cartera'  ; 9;2;;NO;  ;;;;Val(ae:1)
+      Cantidad2  :'Estim. Amort'   ;10;2;;NO;  ;;;;Val(av:2)
+      Cantidad3  :'Estim. Renta'   ;11;2;;NO;  ;;;;Val(as:5);Val(ae:1)*Dialogo.Precio2/100*Val(aa:31)
+** FJL 20/07/20 - Issue 4291 - Recalculo de estimado
+*      Cantidad4  :'Monto Estimado' ;12;2;;NO;  ;;;;;Val(ae:2)
+      Cantidad4  :'Monto Estimado' ;12;2;;NO;  ;;;;Val(ae:2);Val(ae:1)*Dialogo.Precio6
+** FJL 30/07/20 - Issue 4291 - Recalculo de precio si se modifica 
+      Precio1    :'% Amort.Cap.'   ; 4;2;;NO;  ;Dialogo.Precio1>=0;'El % de Amortizacion debe ser Positivo'         ;NO;Val(k:2);;;;'###.#########'
+      Precio2    :'% Renta'        ; 5;2;;NO;  ;Dialogo.Precio2>=0;'El % de Renta debe ser Positivo'                ;NO;Val(l:2);(Dialogo.Precio6-(Val(k:7)+Val(m:7)))*100;;;'###.#########'
+      Precio10   :'TNA'            ; 6;2;;NO;  ;Dialogo.Precio10>=0;'La TNA debe ser Positiva'                      ;NO;Val(s:2);Dialogo.Precio2/Val(v:11);;;'###.#########'
+      Precio3    :'% Am.Int.Cap.'  ; 7;2;;NO;  ;Dialogo.Precio3>=0;'El % de Amortizacion de Intereses Capitalizados';NO;Val(m:2);;;;'###.#########'
+   FinDialogo
+
+   IF NOT OK
+      acn(z1,3)
+      Break
+   ENDIF
+
+** FJL 21/07/20 - Issue 4291 - Permitir actualizar la especie antes del corte aunque sea el ultimo cupon (unico para ZeroCoupon)
+*   IF Dialogo.Fecha1>Fsys y Dialogo.Precio4<=0
+*      Messagebox('La Especie amortiza 100%.'~CHR(13)~'Debe actualizarse el dia de Corte de Cupon.')
+*      acn(z1,3)
+*      Break
+*   Endif
+   IF Dialogo.Precio4<=0
+     ** Nuevo Valor teorico <= 0 - Marca que es ultimo Cupon
+     ACN(y:2, 1)
+   Endif
+
+   * Actualizar V.Teorico con el que ellos cargaron
+   ACN(e:3, Dialogo.Precio4)
+
+** FJL 30/07/20 - Issue 4291 - valores recalculados 
+   * % renta
+   ACN(f:8, Dialogo.Precio6) 
+   * % renta
+   ACN(l:8, Dialogo.Precio2) 
+   * % TNA
+   ACN(s:8, Dialogo.Precio10) 
+   
+   if Val(y:1)=1
+*MessageBox('Procesa')     
+     * Procesa - Viene de Dialogo.Check1
+     *----------- Modifico la especie ----------------*
+     SQL.ADD("UPDATE "~DBO~".ESPECIES ")
+     SQL.ADD("SET Cupon             = "~Fstr(Val(c:3),0,0)~", ")
+     SQL.ADD("    VTeorico          = "~Fstr(Val(e:3),0,9)~", ")
+     SQL.ADD("    FechaCorteCupon   = '"~IdxDate(Val(g:2))~"',  ")
+     SQL.ADD("    FechaProximoCorte = '"~IdxDate(val(ck:1))~"', ")
+     SQL.ADD("    FechaPagoCupon    = '"~IdxDate(Dialogo.Fecha2)~"', ")
+     SQL.ADD("    IntsCapitalizados = "~Fstr(Val(r:4),0,9)~" ")
+     SQL.ADD("WHERE Codigo          = '"~Dialogo.Especie1~"' ")
+     SQL.NEW
+
+     message(' Actualizando Especie ')
+
+     *----------- Modifico LA ESPECIE CUPON -------------*
+     SQL.ADD("UPDATE "~DBO~".ESPECIES ")
+     SQL.ADD("SET Cupon             = "~Fstr(Val(c:2),0,0)~", ")
+     SQL.ADD("    Fecha             = '"~IdxDate(Val(h:4))~"', ")
+     SQL.ADD("    FechaCorteCupon   = '"~IdxDate(Val(g:2))~"', ")
+     SQL.ADD("    FechaPagoCupon    = '"~IdxDate(Dialogo.Fecha2)~"', ")
+     SQL.ADD("    FechaProximoCorte = '"~IdxDate(val(ck:1))~"', ")
+     SQL.ADD("    VTeorico          = "~FSTR(Val(e:2),1,9)~" ")
+     SQL.ADD("WHERE Codigo          = '"~Val(b:4)~"' ")
+     SQL.NEW
+     Message(' Actualizando Especie Cupon ')
+
+     *----------- Inserto Cotizacion ESPECIE CUPON -------------*
+     IF SQL(" Select 1 From "~DBO~".COTIZACIONES Where Fecha = '"~IdxDate(Dialogo.Fecha4)~"' AND Codigo = '"~Val(b:4)~"' AND CallPut = 'CON' AND Moneda = '"~Dialogo.Especie2~"'  ") <> 1
+       Message('Alta Cotizacion  '~Val(b:4))
+       SQL.ADD(" Insert Into "~DBO~".COTIZACIONES ")
+       SQL.ADD(" (Fecha, Codigo, CallPut, ")
+       SQL.ADD(" Precio1, Precio2, Precio3,Moneda) ")
+       SQL.ADD(" Values ")
+       SQL.ADD(" ('"~IdxDate(Dialogo.Fecha4)~"', '"~Val(b:4)~"', 'CON', ")
+       SQL.ADD(" "~Fstr(Dialogo.Precio6, 0, 8)~",  "~Fstr(Dialogo.Precio6, 0, 8)~", ")
+       SQL.ADD(" "~Fstr(Dialogo.Precio6, 0, 8)~", '"~Dialogo.Especie2~"') ")
+       SQL.NEW
+     ELSE
+       Message('Modificacion Cotizacion '~Val(b:4))
+       SQL.ADD(" Update "~DBO~".COTIZACIONES ")
+       SQL.ADD(" Set Precio1 = "~Fstr(Dialogo.Precio6, 0, 8)~", ")
+       SQL.ADD(" Precio2 = "~Fstr(Dialogo.Precio6, 0, 8)~", ")
+       SQL.ADD(" Precio3 = "~Fstr(Dialogo.Precio6, 0, 8)~" ")
+       SQL.ADD(" Where Fecha = '"~IdxDate(Dialogo.Fecha4)~"' ")
+       SQL.ADD(" AND Codigo = '"~Val(b:4)~"' ")
+       SQL.ADD(" AND CallPut = 'CON' ")
+       SQL.ADD(" AND Moneda = '"~Dialogo.Especie2~"' ")
+       SQL.NEW
+     ENDIF
+
+     *---------- Actualiza Tabla AgendaCupon ------------*
+     SQL.ADD(" UPDATE "~DBO~".AGENDACUPONES SET ")
+     SQL.ADD(" FechaCorte  = '"~IdxDate(Val(g2))~"', ")
+     SQL.ADD(" FechaPago   = '"~IdxDate(Dialogo.Fecha2)~"', ")
+     SQL.ADD(" VTeoricoAnt = "~FSTR(Val(e:2),1,9)~", ")
+     SQL.ADD(" IntsCapitalizados  = "~Fstr(Val(q:2),0,9)~", ")
+** FJL 30/07/20 - Issue 4291 - valores recalculados 
+*     SQL.ADD(" PrecioCupon     = "~FSTR(Val(f:3),1,9)~", ")
+     SQL.ADD(" PrecioCupon     = "~FSTR(Val(f:8),1,9)~", ")
+     SQL.ADD(" FechaProceso    = '"~IdxDate(Fsys)~"', ")
+     SQL.ADD(" Estado          = 'PRO', ")
+     SQL.ADD(" PorAmCapital    = "~FSTR(Val(k:2),1,9)~", ")
+** FJL 27/06/18 - Ingreso de TNA
+** FJL 30/07/20 - Issue 4291 - valores recalculados 
+*     SQL.ADD(" TNA             = "~FSTR(Val(s:2),1,9)~", ")
+     SQL.ADD(" TNA             = "~FSTR(Val(s:8),1,9)~", ")
+*****
+** FJL 30/07/20 - Issue 4291 - valores recalculados 
+*     SQL.ADD(" PorRenta        = "~FSTR(Val(l:2),1,9)~", ")
+     SQL.ADD(" PorRenta        = "~FSTR(Val(l:8),1,9)~", ")
+     SQL.ADD(" PorAmIntCap     = "~FSTR(Val(m:2),1,9)~", ")
+     IF Val(k:2)=0
+       * es renta
+       SQL.ADD(" TipoCupon = 'REN' ")
+     ELSE
+       IF Val(l:2)=0
+         *es amort  
+         SQL.ADD(" TipoCupon = 'AMO' ")
+       ELSE
+         *es renta y amo
+         SQL.ADD(" TipoCupon = 'RYA' ")
+       ENDIF
+     ENDIF 
+     SQL.ADD(" WHERE Especie = '"~Dialogo.Especie1~"' AND NrCupon = '"~FSTR(Val(c2),1,0)~"' ")
+     SQL.NEW
+     message(' Actualizando Agenda de Cupones ')
+     SQL.EXEC
+
+     * Impresion De Cartas De Avisos De Cortes De Cupon
+     If [Dialogo.Check2 = 1]
+       (.'CCUPAVISO'.)
+     EndIf
+     * --- Message('Cortando Posiciones ... ')
+     ** FJL 30/07/2020 - Parametros al CORTEX - Evento que genera la ACUPON y Corta las Posiciones
+     *  Especie1   :'Especie'      Dialogo.Especie1
+     *  Fecha1     :'F.Corte'      Dialogo.Fecha1
+     *  Fecha2     :'F.Pago'       Dialogo.Fecha2
+     *  Especie2   :'Pago en'      Dialogo.Especie2
+     *  Entero3    : 'num cupon'   Val(c:2)
+     *  Entero1    :'Nr.Cupon'     Val(c:2)
+     *  Entero2    :'CupActual'    Val(c:3)
+     *  Fecha4     :'F.Actualiz'   Dialogo.Fecha4
+     *  Precio6    :'Pr.Cupon'     Dialogo.Precio6
+     *  Precio7    :'Pr.$.Cupon'   Dialogo.Precio7
+     *  Check6     :'CB5'          Val(ch:6)
+     ** Tambien se pasan estos parametros que no estan en el dialogo del CORTEX pero el evento los usa. Datos de Indices. 
+     ** FJL 30/07/20 - Los agregue en el dialogo de CORTEX
+     *  Fecha5                      Val(fe:5)
+     *  Especie4                    Val(es:4)
+     *  Precio2                     Val(pr:7)
+     *  Precio3                     Val(pr:8)
+     EjecutarEvento('CORTEX', Especie1=Dialogo.Especie1, Fecha1=Dialogo.Fecha1, Fecha2=Dialogo.Fecha2, Entero3=Val(c:2), Especie2=Dialogo.Especie2, Entero1=Val(c:2),Entero2=Val(c:3), Fecha4=Dialogo.Fecha4, Precio6=Dialogo.Precio6, Precio7=Dialogo.Precio7, Check6=Val(ch:6), Fecha5=Val(fe:5), Especie4=Val(es:4), Precio2=Val(pr:7), Precio3=Val(pr:8))
+   endif
+  
+Proximo
+
+FormatoCeldas(k:2..m:8,exe('F8'))
+FormatoCeldas(s:2..s:8,exe('F6'))

@@ -1,0 +1,184 @@
+﻿HojaVisible(NO)
+MostrarCuadroDeMensajes
+CrearDialogo
+   Fecha1:   'Fecha' ;;;;;;;;;fsys
+Findialogo
+
+If Not OK
+   Cancelar
+Endif
+
+message('Recuperando OpRofex...')
+SQL.ADD("Select * from "~DBO~".OPROFEX")
+SQL.ADD(" where isnull(Procesado,'0')='0' ")
+SQL.ADD("   and TipoContrato='1' ")
+SQL.ADD(" Order by Fecha,Boleta ")  
+
+Recorrer SQL
+
+   Message('...'~fbn('Boleta'))
+
+   **// Warning por default
+   ACT(WA:1, 'Falta la posicion '~FBN('Posicion'))
+   ACN(BD:1, 2)
+
+   **// 
+   SQL.ADD(" Select Especie, Vencimiento, NombreExtendido ")
+   SQL.ADD(" From "~DBO~".PLAZOSMERCADO ")
+   SQL.ADD(" Where NombreExtendido = '"~FBN('Posicion')~"' ")
+   Recorrer SQL
+      **// Marco que existe la posicion
+      ACN(BD:1, 1)
+      ACT(E:2, FBN('Especie'))
+      ACT(E:1, SQL("SELECT ContraespecieCupon From "~DBO~".ESPECIES where Codigo='"~FBN('Especie')~"' "))
+      ACT(E:3, FBN('Especie'))
+      ACD(VT:1, FBN('FechaVto'))
+      ACN(VT:2, FBN('Vencimiento'))
+      **// Si falta Especie FIX o MTM, no se genera la operacion
+      If Vacio(Val(E:1)) O Vacio(Val(E:3))
+         ACT(WA:1, 'Faltan datos en la posicion '~FBN('Posicion'))
+         ACN(BD:1, 2)
+      Endif
+   Proximo
+
+   **// Si ya hay una operacion con ese numero de boleta, no se genera.
+   If SQL("Select 1 from "~DBO~".OPERACIONES where FechaOp="~IdxDate2(fbn['Fecha'])~" and TipoOp In ('FXROFC','FXROFV') and NrBoleto in ('"~PAD0(FBN['Boleta'],8)~"','"~FBN['Boleta']~"') ")=1
+      ACN(BD:1, 3)
+      ACT(WA:1, 'Ya existe operacion con NrBoleta '~PAD0(FBN('Boleta'),8)~'. ')
+   Endif
+
+   If Val(BD:1)=1 
+      **// TipoOP
+      ACT(TO:1, iif(FBN('IdCpraVta')=1,'FXROFV','FXROFC') )
+      **// NrOperacion
+      ACT(NR:1, GetNumerador(92))
+      **// Razon Social
+      ACT(RZ:1, Copy(BuscarCampo('CLIENTES','RazonSocial','Codigo',Var('CLIROFEX')),1,25))
+      **// Importe
+      ACN(IM:1, FBN('Cantidad') * BuscarCampo('ESPECIES','Valor10','Codigo',Val(E:3)))
+      **// FechaVto
+      ACD(FV:1, IIF(Val(VT:2)=0,Habiles(FBN('Fecha'),1000,VAR('FERIDEF')),Val(VT:1)))
+      **// Monto (TOTALBRUTOCLI1)
+      ACN(A:1, FBN('Precio') * Val(IM:1))
+      **// Plazo
+      ACN(A:2, Val(FV:1)-FBN('Fecha'))
+      **// Fecha Liq. Mon. Pago (FECHAPAGO)
+      ACD(A:3, Habiles(Val(FV:1),0,VAR('FERIDEF')))
+      **// Agencia (SUCURSAL)
+      **--ACT(A:11, SQL("Select Sucursal from "~DBO~".USRVEHICULO where Codigo='"~USUARIOACTIVO~"' and Vehiculo='"~VAR('VEHICULODE')~"' "))
+      **// Cartera (CARTERA1)
+      **--ACT(A:4, SQL("Select Trim(Substr(Valor,18,1)) From "~DBO~".CONSTANTES Where Tipo='BOOKDEF' and Substr(Valor,1,2)='FW' and Substr(Valor,4,1)='0' and (Trim(Substr(Valor,6,4)) = '"~Val(A:11)~"' or Substr(Valor,6,4) = '    ') and "~DBO~".DesciendeDeEspecie('"~Val(E:2)~"',Trim(Substr(Valor,11,6))) = 1 Order by Valor "))
+      **// Book (BOOK1)
+      **--ACT(A:5, SQL("Select Trim(Substr(Valor,20,10)) From "~DBO~".CONSTANTES Where Tipo='BOOKDEF' and Substr(Valor,1,2)='FW' and Substr(Valor,4,1)='0' and (Trim(Substr(Valor,6,4)) = '"~Val(A:11)~"' or Substr(Valor,6,4) = '    ') and Substr(Valor,18,1) = '"~Val(A:4)~"' and "~DBO~".DesciendeDeEspecie('"~Val(E:2)~"',Trim(Substr(Valor,11,6))) = 1 Order by Valor "))
+      **// Precio Spot (TIPOCAMBIO)
+      ACN(A:6, COTIZACIONC(Val(E:2),,,,FBN('Fecha'),1,SI,VAR('MLOCAL')))
+      **// Precio Fwd (TIPOCAMBIO2)
+      ACN(A:7, COTIZACIONC(Val(E:3),'FUT',Val(FV:1),,FBN('Fecha'),1,SI,VAR('MLOCAL')))
+      **// Com. Rofex (PRECIO3)
+      ACN(A:8, BuscarCampo('CORREDORES','ComisionDefault1','Codigo',Var('CORRERFX')))
+      **// Com. ACSA (PRECIO4)
+      ACN(A:9, BuscarCampo('CORREDORES','ComisionDefault2','Codigo',Var('CORRERFX')))
+      **// Importe Com. (TOTALCOMISIONES)
+      ACN(A:10, IIF(Vacio(Var('CORRERFX')),0, FBN('Cantidad') * (Val(A:8)+Val(A:9))))
+      **// C.Esp USD (PORIMPUESTOBOLSA)
+      ACN(A:12, IIF(EqStr(Modo(Val(E:2),'USD'),'INV'),1/COTIZACIONC(Val(E:2),,,,FBN('Fecha'),1,SI,'USD'), COTIZACIONC(Val(E:2),,,,FBN('Fecha'),1,SI,'USD')))
+      **// Modo Directa|Inversa (MODOCOTIZA)
+      ACT(A:13, IIF(EqStr(Modo(Val(E:2),CotizaEn(Val(E:2))),'DIR'),'0','1'))
+      **// C.Esp ARP (PORDERECHOBOLSA)
+      ACN(A:14, IIF(EqStr(Modo(Val(E:2),'ARP'),'INV'),1/FBN('Precio'),FBN('Precio')))
+      **// RiskWeighting (PORCAUCION)  
+      **--ACT(A:15, IIF(NoVacio(Val(A:5)),SQL("Select Factor from "~DBO~".RISKWEIGHT where Especie = 'USD' and TipoOp = '"~Val(TO:1)~"' and Fecha <= '"~IdxDate(FBN('Fecha'))~"' order by Fecha desc")))
+      **// PreSettlement (TOTALAUX5)  
+      **--ACN(A:16 , IIF(NoVacio(Val(A:5)),Val(IM:1) * IIF(Val(A:15)=0,1,Val(A:15)/100),0))
+      **// Ex. Pres (MINDERECHOBOLSA)
+      ACN(LM:1, LimAsignado(Var('CLIROFEX'),'PRESETTLEM',Val(E:2),VAR('VEHICULODE')))
+      ACN(LM:2, LimConsumido(Var('CLIROFEX'),'PRESETTLEM',Val(E:2),0,VAR('VEHICULODE'),,,''))
+      **--ACN(A:17, Val(LM:1)-(Val(LM:2)+Val(A:16)))
+      IF NoVacio(Val(A:5)) Y NOT[Val(A:17)<0]
+         **--ACN(A:17, 0)
+      Endif
+      **// Mnemotecnico (OBSERRORMAE)
+      ACT(A:18, 'O'~SQL(" Select EspecieOrigen From "~DBO~".EQUIVALENCIA_ESPECIES Where TipoNegociacion = 'O' AND EspecieDestino1 = '"~Val(E:2)~"' AND TipoCotizacion = 'O' ")~SQL(" Select Variable From "~DBO~".PLAZOSOCT Where Fecha = '"~IdxDate(Val(FV:1))~"' AND Especie = '"~Val(E:2)~"' AND TipoNegociacion = 'O' "))
+      **// Hora (LEY6)
+      ACT(A:19, Copy(FBN('Hora'),1,2)~':'~Copy(FBN('Hora'),3,2)~':'~Copy(FBN('Hora'),5,2))
+   
+      SQL.ADD(" Insert INTO "~DBO~".OPERACIONES ")
+      SQL.ADD(" ( TipoOp,     NrOperacion,  ")
+      SQL.ADD("   FechaOp,    Especie,        PosicionRofex, Cliente1, ")
+      SQL.ADD("   Observac4,  TotalBrutoCli3, Cantidad,      Precio1, ")
+      SQL.ADD("   PrecioMer,  TotalBrutoCli1, ContraEspecie, Plazo, ")
+      SQL.ADD("   FechaVto,   FechaPago,      NrBoleto,      Ley6, ")
+      SQL.ADD("   MB1,        MB2,            Mercado2,      TablaFeriados1, ")
+      SQL.ADD("   Observac3,  CB5,            Cartera1,      CarteraBCRA1,  ")
+      SQL.ADD("   Cartera,    Book1,          TipoCambio,    TipoCambio2, ")
+      SQL.ADD("   Corredor,   RB5,            RB7,           Precio3, ")
+      SQL.ADD("   Precio4,    Comision,       Operador,      TotalComisiones,  ")
+      SQL.ADD("   Vehiculo1,  Sucursal,       UDN1,          PorImpuestoBolsa, ")
+      SQL.ADD("   ModoCotiza, TotalAux1,      TotalAux3,     PorDerechoBolsa, ")
+      SQL.ADD("   TotalAux4,  TotalAux6,      FechaUltCupon, PrecioEj, ")
+      SQL.ADD("   FechaEj,    Precio2,        FechaVto2,     CB6,  ")
+      SQL.ADD("   FechaOp2,   ContraEspecie2, EnteCus1,      FechaPrecan,  ")
+      SQL.ADD("   Observac2,  FechaAltaMAE,   ObsErrorMAE,   NrSisExterno, ")
+      SQL.ADD("   Cliente2,   RB3,            MB3,           PorCaucion, ")
+      SQL.ADD("   TotalAux5,  SectorRB,       RB10,          MinDerechoBolsa, ")
+      SQL.ADD("   RB6,        TotalAux7,      Observaciones, UsrInput, ")
+      SQL.ADD("   FechaCarga, FechaCargaSys,  Direccion,     LInstancia, ")
+      SQL.ADD("   Numerador,  Cotizacion1,    Ley2,          CB7 ")
+   
+      SQL.ADD(" ) Values ( ")
+
+      SQL.ADD("   '"~Val(TO:1)~"',             '"~Val(NR:1)~"',  ")
+      SQL.ADD("   "~IdxDate2(FBN('Fecha'))~",  '"~Val(E:2)~"',                '"~FBN('Posicion')~"',         '"~Var('CLIROFEX')~"', ")
+      SQL.ADD("   '"~Val(RZ:1)~"',             "~Fstr(FBN('Cantidad'),0,2)~", "~Fstr(Val(IM:1),0,2)~",       "~Fstr(FBN('Precio'),0,8)~", ")
+      SQL.ADD("   "~Fstr(FBN('Precio'),0,8)~", "~Fstr(Val(A:1),0,2)~",        '"~VAR('MLOCAL')~"',           "~Fstr(Val(A:2),0,2)~", ")
+      SQL.ADD("   "~IdxDate2(Val(FV:1))~",     "~IdxDate2(Val(A:3))~",        '"~PAD0(FBN('Boleta'),8)~"',   '"~Val(A:19)~"', ")    
+      SQL.ADD("   1,                           0,                             '"~VAR('MERCRFX')~"',          '"~VAR('FERIDEF')~"', ")
+      SQL.ADD("   '',                          0,                             '"~Val(A:4)~"',                '"~Val(A:4)~"',  ")
+      SQL.ADD("   '"~Val(A:4)~"',              '"~Val(A:5)~"',                "~Fstr(Val(A:6),0,8)~",        "~Fstr(Val(A:7),0,8)~", ")
+      SQL.ADD("   '"~Var('CORRERFX')~"',       0,                             1,                             "~Fstr(Val(A:8),0,8)~", ")
+      SQL.ADD("   "~Fstr(Val(A:9),0,8)~",    "~Fstr(Val(A:8)+Val(A:9),0,8)~", '"~USUARIOACTIVO~"',                       "~Fstr(Val(A:10),0,2)~", ")
+      SQL.ADD("   '"~VAR('VEHICULODE')~"',     '"~Val(A:11)~"',               '"~VAR('VEHICULODE')~"',       "~Fstr(Val(A:12),0,8)~", ")
+      SQL.ADD("   '"~Val(A:13)~"',             0,                             0,                             "~Fstr(Val(A:14),0,8)~", ")       
+      SQL.ADD("   0,                           0,                             null,                          0, ")
+      SQL.ADD("   null,                        0,                             null,                          0, ")
+      SQL.ADD("   "~IdxDate2(FSYS)~",          '"~Val(E:1)~"',                '"~Val(E:3)~"',                null, ")
+      SQL.ADD("   null,                        "~IdxDate2(FBN('Fecha'))~",    '"~Val(A:18)~"',               null, ")  
+      SQL.ADD("   '"~Var('CLIROFEX')~"',       0,                             0,                             "~Fstr(Val(A:15),0,8)~", ")
+      SQL.ADD("   "~Fstr(Val(A:16),0,2)~",     0,                             0,                             "~Fstr(Val(A:17),0,2)~", ")                         
+      SQL.ADD("   0,                           0,                             'Generado Automatico',         '"~USUARIOACTIVO~"', ")
+      SQL.ADD("   "~SQLAhora~",                 "~IdxDate2(FSYS)~",           null,                          null, ")
+      SQL.ADD("   92,                          null,                          null,                          1 )  ")
+      SQL.NEW
+      SQL.EXEC
+   
+      Message('     Se genero '~Val(NR:1))
+      SQL.ADD(" Update "~DBO~".OPROFEX ")
+      SQL.ADD("    Set Procesado = '1', NrOperacion = '"~Val(NR:1)~"', Warning = null")
+      SQL.ADD("  Where Boleta = '"~FBN('Boleta')~"' ")
+      SQL.NEW
+      SQL.EXEC
+
+      **// Instancia Inicial
+      ACN(I:1, 1)
+      SQL.ADD("SELECT NrInstancia FROM "~DBO~".INSTANCIAS ")
+      SQL.ADD("WHERE Tabla='OPERACIONES' ")
+      SQL.ADD(" AND NrInstancia in (1,70,81,82,121,14) ")
+      SQL.ADD("ORDER BY NrInstancia ")
+      Recorrer SQL
+        SQL.ADD("INSERT INTO "~DBO~".OPERACIONESBITS ( ")
+        SQL.ADD(" NrOperacion, NrBit, Valor ) Values ( ")
+        SQL.ADD(" '"~Val(NR:1)~"',"~Fstr(FBN['NrInstancia'],2,0)~", '"~IIF(VAL(i1)=FBN['NrInstancia'],'1','0')~"' ) ")
+        SQL.NEW
+      Proximo
+      SQL.EXEC
+
+   Else
+
+      Message('     No se genero la OP')
+      SQL.ADD(" Update "~DBO~".OPROFEX ")
+      SQL.ADD("    Set Procesado='0', Warning= '"~Trim(Copy(Val(WA:1),1,255))~"' ")
+      SQL.ADD("  Where Boleta = '"~FBN('Boleta')~"' ")
+      SQL.NEW
+      SQL.EXEC
+   Endif
+Proximo

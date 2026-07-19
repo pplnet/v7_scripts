@@ -1,0 +1,111 @@
+﻿CrearDialogo
+    Check3   : 'Manual'        ; ; ; ;SI;SI;;;;1;
+FinDialogo 
+
+SQL.ADD("Select O.* from "~dbo~".OPERACIONES O, "~dbo~".OPERACIONESBITS B")
+SQL.ADD("where O.NrOperacion=B.NrOperacion and B.NrBit=71 and B.Valor='1' and (O.NrBoleto is NULL or O.NrBoleto='') and O.TipoOp in ('DDC','DDV')")
+
+ *- Con esta seleccion preparo un listbox complementario
+  ACT(a0,'Marca')
+  ACT(c0,'Cliente')
+  ACT(d0,'Operacion')
+  ACT(e0,'TipoOp')
+  ACT(f0,'FechaOp')
+  ACT(g0,'FechaVto')
+  ACT(h0,'FechaLiq')
+  ACT(i0,'FechaAcred')
+  ACT(j0,'Moneda')
+  ACT(k0,'Cantidad')
+  ACT(l0,'Tasa')
+  ACT(m0,'Monto')
+  ACT(n0,'Arancel')
+ 
+  ACN(b1, 3)
+  SetFilaActual(3)
+  MostrarCuadroDeMensajes
+  Recorrer SQL     
+        Message('Operacion '~fbn('NrOperacion'))
+        scn(b1, 1)
+        ACN(a:val(b1),1)
+        ACT(c:val(b1),fbn('Cliente1'))
+        ACT(d:val(b1),fbn('NrOperacion'))
+        ACT(e:val(b1),fbn('TipoOp'))
+        ACD(f:val(b1),fbn('FechaOp'))
+        ACD(g:val(b1),fbn('FechaVto'))
+
+        ACD(h:val(b1),fbn('FechaOp2'))
+        ACD(i:val(b1),fbn('FechaVto2'))
+
+        ACT(j:val(b1),fbn('Especie'))
+        ACT(k:val(b1),fbn('Cantidad'))
+        ACT(l:val(b1),fbn('Precio1'))
+        ACT(m:val(b1),fbn('TotalBrutoCli1'))
+        ACT(n:val(b1),fbn('ImpGastos1'))
+  Proximo
+*  OcultarCuadroDeMensajes
+  
+  If Val(b1) = 3
+     if Dialogo.Check3=1
+        Messagebox('No existen operaciones para Asignar Numero de Boleto')
+     endif   
+  Else
+     if Dialogo.Check3=1
+         CrearListBox;'Arial,8,';'Operaciones a Asignar Nro Boleto'
+            'Marca'        ;a4..a:Val(b1)  ;SI;;; 30;CHECK ;RGB(160,160,193)
+            'Cliente'      ;c4..c:Val(b1)  ;NO;;; 80;STRING;;RGB(250,250,193)
+            'Operacion'    ;d4..d:Val(b1)  ;NO;;; 60;STRING;;RGB(250,250,193)
+            'TipoOp'       ;e4..e:Val(b1)  ;NO;;; 50;STRING;;RGB(250,250,193)
+            'Especie'      ;j4..j:Val(b1)  ;NO;;; 50;STRING;;RGB(250,250,193)
+            'Fecha Op'      ;f4..f:Val(b1)  ;NO;;; 70;FECHA;RGB(250,250,193)
+            'Fecha Vto'     ;g4..g:Val(b1)  ;NO;;; 70;FECHA;RGB(250,250,193)
+            'Fecha Liq'      ;h4..h:Val(b1)  ;NO;;; 70;FECHA;RGB(250,250,193)
+            'Fecha Acred'     ;i4..i:Val(b1)  ;NO;;; 70;FECHA;RGB(250,250,193)
+            'Cantidad'     ;k4..k:Val(b1)  ;NO;;;120;NUMERO;'##,###,###.##';RGB(250,250,193)
+            'Tasa'         ;l4..l:Val(b1)  ;NO;;;120;NUMERO;'#####.#####';RGB(250,250,193)
+            'Total'        ;m4..m:Val(b1)  ;NO;;;120;NUMERO;'##,###,###.##';RGB(250,250,193)
+            'Arancel'      ;n4..n:Val(b1)  ;NO;;;120;NUMERO;'##,###,###.##';RGB(250,250,193)
+            * ---------------------------------------------------------------- *
+         FinListBox
+         
+         If Not OK
+            Cancelar
+         Endif
+     endif   
+     
+     Recorrer&i 4,Val(b1)
+        If Val(a:&i)=1
+          SQL.ADD("Update "~dbo~".OPERACIONES set NrBoleto='"~GetNumerador(34)~"' where NrOperacion='"~Val(d:&i)~"'")
+          SQL.NEW
+          
+          * actualizar instancia 71 en 0 y 67 en 1
+          *** Cambio de Instancia en OPERACIONESBITS
+          SQL.ADD("Update "~DBO~".OPERACIONESBITS Set Valor = '0' where NrOperacion = '"~Val(d:&i)~"' and NrBit = 71" )
+          SQL.NEW
+          #ifdef BIND
+             SQL.ADD("Update "~DBO~".OPERACIONESBITS Set  Valor = '1' where NrOperacion = '"~Val(d:&i)~"' and NrBit = 67")
+             SQL.NEW
+             *** Registro cambio en INSTANCIASOP
+             SQL.ADD("Insert Into "~DBO~".INSTANCIASOP  (NrOperacion, NrInstancia, Usuario, Mensaje, Fecha) ")
+             SQL.ADD(" Values ")
+             SQL.ADD(" ('"~Val(d:&i)~"', 71, '"~USUARIOACTIVO~"', 'Evento GENBDD mueve a 67', "~SQLAhora~" )")
+             SQL.NEW
+          #else
+             SQL.ADD("Update "~DBO~".OPERACIONESBITS Set  Valor = '1' where NrOperacion = '"~Val(d:&i)~"' and NrBit = 10")
+             SQL.NEW
+             *** Registro cambio en INSTANCIASOP
+             SQL.ADD("Insert Into "~DBO~".INSTANCIASOP  (NrOperacion, NrInstancia, Usuario, Mensaje, Fecha) ")
+             SQL.ADD(" Values ")
+             SQL.ADD(" ('"~Val(d:&i)~"', 71, '"~USUARIOACTIVO~"', 'Evento GENBDD mueve a 10', "~SQLAhora~" )")
+             SQL.NEW
+          #endif
+
+*  SQL.ADD("Update "~DBO~".OPERACIONES ")
+*  SQL.ADD("   Set Direccion   = "~Dialogo.Radio2 )
+*  SQL.ADD(" where NrOperacion = '"~Dialogo.String1~"' ")
+*  SQL.NEW
+
+         Endif
+     Proximo
+     SQL.EXEC   
+  endif
+        

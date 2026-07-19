@@ -1,0 +1,74 @@
+﻿**// Esta funcion se hizo para reemplazar la llamada al informe PMCLCD
+**// que hay en el evento LIMPMO. (Version simplificada)
+**// Recibe: Cliente Val(ar:98) y Fecha Val(ar:99)
+**// Y como resultado se obtiene las celdas rs:98 y rs:99
+
+**// Guardo FAC para restaurar al final de la funcion
+ACN(vr:90, FAC)
+
+**// Uso Filas a partir de la 100
+**// Para evitar pisar otras celdas usadas por fuera de la funcion.
+SetFilaActual(100)
+ACN(vr:91,FAC)
+
+ACT(vr:98, Var('VEHICULODE'))
+ACN(vr:99, BuscarCampo('CLIENTES','RPC','Codigo',Var('VEHICULODE')))
+
+*SQL.ADD("SELECT Codigo, isnull(Sector,' ') as Sector FROM "~DBO~".CLIENTES C WHERE ")
+SQL.ADD("SELECT C.Codigo,CategDepositante,CT.Sector as Sector FROM "~DBO~".CLIENTES C ")
+SQL.ADD("join "~DBO~".CATEGORIACLIENTES CT on C.CategDepositante = CT.Codigo WHERE")
+if NoVacio(val(ar:98))
+  SQL.ADD(" Codigo='"~val(ar:98)~"' and")
+endif
+SQL.ADD("exists(select 1 from "~DBO~".LIMCONSUMIDOS where Limite in ('BCRAN','ACIDN','ACCON','BCRAG','ACIDG','ACCOG','ACMAN') and Cliente=C.Codigo) ")
+SQL.ADD("order by Codigo ")
+
+SetFilaActual(FAC+8)
+
+ACN(vr:92, fac+1)
+ACN(vr:93, fac+1)
+ifa
+Recorrer SQL
+  if EsTerminal(fbn['Codigo'],Clientes)    
+    ACT(vr:97, fbn['Codigo'])
+    ACN(ad:FAC, LimConsumido(val(vr:97),'BCRAN','ARP',0,Val(vr:98),,,,val(ar:99)))
+    ACN(ae:FAC, LimConsumido(val(vr:97),'ACIDN','ARP',0,Val(vr:98),,,,val(ar:99)))
+    ACN(af:FAC, LimConsumido(val(vr:97),'ACCON','ARP',0,Val(vr:98),,,,val(ar:99)))
+    ACN(ag:FAC, LimConsumido(val(vr:97),'BCRAG','ARP',0,Val(vr:98),,,,val(ar:99)))
+    ACN(ah:FAC, LimConsumido(val(vr:97),'ACIDG','ARP',0,Val(vr:98),,,,val(ar:99)))
+    ACN(ai:FAC, LimConsumido(val(vr:97),'ACCOG','ARP',0,Val(vr:98),,,,val(ar:99)))
+    ACN(aj:FAC, LimConsumido(val(vr:97),'ACMAN','ARP',0,Val(vr:98),,,,val(ar:99)))
+    ACN(ak:FAC, Sum(ad:fac..aj:fac))
+
+    if val(ak:FAC)>VAR('BCCONTF')/100*val(vr:99) y EqStr(fbn['Sector'],'FIN')
+       ACN(d:val(vr:93),val(ak:FAC))
+       SCN(vr:93,1)      
+    else
+    if val(ak:FAC)>VAR('BCCONTNF')/100*val(vr:99) y Not EqStr(fbn['Sector'],'FIN')
+         ACN(b:val(vr:92),val(ak:FAC))
+         SCN(vr:92,1)
+      else
+       dfa
+      endif
+    endif
+  else
+    dfa
+  endif
+Proximo
+
+ACN(b:fac, Sum(b:val(vr:91)+9..b:fac-1))
+ACN(b:fac+1, VAR('BCCONLNF')*val(vr:99))
+
+if val(b:fac)>val(b:fac+1)
+   ACN(rs:98, val(b:fac)-val(b:fac+1))
+endif
+
+ACN(d:fac, Sum(d:val(vr:91)+9..d:fac-1))
+ACN(d:fac+1, VAR('BCCONLF')*val(vr:99))
+
+if val(d:fac)+val(b:fac)>val(d:fac+1)
+  ACN(rs:99, val(d:fac)+val(b:fac)-val(d:fac+1))
+endif
+
+**// Vuelvo a poner FAC como estaba
+SetFilaActual(Val(vr:90))

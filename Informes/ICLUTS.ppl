@@ -1,0 +1,176 @@
+﻿CrearDialogo
+  Fecha1       : 'Fecha'       ;1;1;;;;Dialogo.Fecha1 > 0;'Fecha Desde Invalida';NO;Fsys;
+  NrOperacion1 : 'Nro. CONU'   ;2;1;;;;Vacio(Dialogo.NrOperacion1) o Incluido(Dialogo.NrOperacion1, SQLSet(" Select NrOperacion From "~DBO~".OPERACIONES Where NrOperacion = '"~Dialogo.NrOperacion1~"' AND TipoOp='CONU'  "));'Debe ingresar una Operacion Valida';NO;;;;;;"TipoOp  = 'CONU'"
+  Book1        : 'Book'        ; ;1;;;;Vacio(Dialogo.Book1) o Incluido(Dialogo.Book1, SQLSet(" Select Codigo From "~DBO~".BOOKS Where Vehiculo = '"~VAR('VEHICULODE')~"' AND (TiposOperacion='' or TiposOperacion is NULL or TiposOperacion like '%CONU|%') "));'Debe ingresar un Book Valido';NO;;;;;;" Estado  = 'HAB' and Vehiculo = '"~VAR('VEHICULODE')~"' AND (TiposOperacion = '' OR TiposOperacion Is Null OR TiposOperacion Like '%CONU|%') "
+ FinDialogo
+
+if Not OK
+  Cancelar  
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+
+SetFilaActual(3)
+ACT(g:fac,'ICL - Reporte Utilizacion Termsheet')
+SetFont(g:fac,3)
+AlinearCeldas(g:fac,'D')
+
+SetFilaActual(fac+1)
+acn(w1,fac)
+act(a:fac,'Fecha : '~Dialogo.Fecha1)
+if NoVacio(Dialogo.Book1)
+   act(a:fac+1,'Book : '~Dialogo.Book1)
+Else
+   act(a:fac+1,'Book : Todos')
+Endif
+if NoVacio(Dialogo.NrOperacion1)
+   act(a:fac+2,'CONU : '~Dialogo.NrOperacion1)
+Else   
+   act(a:fac+2,'CONU : Todas')
+Endif
+SetFont(a:Val(w1)..a:Val(w1)+2,2)
+
+SetFilaActual(fac+4)
+ACT(a:FAC, 'TermSheet ID')
+ACT(b:fac,'Nro. Op.')
+ACT(c:fac,'Fecha Op.')
+ACT(d:fac,'Fecha Vto.')
+ACT(e:fac,'Cliente - Nombre')
+ACT(f:fac,'Especie')
+ACT(g:fac,'Cantidad Original')
+ACT(h:fac,'Saldo Consumido')
+ACT(i:fac,'Saldo Disponible')
+ACT(j:fac, 'Monto PICO' )
+ACT(k:fac, 'Monto PICD' )
+ACT(l:fac, 'Af.a Bonos')
+*13/09/24 Se agrega  Operaciones bloqueadas
+ACT(m:FAC, ' Bloqueada SI/NO')
+ACT(n:FAC, 'Tipo CONU')
+
+AlinearCeldas(g:FAC..i:FAC,'D')
+AgregarMarco(a:FAC..n:FAC,2,0,EXE('COLOR'))
+SetFont(a:FAC..n:FAC,2)
+acn(w2,fac)
+
+SQL.ADD("Select O.NrOperacion, Cliente1, Especie, TipoOp, Cantidad, Book1, FechaOp, ")
+SQL.ADD("       FechaVto, C.RazonSocial, ")
+SQL.ADD("       O.Termsheet, O.TipoCONU, O.CB9,  ")
+SQL.ADD("       Precio1 as Tasa, TipoTasa as CodTasa, Spread, Especie1 as CodSpread ")
+SQL.ADD("  from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB, "~DBO~".CLIENTES C ")
+SQL.ADD(" where (FechaVto > '"~IdxDate(Dialogo.Fecha1)~"'  or CB1=1) ")
+SQL.ADD("   and O.Cliente1 = C.Codigo ")
+SQL.ADD("   and O.NrOperacion = OB.NrOperacion ")
+SQL.ADD("   and OB.NrBit in ('10','70') and OB.Valor = '1' ")
+SQL.ADD("   and TipoOp in ('CONU')")   
+if NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD("   and O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")  
+Endif
+if NoVacio(Dialogo.Book1)
+   SQL.ADD("   and O.Book1 = '"~Dialogo.Book1~"' ")  
+Endif      
+SQL.ADD("   and Termsheet is Not Null ")
+SQL.ADD("   and FechaOp <= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("Order by O.Termsheet,O.NrOperacion, FechaOp ")
+watch(SQL.Batch)
+Recorrer SQL
+  if Not EqStr(fbn('Termsheet'),Val(v:1))
+    if NoVacio(Val(v:1))
+      ACT(e:FAC, 'Acumulado Termsheet '~Val(v:1))
+      ACN(g:FAC, Val(x:1))
+      ACN(h:FAC, Val(x:2))
+      ACN(i:FAC, Val(x:3))
+      FormatoCeldas(g:FAC..i:FAC,Exe('F2'))
+      SetFont(a:FAC..i:FAC,2)
+      IFA
+      ACT(e:FAC, 'Total Termsheet '~Val(v:1))
+      ACN(g:FAC, BuscarCampo('ICLTERMSHEET','Monto','Codigo',Val(v:1)))
+      ACN(h:FAC, Val(x:2))
+      ACN(i:FAC, Val(g:FAC)-Val(h:FAC))
+      AgregarMarco(e:FAC..i:FAC,2,0)
+      FormatoCeldas(g:FAC..i:FAC,Exe('F2'))
+      SetFont(a:FAC..i:FAC,2)
+      SetFilaActual(FAC+2)
+    endif
+    ACT(v:1, fbn('Termsheet'))
+    ACN(x:1, 0)
+    ACN(x:2, 0)
+    ACN(x:3, 0)
+    ACN(v:2, FAC)
+  endif
+  ACT(a:fac, FBN['Termsheet'])
+  ACT(b:fac,fbn('NrOperacion'))
+  ACLO(b:fac,fbn('NrOperacion'))         
+  ACT(c:fac,fbn('FechaOp'))
+  ACT(d:fac,fbn('FechaVto'))
+  ACT(e:fac,fbn('Cliente1')~' - '~fbn('RazonSocial'))
+  ACT(f:fac,fbn('Especie'))
+  ACN(g:fac,fbn('Cantidad'))
+  ACN(h:fac,SQL("Select "~DBO~".SaldoCONU('"~fbn('NrOperacion')~"','"~IdxDate(Dialogo.Fecha1)~"',2)"))
+  if Val(h:FAC)>0
+    AsignarLink(h:fac,'DETICL',Fecha1=fbn('FechaOp'),Fecha2=Dialogo.Fecha1,NrOperacion1=fbn('NrOperacion'))
+  endif
+  ACN(i:fac,SQL("Select "~DBO~".SaldoCONU('"~fbn('NrOperacion')~"','"~IdxDate(Dialogo.Fecha1)~"',1)"))
+  ACN(j:fac,SQL("select SUM(Cantidad) from "~DBO~".OPERACIONES where OperacionRef = '"~fbn('NrOperacion')~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' and TipoOp ='PICO' "))
+  ACN(k:fac,SQL("select SUM(Cantidad) from "~DBO~".OPERACIONES where OperacionRef = '"~fbn('NrOperacion')~"' and FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' and TipoOp ='PICD' "))                 
+  ACT(l:fac, 'NO')
+* 13/09/24 Se agrega  Operaciones bloqueadas
+  if EqStr(FBN['CB9'], '1') 
+    ACT(m:fac,'SI')
+  else
+    ACT(m:fac,'NO')
+  endif
+  ACT(n:fac, FBN['TipoCONU'])
+  SCN(x:1, Val(g:FAC))
+  SCN(x:2, Val(h:FAC))
+  SCN(x:3, Val(i:FAC))
+  FormatoCeldas(g:FAC..k:FAC,Exe('F2'))
+
+Proximo
+if NoVacio(Val(v:1))
+  IFA
+  ACT(e:FAC, 'Acumulado CONU Termsheet '~Val(v:1))
+  ACN(g:FAC, Val(x:1))
+  ACN(h:FAC, Val(x:2))
+  ACN(i:FAC, Val(x:3))
+  FormatoCeldas(g:FAC..i:FAC,Exe('F2'))
+  SetFont(a:FAC..i:FAC,2)
+  IFA
+  ACT(e:FAC, 'Total Termsheet '~Val(v:1))
+  ACN(g:FAC, BuscarCampo('ICLTERMSHEET','Monto','Codigo',Val(v:1)))
+  ACN(h:FAC, Val(x:1))
+  ACN(i:FAC, Val(g:FAC)-Val(h:FAC))
+  AgregarMarco(e:FAC..i:FAC,2,0)
+  FormatoCeldas(g:FAC..i:FAC,Exe('F2'))
+  SetFont(a:FAC..i:FAC,2)
+endif
+
+  
+SetFilaActual(fac+2)
+ACT(a:fac, 'FIN DEL LISTADO')
+SetFont(a:fac,2)
+
+Impresion(1,2)
+Impresion(2,1)
+Impresion(3,1)
+Impresion(4,1)
+
+LimitesVision(n:fac)
+Rangotitulo(a:1..n:fac,Val(w2)+1)
+SetPrintFit(3, 90)
+
+ACO(1,10)
+ACO(2,6)
+ACO(3,8)
+ACO(4,7)
+ACO(5,20)
+ACO(6,6)
+ACO(7,10)
+ACO(8,10)
+ACO(9,10)
+ACO(10,10)
+ACO(11,10)
+ACO(12,7)
+ACO(13,10)

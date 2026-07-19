@@ -1,0 +1,123 @@
+﻿MostrarCuadrodeMensajes
+CrearDialogo
+    Directorio1: 'Ruta'    ;;;;;;NoVacio(Dialogo.Directorio1);'Debe indicar una ruta';NO;VAR('PATHPLCTA')
+    String1: 'Archivo'     ;;;;;;NoVacio(Dialogo.String1);'Debe indicar el archivo a importar';NO;VAR('FILEPLCTA')
+    Vehiculo1: 'Vehiculo'  ;;;;;;NoVacio(Dialogo.Vehiculo1);'Debe indicar un vehiculo';NO;VAR('VEHICULODE')
+Findialogo
+
+If Not Ok
+    Cancelar
+Endif
+************************************************************VALIDACION DE PATH Y ARCHIVO************************************************************
+let &archivo Dialogo.String1
+If ExisteDirectorio(Dialogo.Directorio1)
+    If EqStr(Copy(Dialogo.Directorio1,Longitud(Dialogo.Directorio1),1),'\')
+        let &pathCompleto Dialogo.Directorio1~&archivo
+    Else
+        let &pathCompleto Dialogo.Directorio1~'\'~&archivo
+    Endif
+    If Not ExisteArchivo(&pathCompleto)
+       Cancelar('El Archivo '~&archivo~ ' no existe en el directorio: '~Dialogo.Directorio1)
+    Endif
+    
+Else
+    Cancelar('El directorio '~Dialogo.Directorio1~' no existe')
+Endif
+
+**************************************************************IMPORTACION DE ARCHIVO**************************************************************
+*Columna A Cuenta
+*Columna B Descripcion
+*Columna C Moneda
+
+ImportarXLS(A:2..C:5000,A:1..C:5000,&pathCompleto)
+If Not Ok
+  Cancelar('Error al cargar el archivo '~&pathCompleto)
+EndIf
+
+             
+If Query("Select 1 from "~DBO~".CONTABILIDAD Where Codigo = '"~Dialogo.Vehiculo1~"' ") = 1
+    ACT(JQ:1,Query("Select Jerarquia from "~DBO~".CONTABILIDAD Where Codigo = '"~Dialogo.Vehiculo1~"' "))
+Else
+    ACT(JQ:1,Query("Select Max(Jerarquia) from "~DBO~".CONTABILIDAD Where Jerarquia Like '0%%000000000000' "))
+    ACT(JQ:1,Copy(Val(JQ:1),1,3))
+
+    ACN(JQ:1,Num(Val(JQ:1)))
+
+    ACN(JQ:1,Val(JQ:1)+1)
+
+    If Val(JQ:1)>9
+        ACT(PR:1,'0')
+    Else
+        ACT(PR:1,'00')
+    Endif
+    ACT(JQ:1,Val(PR:1)~FStr(Val(JQ:1),15,0)~'000000000000')
+Endif
+
+SQL.ADD("ALTER TABLE  "~DBO~".CONTABILIDAD DISABLE TRIGGER dl_contabilidad")
+SQL.NEW
+SQL.EXEC
+
+SQL.ADD("DELETE FROM "~DBO~".CONTABILIDAD ")
+SQL.NEW
+SQL.EXEC
+
+SQL.ADD("INSERT INTO "~DBO~".CONTABILIDAD (Jerarquia,Codigo,Nombre,Vehiculo) VALUES ('"~Val(JQ:1)~"','"~Dialogo.Vehiculo1~"','Cuentas "~Dialogo.Vehiculo1~"','"~Dialogo.Vehiculo1~"')")
+SQL.NEW
+SQL.EXEC 
+
+let &cantidad 1
+let &recorrida 1
+Message("Importando cuentas contables")
+Recorrer&i 1,5000
+    If NoVacio(Val(A:&i))
+        Message(Val(A:&i))
+        ACT(A:&i,Trim(Val(A:&i)))
+        **-MONEDA-**
+        ACT(MO:&i,SQL("select Valor from "~DBO~".CONFIGVALEXTERNOS where CodigoProceso = 'JREADY' and Atributo = 'MONEDA' and ValorSistemaExterno = '"~Trim(Val(C:&i))~"'"))
+        If Incluido(val(MO:&i),Var('ESPBILLETE'))
+            ACT(MO:&i,Var('MONEEXTR'))
+        EndIf
+        if &cantidad = 1
+            **Esto es para hacer corte por si tiene mas de 999 registros
+            ACT(JQ:2,GenerarJerarquiaByRef('CONTABILIDAD',Val(JQ:1), true))
+            SQL.ADD("INSERT INTO "~DBO~".CONTABILIDAD (Jerarquia,Codigo,Nombre,Vehiculo) VALUES ('"~Val(JQ:2)~"','"~Dialogo.Vehiculo1~str(&recorrida)~"','Cuentas "~Dialogo.Vehiculo1~"-"~str(&recorrida)~"','"~Dialogo.Vehiculo1~"')")
+            SQL.NEW
+            SQL.EXEC 
+            let &recorrida &recorrida+1
+        EndIf
+        if &cantidad < 1000
+            ACT(C:&i,GenerarJerarquiaByRef('CONTABILIDAD',Val(JQ:2), true))
+            **Entro a generar jerarquia interna porque puede tener mas de 999 registros
+            If Vacio(SQL("SELECT 1 FROM "~DBO~".CONTABILIDAD WHERE Codigo = '"~Fstr(val(A:&i),0,0)~"'"))
+                SQL.ADD("INSERT INTO "~DBO~".CONTABILIDAD (Jerarquia,Codigo,Nombre,Vehiculo,Moneda) VALUES ")
+                SQL.ADD("('"~Val(C:&i)~"','"~Fstr(val(A:&i),0,0)~"','"~Copy(val(B:&i),1,60)~"','"~Dialogo.Vehiculo1~"','"~val(MO:&i)~"')")
+                SQL.NEW
+                SQL.EXEC
+            Else
+                If NoVacio(SQL("SELECT 1 FROM "~DBO~".CONTABILIDAD WHERE Codigo = '"~Fstr(val(A:&i),0,0)~"' and Vehiculo = '"~Dialogo.Vehiculo1~"'")) 
+                    SQL.ADD("UPDATE "~DBO~".CONTABILIDAD Set Nombre = '"~Copy(val(B:&i),1,60)~"' WHERE Codigo = '"~Fstr(val(A:&i),0,0)~"'")
+                    SQL.NEW
+                    SQL.EXEC
+                Else
+                    SQL.ADD("DELETE FROM "~DBO~".CONTABILIDAD WHERE Codigo = '"~Fstr(val(A:&i),0,0)~"'")
+                    SQL.NEW
+                    SQL.EXEC
+                    SQL.ADD("INSERT INTO "~DBO~".CONTABILIDAD (Jerarquia,Codigo,Nombre,Vehiculo,Moneda) VALUES ")
+                    SQL.ADD("('"~Val(C:&i)~"','"~Fstr(val(A:&i),0,0)~"','"~Copy(val(B:&i),1,60)~"','"~Dialogo.Vehiculo1~"','"~val(MO:&i)~"')")
+                    SQL.NEW
+                    SQL.EXEC
+                Endif
+           Endif
+           let &cantidad &cantidad+1
+        else
+            let &cantidad 1
+            dfa
+        EndIf
+    Else
+        break
+    Endif    
+Proximo
+
+SQL.ADD("ALTER TABLE  "~DBO~".CONTABILIDAD ENABLE TRIGGER dl_contabilidad")
+SQL.NEW
+SQL.EXEC

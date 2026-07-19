@@ -1,0 +1,119 @@
+﻿SQL.ADD("SELECT C.Codigo, Jerarquia, PatrimonioPesos, FechaBal FROM "~DBO~".CLIENTES C ")
+SQL.ADD("join "~DBO~".CATEGORIACLIENTES CT on C.CategDepositante = CT.Codigo WHERE")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD(" C.Codigo='"~val(v1)~"' and ")
+endif
+SQL.ADD("CT.Sector <> 'FIN' ")
+SQL.ADD("and isnull(Persona,' ')<>'SI' ")
+SQL.ADD("and exists(select 1 from "~DBO~".LIMCONSUMIDOS where Limite in ('BCRAN','ACIDN','ACCON','BCRAG','ACIDG','ACCOG','ACMAN') and Cliente=C.Codigo) ")
+
+SQL.ADD("ORDER BY substring(Jerarquia,1,3),C.Codigo ")
+
+Recorrer SQL 
+  if EsTerminal(fbn['Codigo'],Clientes)
+    ACT(jj1,Copy(fbn['Jerarquia'],1,3))
+    ACT(zz1, fbn['Codigo'])
+
+    if Not EqStr(val(pp1),val(jj1))
+      if val(aq:fac-1)=1
+        dfa
+      endif
+      ACT(a:fac,SQL("Select RazonSocial from "~DBO~".CLIENTES where Jerarquia like '"~val(jj1)~"000000000000' "))
+      ACT(pp1,val(jj1))      
+      ACT(ap:fac,val(jj1))
+      ACN(aq:fac,1)
+      ifa
+    endif
+
+    ACT(a:FAC, fbn['Codigo'])
+    ACN(lb:FAC, fbn['PatrimonioPesos'])
+
+    ACT(ap:fac,val(jj1))
+
+    recorrer&j val(zz2), val(zz4)
+    
+    ACN(ld:FAC, LimConsumido(val(zz1),'BCRAN','ARP',0,VAR('VEHICULODE'),,,,&j))
+    ACN(le:FAC, LimConsumido(val(zz1),'ACIDN','ARP',0,VAR('VEHICULODE'),,,,&j))
+    ACN(lf:FAC, LimConsumido(val(zz1),'ACCON','ARP',0,VAR('VEHICULODE'),,,,&j))
+    ACN(lg:FAC, LimConsumido(val(zz1),'BCRAG','ARP',0,VAR('VEHICULODE'),,,,&j))
+    ACN(lh:FAC, LimConsumido(val(zz1),'ACIDG','ARP',0,VAR('VEHICULODE'),,,,&j))
+    ACN(li:FAC, LimConsumido(val(zz1),'ACCOG','ARP',0,VAR('VEHICULODE'),,,,&j))
+    ACN(lj:FAC, LimConsumido(val(zz1),'ACMAN','ARP',0,VAR('VEHICULODE'),,,,&j))
+
+    ACN(lk:FAC, Sum(ld:FAC..lj:FAC))
+
+    ACN(ll:fac,0)
+    ACN(lm:fac,0)
+    ACN(ln:fac,0)
+
+    if Val(lk:FAC)>Val(lb:FAC)*VAR('BCGRATMAX')/100     
+      ACN(ll:FAC, Val(lk:FAC)-Val(lb:FAC)*VAR('BCGRATMAX')/100)
+    endif
+    if Val(lk:FAC)>Val(lb:FAC)*VAR('BCGRATMIN')/100
+      ACN(lm:FAC, Val(lk:FAC)-Val(lb:FAC)*VAR('BCGRATMIN')/100)
+      if Val(lk:FAC)-Val(lb:FAC)*VAR('BCGRATMIN')/100>Val(q:Val(ww1)+1)
+        ACN(ln:FAC, Val(lk:FAC)-Val(lb:FAC)*VAR('BCGRATMIN')/100-Val(q:Val(ww1)+1))
+      endif
+    endif
+
+    *Muestro la Exposicion
+    *Si Existe Ex.300% => Ex.300%
+    *Sino Ex.100% vs 2.5% RPC
+    if val(ll:fac)>0
+      ACN(&j-val(zz2)+2:fac, val(ll:fac))
+    else
+      ACN(&j-val(zz2)+2:fac, val(ln:fac))
+    endif 
+
+    proximo
+
+    *Muestro solo aquellos clientes que tiene algun exceso    
+    if not Sum(b:FAC..af:FAC)>0
+        BorrarCeldas(a:fac..ln:fac)  
+        dfa     
+    endif
+  else
+    dfa
+  endif
+proximo
+
+if val(aq:fac)=1
+  BorrarCeldas(a:fac..lm:fac)
+  dfa  
+endif
+
+ACN(ay1,0)
+recorrer&i Val(ww1)+4,FAC+1
+  if Not EqStr(Copy(Val(ap:&i),1,3),Copy(Val(ap:&i-1),1,3))
+    if Val(ay1)>1
+      AgregarMarco(a:&i-Val(ay1)+1..ah:&i-1,1,3)
+    endif
+    if &i<FAC+1
+      SetFont(a:&i,2)
+      AgregarMarco(a:&i..ah:&i,1,0)
+      ACN(ay1,0)
+    endif
+  endif
+  SCN(ay1,1)
+proximo
+
+if FAC>Val(ww3)
+  SetFilaActual(FAC+1)
+  ACN(ww4,FAC)
+  ACT(a:fac, 'Totales')
+
+  recorrer&k 2,32
+    ACN(&k:fac, Sum(&k:Val(ww3)+1..&k:fac-1))
+  proximo
+
+  SetFont(a:fac..af:fac,2)
+  AgregarMarco(b:fac..ag:fac,1,2,0)
+
+  ACT(ah:val(ww3),'Total')
+  recorrer&k Val(ww3)+1,fac-1
+    if val(aq:&k)<>1
+      ACN(ag:&k, Sum(b:&k..af:&k))
+    endif
+  proximo
+  SetFont(ah:Val(ww3)+1..ah:fac-1,2)
+endif 

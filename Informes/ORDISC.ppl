@@ -1,0 +1,125 @@
+﻿CrearDialogo
+    Fecha1: 'F. Desde' ;;;;;;;;;;FSYS-1
+    Fecha2: 'F. Hasta' ;;;;;;;;;;FSYS
+FinDialogo
+If not OK
+    Cancelar
+endif  
+
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+
+CrearFont(1, 'Arial,12,B')
+CrearFont(2, 'Arial,8,')
+CrearFont(3,"Arial,8,B")
+
+ACT(A:4, 'Reporte ordenes con Discrepancias')
+SetFont(A:4,1)
+
+ACT(A:6, 'Fecha desde: '~Dialogo.Fecha1)
+ACT(B:6, 'Fecha hasta: '~Dialogo.Fecha2)
+
+SetFilaActual(8)
+
+ACT(A:FAC, "NrOrden")
+ACT(B:FAC, "Tipo Orden")
+ACT(C:FAC, "Fecha")
+ACT(D:FAC, "Cantidad Orden")
+ACT(E:FAC, 'Precio Orden')
+ACT(F:FAC, "Monto Orden")
+ACT(G:FAC, "NrOperación")
+ACT(H:FAC, "Cantidad Op")
+ACT(I:FAC, "Precio Op")
+ACT(J:FAC, "Monto Op")
+ACT(K:FAC, "Cantidad Ejec.")
+ACT(L:FAC, "PPP Ejec.")
+ACT(M:FAC, "Monto Ejec.")
+ACT(N:FAC, "# Ejecuciones")
+ACT(O:FAC, "Discrepancia")
+
+SetFont(A:FAC..Z:FAC, 3)
+
+AgregarMarco(A:FAC..O:FAC,1,2,Exe('COLOR6'))
+
+ACO(1,14)
+ACO(2,13)
+ACO(3,8)
+ACO(4,11)
+ACO(5,11)
+ACO(6,11)
+ACO(7,11)
+ACO(8,9)
+ACO(9,11)
+ACO(10,11)
+ACO(11,10)
+ACO(12,10)
+ACO(13,8)
+ACO(14,8)
+
+SQL.ADD("SELECT")
+SQL.ADD("   OP.Cantidad, OP.Precio1, OP.TotalBrutoCli1, OP.FechaOp, ")
+SQL.ADD("   ORD.CantidadTotalOrden, ORD.PrecPromCompletado,ORD.PrecioLimite, ORD.CantidadEnProceso, ORD.NrOrden, ORD.FechaOrden, ORD.TipoOrden, Ord.NrOperacion")
+SQL.ADD("FROM")
+SQL.ADD("   DBO.OPERACIONES OP")
+SQL.ADD("JOIN")
+SQL.ADD("   DBO.ORDENES ORD ON OP.NrOperacion = ORD.NrOperacion ")
+SQL.ADD("WHERE ")
+SQL.ADD("   ORD.FechaOrden >='"~IdXDate(Dialogo.Fecha1)~"' and ORD.FechaOrden <= '"~IdXDate(Dialogo.Fecha2)~"'; ")
+
+SetFilaActual(8)
+
+Recorrer SQL
+
+     ACT(A:FAC, FBN['NrOrden'])  
+     ACT(B:FAC, FBN['TipoOrden'])
+     ACT(C:FAC, FBN['FechaOrden'])
+     ACN(D:FAC, FBN['CantidadTotalOrden'])
+     ACN(E:FAC, FBN['PrecPromCompletado'])
+     ACN(F:FAC, FBN['CantidadEnProceso'])
+     
+     SQL.ADD("SELECT Count(*) Ejecuciones, SUM(Cantidad) CantidadEj, SUM(Cantidad2) CantxPrecio")
+     SQL.ADD("FROM "~DBO~".EJECUCIONES WHERE NrOrden ='"~VAL(A:FAC)~"'")
+
+     Recorrer SQL
+        dfa
+        ACN(K:FAC, FBN['CantidadEj'])
+        ACN(L:FAC, (FBN['CantxPrecio']/FBN['CantidadEj']))
+        ACN(M:FAC, FBN['CantxPrecio'])      
+        ACT(N:FAC, Fstr(FBN['Ejecuciones'],1,0))
+        
+        Alinearceldas(N:FAC, 'D')           
+        Alinearceldas(L:FAC, 'D')
+        FormatoCeldas(L:FAC,Exe('F9'))
+     proximo
+
+     ACT(G:FAC, FBN['NrOperacion'])
+     ACN(H:FAC, FBN['Cantidad'])
+     ACN(I:FAC, FBN['Precio1'])
+     FormatoCeldas(I:FAC,Exe('F9'))
+     Alinearceldas(I:FAC, 'D')
+     ACN(J:FAC, FBN['TotalBrutoCli1'])
+   
+     * (MONTO ORD = MONTO OP) OR(CANTIDAD OP = CANTIDAD EJ) OR  OR (PRECIO OP <> PPP) 
+
+     IF(Round(VAL(M:FAC),2) = Round(VAL(J:FAC),2) AND Round(VAL(I:FAC),2) = Round(VAL(L:FAC),2) AND (Round(VAL(D:FAC),2) = Round(VAL(H:FAC),2) OR Round(VAL(D:FAC),2) = Round(VAL(K:FAC),2) OR Round(VAL(K:FAC),2) = Round(VAL(H:FAC),2)))
+        BorrarCeldas(a:fac..z:fac)
+        dfa
+     ELSE
+        IF Round(VAL(H:FAC),2) <> Round(VAL(K:FAC),2)
+            ACT(O:FAC, VAL(O:FAC)~'C ')
+        ENDIF
+        IF Round(VAL(M:FAC),2) <> Round(VAL(J:FAC),2)
+            ACT(O:FAC, VAL(O:FAC)~'M ')
+        ENDIF
+        IF Round(VAL(I:FAC),8) <> Round(VAL(L:FAC),8)
+            ACT(O:FAC, VAL(O:FAC)~'P ')
+        ENDIF
+        ACLO(G:FAC,FBN['NrOperacion'])
+        ACLR(A:FAC, FBN['NrOrden'])
+     ENDIF
+     
+proximo
+
+ACT(A:FAC+2,'Fin del Listado')
+SetFont(A:FAC+2,1)
+LimitesVision(P:fac+3)
+

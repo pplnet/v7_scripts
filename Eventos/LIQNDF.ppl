@@ -1,0 +1,222 @@
+﻿CrearDialogo
+    Fecha1  :     'Fecha Op D' ;1;1;;;;;;;Fsys-84;
+    Fecha2  :     'Fecha Op H' ;1;2;;;;;;;Fsys;
+    Fecha3  :     'Fecha Vto D';2;1;;;;Dialogo.Fecha3<>0 y Dialogo.Fecha3 >=Fsys;'Debe Ingresar Fecha Vto Desde Valida';NO;FSys;
+    Fecha4  :     'Fecha Vto H';2;2;;;;Dialogo.Fecha4<>0 y Dialogo.Fecha4 >= Dialogo.Fecha3;'Debe Ingresar Fecha Vto Hasta Valida';NO;FSys+30;    
+    Especie1:     'Moneda Liquidacion' ;;1;;;;;;;
+    NrOperacion1: 'Operacion';;;;;;Vacio(Dialogo.NrOperacion1) o [Fsys <= BuscarCampo('OPERACIONES','FechaVto','NrOperacion',Dialogo.NrOperacion1) y 1<>SQL("SELECT 1 FROM "~DBO~".MTMDIARIO Where NrOperacion = '"~Dialogo.NrOperacion1~"' and Fecha = "~IdxDate2(Fsys)~" ")];'Operacion Vencida/MTM-FIX generado';;;;;;;" Tipoop in('FXCF','FXVF')  "
+    Mercado1:     'Mercado'
+    Check1:       'Marca todas'
+FinDialogo
+
+if Not Ok
+   Cancelar
+endif
+ACT(LS:1, VAR('MONNDF'))
+
+SQL.ADD("SELECT O.NrOperacion, O.TipoOp, O.Cliente1, O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto, O.Cantidad, O.TasaEspecie, O.TipoTasa, O.Book1, O.Book2, ")   
+SQL.ADD("       O.Arancel4, O.FechaAltaSisExterno, O.FechaUltCupon, O.Mercado2, O.Mercado4, O.MercadoRB, O.Cuenta3, O.Cuenta4, O.FechaVto2,")
+SQL.ADD("       O.Arancel3, O.Sector1, O.Sector2, O.Vehiculo1, IsNull(O.Lotes,0) as DiasAnt, O.TablaFeriados1, O.EsCaucionado as HabCorr, ContraEspecie2 ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES O, "~DBO~".MERCADOS M  ")   
+SQL.ADD(" WHERE O.Tipoop in('FXCF','FXVF')")   
+SQL.ADD("   AND O.Mercado4=M.Codigo ")   
+SQL.ADD("   AND M.Regulado='NO' ")
+SQL.ADD("   and Not Exists( ")
+SQL.ADD("                  SELECT 1 FROM "~DBO~".MTMDIARIO MT1 ")
+SQL.ADD("                   WHERE MT1.Fecha="~IdxDate2(Fsys)~" ")
+SQL.ADD("                     and MT1.NrOperacion=O.NrOperacion)")
+IF NoVacio(Dialogo.NrOperacion1)
+   SQL.ADD("   AND O.NrOperacion='"~Dialogo.NrOperacion1~"'")
+ELSE
+   If Not (Dialogo.Fecha1=0 and Dialogo.Fecha2=0)
+      SQL.ADD("   AND (O.FechaOp>="~IdxDate2(Dialogo.Fecha1)~" and O.FechaOp<="~IdxDate2(Dialogo.Fecha2)~")  ")
+   Endif
+   SQL.ADD("   AND (O.FechaVto>="~IdxDate2(Dialogo.Fecha3)~" and O.FechaVto<="~IdxDate2(Dialogo.Fecha4)~")  ")
+   if NoVacio(Dialogo.Mercado1)
+      SQL.ADD("   AND Mercado4='"~Dialogo.Mercado1~"'")
+   endif
+   if NoVacio(Dialogo.Especie1)
+      SQL.ADD("   AND O.TasaEspecie='"~Dialogo.Especie1~"'")
+   endif
+ENDIF
+Watch(sql.Batch)
+
+* Cantidad de ops
+acn(ca:1,0)
+Recorrer SQL
+    if Dialogo.Check1=1
+       acn(a:fac,1)
+    else
+       acn(a:fac,0)
+    endif    
+    act(b:fac,FBN['NrOperacion'])
+    act(c:fac,FBN['Cliente1'])
+    act(d:fac,FBN['Especie'])
+    act(e:fac,FBN['ContraEspecie'])
+    act(f:fac,FBN['FechaOp'])
+    acd(g:fac,FBN['FechaVto'])
+    act(h:fac,FBN['TasaEspecie'])
+    act(i:fac,FBN['Mercado2'])
+    act(j:fac,FBN['Cuenta4'])
+    act(k:fac,FBN['Cuenta3'])
+    act(l:fac,FBN['Mercado4'])    
+    acn(m:fac,FBN['Cantidad'])
+    act(n:fac,FBN['TipoOp'])
+    act(o:fac,FBN['Book1'])      
+    act(v:fac,FBN['Vehiculo1'])
+    acd(w:fac,FBN['FechaVto2'])    
+    act(z:fac,FBN['ContraEspecie2'])
+    ** VTXT1
+    act(aa:fac,BuscarCampo('MERCADOS','Regulado','Codigo',Val(l:FAC)))
+    ** VTXT2
+    act(ab:fac,IIF(EQSTR(Val(aa:fac),'NO'),Val(h:FAC),Val(e:FAC)))
+    ** VTXT12
+    act(ac:fac,BuscarCampo('MERCADOS','Netea','Codigo',Val(i:fac)))
+    ** VTXT5 
+    act(ae:fac,IIF(NoVacio(Val(o:fac)),QUERY("Select Codigo from "~DBO~".CUENTAS where Cliente='"~IIF(EqStr(Val(ac:fac),'SI'),QUERY("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(i:fac)~"' "),Val(c:fac))~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(ab:fac)~"%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS','VIS') and  "~IIF(NOT Eqstr(Val(ac:fac),'SI')," Mercado='"~Val(i:fac)~"' "," Mercado IN ('BCRA','AC','MC','SWIFT') ")~" and (TiposOperacion is NULL or TiposOperacion like '%"~Val(n:fac)~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC")) )
+    ** VCAN2
+    acn(ad:fac,IIF(NoVacio(Val(o:fac)),IIF(NoVacio(Val(ae:fac)),Elementos(Val(ae:fac)),0)))
+
+    acd(ag:fac,FBN['FechaVto'])
+    acn(ah:fac,BuscarLista(FBN['TasaEspecie'],Val(ls1))-1)
+    act(ai:fac,FBN['Mercado2'])
+    act(aj:fac,FBN['Cuenta4'])
+    act(ak:fac,FBN['Cuenta3'])
+    acn(al:fac,fbn('DiasAnt'))
+    act(am:fac,fbn['TablaFeriados1'])
+    act(an:fac,fbn['HabCorr'])
+    act(ao:fac,FBN['Book1']) 
+    acd(aw:fac,FBN['FechaVto2'])        
+    act(az:fac,FBN['ContraEspecie2'])        
+    if Eqstr(FBN['MercadoRB'],'1')
+        acd(bg:fac,FBN['FechaAltaSisExterno'])
+        act(bh:fac,FBN['Arancel4'])
+        act(bi:fac,FBN['TipoTasa'])
+        act(bj:fac,FBN['Sector1'])        
+        act(bk:fac,FBN['Sector2'])
+        act(bo:fac,FBN['Book2'])
+        acd(bw:fac,FBN['FechaUltCupon'])        
+        act(bz:fac,FBN['Arancel3'])        
+    ENDIF
+    scn(ca:1,1)
+Proximo
+
+If Val(ca:1)>0 
+** FJL 12/12/18 - Cambio por Repetir
+*    Recorrer&k 1,Val(ca:1)
+    Repetir
+       **- Armo la lista de las transacciones que puede seleccionar
+        CrearListBox ; 'Arial,8,';'Modificacion NDF'
+           'OK'                    ;a:1..a:Fac   ;SI;;;40 ;CHECK
+           'Operacion'             ;b:1..b:Fac   ;NO;;;70 ;STRING;;
+           'Cliente'               ;c:1..c:Fac   ;NO;;;70 ;STRING;;
+           'Mercado'               ;l:1..l:Fac   ;NO;;;60 ;STRING;;
+           'Especie'               ;d:1..d:Fac   ;NO;;;50 ;STRING;;
+           'Cantidad'              ;m:1..m:Fac   ;NO;;;100 ;NUMERO;;
+           'ConEspecie'            ;e:1..e:Fac   ;NO;;;50 ;STRING;;
+           'EspecieFix'            ;z:1..z:Fac   ;NO;;;50 ;STRING;;
+           'Fecha Op'              ;f:1..f:Fac   ;NO;;;80 ;STRING;;
+           'F.Vto Or.'             ;g:1..g:Fac   ;NO;;;80;FECHA;
+           'M.Liq.Or.'             ;h:1..h:Fac   ;NO;;;50;STRING;;
+           'Mer.Liq.'              ;i:1..i:Fac   ;NO;;;60 ;STRING;;
+           'Book'                  ;o:1..o:Fac   ;NO;;;60 ;STRING;;           
+           'Cta.Mon.CLI'           ;j:1..j:Fac   ;NO;;;80 ;STRING;;
+           'Cta.Mon.VEH'           ;k:1..k:Fac   ;NO;;;80 ;STRING;;       
+           'Nva.F.Vto.'            ;ag:1..ag:Fac ;Val(a:FLB)=1;Val(a:FLB)=0 O [EsHabil(val(ag:FLB)) y [SQL("Select 1 from "~DBO~".MTMDIARIO M1 where M1.NrOperacion = '"~Val(b:FLB)~"' and M1.Fecha  >= '"~IdxDate(Val(ag:FLB))~"'  ") <>1]] ;'Fecha Inválida';80 ;FECHA;RGB(180,180,193)
+           'Nva.F.FIX.'            ;aw:1..aw:Fac ;Val(a:FLB)=1;Val(a:FLB)=0 O [EsHabil(val(aw:FLB)) y [SQL("Select 1 from "~DBO~".MTMDIARIO M1 where M1.NrOperacion = '"~Val(b:FLB)~"' and M1.Fecha  >= '"~IdxDate(Val(aw:FLB))~"'  ") <>1]] ;'Fecha Inválida';80 ;FECHA;RGB(180,180,193)           
+           'Nva.Mon.Liq.'          ;ah:1..ah:Fac ;Val(a:FLB)=1;Val(a:FLB)=0 O NoVacio(Val(ah:FLB));'Moneda inválida';50 ;COMBO;Val(LS:1);RGB(180,180,193)
+** FJL 19/12/18 - Se saca la condicion de editable
+*           'Nuevo Mercado'         ;ai:1..ai:Fac ;Val(a:FLB)=1 y [Vacio(Val(bh:FLB)) y (BuscarLista(Val(h:FLB),Val(ls1))-1)<>Val(ah:FLB)] o [NoVacio(Val(bh:FLB)) y Val(bh:FLB)<>Val(ah:FLB)];;;100 ;TABLA;'MERCADOS';'Codigo';'Codigo;Descripcion';"TipoNegocio Like '%M%' ";RGB(180,180,193)
+*           'Nueva Cta.CLI'         ;aj:1..aj:Fac ;Val(a:FLB)=1 y [Vacio(Val(bh:FLB)) y (BuscarLista(Val(h:FLB),Val(ls1))-1)<>Val(ah:FLB)] o [NoVacio(Val(bh:FLB)) y Val(bh:FLB)<>Val(ah:FLB)];;;100 ;TABLA;'CUENTAS';'Codigo';'Codigo;Nombre';"Cliente = '"~Val(c:FLB)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~ItemLista(Val(LS:1), val(ah:FLB)+1)~"%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and Mercado='"~Val(ai:FLB)~"' ";RGB(180,180,193)
+*           'Nueva Cta.VEH'         ;ak:1..ak:Fac ;Val(a:FLB)=1 y [Vacio(Val(bh:FLB)) y (BuscarLista(Val(h:FLB),Val(ls1))-1)<>Val(ah:FLB)] o [NoVacio(Val(bh:FLB)) y Val(bh:FLB)<>Val(ah:FLB)];;;100 ;TABLA;'CUENTAS';'Codigo';'Codigo;Nombre';"Cliente = '"~Val(v:FLB)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~ItemLista(Val(LS:1), val(ah:FLB)+1)~"%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and Mercado='"~Val(ai:FLB)~"' ";RGB(180,180,193)
+** FJL 20/12/18 - Se agrega formula de recalculo
+*           'Nuevo Mercado'         ;ai:1..ai:Fac ;Val(a:FLB)=1;;;100 ;TABLA;'MERCADOS';'Codigo';'Codigo;Descripcion';"TipoNegocio Like '%M%' ";RGB(180,180,193);
+*           'Nueva Cta.CLI'         ;aj:1..aj:Fac ;Val(a:FLB)=1;;;100 ;TABLA;'CUENTAS';'Codigo';'Codigo;Nombre';"Cliente = '"~Val(c:FLB)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~ItemLista(Val(LS:1), val(ah:FLB)+1)~"%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and Mercado='"~Val(ai:FLB)~"' ";RGB(180,180,193)
+*           'Nueva Cta.VEH'         ;ak:1..ak:Fac ;Val(a:FLB)=1;;;100 ;TABLA;'CUENTAS';'Codigo';'Codigo;Nombre';"Cliente = '"~Val(v:FLB)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~ItemLista(Val(LS:1), val(ah:FLB)+1)~"%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and Mercado='"~Val(ai:FLB)~"' ";RGB(180,180,193)
+*           'Nvo.Esp.Fix'           ;az:1..az:Fac ;Val(a:FLB)=1;;;70 ;TABLA;'ESPECIES';'Codigo';'Codigo;Nombre';"Codigo in (Select EspecieFIX from "~DBO~".MERCADOS where Codigo = '"~Val(l:FLB)~"')";RGB(180,180,193);
+           'Nvo.Esp.Fix'           ;az:1..az:Fac ;Val(a:FLB)=1;;;70 ;TABLA;'ESPECIES';'Codigo';'Codigo;Nombre';;RGB(180,180,193);           
+           'Nvo.M.Liq.'            ;ai:1..ai:Fac ;Val(a:FLB)=1;;;60 ;TABLA;'MERCADOS';'Codigo';'Codigo;Descripcion';"TipoNegocio Like '%M%' ";RGB(180,180,193);IIF(EqStr(Val(h:FLB),ItemLista(Val(LS:1), val(ah:FLB)+1)),Val(i:FLB),MercadoDef(ItemLista(Val(LS:1), val(ah:FLB)+1)));NO;
+           'Nvo. Book'             ;ao:1..ao:Fac ;Val(a:FLB)=1;;;70 ;TABLA;'BOOKS';'Codigo';'Codigo;Descripcion';;RGB(180,180,193);
+           ** Cuenta4 - La validacion nofunciona
+           'Nva.Cta.CLI'           ;aj:1..aj:Fac ;SI;Val(a:FLB)=1 y Vacio(Val(aj:FLB)) o [[[CLIENTECUENTA(Val(c:FLB),Val(aj:FLB)) y EqStr(Val(ac:FLB),'NO')] o [CLIENTECUENTA(Val(v:FLB),Val(aj:FLB)) y EqStr(Val(ac:FLB),'SI')]] y ESPECIECUENTA(Val(ab:FLB),Val(aj:FLB)) y EqStr(Val(i:FLB), BuscarCampo('CUENTAS','Mercado','Codigo',Val(aj:FLB)))];'Nueva Cuenta Cliente Invalida' ;80 ;TABLA;'CUENTAS';'Codigo';'Codigo;Nombre';"Cliente = '"~IIF(EqStr(BuscarCampo('MERCADOS','Netea','Codigo',Val(i:FLB)),'SI'),QUERY("SELECT Cliente1 FROM "~DBO~".MERCADOS WHERE Codigo='"~Val(I:FLB)~"' "),Val(C:FLB))~"' and (Especies Like '%MONEDA%' or Especies Like '%"~IIF(EQSTR(BuscarCampo('MERCADOS','Regulado','Codigo',Val(l:FLB)),'NO'),Val(h:FLB),Val(e:FLB))~"%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS','VIS') and (TiposOperacion is NULL or TiposOperacion like '%"~Val(N:FLB)~"|%') and Mercado='"~Val(I:FLB)~"' ";RGB(180,180,193);IIF(NoVacio(Val(o:FLB)),IIF(1<=Val(ad:FLB),ItemLista(Val(ae:FLB),1),VAR('CTAMOD23')));NO;
+           ** Cuenta3 - La validacion nofunciona
+           'Nva.Cta.VEH'           ;ak:1..ak:Fac ;SI;Val(a:FLB)=1 y Vacio(Val(ak:FLB)) o [CLIENTECUENTA(Val(v:FLB),Val(ak:FLB)) y ESPECIECUENTA(Val(ab:FLB),Val(ak:FLB)) y EqStr(IIF(Eqstr(Val(aa:FLB),'SI'),Val(l:FLB),IIF(INCLUIDO(Val(i:FLB),VAR('MERNOVEHI')),IIF(EQSTR(Val(ab:FLB),VAR('MONELOCA')),VAR('MERCBCRA'),IIF(EQSTR(Val(ab:FLB),VAR('MONEEXTR')),VAR('MERSWIFT'),Val(i:FLB))),Val(i:FLB))),BuscarCampo('CUENTAS','Mercado','Codigo',Val(ak:FLB)))];'Nueva Cuenta Vehiculo Invalida';80 ;TABLA;'CUENTAS';'Codigo';'Codigo;Nombre';"Cliente = '"~Val(V:FLB)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~IIF(EQSTR(BuscarCampo('MERCADOS','Regulado','Codigo',Val(l:FLB)),'NO'),Val(h:FLB),Val(e:FLB))~"%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and (TiposOperacion is NULL or TiposOperacion like '%"~Val(N:FLB)~"|%') and Mercado='"~ IIF(INCLUIDO(Val(I:FLB),VAR('MERNOVEHI')),IIF(EQSTR(IIF(EQSTR(BuscarCampo('MERCADOS','Regulado','Codigo',Val(l:FLB)),'NO'),Val(h:FLB),Val(e:FLB)),VAR('MONELOCA')),VAR('MERCBCRA'),IIF(EQSTR(IIF(EQSTR(BuscarCampo('MERCADOS','Regulado','Codigo',Val(l:FLB)),'NO'),Val(h:FLB),Val(e:FLB)),VAR('MONEEXTR')),VAR('MERSWIFT'),Val(I:FLB))),Val(I:FLB)) ~"'";RGB(180,180,193);IIF(MODI,IIF(NOVACIO(Val(o:FLB)),IIF(EqStr(Val(ac:FLB),'SI'),Val(j:FLB),SQL("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente = '"~Val(v:FLB)~"' and (Especies Like '%MONEDA%' or Especies Like '%"~Val(ab:FLB)~"%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and (TiposOperacion is NULL or TiposOperacion like '%"~Val(n:FLB)~"|%') and Mercado='"~IIF(Eqstr(Val(aa:FLB),'SI'),Val(l:FLB),IIF(INCLUIDO(Val(i:FLB),VAR('MERNOVEHI')),IIF(EQSTR(Val(ab:FLB),VAR('MONELOCA')),VAR('MERCBCRA'),IIF(EQSTR(Val(ab:FLB),VAR('MONEEXTR')),VAR('MERSWIFT'),Val(i:FLB))),Val(i:FLB)))~"' ORDER by ISNull(Permanente,'NO') ASC")),VAL(j:flb)));NO;NO;
+           'Pend. F.V.'            ;bg:1..bg:Fac ;NO;;;80 ;FECHA;RGB(180,170,193)
+           'Pend. F.Fix.'          ;bw:1..bw:Fac ;NO;;;80 ;FECHA;RGB(180,170,193)           
+           'Pend. Mon. Liq'        ;bh:1..bh:Fac ;NO;;;90 ;STRING;;RGB(180,170,193)
+           'Pend. Esp.Fix.'        ;bz:1..bz:Fac ;NO;;;90 ;STRING;;RGB(180,170,193)
+           'Pend. Mercado '        ;bi:1..bi:Fac ;NO;;;90 ;STRING;;RGB(180,170,193)
+           'Pend. Book '           ;bo:1..bo:Fac ;NO;;;90 ;STRING;;RGB(180,170,193)
+           'Pend. Cta CLI'         ;bj:1..bj:Fac ;NO;;;90 ;STRING;;RGB(180,170,193)
+           'Pend. Cta VEH'         ;bk:1..bk:Fac ;NO;;;90 ;STRING;;RGB(180,170,193)       
+        FinListBox
+
+        ** Val(a:FLB)=0 o 
+        IF NOT OK 
+           Cancelar('Evento Modificacion NDF, ha sido Cancelado!!!')
+        ENDIF
+
+        ACN(cz:1,0)
+        Recorrer&j 1,Val(ca:1)
+            If Val(a:&j)=1 
+                If NoVacio(Val(ai:&j)) 
+                *                   ACT(og:&j, Sql("Select Mercado From "~DBO~".CUENTAS Where Codigo = '"~Val(aj:&j)~"'  "))
+                   If NoVacio(Val(i:&j)) y Not Eqstr(Val(ai:&j),Val(i:&j))
+                      SCN(cz:1,1)
+                      Messagebox('ALERTA! la Cuenta '~Val(aj:&j)~' de la operacion '~Val(b:&j)~' no Corresponde al Mercado asignado '~Val(ai:&j)~'!!!')
+                   Endif
+                Endif
+                
+                If NoVacio(Val(ai:&j)) 
+                *                   ACT(og:&j, Sql("Select Mercado From "~DBO~".CUENTAS Where Codigo = '"~Val(ak:&j)~"'  "))
+                If NoVacio(Val(i:&j)) y Not Eqstr(Val(ai:&j),Val(i:&j))
+                      SCN(cz:1,1)               
+                      Messagebox('ALERTA! la Cuenta '~Val(ak:&j)~' de la operacion '~Val(b:&j)~' no Corresponde al Mercado asignado '~Val(ai:&j)~'!!!')
+                   Endif
+                Endif
+                
+            Endif
+        Proximo
+           
+        If Val(cz:1)= 0
+           If 1=Messagebox('Confirma datos Ingresados???',3,1)
+              Break
+           Endif
+        Endif 
+    Proximo
+
+
+    Recorrer&i 1, FAC
+         If Val(a:&i) = 1
+            ** Fecha Fixing  NO SE CALCULA 
+            *ACD(FE:&i,val(ag:&i))
+            *ACN(NR:1, SQL("Select 1 From "~DBO~".MERCADOS Where Codigo = '"~val(l:&i)~"' AND Regulado = 'NO' "))      
+            *IF Val(NR:1)=1
+            *   If EqStr(val(an:&i),'1')
+            *      ACD(FE:&i,Habiles(val(ag:&i),-1*val(al:&i),val(am:&i)))
+            *   Else
+            *      ACD(FE:&i,Habiles(val(ag:&i),-1*val(al:&i),val(am:&i),NO))
+            *   Endif
+            *Endif
+            *if No EsHabil(val(FE:&i),VAR('FERIDEF'))
+            *   ACD(FE:&i,Habiles(val(FE:&i),-1,VAR('FERIDEF'),NO))
+            *endif
+            SQL.ADD("UPDATE "~DBO~".OPERACIONES ")
+            SQL.ADD("   SET Arancel4='"~ItemLista(Val(LS:1), val(ah:&i)+1)~"', ")
+            SQL.ADD("       FechaAltaSisExterno="~IdxDate2(val(ag:&i))~", ")
+            SQL.ADD("       FechaUltCupon="~IdxDate2(val(aw:&i))~", ")
+            SQL.ADD("       TipoTasa='"~val(ai:&i)~"', ")
+            SQL.ADD("       Book2='"~val(ao:&i)~"', ")
+            SQL.ADD("       Sector1='"~val(aj:&i)~"', ")
+            SQL.ADD("       Sector2='"~val(ak:&i)~"', ")            
+            SQL.ADD("       Arancel3='"~val(az:&i)~"', ")  
+            SQL.ADD("       MercadoRB='1' ")
+            SQL.ADD(" WHERE NrOperacion='"~val(b:&i)~"'  ")
+            SQL.NEW
+         Endif
+    Proximo
+    SQL.EXEC
+    Messagebox('Fin modificacion NDF')
+Else
+    Messagebox('No se encontraron operaciones para modificar')
+Endif

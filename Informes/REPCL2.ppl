@@ -1,0 +1,262 @@
+﻿*Variable con DBO
+*ACT(va:1,VAR('PATHEXTERN'))
+
+CrearDialogo
+    Lista1   : 'Clientes'                                  ;;;;;;;;;;;SQLSet("select Codigo from "~DBO~".CLientes  where Jerarquia not like '011%' and  Jerarquia not like '007%' and  Jerarquia not like '008001%' order by Jerarquia")
+    Radio1   : 'Status|Habilitados|Deshabilitados|Ambos'   ;;;;;;;;;0;
+    Radio2   : 'Tipo|Cliente|Contraparte|Todos'            ;;;;;;;;;2;
+    
+FinDialogo 
+
+If Not Ok
+   Cancelar
+endif   
+
+*AgregarBMP(a1,Exe('LOGO'),80)
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")    
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(1)
+ACT(e:fac, 'Fecha: '~Var('FECHASYS'))
+SetFont(e:1,2)
+
+ACT(a:fac,'Reporte Detalle Related People')
+SetFont(a:fac,3)
+
+SetFilaActual(fac+2)
+
+if Vacio(Dialogo.Lista1) 
+    ACT(a:fac,'Clientes: Todos')
+else
+    ACT(a:fac,'Clientes: '~Pipe2Coma(Dialogo.Lista1))
+endif
+
+SetFilaActual(fac+1)
+
+If Dialogo.Radio1 = 0
+    ACT(a:fac, 'Status: Habilitados')
+Endif
+
+If Dialogo.Radio1 = 1
+    ACT(a:fac, 'Status: Desabilitados')
+Endif
+
+If Dialogo.Radio1 = 2
+    ACT(a:fac, 'Status: Ambos')
+Endif 
+
+IFA
+
+If Dialogo.Radio2 = 0
+    ACT(a:fac, 'Tipo: Clientes')
+Endif
+
+If Dialogo.Radio2 = 1
+    ACT(a:fac, 'Tipo: Contraparte')
+Endif
+
+If Dialogo.Radio2 = 2
+    ACT(a:fac, 'Tipo: Todos')
+Endif 
+
+SetFont(a:fac-1..a:fac,2)
+
+act(xx1,VAR('JERCLINO'))
+
+SQL.ADD("select Codigo, RazonSocial, Direccion, Localidad, CUIT, CodigoPostal, Pais, Telefono, FechaApertura, TipoCliente, Alias1, Alias2, Alias3, Alias4,  ")
+SQL.ADD("   case when Jerarquia like '001%' then 'Contraparte' else 'Cliente' end   Tipo, FecDesHabilitacion, NrAgenteBolsa,  Alias6, Alias7, Alias8,       ")
+SQL.ADD("   FechaApertura FechaAlta, Status, NrMAE, CategDepositante, ActividadBCRA, CondicionIVA, CondicionGan, CodDepCajaValores, Persona                 ")
+SQL.ADD("from   "~DBO~".Clientes c1       ")
+SQL.ADD("where  1 = 1                           ")
+if Dialogo.Radio1=0
+    SQL.ADD("and  Status = 'HAB'                ")
+else
+    if Dialogo.Radio1=1
+    SQL.ADD("and  Status = 'DES'                ")
+    endif    
+endif
+
+if Dialogo.Radio2=0 
+    SQL.ADD("and  Jerarquia not like '001%'             ")
+endif
+
+if Dialogo.Radio2=1 
+    SQL.ADD("and  Jerarquia like '001%'                 ")
+endif
+
+
+if NoVacio(Dialogo.Lista1)
+    SQL.ADD(" and Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+else
+    Recorrer&xz 1, Elementos(val(xx1))
+        act(xx2,ItemLista(Val(xx1), &xz))
+        SQL.ADD("and  Jerarquia not like '"~val(xx2)~"%'        ")
+    Proximo
+endif
+SQL.ADD("order by Jerarquia ")
+
+SetFilaActual(fac+2)
+ACT(a:fac,'Codigo')
+ACT(b:fac,'Razon Social')
+ACT(c:fac,'Tipo')
+ACT(d:fac,'Related People Name')
+ACT(e:fac,'Related People Role')
+ACT(f:fac,'Tipo Documento')
+ACT(g:fac,'Identifier')
+ACT(h:fac,'Coper')
+ACT(i:fac,'Status')
+ACT(j:fac,'F. de baja')
+
+AgregarMarco(a:fac..j:fac,2,0,Exe('COLOR'))
+AlinearCeldas(g:fac..g:fac,'I')
+
+SetFont(a:fac..aa:fac,2)
+acn(op:1,fac+1)
+
+
+Recorrer SQL
+*    if EsTerminal(fbn('Codigo'), Cliente)
+        ACT(a:fac,fbn('Codigo'))
+        ACT(b:fac,fbn('RazonSocial'))
+        ACT(c:fac,fbn('Tipo'))
+        ACT(h:fac,SQl("Select NrCopers from "~DBO~".ClientesDocumentacion where Codigo = '"~FBN['Codigo']~"' and Documento = 'COPERS' "))
+        ACT(i:fac,iif(Eqstr(FBN['Status'],'HAB'),'Habilitado',iif(Eqstr(FBN['Status'],'DES'),'Deshabilitado','')))
+        if Vacio(fbn('FecDesHabilitacion'))
+           ACT(j:fac,'')
+        else
+           ACT(j:fac,Fecha(fbn('FecDesHabilitacion'),'DD/MM/YYYY'))        
+        endif
+        ACN(x:1, 0)
+        
+        *SQL.ADD("Select * from "~DBO~".IntegrantesCli Where Codigo = '"~FBN('Codigo')~"'")
+        
+        SQL.ADD(" Select Nombre, Apellido, P.TipoDocumento, I.TipoDocumento as TipoDocumentoI,  ")
+        SQL.ADD(" P.NrDocumento , I.NrDocumento as NrDocumentoI, I.TipoPoder as TipoPoderI      ")
+        SQL.ADD(" from "~DBO~".PERSONAS P JOIN "~DBO~".INTEGRANTESCLI I                         ")
+        SQL.ADD(" ON P.TipoDocumento = I.TipoDocumento and P.NrDocumento = I.NrDocumento and Codigo = '"~FBN('Codigo')~"' ")
+        
+        
+        Recorrer SQL
+            SCN(x:1, 1)
+        
+            if Val(x:1) = 1
+                dfa
+            endif
+            
+            ACT(d:fac, FBN('Nombre')~' '~FBN('Apellido'))
+      
+            if Eqstr(FBN('TipoPoderI'),'TIT')
+               ACT(e:fac,'Titular')
+            endif            
+            if Eqstr(FBN('TipoPoderI'),'CTI')
+               ACT(e:fac,'Co Titular')
+            endif
+            if Eqstr(FBN('TipoPoderI'),'AUT')
+               ACT(e:fac,'Autorizado')
+            endif
+            if Eqstr(FBN('TipoPoderI'),'APO')
+               ACT(e:fac,'Apoderado')
+            endif
+            if Eqstr(FBN('TipoPoderI'),'RLE')
+               ACT(e:fac,'Representante Legal')
+            endif
+            if Eqstr(FBN('TipoPoderI'),'TUT')
+               ACT(e:fac,'Tutor')
+            endif
+            if Eqstr(FBN('TipoPoderI'),'SDE')
+               ACT(e:fac,'Sociedad depositaria')
+            endif
+            if Eqstr(FBN('TipoPoderI'),'FID')
+               ACT(e:fac,'Fiduciario')
+            endif
+            if Eqstr(FBN('TipoPoderI'),'EMP')
+               ACT(e:fac,'Empleado')
+            endif
+            if Eqstr(FBN('TipoPoderI'),'DIR')
+               ACT(e:fac,'Director')
+            endif
+            if Eqstr(FBN('TipoPoderI'),'FPU')
+               ACT(e:fac,'Funcionario Publico')
+            endif   
+            if Eqstr(FBN('TipoPoderI'),'FIR')
+               ACT(e:fac,'Firmante')
+            endif   
+            if Eqstr(FBN('TipoPoderI'),'FTE')
+               ACT(e:fac,'Fiduciante')
+            endif   
+            if Eqstr(FBN('TipoPoderI'),'BFI')
+               ACT(e:fac,'Beneficiario Fideicomiso')
+            endif   
+            if Eqstr(FBN('TipoPoderI'),'FRI')
+               ACT(e:fac,'Fideicomiso')
+            endif   
+            if Eqstr(FBN('TipoPoderI'),'SFI')
+               ACT(e:fac,'Socio Funcionario')
+            endif   
+            if Eqstr(FBN('TipoPoderI'),'ACC')
+               ACT(e:fac,'Socio/Accionista')
+            endif   
+            if Eqstr(FBN('TipoPoderI'),'FEM')
+               ACT(e:fac,'Funcionario de la empresa')
+            endif   
+            if Eqstr(FBN('TipoPoderI'),'GER')
+               ACT(e:fac,'Gerente')
+            endif   
+            if Eqstr(FBN('TipoPoderI'),'PRE')
+               ACT(e:fac,'Presidente')
+            endif        
+            if Eqstr(FBN('TipoPoderI'),'VPR')
+               ACT(e:fac,'Vicepresidente')
+            endif 
+            if Eqstr(FBN('TipoPoderI'),'FBA')
+               ACT(e:fac,'Firmante Dado de Baja')
+            endif 
+            if Eqstr(FBN('TipoPoderI'),'NC')
+               ACT(e:fac,'No Corresponde')
+            endif 
+            if Eqstr(FBN('TipoPoderI'),'FBC')
+               ACT(e:fac,'Funcionario del Banco')
+            endif 
+            if Eqstr(FBN('TipoPoderI'),'VIN')
+               ACT(e:fac,'Vinculacion Indirecta Bco.')
+            endif 
+            if Eqstr(FBN('TipoPoderI'),'EMB')
+               ACT(e:fac,'Empleado de Banco')
+            endif 
+            if Eqstr(FBN('TipoPoderI'),'ACB')
+               ACT(e:fac,'Accionista del Banco')
+            endif 
+            
+            ACT(f:fac, fbn('TipoDocumentoI'))
+            ACT(g:fac,fbn('NrDocumentoI'))
+        
+        Proximo
+*    else
+*        dfa
+*    endif
+Proximo
+SetFont(a:val(op:1)..u:fac,1)
+
+
+ACO(1,10)
+ACO(2,35)
+ACO(4,22)
+ACO(5,15)
+ACO(6,17)
+ACO(7,13)
+ACO(8,9)
+ACO(9,10)
+ACO(10,9)
+ACO(11,9)
+ACO(12,6)
+ACO(13,10)
+
+
+IFA
+IFA
+ACT(a:FAC, 'FIN DEL INFORME')
+SetFont(a:fac..a:fac,2)
+
+Limitesvision(k:fac+1)

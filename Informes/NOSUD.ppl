@@ -1,0 +1,386 @@
+﻿CrearDialogo
+     Fecha1     : 'Fecha Liq: '       ;1;;;;;NoVacio(Dialogo.Fecha1);'Ingrese una fecha';NO;FSys;
+     Lista1     : 'Tipos Op.'         ;3;;;;;;;;;;SQLSet("Select Codigo from "~DBO~".TIPOSOPERACION where Codigo in ('TIC','TIV','TIFC','TIFV') ")  
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+CrearFont(1, "Arial,8,")
+CrearFont(2, "Arial,8,B")
+CrearFont(3, "Arial,10,B")
+
+SetFilaActual(1)
+
+**-- Encabezado --**
+ACT(a:FAC, 'Informe de Operaciones No Confirmadas Extrabursatiles')
+SetFont(a:1..a:FAC, 3)
+
+ACT(a:FAC+2, 'Fecha Liq.: '~Dialogo.Fecha1)
+
+If NoVacio(Dialogo.Lista1)
+   ACT(a:FAC+3, 'Tipo Op: '~Pipe2Comillas(Dialogo.Lista1))
+Else
+   ACT(a:FAC+3, 'Tipo Op: Todas')
+Endif
+
+SetFont(a:FAC+2..b:FAC+3, 2) 
+SetFilaActual(5)
+
+ACT(a:FAC, 'Nro.Oper.')
+ACT(b:FAC, 'Tipo Op.')
+ACT(c:FAC, 'Boleto')
+ACT(d:FAC, 'Cliente')
+ACT(e:FAC, 'Cuenta')
+ACT(f:FAC, 'Nombre Cta')
+ACT(g:FAC, 'Suc')
+ACT(h:FAC, 'Fecha Op.')
+ACT(i:FAC, 'Fecha Vto.')
+ACT(j:FAC, 'Especie')
+ACT(k:FAC, 'Cantidad')
+ACT(l:FAC, 'Cont.Esp.')
+ACT(m:FAC, 'Precio')
+ACT(n:FAC, 'Monto')
+ACT(o:FAC, 'Int. Corr.')
+ACT(p:FAC, 'Neto')
+ACT(q:FAC, 'Trader')
+ACT(r:FAC, 'H.MAE')
+ACT(s:FAC, 'Ref. MAE')
+
+SetFont(a:FAc..t:FAC, 2)
+AgregarMarco(a:FAC..t:FAC, 2,0,Exe('COLOR6'))
+AlinearCeldas(a:FAC..e:FAC, 'I')
+AlinearCeldas(i:FAC..i:FAC, 'D')
+AlinearCeldas(g:FAC..g:FAC, 'C')
+AlinearCeldas(j:FAC..j:FAC, 'C')
+AlinearCeldas(k:FAC..k:FAC, 'D')
+AlinearCeldas(l:FAC..l:FAC, 'C')
+AlinearCeldas(m:FAC..p:FAC, 'D')
+AlinearCeldas(q:FAC..q:FAC, 'C')
+SetFilaActual(FAC)
+
+**----------------- CELDAS DE TOTALES ------------------**
+**--Total a Pagar por especie en pesos
+ACN(tc1, 0)
+**--Total a cobrar por especie en pesos
+ACN(tp1, 0)
+**--Total a Pagar por especie en dolares
+ACN(tc2, 0)
+**--Total a Cobrar por especie en dolares
+ACN(tp2, 0)
+**--Total a Pagar por mercado en pesos
+ACN(pc1, 0)
+**--Total a Cobrar por mercado en pesos
+ACN(pp1, 0)
+**--Total a Pagar por mercado en dolares
+ACN(dc1, 0)
+**--Total a Cobrar por mercado en dolares
+ACN(dp1, 0)
+**--Total Compras en pesos
+ACN(cc1, 0)
+**--Total Ventas en pesos
+ACN(cp1, 0)
+**--Total Compras en dolares
+ACN(cc2, 0)
+**--Total Ventas en dolares
+ACN(cp2, 0)
+**--Total Compras
+ACN(ct1, 0)
+**--Total Ventas
+ACN(vt1, 0)
+**-------------------------------------------------------------**
+ 
+SQL.ADD("select distinct O.*, Convert(Char(12), O.FechaAltaMAE, 14) as HoraMAE, U.Nombre NomCta, R.Descripcion, C.RazonSocial, C.Sucursal ")
+SQL.ADD(" from  "~DBO~".MOVEJECUTADOS M, "~DBO~".OPERACIONESBITS B, "~DBO~".OPERACIONES O, "~DBO~".CUENTAS U, "~DBO~".MERCADOS R, "~DBO~".CLIENTES C ")
+SQL.ADD(" where M.NrOperacion = B.NrOperacion ")
+SQL.ADD("  and  M.NrOperacion = O.NrOperacion ")
+SQL.ADD("  and  O.Cuenta1     = U.Codigo ")
+SQL.ADD("  and  O.Mercado     = R.Codigo ")
+SQL.ADD("  and  O.Cliente1    = C.Codigo ")
+SQL.ADD("  and  M.FechaMov   <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("  and  M.Mercado    Not IN ("~Pipe2Comillas(VAR('MERCAACMC'))~") ")
+SQL.ADD("  and  M.NrSaldo     = 31 ")
+SQL.ADD("  and  B.NrBit       = 10 ")
+SQL.ADD("  and  B.Valor       = '1' ")
+if NoVacio(Dialogo.Lista1)
+ SQL.ADD("  and  O.TipoOp IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+else
+ SQL.ADD("  and  O.TipoOp IN ('TIC', 'TIV', 'TIFC', 'TIFV') ")
+endif
+SQL.ADD("order by O.Mercado, O.Especie, O.NrOperacion ")
+
+Recorrer SQL
+   **-- Corte por Mercado
+   If Not EqStr(FBN['Mercado'],Val(z1))
+      If Val(z29) <> 0
+         ACT(a:FAC, "Total a Pagar por "~Val(z2)~" en Pesos:")
+         ACN(d:FAC, Val(tc1))
+         ACT(f:FAC, "Total Compras V.N. en Pesos: ") 
+         ACN(k:FAC, Val(cc1))
+         ACT(a:FAC+1, "Total a Cobrar por "~Val(z2)~" en Pesos:")
+         ACN(d:FAC+1, Val(tp1))
+         ACT(f:FAC+1, "Total Ventas V.N en Pesos: ") 
+         ACN(k:FAC+1, Val(cp1))
+         ACT(a:FAC+2, "Total a Pagar por "~Val(z2)~" en Dolares:")
+         ACN(d:FAC+2, Val(tc2))
+         ACT(f:FAC+2, "Total Compras V.N en Dolares: ") 
+         ACN(k:FAC+2, Val(cc2))             
+         ACT(a:FAC+3, "Total a Cobrar por "~Val(z2)~" en Dolares:")
+         ACN(d:FAC+3, Val(tp2))
+         ACT(f:FAC+3, "Total Ventas V.N en Dolares: ") 
+         ACN(k:FAC+3, Val(cp2))
+         ACT(f:FAC+5, "Total Compras "~Val(z2)~" :")
+         ACN(k:FAC+5, Val(ct1))
+         ACT(f:FAC+6, "Total Ventas "~Val(z2)~" :")
+         ACN(k:FAC+6, Val(vt1))
+         SetFont(a:FAC..k:FAC+6, 2)
+         If [Val(ct1) <> Val(vt1)]
+            ACT(z3, Val(z3)~"-"~Val(z2))
+         Endif
+         ACN(tc1, 0)
+         ACN(tp1, 0)
+         ACN(tc2, 0)
+         ACN(tp2, 0)
+         ACN(cc1, 0)
+         ACN(cp1, 0)
+         ACN(cc2, 0)
+         ACN(cp2, 0)
+         ACN(ct1, 0)
+         ACN(vt1, 0)
+         SetFilaActual(FAC+8)
+      Else
+         ACN(z29,1)
+      Endif
+           
+      If Val(z26)<>0
+         ACT(a:FAC,"Total a  Pagar en Pesos:")
+         ACN(d:FAC, Val(pc1))
+         ACT(a:FAC+1,"Total a Cobrar en Pesos:")
+         ACN(d:FAC+1, Val(pp1))
+         ACT(a:FAC+2,"Total a Pagar en Dolares:")
+         ACN(d:FAC+2, Val(dc1)) 
+         ACT(a:FAC+3,"Total a Cobrar en Dolares:")
+         ACN(d:FAC+3, Val(dp1))
+         ifa
+                
+         SetFont(a:FAC-1..e:FAC+3, 2)
+         **-- Inicializo totales
+         ACN(pp1,0)
+         ACN(pc1,0)
+         ACN(dp1,0)
+         ACN(dc1,0)
+         SetFilaActual(FAC+4)
+      Else
+         ACN(z26,1)
+      Endif 
+       
+      **-- Rotulo de Tipo Operacion
+      ACT(a:FAC,'Casa Custodia: '~FBN['Mercado']~' - '~FBN['Descripcion'])
+      AgregarMarco(a:FAC..t:FAC,2,0,EXE('COLOR1'))
+      SetFont(a:FAC..o:FAC,2)
+      ACT(z1,FBN['Mercado'])
+      ACT(z2, FBN['Especie'])
+      IFA
+   Endif
+         
+   **-- Corte por Especie
+   If Not EqStr(FBN['Especie'],val(z2)) 
+      If Val(z29) <> 0
+         ACT(a:FAC, "Total a Pagar por "~Val(z2)~" en Pesos:")
+         ACN(d:FAC, Val(tc1))
+         ACT(f:FAC, "Total Compras V.N. en Pesos: ") 
+         ACN(k:FAC, Val(cc1))
+         ACT(a:FAC+1, "Total a Cobrar por "~Val(z2)~" en Pesos:")
+         ACN(d:FAC+1, Val(tp1))
+         ACT(f:FAC+1, "Total Ventas V.N en Pesos: ") 
+         ACN(k:FAC+1, Val(cp1))
+         ACT(a:FAC+2, "Total a Pagar por "~Val(z2)~" en Dolares:")
+         ACN(d:FAC+2, Val(tc2))
+         ACT(f:FAC+2, "Total Compras V.N en Dolares: ") 
+         ACN(k:FAC+2, Val(cc2))             
+         ACT(a:FAC+3, "Total a Cobrar por "~Val(z2)~" en Dolares:")
+         ACN(d:FAC+3, Val(tp2))
+         ACT(f:FAC+3, "Total Ventas V.N en Dolares: ") 
+         ACN(k:FAC+3, Val(cp2))
+         ACT(f:FAC+5, "Total Compras "~Val(z2)~" :")
+         ACN(k:FAC+5, Val(ct1))
+         ACT(f:FAC+6, "Total Ventas "~Val(z2)~" :")
+         ACN(k:FAC+6, Val(vt1))
+         SetFont(a:FAC..k:FAC+6, 2)
+         If [Val(ct1) <> Val(vt1)]
+            ACT(z3, Val(z3)~"-"~Val(z2))
+         Endif
+         ACN(tc1, 0)
+         ACN(tp1, 0)
+         ACN(tc2, 0)
+         ACN(tp2, 0)
+         ACN(cc1, 0)
+         ACN(cp1, 0)
+         ACN(cc2, 0)
+         ACN(cp2, 0)
+         ACN(ct1, 0)
+         ACN(vt1, 0)
+         SetFilaActual(FAC+8)
+      Else
+         ACN(z29,1)
+      Endif 
+      ACT(z2,FBN['Especie'])
+   Endif 
+       
+   **-- Linea de Detalle  
+   ACT(a:FAC, FBN['NrOperacion'])
+   ACLO(a:FAC, FBN['NrOperacion'])
+   ACT(b:FAC, FBN['TipoOp'])
+   ACT(c:FAC, FBN['NrBoleto'])
+   ACT(d:FAC, FBN['Cliente1']~' - '~Copy(FBN['RazonSocial'],1,25))
+   ACT(e:FAC, FBN['Cuenta1'])
+   ACT(f:FAC, FBN['NomCta'])
+   ACT(g:FAC, FBN['Sucursal'])
+   ACD(h:FAC, FBN['FechaOp'])
+   ACD(i:FAC, FBN['FechaVto'])
+   ACT(j:FAC, FBN['Especie'])
+   ACN(k:FAC, FBN['Cantidad'])
+   ACT(l:FAC, FBN['ContraEspecie'])
+   ACN(m:FAC, FBN['Precio1'])
+   FormatoCeldas(m:FAC..m:FAC,EXE('F9')) 
+   ACN(n:FAC, FBN['TotalBrutoCli1'])
+   ACN(o:FAC, FBN['TotalIntereses'])
+   ACN(p:FAC, FBN['TotalNetoCli1'])
+   ACT(q:FAC, FBN['Operador'])
+   ACT(r:FAC, FBN['HoraMAE'])
+   ACT(s:FAC, FBN['NroAltaMAE'])
+   SetFont(a:FAC..s:FAC, 1)
+   AlinearCeldas(g:FAC..g:FAC, 'C')
+   AlinearCeldas(j:FAC..j:FAC, 'C')
+   AlinearCeldas(l:FAC..l:FAC, 'C')
+   AlinearCeldas(q:FAC..q:FAC, 'C')
+   **-- Acumuladores 
+   If EqStr(FBN['ContraEspecie'], 'USD') 
+      If Incluido(FBN['TipoOp'], 'TIC|TIFC')
+         SCN(tc2, FBN['TotalNetoCli1'])
+         SCN(cc2, FBN['Cantidad'])  
+         SCN(dc1, FBN['TotalNetoCli1'])
+      Else
+         SCN(tp2, FBN['TotalNetoCli1'])
+         SCN(cp2, FBN['Cantidad']) 
+         SCN(dp1, FBN['TotalNetoCli1'])
+      Endif
+   Else
+      If Incluido(FBN['TipoOp'], 'TIC|TIFC') 
+         SCN(tc1, FBN['TotalNetoCli1'])
+         SCN(cc1, FBN['Cantidad'])
+         SCN(pc1, FBN['TotalNetoCli1'])
+      Else
+         SCN(tp1, FBN['TotalNetoCli1'])
+         SCN(cp1, FBN['Cantidad'])
+         SCN(pp1, FBN['TotalNetoCli1'])
+      Endif
+   Endif
+   ACN(ct1, Val(cc2)+Val(cc1))
+   ACN(vt1, Val(cp2)+Val(cp1))
+Proximo
+IFA
+*-- Proceso para el ultimo registro
+If Val(z29) <> 0
+   ACT(a:FAC, "Total a Pagar por "~Val(z2)~" en Pesos:")
+   ACN(d:FAC, Val(tc1))
+   ACT(f:FAC, "Total Compras V.N. en Pesos: ") 
+   ACN(k:FAC, Val(cc1))
+   ACT(a:FAC+1, "Total a Cobrar por "~Val(z2)~" en Pesos:")
+   ACN(d:FAC+1, Val(tp1))
+   ACT(f:FAC+1, "Total Ventas V.N en Pesos: ") 
+   ACN(k:FAC+1, Val(cp1))
+   ACT(a:FAC+2, "Total a Pagar por "~Val(z2)~" en Dolares:")
+   ACN(d:FAC+2, Val(tc2))
+   ACT(f:FAC+2, "Total Compras V.N en Dolares: ") 
+   ACN(k:FAC+2, Val(cc2))             
+   ACT(a:FAC+3, "Total a Cobrar por "~Val(z2)~" en Dolares:")
+   ACN(d:FAC+3, Val(tp2))
+   ACT(f:FAC+3, "Total Ventas V.N en Dolares: ") 
+   ACN(k:FAC+3, Val(cp2))
+   ACT(f:FAC+5, "Total Compras "~Val(z2)~" :")
+   ACN(k:FAC+5, Val(ct1))
+   ACT(f:FAC+6, "Total Ventas "~Val(z2)~" :")
+   ACN(k:FAC+6, Val(vt1))
+   SetFont(a:FAC..k:FAC+6, 2)  
+   If [Val(ct1) <> Val(vt1)] 
+      ACT(z3, Val(z3)~"-"~Val(z2))
+   Endif
+   ACN(tc1, 0)
+   ACN(tp1, 0)
+   ACN(tc2, 0)
+   ACN(tp2, 0)
+   ACN(cc1, 0)
+   ACN(cp1, 0)
+   ACN(cc2, 0)
+   ACN(cp2, 0)
+   ACN(ct1, 0)
+   ACN(vt1, 0)
+   SetFilaActual(FAC+8)
+Else
+   ACN(z29,1)
+Endif 
+SetFont(a:fac..l:fac,2)
+SetFont(a:fac+1..l:fac+1,2) 
+IFA
+If Val(z26)<>0
+   ACT(a:FAC,"Total a Pagar en Pesos:")
+   ACN(d:FAC, Val(pc1))
+   ACT(a:FAC+1,"Total a Cobrar en Pesos:")
+   ACN(d:FAC+1, Val(pp1))
+   ACT(a:FAC+2,"Total a Pagar en Dolares:")
+   ACN(d:FAC+2, Val(dc1)) 
+   ACT(a:FAC+3,"Total a Cobrar en Dolares:")
+   ACN(d:FAC+3, Val(dp1))
+             
+   SetFont(a:FAC..e:FAC+5, 2)
+   **-- Inicializo totales
+   ACN(pp1,0)
+   ACN(pc1,0)
+   ACN(dp1,0)
+   ACN(dc1,0)
+   SetFilaActual(FAC+4)
+Else
+   ACN(z26, 1)
+Endif
+If Not EqStr(Val(z3),'')
+   SetFilaActual(FAC+2)
+   ACT(a:FAC, 'LAS ESPECIES '~Val(z3)~' ESTAN DESBALANCEADAS')
+   SetFont(a:FAC..a:FAC, 3)
+Endif
+*-- Ajuste de celdas
+ACO(1,7)
+ACO(2,5)
+ACO(3,7)
+ACO(4,25)
+ACO(5,7)
+ACO(6,20)
+ACO(7,3)
+ACO(8,6)
+ACO(9,6)
+ACO(10,5)
+ACO(11,10)
+ACO(12,6)
+ACO(13,10)
+ACO(14,10)
+ACO(15,10)
+ACO(16,10)
+ACO(17,5)
+ACO(18,7)
+ACO(19,7)
+ACO(20,7)
+
+Impresion(1,2)
+SetPrintFit(3,58)
+SetFilaActual(FAC+3)
+ACT(a:FAC, 'FIN DEL LISTADO')
+SetFont(a:FAC,2)
+LimitesVision(s:fac)
+Rangotitulo(a:1..s:fac, 5)
+
+
+
+
+
+

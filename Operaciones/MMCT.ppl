@@ -1,0 +1,256 @@
+﻿CAMPOS:2;;10
+FechaOp        : 'Fecha Op.'     ; 3;2;1;CB5=0 y VerificaAcceso('OPFVALOR');;FechaOp <= FSys y FechaOp >= Habiles(FSys,-num(var('CHKFVLMMCT')),'ARG') y ESHABIL(FECHAOP,TABLAFERIADOS1);'Fecha incorrecta';NO;FSYS;
+Especie        : 'Especie'       ; 1;1; ;CB5=0;  ;NoVacio(ESPECIE) y DesciendeDeEspecie(ESPECIE,'MONEDA') y EsTerminal(ESPECIE, Especie);'Debe Ingresar una Moneda Valida';NO;;IF(MODI,ESPECIE,OPREF.ESPECIE);;;;;;" Jerarquia like '001%' "
+*Cliente1       : 'Cliente'       ; 2;1; ;CB5=0;  ;NOVACIO(CLIENTE1) Y EQSTR(BuscarCampo('CLIENTES','CategDepositante','Codigo',CLIENTE1),'BAN');'Debe ingresar un Banco';NO;;IF(MODI,CLIENTE1,OPREF.CLIENTE1);;;;;;" CategDepositante = 'BAN' "
+Cliente1       : 'Cliente'        ; 2;1; ;CB5=0;  ;NOVACIO(CLIENTE1) Y Incluido(BuscarCampo('CLIENTES','CategDepositante','Codigo',CLIENTE1), SQLSet("SELECT Codigo FROM "~DBO~".CATEGORIACLIENTES WHERE Sector='FIN' "));'Debe ingresar un cliente Financiero';NO;;IF(MODI,CLIENTE1,OPREF.CLIENTE1);;;;;;"Status = 'HAB' AND  CategDepositante in(SELECT Codigo FROM "~DBO~".CATEGORIACLIENTES WHERE Sector='FIN' )" 
+Cantidad       :                 ; 3;1; ;CB5=0;  ;CANTIDAD>0;'La Cantidad de ser positiva';NO;
+Precio1        : 'Tasa (%)'      ; 4;1; ;CB5=0;  ;;'Tasa no Positiva # Tasa=0';NO;
+Plazo          :                 ; 4;2; ;CB5=0;  ;PLAZO>0;'El plazo debe ser mayor que cero';NO;FECHAVTO-FECHAOP;FECHAVTO-FECHAOP;
+FechaVto       : 'Fecha Vto.'    ; 5;2; ;CB5=0;  ;ESHABIL(FECHAVTO,TABLAFERIADOS1) Y [ESHABIL(FECHAVTO,'USA') O EQSTR(ESPECIE,'ARP')];'No es un dia habil';NO;HABILES(FECHAOP,1,TABLAFERIADOS1,NO);FECHAOP+PLAZO;
+MB1            : 'Liquidacion|Com.|Liq.'; 6;2; ;  ;NOVACIO(OPERACIONREF);;;;0;
+TotalIntereses : 'Interes'       ; 5;1; ;NO;  ;;;;;CANTIDAD*PRECIO1*PLAZO/If(DIASANIO=0,36000,36500);
+TotalBrutoCli1 : 'Monto'         ; 6;1; ;NO;  ;;;;;CANTIDAD+TOTALINTERESES;
+DiasAnio       : 'Base|360|365'  ; 7;1; ;CB5=0;  ;;;;1
+Mercado4       : 'M. Negociac.'   ;7;2;;;;NOVACIO(MERCADO4);'Debe ingresar Mercado Negociacion Moneda';NO;VAR('MEROTC');;;;;;;"TipoNegocio Like '%M%' and EsNegociacion = 'SI' "
+Corredor       : 'Corredor'      ; 8;1; ;CB5=0;  ;
+Mercado        : 'Merc.Especie'  ; 8;2; ;CB5=0;;NOVACIO(MERCADO);'Debe indicar mercado';NO;;if(MODI,MERCADO,MercadoDef(ESPECIE));;;;;;"Observaciones like '%M%'"
+Mercado2       : 'Merc.Moneda'   ; 8;2; ;NO;NO;;;;;MERCADO;;;;;;"Observaciones Like '%M%'"
+
+Vehiculo1      : 'Vehiculo'      ; 9;1; ;CB5=0 y Eqstr(ABM,'A');  ;NoVacio(VEHICULO1);'Debe Ingresar el Vehiculo';NO;if(Eqstr(ABM,'A'),VAR('VEHICULODE'),Vehiculo1)
+MB2            : 'Agrede |SI|NO' ; 9;2; ;NoVacio(CORREDOR);NoVacio(CORREDOR);;;;1;IF(Vacio(CORREDOR),1,MB2);
+
+Operador       :                 ;10;1; ;NO;  ;;;;USUARIOACTIVO;
+Book1          : 'Book'          ;10;2; ;  ;  ;Incluido(BOOK1, SQLSet(" Select Codigo From "~DBO~".BOOKS Where Vehiculo = '"~VEHICULO1~"' AND (TiposOperacion='' or TiposOperacion is NULL or TiposOperacion like '%"~TIPOOP~"|%') "));'Book Invalido.';NO;BookDefault2(VEHICULO1,TIPOOP,'',ESPECIE,'','','','','HAB');BookDefault2(VEHICULO1,TIPOOP,'',ESPECIE,'','','','','HAB');;;;;;"Estado  = 'HAB' and Vehiculo = '"~VEHICULO1~"' AND (TiposOperacion = '' OR TiposOperacion Is Null OR TiposOperacion Like '%"~TIPOOP~"|%') ";
+
+CB5            : 'Oferta'        ;11;1; ;NO;NO;
+OpSIOPEL       : 'OpSIOPEL'      ;11;2; ;NO;CB5=1;
+
+
+
+Precio4        : 'Tasa de Transf.';13;1;1;IF(EqStr(VAR('CONTROLATT'),'SI'),SI,NO);;;;;;IF(MODI,PRECIO4,IF(Eqstr(var('BASEXPILAR'), 'SI'),SQLSet("SELECT dbo.ObtenerTasaTransferencia("~IdxDate2(FECHAOP)~",'"~SQLset("Select Codigo from "~DBO~".TIPOSTASA WHERE TiposOperacion LIKE ('%MMCT|%')")~"','"~ESPECIE~"','"~PLAZO~"')") + IF(EqStr(VAR('CONTROLATT'),'SI'),PORBONIFICACION,0),TASADIA('TRANSF',ESPECIE,FECHAOP,PLAZO,1)));
+Precio2        : 'TT Original'   ;17;1;1;NO;NO;;;;;IF(Eqstr(var('BASEXPILAR'), 'SI'),SQLSet("SELECT dbo.ObtenerTasaTransferencia("~IdxDate2(FECHAOP)~",'"~SQLset("Select Codigo from "~DBO~".TIPOSTASA WHERE TiposOperacion LIKE ('%MMCT|%')")~"','"~ESPECIE~"','"~PLAZO~"')") + PORBONIFICACION,TASADIA('TRANSF',ESPECIE,FECHAOP,PLAZO,1));
+PorBonificacion: 'Encaje'        ;14;1;1;NO;IF(EqStr(VAR('CONTROLATT'),'SI'),SI,NO);;;;;SQLset("SELECT ISNULL((SELECT Porcentaje FROM "~DBO~".PORENCAJETASAT WHERE CodJerarquia IN ("~Pipe2Comillas(Ascendientes('CLIENTES',CLIENTE1))~")),0)") 
+OficialCuenta  : 'Of.Cuenta'     ;15;1; ;NO;;;;;;BuscarCampo('CLIENTES','OficialCuenta','Codigo',CLIENTE1)
+Sector1        : 'Sector'        ;16;1;1;NO;IF(EqStr(VAR('CTRLSECTOR'),'SI'),SI,NO);;;;Query("SELECT Sector FROM "~DBO~".USRVEHICULO WHERE Codigo = '"~OPERADOR~"' ")
+
+VTXT18         : 'Ascend_Especie';12;1; ;NO;NO;;;;;Ascendientes('ESPECIES',ESPECIE)
+
+PorComision    : '% Comision'    ; 1;1;2;NoVacio(CORREDOR);;PORCOMISION>=0;'La comisi#n no puede ser negativa';NO;;IF(MODI,PORCOMISION,PRECIO3);
+TotalComisiones: 'Importe Com.'  ; 1;2;2;NO;  ;;;;;TOTALBRUTOCLI2*(PORCOMISION/1000)*PLAZO/365;
+Precio3        : 'Comision'      ; 2;1;2;NO;  ;;;;;IF(Vacio(CORREDOR),0,IF(MB2=1,BUSCARCAMPO('CORREDORES','ComisionDefault1','Codigo',CORREDOR),BUSCARCAMPO('CORREDORES','ComisionDefault2','Codigo',CORREDOR)));
+TotalBrutoCli2 : 'Cant.USD Equiv'; 2;2;2;NO;  ;;;;;IF(EQSTR(ESPECIE,'USD'), CANTIDAD, CANTIDAD*COTIZACIONC(ESPECIE,,,,FECHAOP,1,SI,'USD'));
+
+RB6: 'Estado|Pend|Renov.|Cancel.'; 3;1;2;NO;  ;;;;0
+Corporate      : 'Corporate'     ; 3;2;2;NO;NO;;;;;0
+VRB1      : 'Tipo|Nueva|Renovac.'; 4;1;2;VACIO(VTXT12) y RB6=0 y NO;;;;;if(VACIO(OPERACIONREF), 0, 1)
+OperacionRef   : 'Op.Ref.'       ; 5;1;2;NO;VRB1=1;;;;;Query("Select NrOperacion from "~DBO~".OPERACIONES Where TipoOp = 'MMCT' and RB6 = '0' and Cliente1 = '"~CLIENTE1~"' and Especie = '"~ESPECIE~"' and FechaVto = '"~IDXDATE(FECHAOP)~"'")
+VTXT12         : 'Op.Ref.Ant.'   ; 6;1;2;NO;NO;;;;OPERACIONREF
+TotalBrutoCli3 : 'TBC1.OpRef.'   ; 7;1;2;NO;VRB1=1;;;;;IF(NOVACIO(OPERACIONREF),OPREF.TOTALBRUTOCLI1,0);
+VCAN6          : 'Cant.OpRef'    ; 8;1;2;NO;NO;;;;;OPREF.CANTIDAD
+*---- Cuentas ------
+* Vehiculo
+VTXT8            : 'Ctas/MON Vehi'   ; 8;2;2;NO;NO;;; ;SQLSet("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente='"~IF(EqStr(BuscarCampo('MERCADOS','Netea','Codigo',MERCADO),'SI'),BuscarCampo('MERCADOS','Cliente1','Codigo',MERCADO),VEHICULO1)~"' and (Especies Like '%"~ESPECIE~"%' or Especies Like '%MONEDA%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and "~IF(NOT Eqstr(BuscarCampo('MERCADOS','Netea','Codigo',MERCADO),'SI')," Mercado='"~MERCADO~"' "," Mercado IN ('BCRA','SWIFT','INT',"~Pipe2Comillas(VAR('MERCAACMC'))~") ")~" and (TiposOperacion is NULL or TiposOperacion like '%"~TIPOOP~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC");SQLSet("SELECT Codigo FROM "~DBO~".CUENTAS WHERE Cliente='"~IF(EqStr(BuscarCampo('MERCADOS','Netea','Codigo',MERCADO),'SI'),BuscarCampo('MERCADOS','Cliente1','Codigo',MERCADO),VEHICULO1)~"' and (Especies Like '%"~ESPECIE~"%' or Especies Like '%MONEDA%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and "~IF(NOT Eqstr(BuscarCampo('MERCADOS','Netea','Codigo',MERCADO),'SI')," Mercado='"~MERCADO~"' "," Mercado IN ('BCRA','SWIFT','INT',"~Pipe2Comillas(VAR('MERCAACMC'))~") ")~" and (TiposOperacion is NULL or TiposOperacion like '%"~TIPOOP~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC");
+VCAN7            : 'Cant.Vehi    '   ;10;2;2;NO;NO;;;0;IF(NoVacio(VTXT8),Elementos(VTXT8),0);IF(NoVacio(VTXT8),Elementos(VTXT8),0);
+* Cliente
+VTXT5            : 'Cta $/U$S Cli'   ;6;2;2;NO;NO;;;; ;IF(NoVacio(BOOK1),SQLSet("Select Codigo from "~DBO~".CUENTAS where Cliente='"~IF(EqStr(BuscarCampo('MERCADOS','Netea','Codigo',MERCADO),'SI'),BuscarCampo('MERCADOS','Cliente1','Codigo',MERCADO),CLIENTE1)~"' and (Especies Like '%"~ESPECIE~"%' or Especies Like '%MONEDA%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and  "~IF(NOT Eqstr(BuscarCampo('MERCADOS','Netea','Codigo',MERCADO),'SI')," Mercado='"~MERCADO~"' "," MercadoLiq='"~MERCADO~"' and Mercado IN ('BCRA','SWIFT','INT',"~Pipe2Comillas(VAR('MERCAACMC'))~") ")~" and (TiposOperacion is NULL or TiposOperacion like '%"~TIPOOP~"|%') ORDER BY ISNull(Permanente,'NO') DESC, Codigo ASC"));
+VCAN2            : 'Cant.    '       ;7;2;2;NO;NO;;;;0;IF(NoVacio(VTXT5),Elementos(VTXT5),0);
+*------
+Cuenta1        : 'Cta.Esp.Veh.:' ; 9;1;2;SI; ;[CLIENTECUENTA(VEHICULO1,CUENTA1) y ESPECIECUENTA(ESPECIE,CUENTA1) y EqStr(MERCADO, BuscarCampo('CUENTAS','Mercado','Codigo',CUENTA1))] o NOT NOVACIO(CUENTA1); ;;;IF(1<=VCAN7,ItemLista(VTXT8,1),VAR('CTAMOD23'));;;;;;"Cliente='"~IF(EqStr(BuscarCampo('MERCADOS','Netea','Codigo',MERCADO),'SI'),BuscarCampo('MERCADOS','Cliente1','Codigo',MERCADO),VEHICULO1)~"' and (Especies Like '%"~ESPECIE~"%' or Especies Like '%MONEDA%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and "~IF(NOT Eqstr(BuscarCampo('MERCADOS','Netea','Codigo',MERCADO),'SI')," Mercado='"~MERCADO2~"' "," Mercado IN ('BCRA','SWIFT','INT',"~Pipe2Comillas(VAR('MERCAACMC'))~") ")~" and (TiposOperacion is NULL or TiposOperacion like '%"~TIPOOP~"|%') " 
+Cuenta2        : 'Cta.Mon.Veh.:' ; 9;1;2;NO;NO;;;;;CUENTA1;
+Cuenta3        : 'Cta.Esp.Clie.:';10;1;2;SI; ;[CLIENTECUENTA(CLIENTE1,CUENTA3) y ESPECIECUENTA(ESPECIE,CUENTA3) y EqStr(MERCADO, BuscarCampo('CUENTAS','Mercado','Codigo',CUENTA3))] o NOT NOVACIO(CUENTA3); ;;;IF(1<=VCAN2,ItemLista(VTXT5,1),VAR('CTAMOD23'));;;;;;"Cliente='"~IF(EqStr(BuscarCampo('MERCADOS','Netea','Codigo',MERCADO),'SI'),BuscarCampo('MERCADOS','Cliente1','Codigo',MERCADO),CLIENTE1)~"' and (Especies Like '%"~CONTRAESPECIE~"%' or Especies Like '%MONEDA%') and Estado='HAB' and TipoCuenta In ('CC','CA','CUS') and "~IF(NOT Eqstr(BuscarCampo('MERCADOS','Netea','Codigo',MERCADO),'SI')," Mercado='"~MERCADO2~"' "," Mercado IN ('BCRA','SWIFT','INT',"~Pipe2Comillas(VAR('MERCAACMC'))~") ")~" and (TiposOperacion is NULL or TiposOperacion like '%"~TIPOOP~"|%') " ;
+Cuenta4        : 'Cta.Mon.Clie.:';10;1;2;NO;NO;;;;;CUENTA3;
+
+TablaFeriados1 : 'Feriados'      ;11;1;2;  ;  ;NoVacio(TABLAFERIADOS1);'Se debe indicar feriados a utilizar';NO;'ARG';;;Var('LISFERIADO')
+MB6            : 'Prematching:'  ;12;1;2;NO;NO;;;;0;
+ObservacDoc    : 'St.Riesgo:'    ;13;1;2;NO;NO;;;;'OK';
+
+VTXT14         : 'Categ.Cliente' ; 4;2;2;NO;NO;;;;;BuscarCampo('CLIENTES','Alias2','Codigo',CLIENTE1);;;;;'XXXXX'
+VTXT13         : 'Jerarq.Cliente'; 5;2;2;NO;NO;;;;;Copy(BuscarCampo('CLIENTES','Jerarquia','Codigo',CLIENTE1),1,6);
+VTXT4          : 'Jerarq.Especie'; 6;2;2;NO;NO;;;;;BuscarCampo('ESPECIES','Jerarquia','Codigo',ESPECIE);
+RB7            : 'Genera Sales|NO|SI' ; 7;2;2;EqStr(VTXT14, 'EVENTUAL');NO;;;;;if(Eqstr(VTXT14, 'CLIENTE') o [Eqstr(VTXT14, 'EVENTUAL') y EqStr('001001', VTXT13)],1,0);
+VRB2           : 'Cross_S.P.|Cobro|Pago'; 8;2;2;RB7=1 y EqStr('001001', VTXT13);RB7=1 y EqStr('001001', VTXT13);;;;0;if(RB7=0 o not EqStr('001001', VTXT13) o [Eqstr(copy(VTXT4,1,6),'002001') y not Incluido(ESPECIE, 'LEXP2|LEXP2|BTVA1|BTVA2|TAV2|TAV3|TAV4|')] o EqStr(Copy(VTXT4,1,9), '002004002'), 0, 1);
+
+VPRE9          : 'H.Spread Def.' ;11;2;2;EqStr(VTXT14, 'CLIENTE') o [EqStr(VTXT14,'EVENTUAL') y RB7=1];EqStr(VTXT14, 'CLIENTE') o [EqStr(VTXT14,'EVENTUAL') y RB7=1];;;;SPREAD;
+Spread         : 'Hard Spread'   ;12;2;2;NO;NO;;;;;if(VRB2=0, abs(VPRE9), -abs(VPRE9));
+
+VTXT20         : 'Comentario'    ;14;1;2;  ;NO;
+Cliente3       : 'Cl._SINAC'     ;14;2;2;NO;NO;;;;;CLIENTE1
+
+VTXT10         : 'Vehiculo'      ;15;2;2;NO;NO;;;;;if(VACIO(BuscarCampo('BOOKS','Vehiculo','Codigo',BOOK1)),'',BuscarCampo('BOOKS','Vehiculo','Codigo',BOOK1));
+ContraEspecie  : 'ContraEspecie' ;15;2;2;NO;NO;;;;;ESPECIE;;;;;;
+Cartera        : 'Cartera|Trading|Investment|Comerc';15;2;2;NO;NO;;;;0
+Cotizacion2    : 'Cotizacion2'    ; ; ;2;NO;NO;;;;;COTIZACIONC(ESPECIE,,,,FECHAOP,25,SI,VAR('MONELOCA'))
+
+
+
+
+CONDICIONES:
+
+Not FECHAOP<FSYS o EV;'Es una Operacion FechaValor';SI;SI;FSYS;'FVALOR'
+
+PRECIO1 >= 0;'La tasa debe ser mayor a cero';NO
+[PRECIO4>0 Y EqStr(VAR('CONTROLATT'),'SI')] O EqStr(VAR('CONTROLATT'),'NO');'La Tasa de Transferencia NO puede ser Negativa o Cero';NO;;;;;
+
+[PRECIO4<=PRECIO2*(1+VAR('RTASA2')/100) Y PRECIO4>=PRECIO2*(1-VAR('RTASA2')/100) Y EqStr(VAR('CONTROLATT'),'SI')] O EqStr(VAR('CONTROLATT'),'NO');'Tasa Transferencia Fuera de Rango';NO;;;;;
+[PRECIO4<=PRECIO2*(1+VAR('RTASA1')/100) Y PRECIO4>=PRECIO2*(1-VAR('RTASA1')/100) Y EqStr(VAR('CONTROLATT'),'SI')] O EqStr(VAR('CONTROLATT'),'NO');'Tasa Transferencia Fuera de Rango: '~FSTR((PRECIO2*(1-VAR('RTASA1')/100)),1,7)~' y '~FSTR((PRECIO2*(1+VAR('RTASA1')/100)),1,7);SI;SI;Fsys;'RANGOTRANS';;
+
+PRECIO1<=PRECIO4*(1+VAR('RTASA2')/100) Y PRECIO1>=PRECIO4*(1-VAR('RTASA2')/100);'Tasa Fuera de Rango: '~FSTR((PRECIO4*(1-VAR('RTASA2')/100)),1,7)~' y '~FSTR((PRECIO4*(1+VAR('RTASA2')/100)),1,7);NO           
+PRECIO1<=PRECIO4*(1+VAR('RTASA1')/100) Y PRECIO1>=PRECIO4*(1-VAR('RTASA1')/100);'Tasa Fuera de Rango: '~FSTR(PRECIO4*(1-VAR('RTASA1')/100),1,7)~' y '~FSTR(PRECIO4*(1+VAR('RTASA1')/100),1,7)    ;SI;SI;Fsys;'RANGOTASA'
+
+[PRECIO1<=PRECIO4 Y EqStr(VAR('CONTROLATT'),'SI')] O EqStr(VAR('CONTROLATT'),'NO');'Spread Negativo: '~FSTR(PRECIO1-PRECIO4,0,7);SI;SI;FSys;'SPREADNEG';;
+[PRECIO4 = PRECIO2 Y EqStr(VAR('CONTROLATT'),'SI')] O EqStr(VAR('CONTROLATT'),'NO');'Tasa Transferencia: '~FSTR(PRECIO2,0,7)~'. Tasa Transferencia Modificada: '~FSTR(PRECIO4,0,7)~'. ';SI;SI;FSys;'TASATMOD';;
+
+IF(EqStr(VAR('CTRLSECTOR'),'SI'),NOVACIO(SECTOR1)) O EqStr(VAR('CTRLSECTOR'),'NO') ;'El usuario no tiene sector asignado';NO
+
+Not EqStr('DES',BuscarCampo('ESPECIES','Status','Codigo',ESPECIE));'La Especie esta deshabilitada';NO
+
+[Eqstr(Especie,Opref.Especie)] o [Not NoVacio(OperacionRef)];'No coincide la especie con la operacion de referencia';NO
+[Eqstr(Cliente1,Opref.Cliente1)] o [Not NoVacio(OperacionRef)];'No coincide el cliente con la operacion de referencia';NO
+[FechaOp=Opref.FechaVto] o [Not NoVacio(OperacionRef)];'La operacion de referencia no ha vencido aun';NO
+NOT EQSTR (VEHICULO1,CLIENTE1);'El Cliente no puede ser el Vehiculo';NO
+
+
+Not EqStr('DES',BuscarCampo('CLIENTES','Status','Codigo',CLIENTE1));'El Cliente esta deshabilitado';NO
+
+Incluido('M',BuscarCampo('MERCADOS', 'Observaciones', 'Codigo', Mercado))  ;'Ingreso un Mercado de Titulos para el Mercado de Especie' ;NO 
+Incluido('M',BuscarCampo('MERCADOS', 'Observaciones', 'Codigo', Mercado2)) ;'Ingreso un Mercado de Titulos para el Mercado de Moneda';NO 
+
+SI o Vacio(Query("Select Valor from "~DBO~".VARIABLES Where Codigo='TRADOVNGT' "));pipe2coma(Query("Select Valor from "~DBO~".VARIABLES Where Codigo='TRADOVNGT' "))~' tienen todavia posiciones en Overnight.';SI
+
+
+BookValido(BOOK1, TIPOOP, ESPECIE, Vehiculo1, OPERADOR, 'HAB' );'El Book de seleccionado no corresponde a la Especie, Tipo de Operacion, Operador, Vehiculo o no esta Habilitado ';NO
+
+@MOVMMCT
+
+DEVENGADOS
+FechaOp ;FechaVto-1;;SI;NO;TablaFeriados1;SI;SI;'INTLEN';-TotalIntereses;140;VTXT10;VTXT10;;;;;;;;Especie;;;;;;Book1;;;;;Especie;
+
+POSTEDICION
+NoVacio(OPERACIONREF);'SETRB6';NrOperacion1=OPERACIONREF;NrOperacion2=VTXT12
+
+
+BITS
+1;1;CB5=0
+3;0
+30;0
+2;0
+10;0
+19;0
+70;0;CB5=0
+70;1;CB5=1
+
+INSTANCIA1
+POSTEDICION
+FW=2;'ANULO';NrOperacion1=NROPERACION
+
+SQL
+"UPDATE "~DBO~".INSTANCIASOP SET Mensaje = '"~OBSERVAC~"' Where NrOperacion = '"~NROPERACION~"' and NrInstancia = "~FSTR(INSTANCIA,2)
+BITS
+ 1;0;FW=1 o FW=2
+ 8;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('FVALOR') ") >= 1
+19;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('FVALOR') ") = 0 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('TASATMOD','RANGOTRANS')") >= 1 
+ 2;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('FVALOR') ") = 0  y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('TASATMOD','RANGOTRANS')") = 0  y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in('RANGOTASA', 'SPREADNEG') ") >= 1
+ 7;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('FVALOR','RANGOTASA','SPREADNEG','TASATMOD','RANGOTRANS') ") = 0 y Not Incluido(VAR('OPSNOCONF'),'MMCT')
+10;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('FVALOR','RANGOTASA','SPREADNEG','TASATMOD','RANGOTRANS') ") = 0 y     Incluido(VAR('OPSNOCONF'),'MMCT')
+30;1;FW=2
+
+INSTANCIA2
+CAMPOS:0
+FechaOp        : 'Fecha Op.'      ;2;2;1;NO
+Especie        : 'Especie'        ;1;1; ;NO
+Cliente1       : 'Cliente'        ;2;1; ;NO
+Cantidad       : 'Cantidad'       ; ; ; ;NO
+Precio1        : 'Precio'         ; ; ; ;NO
+Plazo          : 'Plazo'          ;3;2; ;NO
+FechaVto       : 'Fecha Liq.'     ;4;2; ;NO
+TotalIntereses : 'Intereses'      ;5;1; ;NO
+TotalBrutoCli1 : 'Monto'          ;6;1; ;NO
+Vehiculo1      :                  ;7;1; ;NO
+Operador       :                  ;8;1; ;NO
+Observaciones  :                  ; ; ;2;  ;;;NO
+
+CONDICIONES:
+NoVacio(Observaciones);'Debe ingresarse una observacion';NO
+
+POSTEDICION
+FW = 1;'AUTOIN';NrOperacion1=NROPERACION;Cantidad1=2
+ 
+BITS
+ 2;0;FW=2 o FW=1
+ 7;1;FW=1 y Not Incluido(VAR('OPSNOCONF'),'MMCT') 
+10;1;FW=1 y     Incluido(VAR('OPSNOCONF'),'MMCT')
+ 1;1;FW=2
+
+INSTANCIA7
+BITS
+7;0;FW=2
+30;1;FW=2
+
+INSTANCIA8
+CAMPOS:0
+FechaOp        : 'Fecha Op.'      ;2;2;1;NO
+Especie        : 'Especie'        ;1;1; ;NO
+Cliente1       : 'Cliente'        ;2;1; ;NO
+Cantidad       : 'Cantidad'       ; ; ; ;NO
+Precio1        : 'Precio'         ; ; ; ;NO
+Plazo          : 'Plazo'          ;3;2; ;NO
+FechaVto       : 'Fecha Liq.'     ;4;2; ;NO
+TotalIntereses : 'Intereses'      ;5;1; ;NO
+TotalBrutoCli1 : 'Monto'          ;6;1; ;NO
+Vehiculo1      :                  ;7;1; ;NO
+Operador       :                  ;8;1; ;NO
+Observaciones  :                  ; ; ;2;  ;;;NO
+
+CONDICIONES:
+NoVacio(Observaciones);'Debe ingresarse una observacion';NO
+
+POSTEDICION
+FW = 1;'AUTOIN';NrOperacion1=NROPERACION;Cantidad1=8
+
+BITS
+ 8;0;FW=1 o FW=2
+ 1;1;FW=2
+19;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('TASATMOD','RANGOTRANS') ") >= 1
+ 2;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('TASATMOD','RANGOTRANS') ") = 0 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('RANGOTASA', 'SPREADNEG') ") >= 1
+ 7;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('RANGOTASA', 'SPREADNEG','TASATMOD','RANGOTRANS') ") = 0 y Not Incluido(VAR('OPSNOCONF'),'MMCT')
+10;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('RANGOTASA', 'SPREADNEG','TASATMOD','RANGOTRANS') ") = 0 y     Incluido(VAR('OPSNOCONF'),'MMCT')
+
+INSTANCIA10
+BITS
+10;0;FW=2 y Query(" Select Count(1) From "~DBO~".MOVEJECUTADOS Where NrOperacion = '"~NROPERACION~"' ") <> 1
+30;1;FW=2 y Query(" Select Count(1) From "~DBO~".MOVEJECUTADOS Where NrOperacion = '"~NROPERACION~"' ") <> 1
+
+INSTANCIA19
+CAMPOS:0
+FechaOp        : 'Fecha Op.'      ;2;2;1;NO
+Especie        : 'Especie'        ;1;1; ;NO
+Cliente1       : 'Cliente'        ;2;1; ;NO
+Cantidad       : 'Cantidad'       ; ; ; ;NO
+Precio1        : 'Precio'         ; ; ; ;NO
+Plazo          : 'Plazo'          ;3;2; ;NO
+FechaVto       : 'Fecha Liq.'     ;4;2; ;NO
+TotalIntereses : 'Intereses'      ;5;1; ;NO
+TotalBrutoCli1 : 'Monto'          ;6;1; ;NO
+Vehiculo1      :                  ;7;1; ;NO
+Operador       :                  ;8;1; ;NO
+Observaciones  :                  ; ; ;2;  ;;;NO
+
+BITS
+19;0;FW=1 o FW=2
+ 2;1;FW=1 Y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('RANGOTASA','SPREADNEG') ") >= 1 
+ 7;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('RANGOTASA','SPREADNEG') ") = 0 y Not Incluido(VAR('OPSNOCONF'),'MMCT')
+10;1;FW=1 y Query(" Select Count(1) From "~DBO~".EXCEPCIONES Where NrOperacion = '"~NROPERACION~"' And Tipo in ('RANGOTASA','SPREADNEG') ") = 0  y Incluido(VAR('OPSNOCONF'),'MMCT')
+1;1;FW=2
+
+CONDICIONES:
+NoVacio(Observaciones);'Debe ingresarse una observacion';NO
+
+POSTEDICION
+FW = 1;'AUTOIN';NrOperacion1=NROPERACION;Cantidad1=19
+
+
+INSTANCIA70
+BITS
+10;1;FW=2 y [Query("Select COUNT(1) from "~DBO~".MOVEJECUTADOS where NrOperacion = '"~NROPERACION~"'  and NrSaldo = 1 ") = 0] y CB5=0
+70;0;FW=2 y [Query("Select COUNT(1) from "~DBO~".MOVEJECUTADOS where NrOperacion = '"~NROPERACION~"'  and NrSaldo = 1 ") = 0] y CB5=0
+

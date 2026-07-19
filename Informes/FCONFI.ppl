@@ -1,0 +1,180 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+   Radio1: 'Filtro|FechaOp|FechaConf|FechaVto|FechaLiq' ;1;1;;;;;;;0
+   Fecha1:    'D.FechaOp'   ;2;1;;;Dialogo.Radio1=0;;;;FSYS
+   Fecha2:    'H.FechaOp'   ;2;2;;;Dialogo.Radio1=0;;;;FSYS
+   Fecha3:    'D.FechaConf' ;2;1;;;Dialogo.Radio1=1;;;;FSYS
+   Fecha4:    'H.FechaConf' ;2;2;;;Dialogo.Radio1=1;;;;FSYS
+   Fecha5:    'D.FechaConf' ;2;1;;;Dialogo.Radio1=2;;;;FSYS
+   Fecha6:    'H.FechaConf' ;2;2;;;Dialogo.Radio1=2;;;;FSYS
+   Fecha7:    'D.FechaLiq'  ;2;1;;;Dialogo.Radio1=3;;;;FSYS
+   Fecha8:    'H.FechaLiq'  ;2;2;;;Dialogo.Radio1=3;;;;FSYS
+   Vehiculo1: 'Vehiculo'    ;3;1;;;;;;;VAR('VEHICULODE')
+FinDialogo
+
+IF NOT OK
+   Cancelar
+Endif
+
+* --- Tengo Liquidaciones AC
+* --- Tengo Liquidaciones NO AC -> Con Fallas
+* --- Tengo Liquidaciones NO AC -> Sin Fallas
+* --- Informar NrOperacion, FechaOp, FechaVto, Cliente, Vehiculo, 
+* --- NrTrans, Cuenta, Especie, Cantidad, FLiquid, FConf
+
+CrearFont(1,'Arial,8,')
+CrearFont(2,'Arial,8,B')
+CrearFont(3,'Arial,10,B')
+
+ACT(a:2, "Liquidaciones Confiramadas")
+SetFont(a:2, 3)
+
+If Dialogo.Radio1=0
+   ACT(a:4, "Fecha Concertacion del "~dialogo.Fecha1~" al "~Dialogo.Fecha2)
+Endif
+If Dialogo.Radio1=1
+   ACT(a:4, "Fecha Confirmacion del "~dialogo.Fecha3~" al "~Dialogo.Fecha4)
+Endif
+If Dialogo.Radio1=2
+   ACT(a:4, "Fecha Vencimiento del "~dialogo.Fecha5~" al "~Dialogo.Fecha6)
+Endif
+If Dialogo.Radio1=3
+   ACT(a:4, "Fecha Liquidacion del "~dialogo.Fecha7~" al "~Dialogo.Fecha8)
+Endif
+ACT(a:5, "Vehiculo: "~iif(NOVACIO(Dialogo.Vehiculo1),Dialogo.Vehiculo1,"Todos") )
+SetFont(a:4..a:5, 2)
+
+SetFilaActual(7)
+
+ACT(a:fac, "Operacion")
+ACT(b:fac, "FechaOp")
+ACT(c:fac, "FechaVto")
+ACT(d:fac, "Cliente")
+ACT(e:fac, "Vehiculo")
+ACT(f:fac, "NrTrans")
+ACT(g:fac, "Cuenta")
+ACT(h:fac, "Especie")
+ACT(i:fac, "Cantidad")
+ACT(j:fac, "FLiquid.")
+ACT(k:fac, "FConfir.")
+SetFont(a:fac..z:fac,2)
+AlinearCeldas(a:fac..z:fac,'C')
+Agregarmarco(a:fac..z:fac,1,0,EXE('COLOR6'))
+
+ACT(ac:1, VAR('MERCAACMC'))
+
+* --- Liquidaciones AC
+SQL.ADD(" SELECT O.NrOperacion, O.Cliente1, O.FechaOp, O.FechaVto, O.Vehiculo1, ")
+SQL.ADD(" T.NrTrans, -M.Cantidad Cantidad, M.Especie, M.Cuenta, O.FechaPrecan FLiquid, ")
+SQL.ADD(" T.Fecha5 FConfir ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD(" WHERE O.NrOperacion = M.NrOperacion   ")
+SQL.ADD(" AND   M.NrTrans2    = T.NrTrans       ")
+SQL.ADD(" AND   T.Mercado1    in ("~Pipe2Comillas(Val(ac:1))~") ")
+SQL.ADD(" AND   T.RB6         = '1' ")
+If Dialogo.Radio1=0
+   SQL.ADD(" AND   O.FechaOp    >= "~Idxdate2(Dialogo.Fecha1)~" ")
+   SQL.ADD(" AND   O.FechaOp    <= "~Idxdate2(Dialogo.Fecha2)~" ")
+Endif
+If Dialogo.Radio1=1
+   SQL.ADD(" AND   T.Fecha5  >= "~Idxdate2(Dialogo.Fecha3)~" ")
+   SQL.ADD(" AND   T.Fecha5  <= "~Idxdate2(Dialogo.Fecha4)~" ")
+Endif
+If Dialogo.Radio1=2
+   SQL.ADD(" AND   O.FechaVto  >= "~Idxdate2(Dialogo.Fecha5)~" ")
+   SQL.ADD(" AND   O.FechaVto  <= "~Idxdate2(Dialogo.Fecha6)~" ")
+Endif
+If Dialogo.Radio1=3
+   SQL.ADD(" AND   O.FechaPrecan >= "~Idxdate2(Dialogo.Fecha7)~" ")
+   SQL.ADD(" AND   O.FechaPrecan <= "~Idxdate2(Dialogo.Fecha8)~" ")
+Endif
+IF NOVACIO(Dialogo.Vehiculo1)
+   SQL.ADD(" AND   O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+Endif
+SQL.ADD(" UNION ")
+* --- Liquidaciones sin fallas
+SQL.ADD(" SELECT O.NrOperacion, O.Cliente1, O.FechaOp, O.FechaVto, O.Vehiculo1, ")
+SQL.ADD(" T.NrTrans, -M.Cantidad Cantidad, M.Especie, T.Cuenta2 Cuenta, T.Fecha2 FLiquid, ")
+SQL.ADD(" T.Fecha3 FConfir ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD(" WHERE O.NrOperacion = M.NrOperacion   ")
+SQL.ADD(" AND   M.NrTrans2    = T.NrTrans       ")
+SQL.ADD(" AND   T.Mercado1    not in ("~Pipe2Comillas(Val(ac:1))~") ")
+SQL.ADD(" AND   T.CB9         = '1' ")
+If Dialogo.Radio1=0
+   SQL.ADD(" AND   O.FechaOp    >= "~Idxdate2(Dialogo.Fecha1)~" ")
+   SQL.ADD(" AND   O.FechaOp    <= "~Idxdate2(Dialogo.Fecha2)~" ")
+Endif
+If Dialogo.Radio1=1
+   SQL.ADD(" AND   T.Fecha3  >= "~Idxdate2(Dialogo.Fecha3)~" ")
+   SQL.ADD(" AND   T.Fecha3  <= "~Idxdate2(Dialogo.Fecha4)~" ")
+Endif
+If Dialogo.Radio1=2
+   SQL.ADD(" AND   O.FechaVto  >= "~Idxdate2(Dialogo.Fecha5)~" ")
+   SQL.ADD(" AND   O.FechaVto  <= "~Idxdate2(Dialogo.Fecha6)~" ")
+Endif
+If Dialogo.Radio1=3
+   SQL.ADD(" AND   T.Fecha2 >= "~Idxdate2(Dialogo.Fecha7)~" ")
+   SQL.ADD(" AND   T.Fecha2 <= "~Idxdate2(Dialogo.Fecha8)~" ")
+Endif
+IF NOVACIO(Dialogo.Vehiculo1)
+   SQL.ADD(" AND   O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+Endif
+SQL.ADD(" UNION ")
+* --- Liquidaciones con fallas
+* --- Tabla LIQUIDACIONESVT Contiene toda la cadena de liquidaciones de vocuhers de transporte
+* --- Busco NrTrans relacionada con la op que este confirmada
+SQL.ADD(" SELECT O.NrOperacion, O.Cliente1, O.FechaOp, O.FechaVto, O.Vehiculo1, ")
+SQL.ADD(" T.NrTrans, -M.Cantidad Cantidad, M.Especie, T.Cuenta2 Cuenta, T.Fecha2 FLiquid, ")
+SQL.ADD(" T.Fecha3 FConfir ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".TRANSACCIONES2 T, ")
+SQL.ADD(" "~DBO~".MOVEJECUTADOS M, "~DBO~".LIQUIDACIONESVT L ")
+SQL.ADD(" WHERE O.NrOperacion = M.NrOperacion   ")
+SQL.ADD(" AND   O.NrOperacion = L.NrOperacion   ")
+SQL.ADD(" AND   T.NrTrans     = L.NrTrans       ")
+SQL.ADD(" AND   T.Especie     = M.Especie       ")
+SQL.ADD(" AND   T.Mercado1    not in ("~Pipe2Comillas(Val(ac:1))~") ")
+SQL.ADD(" AND   T.CB9         = '1' ")
+If Dialogo.Radio1=0
+   SQL.ADD(" AND   O.FechaOp    >= "~Idxdate2(Dialogo.Fecha1)~" ")
+   SQL.ADD(" AND   O.FechaOp    <= "~Idxdate2(Dialogo.Fecha2)~" ")
+Endif
+If Dialogo.Radio1=1
+   SQL.ADD(" AND   T.Fecha3  >= "~Idxdate2(Dialogo.Fecha3)~" ")
+   SQL.ADD(" AND   T.Fecha3  <= "~Idxdate2(Dialogo.Fecha4)~" ")
+Endif
+If Dialogo.Radio1=2
+   SQL.ADD(" AND   O.FechaVto  >= "~Idxdate2(Dialogo.Fecha5)~" ")
+   SQL.ADD(" AND   O.FechaVto  <= "~Idxdate2(Dialogo.Fecha6)~" ")
+Endif
+If Dialogo.Radio1=3
+   SQL.ADD(" AND   T.Fecha2 >= "~Idxdate2(Dialogo.Fecha7)~" ")
+   SQL.ADD(" AND   T.Fecha2 <= "~Idxdate2(Dialogo.Fecha8)~" ")
+Endif
+IF NOVACIO(Dialogo.Vehiculo1)
+   SQL.ADD(" AND   O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+Endif
+SQL.ADD("  ORDER BY O.NrOperacion ")
+Recorrer SQL
+  message(fbn("NrOperacion"))
+  ACT(a:fac, fbn("NrOperacion"))
+  ACLO(a:fac, fbn("NrOperacion"))
+  ACD(b:fac, fbn("FechaOp"))
+  ACD(c:fac, fbn("FechaVto"))
+  ACT(d:fac, fbn("Cliente1"))
+  ACT(e:fac, fbn("Vehiculo1"))
+  ACT(f:fac, fbn("NrTrans"))
+  ACLT(f:fac, fbn("NrTrans"))
+  ACT(g:fac, fbn("Cuenta"))
+  ACT(h:fac, fbn("Especie"))
+  ACN(i:fac, fbn("Cantidad"))
+  ACD(j:fac, fbn("FLiquid"))
+  ACD(k:fac, fbn("FConfir"))
+Proximo
+
+ACO(12,15)
+SetFont(a:8..z:fac,1)
+FormatoCeldas(i:8..i:fac,EXE('F2'))
+LimitesVision(k:fac+2)
+Impresion(1,2)
+Impresion(4,1)

@@ -1,0 +1,92 @@
+﻿* Evento utilizado por el servicio que genera operacion BYMA
+CrearDialogo
+   NrOperacion1 : 'Nr.Operacion:';;;;;;Novacio(Dialogo.NrOperacion1);'Operacion Invalida.';NO;
+FinDialogo
+if Not OK
+   Cancelar
+endif   
+
+ACN(A:14,SQL("SELECT NrBit FROM "~DBO~".OPERACIONESBITS WHERE NrOperacion='"~Dialogo.NrOperacion1~"' and Valor=1 "))
+* Si es anulacion no se hace nada
+if Val(a:14)<>30
+    ACT(A:1, BuscarCampo('OPERACIONES','NrOrden1','NrOperacion',Dialogo.NrOperacion1))
+    IF NoVacio(Val(a:1)) 
+      ACT(A:5, BuscarCampo('ORDENES','Book1','NrOrden',VAL(A:1)))
+    else
+      ACT(A:2, BuscarCampo('OPERACIONES','Vehiculo1','NrOperacion',Dialogo.NrOperacion1))
+      if Vacio(Val(a:2))
+        ACT(A:2, Var('VEHICULODE'))
+      endif
+      ACT(A:3, BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion1))
+      ACT(A:4, BuscarCampo('OPERACIONES','Especie','NrOperacion',Dialogo.NrOperacion1))
+      ACT(a:5, BookDefault2(Val(a:2),Val(a:3),'',Val(a:4),'','','','','HAB'))
+    endif
+    ACT(A:7, BuscarCampo('OPERACIONES','Book1','NrOperacion',Dialogo.NrOperacion1))
+
+    ACN(A:10, SQL("SELECT Sum(Cantidad) FROM "~DBO~".EJECUCIONES WHERE NrOperacion='"~Dialogo.NrOperacion1~"' "))
+
+       SQL.ADD(" UPDATE "~DBO~".OPERACIONES ")
+       SQL.ADD(" SET  ")
+    IF val(A:10)>0
+       SQL.ADD("     Cantidad = "~FSTR(VAL(A:10),0,2)~", ")
+    ENDIF
+       SQL.ADD("     Book1 = '"~VAL(A:5)~"' ")
+       SQL.ADD(" WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+       SQL.ADD(" AND TipoOp IN ('TIC', 'TIV') ")
+       SQL.NEW
+       SQL.EXEC
+
+    ACT(A:8, BuscarCampo('OPERACIONES','Book1','NrOperacion',Dialogo.NrOperacion1))
+
+    ModificarOperacion(Dialogo.NrOperacion1,0,NO,SI,SI,NO,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO,SI,NO,SI,NO,0,NO,NO)
+    * Este ModificarOperacion() no genera OPERACIONESBITS
+    ACT(A:9, BuscarCampo('OPERACIONES','Book1','NrOperacion',Dialogo.NrOperacion1))
+
+    ACT(A:11, BuscarCampo('OPERACIONES','NrOrden1','NrOperacion',Dialogo.NrOperacion1))
+    **  Los recalculos de la TIC/TIV no estan calculando las cuentas en algunos casos (por ejemplo cuando cliente1 <> vehiculo1).
+    IF NoVacio(Val(a:11)) 
+
+       ** AA 06/06/2023 Actualizacion Plazo de la orden  Plazo1 a Lotes
+       SQL.ADD(" UPDATE "~DBO~".ORDENES ")
+       SQL.ADD(" SET Lotes = Plazo1 ")
+       SQL.ADD(" WHERE NrOrden='"~VAL(A:11)~"' ")
+       SQL.NEW
+       SQL.EXEC
+
+       SQL.ADD(" UPDATE "~DBO~".OPERACIONES ")
+       SQL.ADD(" SET Cuenta1 = (SELECT R.Cuenta1 FROM "~DBO~".ORDENES R WHERE R.NrOrden='"~VAL(A:11)~"' ), ")
+       SQL.ADD("     Cuenta4 = (SELECT R.Cuenta4 FROM "~DBO~".ORDENES R WHERE R.NrOrden='"~VAL(A:11)~"' ), ")
+       SQL.ADD("     AfectaLS = (SELECT R.AfectaLS FROM "~DBO~".ORDENES R WHERE R.NrOrden='"~VAL(A:11)~"' ) ")
+       SQL.ADD(" WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+       SQL.ADD(" AND TipoOp IN ('TIC', 'TIV') ")
+       SQL.NEW
+       SQL.EXEC
+       
+    endif
+
+    * Solo la cambio si viene de Ingresada BYMA
+    if Val(a:14)=18
+       **CAMBIO DE INSTANCIA OPERACIONES
+       EjecutarEvento('CBOINS', String1=Dialogo.NrOperacion1, Radio1=0, Radio2=0, Entero1=0, Entero2=13)
+    endif   
+
+    SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+    SQL.ADD(" WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    Recorrer SQL
+      ACT(a:12, 'SI')
+      if Vacio(fbn('Cuenta1')) o Vacio(fbn('Cuenta2')) o Vacio(fbn('Cuenta3')) o Vacio(fbn('Cuenta4')) 
+        ACT(a:12, 'NO')
+      endif
+      if EqStr(Val(a:12),'SI')
+        SQL.ADD("Select * from "~DBO~".OPERACIONESBITS ")
+        SQL.ADD(" WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+        SQL.ADD("   and Valor=1 ")
+        Recorrer SQL
+          * FJL 20/04/22 - Issue 5562 - Solo pasa a Liquidacion si esta en Confirmacion
+          if fbn('NrBit')=7
+            EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=0, Radio2=0, Entero1=fbn['NrBit'], Entero2=10)
+          endif
+        proximo
+      endif
+    proximo
+endif

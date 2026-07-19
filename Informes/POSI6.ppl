@@ -1,0 +1,181 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+   Fecha1: 'Fecha'       ;;;;;;;;;fsys
+   Check1: 'Revaluo'     ;;;;;;;;;1
+   Check2: 'Trading'     ;;;;;;;;;1
+   Check3: 'Realizado'   ;;;;;;;;;1
+   **   Check4: 'RIEXP'       ;;;;;;;;;1
+   Check4: 'Reval FI'    ;;;;;;;;;1
+   Check5: 'Devengados'  ;;;;;;;;;1
+   Lista1 : "Devengados" ;;;;;;;;;;;SQLSet("SELECT Codigo FROM "~DBO~".TIPOSDEVENGADOS ");SI
+   Lista2 : "Books   "   ;;;;;;;;;;;SQLSet("SELECT Codigo FROM "~DBO~".BOOKS ORDER BY Codigo ");SI 
+FinDialogo
+
+If not OK
+   Cancelar
+Endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,8,BI')
+CrearFont(4, 'Arial,10,B')
+
+ACT(a:1, 'Resultados al '~Dialogo.Fecha1)
+if NoVacio(Dialogo.Lista2)
+   ACT(a:3, 'Book : '~Pipe2Comillas(Dialogo.Lista2))
+else
+   ACT(a:3, 'Book : Todos')
+endif
+
+SetFont(a:1, 4)
+SetFont(a:2..z:5, 2)
+
+setfilaactual(3)
+
+
+SQL.ADD(" SELECT P.* FROM "~DBO~".RESULTADOS P ")
+SQL.ADD(" WHERE  P.Fecha  <= "~idxdate2(Dialogo.Fecha1)~" ")
+If Dialogo.Check1=0
+   SQL.ADD(" AND   P.Especie <> '"~VAR('MONELOCA')~"' ")
+Endif
+if NoVacio(Dialogo.Lista2)
+   SQL.ADD(" and P.Book in( "~Pipe2Comillas(Dialogo.Lista2)~") ")
+endif
+*SQL.ADD(" AND   P.NrSaldo IN (171,31,41,42,43,44,45,140,141,143,144,134,200)")
+If Dialogo.Check1=0
+   SQL.ADD(" AND   P.TipoResultado <> 'REVAL' ")
+Endif
+If Dialogo.Check2=0
+   SQL.ADD(" AND   P.TipoResultado <> 'TRADE' ")
+Endif
+If Dialogo.Check3=0
+   SQL.ADD(" AND   P.TipoResultado <> 'REALIZ' ")
+Endif
+If Dialogo.Check4=0
+**   SQL.ADD(" AND   P.TipoResultado <> 'RIEXP' ")
+   SQL.ADD(" AND   P.TipoResultado <> 'REVAFI' ")
+Endif
+If Dialogo.Check4=5
+   SQL.ADD(" AND   P.TipoResultado NOT IN ('INTLEN','RINTLE','FONDEO','INTFON','PFWDEV','TIDEV') ")
+Else
+   if NoVacio(Dialogo.Lista1)
+      SQL.ADD(" and P.TipoResultado IN ( "~Pipe2Comillas(Dialogo.Lista1)~") ")
+   endif
+Endif
+* Este no va porque se duplica con los revaluos 
+SQL.ADD(" AND   P.TipoResultado <> 'MTMOCT' ")
+SQL.ADD(" AND   (P.Day<>0 OR P.MTD <>0 OR P.YTD<>0) ")
+SQL.ADD(" AND   P.Fecha IN (SELECT MAX(Fecha) FROM "~DBO~".RESULTADOS P1 ")
+SQL.ADD("                   WHERE P1.Especie   = P.Especie  ")
+SQL.ADD("                   AND   P1.Vehiculo  = P.Vehiculo ")
+SQL.ADD("                   AND   P1.Cliente   = P.Cliente  ")
+SQL.ADD("                   AND   P1.NrSaldo   = P.NrSaldo  ")
+SQL.ADD("                   AND   P1.TipoResultado   = P.TipoResultado  ")
+SQL.ADD("                   AND   P1.Book      = P.Book  ")
+SQL.ADD("                   AND   (P1.Cupon    = P.Cupon    OR ((P1.Cupon    IS NULL OR P1.Cupon   ='' OR P1.Cupon   =' ') AND (P.Cupon    IS NULL OR P.Cupon   ='' OR P.Cupon   =' ' )) )  ")
+SQL.ADD("                   AND   (P1.Sector   = P.Sector   OR ((P1.Sector   IS NULL OR P1.Sector  ='' OR P1.Sector  =' ') AND (P.Sector   IS NULL OR P.Sector  ='' OR P.Sector  =' ' )) )  ")
+SQL.ADD("                   AND   (P1.CallPut  = P.CallPut  OR ((P1.CallPut  IS NULL OR P1.CallPut ='' OR P1.CallPut =' ') AND (P.CallPut  IS NULL OR P.CallPut ='' OR P.CallPut =' ' )) )  ")
+SQL.ADD("                   AND   (P1.FechaEj  = P.FechaEj  OR ((P1.FechaEj  IS NULL OR P1.FechaEj ='' OR P1.FechaEj =' ') AND (P.FechaEj  IS NULL OR P.FechaEj ='' OR P.FechaEj =' ' )) )  ")
+SQL.ADD("                   AND   (P1.PrecioEj = P.PrecioEj OR ((P1.PrecioEj IS NULL OR P1.PrecioEj='' OR P1.PrecioEj=' ') AND (P.PrecioEj IS NULL OR P.PrecioEj='' OR P.PrecioEj=' ' )) )  ")
+SQL.ADD("                   AND   P1.Fecha     <= "~idxdate2(Dialogo.Fecha1)~" ")
+SQL.ADD("                  ) ")
+SQL.ADD(" ORDER BY P.Vehiculo, P.Book, P.TipoResultado, P.NrSaldo, P.Especie ")
+ACT(xx:1, '')
+ACT(xx:2, '')
+ACT(xx:3, '')
+ACN(xx:4, 0)
+
+Recorrer SQL
+  If Not Eqstr(fbn('Vehiculo'), Val(xx:2))
+     If NoVacio(Val(xx:2))
+        ifa
+     Endif
+     ACT(a:fac, fbn('Vehiculo'))
+     message(Val(a:fac))
+     SetFont(a:fac..z:fac, 2)
+     AgregarMarco(a:fac..z:fac,0,0,EXE('COLOR8'))
+     ifa
+  Endif
+
+  If Not Eqstr(fbn('Book'), Val(xx:3))
+     If Val(xx:4)<>0
+        ifa
+     Endif
+     ACT(a:fac,  'Book: '~fbn('Book'))
+     message(Val(a:fac))
+     SetFont(a:fac..z:fac, 3)
+     AgregarMarco(a:fac..z:fac,0,0,EXE('COLOR6'))
+     ACN(xx:1,0)
+  Endif
+
+  If Not eQSTR(fbn('TipoResultado'),Val(xx:1)) o fbn('NrSaldo')<>Val(xx:4)
+     IFA
+     If Eqstr(FBN('TipoResultado'), 'REVAL')
+        ACT(a:fac, 'Revaluo - Saldo: '~fbn('NrSaldo'))
+     Else
+        If Eqstr(FBN('TipoResultado'), 'TRADE')
+           ACT(a:fac, 'Trading - Saldo: '~fbn('NrSaldo'))
+        Else
+           If Eqstr(FBN('TipoResultado'), 'REALIZ')
+              ACT(a:fac, 'Realizado - Saldo: '~fbn('NrSaldo'))
+           Else
+**              If Eqstr(FBN('TipoResultado'), 'RIEXP')
+**                 ACT(a:fac, 'RIEXP - Saldo: '~fbn('NrSaldo'))
+              If Eqstr(FBN('TipoResultado'), 'REVAFI')
+                ACT(a:fac, 'REval FI - Saldo: '~fbn('NrSaldo'))
+              Else
+                 ACT(a:fac, FBN('TipoResultado')~' - '~BuscarCampo('TIPOSDEVENGADOS','Descripcion','Codigo',FBN('TipoResultado'))~' - Saldo: '~fbn('NrSaldo'))
+              Endif
+           Endif
+        Endif
+     Endif
+     AgregarMarco(a:fac..e:fac,0,0)
+     SetFont(a:fac, 2)
+     ifa
+     ACT(a:fac, 'Especie')
+     ACT(b:fac, 'FechaEj')
+     ACT(c:fac, 'Day')
+     ACT(d:fac, 'MTD')
+     ACT(e:fac, 'YTD')
+     AgregarMarco(a:fac..e:fac,0,0)
+     AlinearCeldas(a:fac..z:fac, 'C')
+     SetFont(a:fac..e:fac, 3)
+     ifa
+  Endif
+
+  ACT(a:fac, fbn('Especie'))
+  ACD(b:fac, fbn('FechaEj'))
+  If fbn('Fecha')=Dialogo.Fecha1
+     ACN(c:fac, fbn('Day'))
+  Endif
+  If mes(fbn('Fecha'))=mes(Dialogo.Fecha1)
+     ACN(d:fac, fbn('MTD'))
+  Endif
+  If Anio(fbn('Fecha'))=Anio(Dialogo.Fecha1)
+     ACN(e:fac, fbn('YTD'))
+  Endif
+
+  FormatoCeldas(c:fac..e:fac, EXE('F2'))
+  SetFont(a:fac..z:fac, 1)
+
+  ACT(xx:1, fbn('TipoResultado'))
+  ACT(xx:2, fbn('Vehiculo'))
+  ACT(xx:3, fbn('Book'))
+  ACN(xx:4, fbn('NrSaldo'))
+Proximo
+
+ifa
+ifa
+ifa
+ACO(1,12)
+ACO(2,10)
+ACO(3,10)
+ACO(4,10)
+
+ACT(a:fac, 'Fin del Informe.')
+SetFont(a:fac, 1)
+IFA
+ACT(a:fac, USUARIOACTIVO)
+LimitesVision(e:fac+2)
+Impresion(4,1)
+SetMargins(0,0,0,2)
