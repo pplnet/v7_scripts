@@ -77,6 +77,25 @@
         });
     }
 
+    // Las columnas NULL las omite el backend del objeto de la fila. Aseguramos que
+    // cada fila tenga TODAS las columnas que la grilla espera (evita el warning
+    // "Requested unknown parameter" de DataTables).
+    const OP_FIELDS = ['Instancia', 'NrOperacion', 'FechaOp', 'FechaVto', 'Especie',
+        'ContraEspecie', 'TipoOp', 'Mercado', 'Cliente', 'Cantidad', 'Precio',
+        'Vehiculo', 'Operador'];
+
+    function normalizeOps(rows) {
+        return rows.map(function (r) {
+            const o = r || {};
+            OP_FIELDS.forEach(function (f) {
+                if (o[f] === undefined || o[f] === null) {
+                    o[f] = (f === 'Cantidad' || f === 'Precio') ? 0 : '';
+                }
+            });
+            return o;
+        });
+    }
+
     // ======================================================================
     // DataTable
     // ======================================================================
@@ -165,7 +184,7 @@
     function loadOperaciones(showLoading) {
         if (showLoading) $$.loading(true);
         return bound.execPPL('GetOperaciones()').then(function (result) {
-            operacionesData = transformData(result);
+            operacionesData = normalizeOps(transformData(result));
             $$.setData(operacionesData, colsConfig);
             $$.loading(false);
         }).catch(function (err) {

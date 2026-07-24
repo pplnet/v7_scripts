@@ -271,13 +271,59 @@
         });
     }
 
+    // Extrae los PARAMETROS "de negocio" de la notificacion (sin las claves de
+    // control del sobre) para mostrarlos como tabla clave/valor.
+    function extractParams(datos) {
+        if (datos === null || datos === undefined) return null;
+        if (typeof datos !== 'object' || Array.isArray(datos)) return { valor: datos };
+
+        // Sobre { v, grupo, id, severidad, mensaje, datos }: los parametros reales
+        // viven en .datos.
+        if (datos.datos !== undefined && datos.datos !== null) {
+            const inner = datos.datos;
+            if (typeof inner === 'object' && !Array.isArray(inner)) return inner;
+            return { datos: inner };
+        }
+
+        // Payload plano: descartar las claves reservadas de control.
+        const reserved = { v: 1, grupo: 1, id: 1, severidad: 1, _sev: 1, severity: 1,
+                           mensaje: 1, _msg: 1, message: 1, coalesced: 1, items: 1 };
+        const out = {};
+        Object.keys(datos).forEach(function (k) {
+            if (!reserved[k.toLowerCase()]) out[k] = datos[k];
+        });
+        return Object.keys(out).length ? out : null;
+    }
+
+    function renderParamsTable(params) {
+        if (!params) return '<div class="notif-noparams">Sin parametros</div>';
+        let html = '<table class="notif-params"><tbody>';
+        Object.keys(params).forEach(function (k) {
+            let v = params[k];
+            if (v !== null && typeof v === 'object') v = safeJson(v);
+            html += '<tr><th>' + escapeHtml(k) + '</th><td>' + escapeHtml(v) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        return html;
+    }
+
     function renderDetail(data) {
+        const notifId = pick(data.datos, ['id', '_id']) || '-';
         const meta = 'grupo: ' + escapeHtml(data.grupo) +
             '  |  origen: ' + escapeHtml(data.origen) +
             '  |  severidad: ' + escapeHtml(data.severidad) +
+            '  |  id: ' + escapeHtml(notifId) +
             '  |  hora: ' + escapeHtml(data.hora);
-        return '<div class="notif-detail"><span class="meta">' + meta + '</span>\n\n' +
-            escapeHtml(safeJson(data.datos)) + '</div>';
+
+        const params = extractParams(data.datos);
+
+        return '<div class="notif-detail">' +
+            '<div class="notif-section-title">Parametros</div>' +
+            renderParamsTable(params) +
+            '<div class="notif-section-title">Payload completo</div>' +
+            '<pre class="notif-json"><span class="meta">' + meta + '</span>\n\n' +
+            escapeHtml(safeJson(data.datos)) + '</pre>' +
+            '</div>';
     }
 
     // ======================================================================
