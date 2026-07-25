@@ -1,0 +1,118 @@
+** ============================================================================
+** PPL WebView: Estado de Operaciones en Tiempo Real (ESTOPE)
+** ============================================================================
+** Descripcion: Replica en formato WebView el informe ESTOPE ("Estado de
+**              Operaciones"). Muestra las operaciones creadas, su ESTADO
+**              (instancia activa segun OPERACIONESBITS) e informacion relevante
+**              (fechas, especie, moneda, tipo, mercado, cliente, cantidad,
+**              precio, vehiculo, operador, monto), con filtros dinamicos,
+**              busqueda, orden y actualizacion en tiempo real via SignalR.
+**
+**              El estado de la operacion se deriva igual que en el informe:
+**              la instancia activa es el NrBit con Valor=1 en OPERACIONESBITS,
+**              y su nombre sale de INSTANCIAS (Tabla='OPERACIONES').
+** Autor: Sistema V7
+** Fecha: 2026-07-23
+** ============================================================================
+
+** Variables globales
+&operaciones := $[]
+
+** ============================================================================
+** Funcion: Operaciones con su estado (instancia activa) e info relevante.
+** ============================================================================
+def GetOperaciones()
+    &sql := <<
+        SELECT TOP 500
+            RTRIM(ISNULL(I.Nombre, '*** Sin Instancia ***')) as Instancia,
+            RTRIM(O.NrOperacion) as NrOperacion,
+            CONVERT(VARCHAR(10), O.FechaOp, 103) as FechaOp,
+            CONVERT(VARCHAR(10), O.FechaVto, 103) as FechaVto,
+            RTRIM(ISNULL(O.Especie, '')) as Especie,
+            RTRIM(ISNULL(O.ContraEspecie, '')) as ContraEspecie,
+            RTRIM(ISNULL(O.TipoOp, '')) as TipoOp,
+            RTRIM(ISNULL(O.Mercado4, O.Mercado)) as Mercado,
+            RTRIM(ISNULL(O.Cliente1, '')) as Cliente,
+            ISNULL(O.Cantidad, 0) as Cantidad,
+            ISNULL(O.Precio1, 0) as Precio,
+            RTRIM(ISNULL(O.Vehiculo1, '')) as Vehiculo,
+            RTRIM(ISNULL(O.Operador, '')) as Operador
+        FROM OPERACIONES O
+            LEFT OUTER JOIN OPERACIONESBITS OB ON O.NrOperacion = OB.NrOperacion AND OB.Valor = 1
+            LEFT OUTER JOIN INSTANCIAS I ON OB.NrBit = I.NrInstancia AND I.Tabla = 'OPERACIONES'
+        ORDER BY O.FechaOp DESC, O.NrOperacion DESC
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Tipos de operacion distintos (para el filtro).
+** ============================================================================
+def GetTiposOp()
+    &sql := <<
+        SELECT DISTINCT RTRIM(TipoOp) as TipoOp
+        FROM OPERACIONES
+        WHERE TipoOp IS NOT NULL
+        ORDER BY RTRIM(TipoOp)
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Instancias (estados) distintos vigentes (para el filtro).
+** ============================================================================
+def GetInstancias()
+    &sql := <<
+        SELECT DISTINCT RTRIM(I.Nombre) as Instancia
+        FROM OPERACIONESBITS OB
+            INNER JOIN INSTANCIAS I ON OB.NrBit = I.NrInstancia AND I.Tabla = 'OPERACIONES'
+        WHERE OB.Valor = 1
+        ORDER BY RTRIM(I.Nombre)
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Estadisticas resumidas de los ultimos 30 dias.
+** ============================================================================
+def GetEstadisticas()
+    &sql := <<
+        SELECT
+            COUNT(*) as TotalOperaciones,
+            SUM(CASE WHEN O.FechaOp = m.MaxFecha THEN 1 ELSE 0 END) as OperacionesHoy,
+            COUNT(DISTINCT RTRIM(O.Especie)) as EspeciesDistintas,
+            COUNT(DISTINCT RTRIM(O.TipoOp)) as TiposDistintos
+        FROM OPERACIONES O
+            CROSS JOIN (SELECT MAX(FechaOp) as MaxFecha FROM OPERACIONES) m
+    >>
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Detalle de una operacion especifica (fila expandible / modal).
+** ============================================================================
+def GetDetalleOperacion(nrOperacion)
+    &sql := "SELECT "
+    &sql := &sql ~ "RTRIM(O.NrOperacion) as NrOperacion, "
+    &sql := &sql ~ "RTRIM(ISNULL(O.Especie,'')) as Especie, "
+    &sql := &sql ~ "RTRIM(ISNULL(O.ContraEspecie,'')) as ContraEspecie, "
+    &sql := &sql ~ "ISNULL(O.Cantidad,0) as Cantidad, "
+    &sql := &sql ~ "ISNULL(O.Precio1,0) as Precio, "
+    &sql := &sql ~ "ISNULL(O.Cantidad,0) * ISNULL(O.Precio1,0) as Importe, "
+    &sql := &sql ~ "RTRIM(ISNULL(O.Mercado4, O.Mercado)) as Mercado, "
+    &sql := &sql ~ "RTRIM(ISNULL(O.Operador,'')) as Operador, "
+    &sql := &sql ~ "RTRIM(ISNULL(O.Observac2,'')) as Observaciones "
+    &sql := &sql ~ "FROM OPERACIONES O "
+    &sql := &sql ~ "WHERE O.NrOperacion = '" ~ nrOperacion ~ "'"
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end

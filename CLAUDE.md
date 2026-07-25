@@ -27,8 +27,8 @@ ppl_tests/
 │   └── DIAL, DMOTST, GRDTST, INFTST, RECALC
 ├── RemoteTest/          # Suite de tests PPL (52 scripts)
 │   └── Tests de operadores, colecciones, control de flujo, etc.
-├── WebView/             # Interfaces web interactivas (2 scripts)
-│   └── ESTORD, CRTORD (cada uno con .ppl, .html, .css, .js, .hppl)
+├── WebView/             # Interfaces web interactivas
+│   └── ESTORD, CRTORD, ESTOPE, MNTNTF, ... (cada uno con .ppl, .html, .css, .js, .hppl)
 └── .gitignore
 ```
 
@@ -71,6 +71,40 @@ SCRIPTID.ppln  → Generado automáticamente (no editar)
 ```
 
 ---
+
+## WebViews en tiempo real: SignalR + firehose de notificaciones
+
+Los WebViews consolidados ya traen el cliente **SignalR 8** embebido (lo inyecta
+`WebViewConsolidator`), disponible como el global `signalR`. Patrón para un WebView que consuma
+eventos en tiempo real:
+
+```javascript
+const hub = new signalR.HubConnectionBuilder()
+    .withUrl(window.API_BASE_URL + '/hubs/ppl', { withCredentials: true })
+    .withAutomaticReconnect()
+    .build();
+hub.on('ReceiveMessage', function (messageCode, payload) { /* ... */ });
+hub.start().then(function () { hub.invoke('Subscribe', '<GRUPO>'); });
+```
+
+- **Grupo `user:{CODIGO}`**: se **auto-une en `OnConnectedAsync`** (no hace falta `Subscribe`). Recibe
+  los eventos de proceso `PROCESS_COMPLETED` / `PROCESS_ERROR` / `PROCESS_CANCELLED` / `PROCESS_MESSAGE`
+  / `PROCESS_MESSAGEBOX_REQUEST` y de mensajería `NOTIFICATION_NEW` / `NOTIFICATION_DELETED`.
+- **Firehose `__NOTIF_ALL__`**: grupo **no-chat** (cualquier cliente puede `Subscribe`, sin
+  restricción de perfil). Recibe **TODA** notificación PPL (sección `NOTIFICACION` / función
+  `Notificar`) con el **grupo real como `messageCode`**; el `payload` puede ser plano, un **sobre**
+  `{v,grupo,id,severidad,mensaje,datos}` o un **batch** coalescido `{coalesced,grupo,items[]}` — el
+  cliente debe tolerar las tres formas.
+- Los grupos de chat (`user:`/`channel:`/`op:`/`profile:`) sí están autorizados por identidad/perfil
+  en `PPLHub`; el resto de los grupos pasan libres. Ver detalle en `../v7_proto/CLAUDE.md` →
+  "Mejoras del pipeline de notificaciones" y "El grupo `user:{CODIGO}` se une en `OnConnectedAsync`".
+
+### WebViews de ejemplo
+
+| WebView | Qué hace |
+|---------|----------|
+| **MNTNTF** (Monitor de Notificaciones) | Monitor universal 100% client-side: se suscribe al firehose `__NOTIF_ALL__` + escucha el grupo del usuario, acumula toda notificación en una grilla (tipo/origen/grupo/severidad/mensaje) con filtros, orden, pausa, límite de buffer y detalle expandible con el payload crudo. Su `.ppl` sólo expone un helper informativo (`GetServerInfo`). |
+| **ESTOPE** (Estado de Operaciones) | Réplica en WebView del informe homónimo `Informe/ESTOPE`. Grilla de operaciones con su **estado = instancia activa** (`OPERACIONESBITS.Valor=1` → `INSTANCIAS.Nombre`), fechas/especie/moneda/tipo/mercado/cliente/cantidad/precio/vehículo/operador. Filtros por tipo/estado, detalle expandible + modal, y **refresh en tiempo real** (debounced) al recibir eventos `PROCESS_*` o notificaciones de grupos de operaciones. |
 
 ## Sintaxis PPL Rápida
 
