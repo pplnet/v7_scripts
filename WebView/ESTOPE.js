@@ -101,9 +101,8 @@
     // DataTable
     // ======================================================================
     const colsConfig = [
-        { className: 'details-control', orderable: false, data: null, defaultContent: '' },
         {
-            data: 'Instancia', title: 'Estado',
+            data: 'Instancia', title: 'Instancia',
             render: function (d, type) {
                 if (type !== 'display') return d;
                 return '<span class="badge-estado">' + escapeHtml(d || '-') + '</span>';
@@ -142,7 +141,7 @@
             pageLength: 25,
             data: operacionesData,
             columns: colsConfig,
-            order: [[2, 'desc']],
+            order: [[1, 'desc']],
             language: {
                 zeroRecords: 'No se encontraron operaciones',
                 info: 'Mostrando _START_ a _END_ de _TOTAL_',
@@ -160,23 +159,19 @@
         $$.setDataTable(dataTable, '#dt1');
         $$.setKeyNames(['NrOperacion']);
 
-        // Expandir/colapsar detalle
-        $('#dt1 tbody').on('click', 'td.details-control', function () {
-            const tr = $(this).closest('tr');
-            const row = dataTable.row(tr);
-            if (row.child.isShown()) {
-                row.child.hide();
-                tr.removeClass('shown');
-            } else {
-                loadDetalle(row.data().NrOperacion, row, tr);
-            }
-        });
-
-        // Doble click -> modal
+        // Doble click -> modal de detalle
         $('#dt1 tbody').on('dblclick', 'tr', function () {
             const row = dataTable.row(this);
             if (row.data()) openModal(row.data().NrOperacion);
         });
+    }
+
+    // Re-sincroniza el header con el cuerpo cuando scrollX esta activo. Sin
+    // esto, un nombre de instancia largo ensancha la columna del cuerpo pero el
+    // header (tabla separada de DataTables) queda con el ancho viejo -> se
+    // desfasa. Hay que llamarlo tras cada carga de datos y en cada resize.
+    function adjustColumns() {
+        if (dataTable) dataTable.columns.adjust();
     }
 
     // ======================================================================
@@ -217,6 +212,7 @@
         return bound.execPPL(expr).then(function (result) {
             operacionesData = normalizeOps(transformData(result));
             $$.setData(operacionesData, colsConfig);
+            adjustColumns();   // re-sincroniza header/cuerpo (scrollX) tras el draw
             $$.loading(false);
         }).catch(function (err) {
             $$.loading(false);
@@ -245,18 +241,18 @@
         bound.execPPL('GetTiposOp()').then(function (result) {
             const tipos = transformData(result);
             const el = $('#filter-tipo').empty();
-            appendFilterItem(el, '', 'Todos', 7, '#dropdownTipo', 'Todos los tipos');
+            appendFilterItem(el, '', 'Todos', 6, '#dropdownTipo', 'Todos los tipos');
             tipos.forEach(function (t) {
-                appendFilterItem(el, t.TipoOp, t.TipoOp, 7, '#dropdownTipo', 'Todos los tipos');
+                appendFilterItem(el, t.TipoOp, t.TipoOp, 6, '#dropdownTipo', 'Todos los tipos');
             });
         });
         // Instancias (estados)
         bound.execPPL('GetInstancias()').then(function (result) {
             const insts = transformData(result);
             const el = $('#filter-instancia').empty();
-            appendFilterItem(el, '', 'Todos', 1, '#dropdownInstancia', 'Todos los estados');
+            appendFilterItem(el, '', 'Todos', 0, '#dropdownInstancia', 'Todos los estados');
             insts.forEach(function (i) {
-                appendFilterItem(el, i.Instancia, i.Instancia, 1, '#dropdownInstancia', 'Todos los estados');
+                appendFilterItem(el, i.Instancia, i.Instancia, 0, '#dropdownInstancia', 'Todos los estados');
             });
         });
     }
@@ -280,19 +276,6 @@
     // ======================================================================
     // Detalle
     // ======================================================================
-    function loadDetalle(nr, row, tr) {
-        $$.loading(true);
-        bound.execPPL("GetDetalleOperacion('" + nr + "')").then(function (result) {
-            $$.loading(false);
-            const det = transformData(result);
-            row.child(renderDetalle(det[0])).show();
-            tr.addClass('shown');
-        }).catch(function (err) {
-            $$.loading(false);
-            console.error('Error cargando detalle:', err);
-        });
-    }
-
     // Filas <tr> clave/valor del detalle de una operacion.
     function detalleRows(d) {
         if (!d) return '<tr><td class="text-center">Sin detalle disponible</td></tr>';
@@ -304,10 +287,6 @@
             rowKV('Mercado', d.Mercado) +
             rowKV('Operador', d.Operador) +
             rowKV('Observaciones', d.Observaciones);
-    }
-
-    function renderDetalle(d) {
-        return '<table class="table table-sm table-bordered mb-0">' + detalleRows(d) + '</table>';
     }
 
     function rowKV(k, v) {
@@ -472,6 +451,9 @@
             }
             loadOperaciones(true);
         });
+
+        // Al redimensionar la ventana, re-alinear header/cuerpo (scrollX).
+        $(window).on('resize', adjustColumns);
     }
 
     window.addEventListener('beforeunload', function () {

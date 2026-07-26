@@ -103,8 +103,33 @@ hub.start().then(function () { hub.invoke('Subscribe', '<GRUPO>'); });
 
 | WebView | Qué hace |
 |---------|----------|
-| **MNTNTF** (Monitor de Notificaciones) | Monitor universal 100% client-side: se suscribe al firehose `__NOTIF_ALL__` + escucha el grupo del usuario, acumula toda notificación en una grilla (tipo/origen/grupo/severidad/mensaje) con filtros, orden, pausa, límite de buffer y detalle expandible con el payload crudo. Su `.ppl` sólo expone un helper informativo (`GetServerInfo`). |
-| **ESTOPE** (Estado de Operaciones) | Réplica en WebView del informe homónimo `Informe/ESTOPE`. Grilla de operaciones con su **estado = instancia activa** (`OPERACIONESBITS.Valor=1` → `INSTANCIAS.Nombre`), fechas/especie/moneda/tipo/mercado/cliente/cantidad/precio/vehículo/operador. Filtros por tipo/estado, detalle expandible + modal, y **refresh en tiempo real** (debounced) al recibir eventos `PROCESS_*` o notificaciones de grupos de operaciones. |
+| **MNTNTF** (Monitor de Notificaciones) | Monitor universal 100% client-side: acumula TODA notificación en una grilla (tipo/origen/grupo/severidad/mensaje) con filtros, orden, pausa, límite de buffer y detalle expandible con el payload crudo. Escucha **cuatro fuentes**: firehose `__NOTIF_ALL__` (notificaciones PPL), grupo `user:{CODIGO}` (procesos + menciones + ops donde participa), **`channel:global`** y los **`channel:{id}` visibles** (chat de canales). Su `.ppl` expone `GetServerInfo` + `GetGruposChat`. |
+
+### Capturar el CHAT en un WebView (los `channel:*` no llegan por `user:{code}`)
+
+El chat NO viaja por el firehose. El backend emite `NOTIFICATION_NEW`/`NOTIFICATION_DELETED`/`NOTIFICATION_READ`
+(payload `MessageDto`: `Usuario`/`Message`/`ChannelName`/`Type`) y `OP_UNREAD` (`{nr,usuario}`) **por grupo de
+chat**: `channel:{id}` / `channel:global` / `op:{nr}` / `profile:{code}` (+ `user:{code}` sólo para menciones y
+ops donde participás). Un WebView auto-unido sólo a `user:{code}` **se pierde toda la mensajería de canales**.
+
+**Para capturarla** (patrón de MNTNTF):
+1. Suscribirse a **`channel:global`** (todo autenticado está autorizado — capta el chat público).
+2. Suscribirse a los **`channel:{id}`** que el usuario puede ver. En vez de replicar la visibilidad de canales
+   en el webview, una PPLFunc (`GetGruposChat` → `SELECT 'channel:'+Id FROM MENSAJES_CANALES`) devuelve TODOS
+   los canales candidatos y **`hub.invoke('SubscribeMany', grupos)`** deja que **`PPLHub` autorice cada uno**
+   por perfil (los restringidos se saltean silenciosamente — es la fuente de verdad, ver
+   `../v7_proto/CLAUDE.md` → `PPLHub.IsChatGroupAllowed`).
+3. Re-suscribirse en cada `onreconnected` (la membresía se pierde con el connectionId nuevo).
+4. Dedupear la **re-entrega multi-grupo** (un mensaje de canal que además te menciona llega por `channel:{id}`
+   Y por `user:{code}`) por `(code,id)` del `MessageDto` en una ventana corta.
+5. `MessageDto.Type` es `info`/`warning`/**`alert`** (no `alerta`) — normalizar al mapear la severidad.
+
+**Límite conocido**: los canales de **perfil** (`profile:{code}`, gated por `ActivateProfileChannels`) no se
+monitorean (requieren los perfiles del usuario); las ops se ven vía `OP_UNREAD` (aviso) + `user:{code}` (texto,
+si sos participante).
+| **ESTOPE** (Estado de Operaciones) | Réplica en WebView del informe homónimo `Informe/ESTOPE`. Grilla de operaciones con su **estado = instancia activa** (`OPERACIONESBITS.Valor=1` → `INSTANCIAS.Nombre`; primera columna **Instancia**), fechas/especie/moneda/tipo/mercado/cliente/cantidad/precio/vehículo/operador. **Filtro por fecha server-side** (`GetOperaciones(desde,hasta)` con `IdxDate` para SQL-safe; default `FSYS..FSYS` vía `GetFechaSistema()` → al abrir sólo se ven las operaciones del día) + filtros por tipo/estado, **detalle por modal (doble click)**, y **refresh en tiempo real** (debounced) al recibir eventos `PROCESS_*` o notificaciones de grupos de operaciones. |
+
+> ⚠️ **DataTables con `scrollX: true`**: el header vive en una tabla separada del cuerpo, y `$$.setData` (helper del consolidador) hace `draw()` **pero NO `columns.adjust()`** → un contenido ancho (ej. un nombre de instancia largo) desfasa el header respecto del cuerpo. Todo WebView con `scrollX` debe llamar `dataTable.columns.adjust()` **tras cada `$$.setData(...)`** y en el evento `resize` de la ventana (ver `ESTOPE.js::adjustColumns`).
 
 ## Sintaxis PPL Rápida
 
