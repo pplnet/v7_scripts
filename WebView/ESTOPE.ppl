@@ -19,10 +19,37 @@
 &operaciones := $[]
 
 ** ============================================================================
-** Funcion: Operaciones con su estado (instancia activa) e info relevante.
+** Funcion: Fecha del sistema (FSYS) en formato ISO yyyy-MM-dd.
+** ----------------------------------------------------------------------------
+** La usa el frontend para inicializar los filtros "Fecha desde" / "Fecha
+** hasta" con la fecha del sistema al abrir el webview (asi solo se ven las
+** operaciones del dia). Se devuelve como tabla de una fila/columna para
+** reusar el mismo pipeline de transformacion que el resto de las funciones.
 ** ============================================================================
-def GetOperaciones()
-    &sql := <<
+def GetFechaSistema()
+    &sql := "SELECT '" ~ Fecha(FSys, 'yyyy-mm-dd') ~ "' as Fecha"
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Operaciones con su estado (instancia activa) e info relevante.
+** ----------------------------------------------------------------------------
+** Filtro por rango de FechaOp (server-side). fechaDesde / fechaHasta llegan
+** como ISO (yyyy-MM-dd) desde el date picker del frontend; IdxDate las
+** normaliza a yyyyMMdd (SQL-safe, sin inyeccion). Cada extremo vacio deja ese
+** lado del rango abierto (NoVacio lo omite del WHERE).
+** ============================================================================
+def GetOperaciones(fechaDesde, fechaHasta)
+    &filtroFecha := ""
+    If NoVacio(fechaDesde)
+        &filtroFecha := &filtroFecha ~ " AND CONVERT(date, O.FechaOp) >= '" ~ IdxDate(fechaDesde) ~ "'"
+    EndIf
+    If NoVacio(fechaHasta)
+        &filtroFecha := &filtroFecha ~ " AND CONVERT(date, O.FechaOp) <= '" ~ IdxDate(fechaHasta) ~ "'"
+    EndIf
+
+    &base := <<
         SELECT TOP 500
             RTRIM(ISNULL(I.Nombre, '*** Sin Instancia ***')) as Instancia,
             RTRIM(O.NrOperacion) as NrOperacion,
@@ -40,9 +67,10 @@ def GetOperaciones()
         FROM OPERACIONES O
             LEFT OUTER JOIN OPERACIONESBITS OB ON O.NrOperacion = OB.NrOperacion AND OB.Valor = 1
             LEFT OUTER JOIN INSTANCIAS I ON OB.NrBit = I.NrInstancia AND I.Tabla = 'OPERACIONES'
-        ORDER BY O.FechaOp DESC, O.NrOperacion DESC
+        WHERE 1 = 1
     >>
 
+    &sql := &base ~ &filtroFecha ~ " ORDER BY O.FechaOp DESC, O.NrOperacion DESC"
     &resultado := QueryTable(&sql)
     return &resultado
 end

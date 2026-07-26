@@ -30,6 +30,7 @@
     let hubConnection = null;
     let reconnectAttempts = 0;
     let refreshTimer = null;
+    let fechaSistema = '';   // FSYS (ISO yyyy-MM-dd) — default de los filtros de fecha
 
     // ======================================================================
     // Transformacion de datos del backend
@@ -179,11 +180,41 @@
     }
 
     // ======================================================================
+    // Filtro por fecha (server-side)
+    // ======================================================================
+    // Solo aceptamos el ISO yyyy-MM-dd del <input type="date">; cualquier otra
+    // cosa se descarta (el backend igual re-sanitiza con IdxDate).
+    function sanitizeIsoDate(v) {
+        return /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : '';
+    }
+
+    // Rango vigente de los inputs. Un extremo vacio deja ese lado abierto.
+    function getFechaRange() {
+        return {
+            desde: sanitizeIsoDate(($('#filter-fecha-desde').val() || '').trim()),
+            hasta: sanitizeIsoDate(($('#filter-fecha-hasta').val() || '').trim())
+        };
+    }
+
+    // Fecha del sistema (FSYS) para el default de los filtros. Tabla 1x1.
+    function fetchFechaSistema() {
+        return bound.execPPL('GetFechaSistema()').then(function (result) {
+            const rows = transformData(result);
+            return rows[0] && rows[0].Fecha ? rows[0].Fecha : '';
+        }).catch(function (err) {
+            console.error('Error obteniendo la fecha del sistema:', err);
+            return '';
+        });
+    }
+
+    // ======================================================================
     // Carga de datos
     // ======================================================================
     function loadOperaciones(showLoading) {
         if (showLoading) $$.loading(true);
-        return bound.execPPL('GetOperaciones()').then(function (result) {
+        const r = getFechaRange();
+        const expr = "GetOperaciones('" + r.desde + "','" + r.hasta + "')";
+        return bound.execPPL(expr).then(function (result) {
             operacionesData = normalizeOps(transformData(result));
             $$.setData(operacionesData, colsConfig);
             $$.loading(false);
@@ -404,7 +435,16 @@
     // ======================================================================
     function init() {
         initDataTable();
-        loadOperaciones(true);
+        // Default: rango = fecha del sistema (FSYS) → al abrir solo se ven las
+        // operaciones del dia. Seteamos los inputs y recien ahi cargamos.
+        fetchFechaSistema().then(function (fsys) {
+            fechaSistema = fsys;
+            if (fsys) {
+                $('#filter-fecha-desde').val(fsys);
+                $('#filter-fecha-hasta').val(fsys);
+            }
+            loadOperaciones(true);
+        });
         loadEstadisticas();
         buildFilters();
         setupEventListeners();
@@ -417,6 +457,20 @@
                 loadEstadisticas();
                 showToast('Datos actualizados', 'success');
             });
+        });
+
+        // Cambiar cualquiera de las fechas recarga la grilla (filtro server-side).
+        $('#filter-fecha-desde, #filter-fecha-hasta').on('change', function () {
+            loadOperaciones(true);
+        });
+
+        // "Hoy": vuelve ambos filtros a la fecha del sistema y recarga.
+        $('#btn-hoy').on('click', function () {
+            if (fechaSistema) {
+                $('#filter-fecha-desde').val(fechaSistema);
+                $('#filter-fecha-hasta').val(fechaSistema);
+            }
+            loadOperaciones(true);
         });
     }
 
