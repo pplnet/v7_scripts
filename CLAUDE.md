@@ -72,6 +72,50 @@ SCRIPTID.ppln  → Generado automáticamente (no editar)
 
 ---
 
+## WebView: filtros server-side + fecha del sistema (FSYS)
+
+Un WebView puede filtrar **server-side** pasando argumentos a su función PPL vía `bound.execPPL`
+(el JS arma la expresión con los args inline, igual que `GetDetalleOperacion('...')`) y construyendo
+el `WHERE` dinámicamente en la función. Patrón usado por **ESTOPE** (filtro por rango de fecha):
+
+- **JS** llama `bound.execPPL("GetOperaciones('" + desde + "','" + hasta + "')")` — cada arg como
+  string ISO `yyyy-MM-dd` del `<input type="date">`. Validar en el JS con `^\d{4}-\d{2}-\d{2}$`
+  antes de pasarlo.
+- **PPL** arma el filtro con `If NoVacio(param) ... EndIf` + concatenación `~` (extremo vacío ⇒ lado
+  del rango abierto). **Sanitizar toda fecha con `IdxDate(param)`** antes de meterla en el SQL:
+  devuelve `yyyyMMdd` (SQL-safe, sin inyección; input inválido ⇒ `19000101`). El compare va como
+  `CONVERT(date, O.FechaOp) >= '" ~ IdxDate(param) ~ "'`.
+
+**Fecha del sistema (FSYS) en un WebView**: no hay global JS con FSYS — se pide al backend. Función
+PPL que la devuelve como ISO para el date picker:
+
+```ppl
+def GetFechaSistema()
+    &sql := "SELECT '" ~ Fecha(FSys, 'yyyy-mm-dd') ~ "' as Fecha"
+    return QueryTable(&sql)
+end
+```
+
+`FSys` (bareword, sin paréntesis — igual que en eventos/informes) es la fecha lógica del sistema
+(≠ `GETDATE()`). `Fecha(f, 'yyyy-mm-dd')` la formatea ISO (el backend lowercasea la máscara y
+`mm→MM`, así que da `yyyy-MM-dd`). Se devuelve como tabla 1×1 para reusar el mismo pipeline
+`transformData`/`capKey` del JS. El JS setea ambos inputs con ese valor **al iniciar** y recién ahí
+carga la grilla → al abrir se ven solo las operaciones del día (default FSYS..FSYS). Los filtros de
+fecha van **por encima** de los demás filtros en el HTML.
+
+`NoVacio`, `IdxDate`, `Fecha` y `FSys` son PMFuncs disponibles en el compilador `inf` (el de los
+WebView) — mismo patrón de `If/EndIf` + concatenación dentro de un `def` que usa `CRTORD.CrearOrden`.
+
+⚠️ **Tras editar el `.ppl`/`.html`/`.js`/`.css` de un WebView hay que RE-TRANSPILARLO y redeployarlo**
+(`PPL.Dev.Console --f ESTOPE --t WebView`): regenera el C# de las funciones nuevas y el HTML
+consolidado de `ppl_deploy/WebView/{id}/`. Los archivos bajo `ppl_deploy/`, `transpilations-*` son
+artefactos generados — **no editarlos a mano**.
+
+**WebViews existentes**: `ESTORD` (estado de órdenes), `CRTORD` (alta de orden), `ESTOPE` (estado de
+operaciones, con filtro por fecha).
+
+---
+
 ## Sintaxis PPL Rápida
 
 ```ppl
