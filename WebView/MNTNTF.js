@@ -47,7 +47,14 @@
         'PROCESS_ERROR': 'alerta'
     };
 
-    const CHAT_CODES = ['NOTIFICATION_NEW', 'NOTIFICATION_DELETED', 'NOTIFICATION_READ'];
+    // Codigos de mensajeria/chat que emite el backend (server-only en PPLHub).
+    // NOTIFICATION_* llegan por los grupos de chat (user:/channel:/op:/profile:);
+    // OP_UNREAD por channel:global (aviso liviano de mensaje nuevo en una op).
+    const CHAT_CODES = ['NOTIFICATION_NEW', 'NOTIFICATION_DELETED', 'NOTIFICATION_READ', 'OP_UNREAD'];
+
+    // Dedup de re-entregas multi-grupo (ej. un mensaje de canal que ademas te
+    // menciona llega por channel:{id} Y por user:{code}). key = code#id -> ts.
+    const _recentChat = {};
 
     // ======================================================================
     // Utilidades
@@ -85,6 +92,31 @@
         return undefined;
     }
 
+    // Normaliza el resultado de bound.execPPL(QueryTable(...)) a un array de objetos
+    // con claves en minuscula. Tolera { result: [...] }, filas como array de
+    // {key,value} y filas como objeto plano.
+    function rowsFromResult(result) {
+        let data = result;
+        if (data && data.result && Array.isArray(data.result)) data = data.result;
+        if (!Array.isArray(data)) return [];
+        return data.map(function (row) {
+            const obj = {};
+            if (Array.isArray(row)) {
+                row.forEach(function (item) {
+                    if (item && item.key !== undefined) {
+                        obj[String(item.key).toLowerCase()] =
+                            typeof item.value === 'string' ? item.value.trim() : item.value;
+                    }
+                });
+            } else if (row && typeof row === 'object') {
+                Object.keys(row).forEach(function (k) {
+                    obj[k.toLowerCase()] = typeof row[k] === 'string' ? row[k].trim() : row[k];
+                });
+            }
+            return obj;
+        });
+    }
+
     // ======================================================================
     // Normalizacion de notificaciones -> filas del monitor
     // ======================================================================
@@ -104,17 +136,12 @@
             })];
         }
 
-        // 2) Mensajeria / chat (grupo user:{codigo})
+        // 2) Mensajeria / chat. Llega por los grupos de chat suscriptos
+        // (channel:global / channel:{id} / user:{codigo}). Se dedupea la
+        // re-entrega multi-grupo (canal + mencion) por id de mensaje.
         if (CHAT_CODES.indexOf(code) !== -1) {
-            const msg = pick(payload, ['contenido', 'texto', 'text', 'mensaje', 'message', 'title']);
-            return [buildRow({
-                tipo: 'Mensaje',
-                origen: code,
-                grupo: '(usuario)',
-                severidad: 'info',
-                mensaje: msg || code,
-                datos: payload
-            })];
+            if (isDuplicateChat(code, payload)) return [];
+            return [chatRow(code, payload)];
         }
 
         // 3) Firehose: messageCode = nombre del grupo real. Payload plano / sobre / batch.
@@ -168,9 +195,71 @@
 
     function normSeveridad(s) {
         s = String(s || '').toLowerCase();
-        if (s === 'alerta' || s === 'error' || s === 'critical' || s === 'critico') return 'alerta';
+        // 'alert' es el valor de MessageDto.Type del chat (info/warning/alert).
+        if (s === 'alerta' || s === 'alert' || s === 'error' || s === 'critical' || s === 'critico') return 'alerta';
         if (s === 'warning' || s === 'warn' || s === 'advertencia' || s === 'aviso') return 'warning';
         return 'info';
+    }
+
+    // Convierte un evento de chat/mensajeria en una fila coherente del monitor.
+    // NOTIFICATION_NEW → payload es un MessageDto (Usuario/Message/ChannelName/Type).
+    function chatRow(code, payload) {
+        let grupo, severidad, mensaje;
+        const usuario = pick(payload, ['usuario', 'user', 'autor']);
+
+        if (code === 'NOTIFICATION_NEW') {
+            const canal = pick(payload, ['channelName', 'canalnombre', 'canal']);
+            const texto = pick(payload, ['message', 'mensaje', 'texto', 'contenido', 'text']);
+            grupo = canal || 'General';
+            severidad = normSeveridad(pick(payload, ['type', 'severidad']) || 'info');
+            mensaje = (usuario ? usuario + ': ' : '') + (texto || '(mensaje sin texto)');
+        } else if (code === 'OP_UNREAD') {
+            const nr = pick(payload, ['nr', 'nroperacion']);
+            grupo = nr ? ('Op ' + nr) : 'Operacion';
+            severidad = 'info';
+            mensaje = 'Nuevo mensaje en la operacion ' + (nr || '?') +
+                (usuario ? ' (de ' + usuario + ')' : '');
+        } else if (code === 'NOTIFICATION_DELETED') {
+            const mid = pick(payload, ['messageid', 'id']);
+            grupo = 'Chat';
+            severidad = 'warning';
+            mensaje = 'Mensaje eliminado' + (mid ? ' (id ' + mid + ')' : '');
+        } else if (code === 'NOTIFICATION_READ') {
+            const by = pick(payload, ['seenby', 'usuario']);
+            grupo = 'Chat';
+            severidad = 'info';
+            mensaje = 'Mensajes marcados como leidos' + (by ? ' por ' + by : '');
+        } else {
+            grupo = 'Chat';
+            severidad = 'info';
+            mensaje = code;
+        }
+
+        return buildRow({
+            tipo: 'Mensaje',
+            origen: code,
+            grupo: grupo,
+            severidad: severidad,
+            mensaje: mensaje,
+            datos: payload
+        });
+    }
+
+    // Evita filas duplicadas cuando el MISMO mensaje llega por dos grupos a los
+    // que el monitor esta suscripto (ej. canal + mencion). Dedup por (code,id) en
+    // una ventana corta; los eventos sin id (OP_UNREAD/READ) nunca se dedupean.
+    function isDuplicateChat(code, payload) {
+        const id = pick(payload, ['id', 'messageid']);
+        if (id === undefined) return false;
+        const key = code + '#' + id;
+        const now = Date.now();
+        const prev = _recentChat[key];
+        _recentChat[key] = now;
+        const keys = Object.keys(_recentChat);
+        if (keys.length > 500) {
+            keys.forEach(function (k) { if (now - _recentChat[k] > 30000) delete _recentChat[k]; });
+        }
+        return prev !== undefined && (now - prev) < 5000;
     }
 
     // Heuristica de "tipo" segun el nombre del grupo / contenido.
@@ -480,12 +569,40 @@
             });
     }
 
-    // El grupo user:{codigo} se auto-une en OnConnectedAsync. Aca nos suscribimos
-    // ademas al firehose para recibir TODA notificacion PPL del sistema.
+    // El grupo user:{codigo} se auto-une en OnConnectedAsync (menciones + ops
+    // donde participo). Aca sumamos: (1) el firehose de notificaciones PPL, y
+    // (2) los grupos de CHAT (canal publico + canales visibles) para capturar
+    // TODA la mensajeria, no solo la dirigida al usuario.
     function subscribeAll() {
         hubConnection.invoke('Subscribe', FIREHOSE_GROUP)
             .then(function () { console.log('Suscrito al firehose', FIREHOSE_GROUP); })
             .catch(function (err) { console.error('Error suscribiendo al firehose:', err); });
+
+        // Canal publico: todo usuario autenticado esta autorizado. Directo (no
+        // depende del backend PPL) para garantizar la captura del chat general.
+        hubConnection.invoke('Subscribe', 'channel:global')
+            .catch(function (err) { console.error('Error suscribiendo a channel:global:', err); });
+
+        subscribeChatChannels();
+    }
+
+    // Suscribe a los canales de chat que el usuario puede ver. La lista de
+    // channel:{id} candidatos la da el backend (GetGruposChat); PPLHub autoriza
+    // cada uno por perfil (los restringidos se saltean). Best-effort: si el
+    // backend no responde, ya quedamos suscritos a channel:global + user:{code}.
+    function subscribeChatChannels() {
+        if (typeof bound === 'undefined' || !bound.execPPL) return;
+        bound.execPPL('GetGruposChat()').then(function (result) {
+            const grupos = rowsFromResult(result)
+                .map(function (r) { return r.grupo; })
+                .filter(Boolean);
+            if (grupos.length) {
+                hubConnection.invoke('SubscribeMany', grupos)
+                    .catch(function (err) { console.error('Error suscribiendo a canales de chat:', err); });
+            }
+        }).catch(function (err) {
+            console.warn('No se pudieron obtener los grupos de chat:', err);
+        });
     }
 
     function setStatus(status) {
