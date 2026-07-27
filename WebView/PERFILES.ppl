@@ -29,6 +29,14 @@ end
 
 ** ============================================================================
 ** Funcion: Obtener un perfil especifico con su script
+** ----------------------------------------------------------------------------
+** Devuelve la TABLA (0 o 1 fila), igual que GetPerfiles; el JS toma la primera.
+**
+** NO usar '&resultado.count' / '&resultado.itemAt(0)': el compilador inf (el que
+** compila WebViews) no soporta el acceso a miembros sobre una variable y lo
+** compila MAL EN SILENCIO -- '&x.count' pierde el receptor y termina llamando la
+** PMFunc 'Count' (que no existe -> "No se encontraron candidatos para PM count") y
+** '&x.itemAt(0)' se descarta entero, dejando un 'return null'.
 ** ============================================================================
 def GetPerfil(codigo)
     &sql := "SELECT "
@@ -39,12 +47,7 @@ def GetPerfil(codigo)
     &sql := &sql ~ "WHERE Codigo = '" ~ codigo ~ "'"
 
     &resultado := QueryTable(&sql)
-
-    If &resultado.count > 0
-        return &resultado.itemAt(0)
-    EndIf
-
-    return ${}
+    return &resultado
 end
 
 ** ============================================================================
@@ -80,6 +83,11 @@ end
 ** Funcion: Baja de perfil
 ** ============================================================================
 def DeletePerfil(codigo)
+    ** Los permisos de canal viven en su propia tabla: se limpian junto con el perfil
+    ** para no dejar filas huerfanas que reaparezcan si se recrea el codigo.
+    SQL.ADD("DELETE FROM MENSAJES_CANALES_PERFIL WHERE Perfil = '" ~ codigo ~ "'")
+    SQL.NEW
+
     &sql := "DELETE FROM PERFILES2 WHERE Codigo = '" ~ codigo ~ "'"
 
     SQL.ADD(&sql)
@@ -186,15 +194,72 @@ def GetWebViews()
     return &resultado
 end
 
+** ============================================================================
 ** Canales de mensajes
+** ----------------------------------------------------------------------------
+** La tabla del subsistema de mensajeria es MENSAJES_CANALES (la que leen
+** ProfileService y MessagesService). MENSAJECANALES (sin guion) es una tabla
+** legacy con otros Id: leerla dejaba los permisos apuntando a canales que no
+** existen para el runtime.
+** ============================================================================
 def GetCanales()
     &sql := <<
         SELECT
             Id,
-            RTRIM(Nombre) as Nombre
-        FROM MENSAJECANALES
+            RTRIM(Nombre) as Nombre,
+            RTRIM(ISNULL(Descripcion, '')) as Descripcion
+        FROM MENSAJES_CANALES
         ORDER BY Id
     >>
     &resultado := QueryTable(&sql)
     return &resultado
+end
+
+** ============================================================================
+** Funcion: Modo de acceso de cada canal para un perfil
+** ----------------------------------------------------------------------------
+** MENSAJES_CANALES_PERFIL.Modo: 0 = Restringido, 2 = Asignado.
+** El 1 (Opcional) es historico y ya no se ofrece: se muestra como Asignado
+** (ambos modos son visibles para el usuario) y al guardar se reescribe como 2.
+** ============================================================================
+def GetCanalesPerfil(codigo)
+    ** Alias de UNA palabra a proposito: capitalizeKey() del webview solo normaliza
+    ** claves simples ('idcanal' quedaria como 'Idcanal').
+    &sql := "SELECT IdCanal as Id, Modo "
+    &sql := &sql ~ "FROM MENSAJES_CANALES_PERFIL "
+    &sql := &sql ~ "WHERE Perfil = '" ~ codigo ~ "' "
+    &sql := &sql ~ "ORDER BY IdCanal"
+
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Guardar los canales asignados a un perfil
+** ----------------------------------------------------------------------------
+** 'asignados' es la lista de IdCanal separados por coma que quedan en modo
+** Asignado (2). Se escribe una fila POR CADA canal existente -- los que no
+** estan en la lista van con Modo 0 (Restringido) EXPLICITO, no por ausencia:
+** ProfileService trata "el perfil no tiene ninguna fila" como "sin permisos
+** configurados" y en ese caso permite TODOS los canales. Sin las filas en 0,
+** dejar todo restringido tendria el efecto exactamente inverso.
+** ============================================================================
+def SaveCanalesPerfil(codigo, asignados)
+    &lista := asignados
+    If Vacio(&lista)
+        ** IN () no es SQL valido: sentinela que no matchea ningun Id.
+        &lista := '-1'
+    EndIf
+
+    SQL.ADD("DELETE FROM MENSAJES_CANALES_PERFIL WHERE Perfil = '" ~ codigo ~ "'")
+    SQL.NEW
+
+    &sql := "INSERT INTO MENSAJES_CANALES_PERFIL (IdCanal, Perfil, Modo) "
+    &sql := &sql ~ "SELECT Id, '" ~ codigo ~ "', "
+    &sql := &sql ~ "CASE WHEN Id IN (" ~ &lista ~ ") THEN 2 ELSE 0 END "
+    &sql := &sql ~ "FROM MENSAJES_CANALES"
+
+    SQL.ADD(&sql)
+    SQL.EXEC()
+    return "OK"
 end

@@ -368,6 +368,7 @@ var PERFILES = {};
                 return {
                     id: String(r.Id || '').trim(),
                     nombre: (r.Nombre || '').trim(),
+                    descripcion: (r.Descripcion || '').trim(),
                     permiso: 'restringido'
                 };
             });
@@ -376,6 +377,79 @@ var PERFILES = {};
             console.warn('Error cargando canales:', e);
             BASE_CANALES = [];
         });
+    }
+
+    // ========================================================================
+    // Canales del perfil (tabla MENSAJES_CANALES_PERFIL)
+    // ------------------------------------------------------------------------
+    // Modo 0 = Restringido, 2 = Asignado. El 1 (Opcional) es historico: se
+    // muestra como Asignado y al guardar se reescribe como 2.
+    //
+    // Si el perfil NO tiene ninguna fila, el backend lo interpreta como "sin
+    // permisos configurados" y hoy le permite TODOS los canales. Para no
+    // restringirlo en silencio cuando alguien abre el perfil y confirma sin
+    // tocar esta pestania, en ese caso se precarga todo como Asignado (o, si el
+    // script todavia tiene los tokens legacy #{id}_OB / #{id}_OP, lo que digan
+    // esos tokens). Un perfil nuevo (alta) arranca todo Restringido.
+    // ========================================================================
+    function loadCanalesPerfil(codigo, scriptStr) {
+        return bound.execPPL("GetCanalesPerfil('" + codigo + "')").then(function(result) {
+            var rows = transformData(result);
+            var modos = {};
+            var tieneFilas = false;
+
+            rows.forEach(function(r) {
+                var id = String(r.Id !== undefined && r.Id !== null ? r.Id : '').trim();
+                if (!id) return;
+                modos[id] = parseInt(r.Modo, 10) || 0;
+                tieneFilas = true;
+            });
+
+            if (!tieneFilas) {
+                applyCanalesFallback(scriptStr);
+                return;
+            }
+
+            permData.canales.forEach(function(c) {
+                // Sin fila para el canal = Restringido (mismo criterio que ProfileService).
+                c.permiso = (modos[c.id] > 0) ? 'asignado' : 'restringido';
+            });
+        }).catch(function(e) {
+            console.warn('Error cargando canales del perfil:', e);
+            applyCanalesFallback(scriptStr);
+        });
+    }
+
+    function applyCanalesFallback(scriptStr) {
+        var siglaSet = {};
+        var tieneTokens = false;
+
+        (scriptStr || '').trim().split(/\s+/).forEach(function(s) {
+            if (s) siglaSet[s.toUpperCase()] = true;
+        });
+
+        permData.canales.forEach(function(c) {
+            // Tokens legacy: #{id}_OB (obligatorio) / #{id}_OP (opcional) -> ambos Asignado.
+            if (siglaSet['#' + c.id + '_OB'] || siglaSet['#' + c.id + '_OP']) {
+                c.permiso = 'asignado';
+                tieneTokens = true;
+            } else {
+                c.permiso = 'restringido';
+            }
+        });
+
+        if (!tieneTokens) {
+            // Ni filas ni tokens: el perfil hoy ve todos los canales -> no cambiarlo en silencio.
+            permData.canales.forEach(function(c) { c.permiso = 'asignado'; });
+        }
+    }
+
+    function getCanalesAsignados() {
+        return permData.canales
+            .filter(function(c) { return c.permiso === 'asignado'; })
+            .map(function(c) { return parseInt(c.id, 10); })
+            .filter(function(id) { return !isNaN(id); })
+            .join(',');
     }
 
     // ========================================================================
@@ -759,11 +833,14 @@ var PERFILES = {};
                 parseScript(perfScript);
             }
 
-            // Refrescar DataTables de tabs con los datos actualizados
-            refreshTabDataTables();
-            updateTabCounts();
+            // Los canales NO salen del script: se leen de MENSAJES_CANALES_PERFIL.
+            return loadCanalesPerfil(perfCodigo, perfScript).then(function() {
+                // Refrescar DataTables de tabs con los datos actualizados
+                refreshTabDataTables();
+                updateTabCounts();
 
-            $$.loading(false);
+                $$.loading(false);
+            });
         }).catch(function(error) {
             $$.loading(false);
             console.error('Error cargando perfil:', error);
@@ -857,18 +934,9 @@ var PERFILES = {};
             if (siglaSet['VW' + r.codigo.toUpperCase()]) r.hab = true;
         });
 
-        // Canales: #{id}_OB = obligatorio, #{id}_OP = opcional, ninguno = restringido
-        permData.canales.forEach(function(c) {
-            var obKey = '#' + c.id + '_OB';
-            var opKey = '#' + c.id + '_OP';
-            if (siglaSet[obKey.toUpperCase()]) {
-                c.permiso = 'obligatorio';
-            } else if (siglaSet[opKey.toUpperCase()]) {
-                c.permiso = 'opcional';
-            } else {
-                c.permiso = 'restringido';
-            }
-        });
+        // Canales: NO se parsean del script. Desde FPAV7-387 los permisos de canal
+        // viven en MENSAJES_CANALES_PERFIL (ver loadCanalesPerfil); los tokens
+        // #{id}_OB / #{id}_OP del script ya no los lee el backend.
     }
 
     // ========================================================================
@@ -933,15 +1001,8 @@ var PERFILES = {};
             if (r.hab) siglas.push('VW' + r.codigo);
         });
 
-        // Canales: solo emitir token si no es restringido
-        permData.canales.forEach(function(c) {
-            if (c.permiso === 'obligatorio') {
-                siglas.push('#' + c.id + '_OB');
-            } else if (c.permiso === 'opcional') {
-                siglas.push('#' + c.id + '_OP');
-            }
-            // restringido = no emitir token
-        });
+        // Canales: NO se emiten tokens al script. Se persisten en
+        // MENSAJES_CANALES_PERFIL (SaveCanalesPerfil) -- una sola fuente de verdad.
 
         return siglas.join(' ');
     }
@@ -1054,21 +1115,21 @@ var PERFILES = {};
             paging: false, searching: true, info: false, ordering: true, scrollY: '300px', scrollCollapse: true
         });
 
-        // Canales de Mensajes (radio buttons: restringido/obligatorio/opcional)
+        // Canales de Mensajes (radio buttons: asignado / restringido)
         tabDataTables['#tab-canales'] = $('#dt-canales').DataTable({
             data: permData.canales,
             columns: [
                 { data: 'id', title: 'Id' },
                 { data: 'nombre', title: 'Canal' },
+                { data: 'descripcion', title: 'Descripción', defaultContent: '' },
                 {
                     data: 'permiso', title: 'Permiso', className: 'text-center',
                     render: function(data, type, row, meta) {
                         if (type !== 'display') return data;
                         var name = 'canal-' + meta.row;
                         var dis = isReadonly ? ' disabled' : '';
-                        return '<label class="radio-inline mr-2"><input type="radio" name="' + name + '" value="restringido"' + (data === 'restringido' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> Rest.</label>' +
-                               '<label class="radio-inline mr-2"><input type="radio" name="' + name + '" value="obligatorio"' + (data === 'obligatorio' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> Oblig.</label>' +
-                               '<label class="radio-inline"><input type="radio" name="' + name + '" value="opcional"' + (data === 'opcional' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> Opc.</label>';
+                        return '<label class="radio-inline mr-3"><input type="radio" name="' + name + '" value="asignado"' + (data === 'asignado' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> Asignado</label>' +
+                               '<label class="radio-inline"><input type="radio" name="' + name + '" value="restringido"' + (data === 'restringido' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> Restringido</label>';
                     }
                 }
             ],
@@ -1139,7 +1200,7 @@ var PERFILES = {};
             'variables': permData.variables.filter(function(r) { return r.hab; }).length,
             'instancias': permData.instancias.filter(function(i) { return i.alta || i.baja || i.modificacion || i.avanzar || i.retroceder; }).length,
             'webviews': permData.webviews.filter(function(r) { return r.hab; }).length,
-            'canales': permData.canales.filter(function(c) { return c.permiso !== 'restringido'; }).length
+            'canales': permData.canales.filter(function(c) { return c.permiso === 'asignado'; }).length
         };
 
         Object.keys(counts).forEach(function(key) {
@@ -1223,7 +1284,7 @@ var PERFILES = {};
                 i.alta = value; i.baja = value; i.modificacion = value; i.avanzar = value; i.retroceder = value;
             });
         } else if (tabName === 'canales') {
-            data.forEach(function(c) { c.permiso = value ? 'opcional' : 'restringido'; });
+            data.forEach(function(c) { c.permiso = value ? 'asignado' : 'restringido'; });
         } else {
             data.forEach(function(r) { r.hab = value; });
         }
@@ -1324,10 +1385,17 @@ var PERFILES = {};
             pplCode = "UpdatePerfil('" + codigo + "', '" + nombre + "', '" + script + "')";
         }
 
+        var wasAlta = (formMode === 'alta');
+        var canalesAsignados = getCanalesAsignados();
+
         bound.execPPL(pplCode).then(function(result) {
+            // Los permisos de canal se persisten aparte (MENSAJES_CANALES_PERFIL),
+            // despues de que el perfil exista.
+            return bound.execPPL("SaveCanalesPerfil('" + codigo + "', '" + canalesAsignados + "')");
+        }).then(function() {
             $$.loading(false);
 
-            var msg = formMode === 'alta'
+            var msg = wasAlta
                 ? 'Perfil ' + codigo + ' creado correctamente'
                 : 'Perfil ' + codigo + ' modificado correctamente';
 
