@@ -1,7 +1,10 @@
 /* ============================================================================
    JavaScript: Posiciones y Resultados - POSI4
    ============================================================================
-   Dashboard con filtros, graficos de valuacion y actualizacion via WebSocket
+   Dashboard con filtros, graficos de valuacion y actualizacion en tiempo real
+   via SignalR cuando llega una notificacion de alguno de los grupos de
+   NOTIFICACION del ciclo de vida de una operacion (ALTA, EDICION, BAJA,
+   AVANZA, RETROCEDE).
    ============================================================================ */
 
 (function() {
@@ -11,13 +14,20 @@
     var posicionesData = [];
     var hubConnection = null;
     var reconnectAttempts = 0;
+    var refreshTimer = null;
     var MAX_RECONNECT_ATTEMPTS = 10;
     var RECONNECT_DELAY_MS = 3000;
+    var REFRESH_DEBOUNCE_MS = 1200;   // agrupa rafagas de notificaciones en un solo refresh
     var chartUsd = null;
     var chartArp = null;
 
     var API_BASE_URL = window.API_BASE_URL || 'https://localhost:44300';
     var HUB_URL = API_BASE_URL + '/hubs/ppl';
+
+    // Grupos de la seccion NOTIFICACION que ameritan refrescar los datos. Se
+    // matchean EXACTO y son case-sensitive tanto en la suscripcion como en el
+    // filtro: asi son los grupos de SignalR y asi los escribe el catalogo PPL.
+    var NOTIFY_GROUPS = ['ALTA', 'EDICION', 'BAJA', 'AVANZA', 'RETROCEDE'];
 
     // ========================================================================
     // Key mapping
@@ -443,20 +453,31 @@
         startConnection();
     }
 
+    // Decide si un evento SignalR amerita refrescar los datos. El messageCode de
+    // una notificacion PPL ES el nombre del grupo emisor.
+    function isOperationEvent(messageCode) {
+        return NOTIFY_GROUPS.indexOf(String(messageCode || '')) !== -1;
+    }
+
+    function scheduleRefresh() {
+        if (refreshTimer) clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(refreshData, REFRESH_DEBOUNCE_MS);
+    }
+
     function setupHubEventHandlers() {
         hubConnection.on('ReceiveMessage', function(messageCode, payload) {
             console.log('POSI4: Mensaje recibido:', messageCode, payload);
-            if (messageCode === 'POSI4') {
-                showToast('Operaci\u00f3n registrada - actualizando...', 'info');
-                refreshData();
-            }
+            if (isOperationEvent(messageCode)) scheduleRefresh();
         });
 
         hubConnection.onreconnecting(function() { updateWsStatus('reconnecting'); });
         hubConnection.onreconnected(function() {
             reconnectAttempts = 0;
             updateWsStatus('connected');
-            refreshData();
+            // La membresia de grupo de SignalR es por connectionId: al reconectar
+            // hay que volver a suscribirse antes de refrescar.
+            subscribeAll();
+            scheduleRefresh();
         });
         hubConnection.onclose(function() {
             updateWsStatus('disconnected');
@@ -467,15 +488,20 @@
         });
     }
 
+    function subscribeAll() {
+        return hubConnection.invoke('SubscribeMany', NOTIFY_GROUPS)
+            .catch(function(err) { console.error('Error suscribiendo a los grupos de notificacion:', err); });
+    }
+
     function startConnection() {
         hubConnection.start()
             .then(function() {
                 reconnectAttempts = 0;
                 updateWsStatus('connected');
-                return hubConnection.invoke('Subscribe', 'POSI4');
+                return subscribeAll();
             })
             .then(function() {
-                console.log('POSI4: Suscrito');
+                console.log('POSI4: Suscrito a', NOTIFY_GROUPS.join(', '));
                 showToast('Conectado en tiempo real', 'success');
             })
             .catch(function(err) {
