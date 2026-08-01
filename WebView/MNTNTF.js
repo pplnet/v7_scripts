@@ -35,7 +35,7 @@
     let reconnectAttempts = 0;
     let paused = false;
     let seq = 0;
-    const stats = { total: 0, info: 0, warning: 0, alerta: 0, procesos: 0 };
+    const stats = { total: 0, info: 0, warning: 0, error: 0, procesos: 0 };
     const knownTipos = {};               // set de tipos vistos (para el filtro)
 
     // Codigos de proceso conocidos -> severidad por defecto
@@ -44,8 +44,13 @@
         'PROCESS_MESSAGE': 'info',
         'PROCESS_MESSAGEBOX_REQUEST': 'warning',
         'PROCESS_CANCELLED': 'warning',
-        'PROCESS_ERROR': 'alerta'
+        'PROCESS_ERROR': 'error'
     };
+
+    // Codigos que el monitor IGNORA. PROCESS_WARNING son los warnings de CONDICIONES de una
+    // operacion: no impiden crearla ni editarla (el usuario los confirma y sigue), asi que no
+    // son una notificacion del sistema y no deben ensuciar el monitor ni el conteo.
+    const IGNORED_CODES = { 'PROCESS_WARNING': 1 };
 
     // Codigos de mensajeria/chat que emite el backend (server-only en PPLHub).
     // NOTIFICATION_* llegan por los grupos de chat (user:/channel:/op:/profile:);
@@ -124,6 +129,9 @@
     function toRows(messageCode, payload) {
         const code = messageCode || '(sin codigo)';
 
+        // 0) Codigos que no son notificaciones del sistema (ver IGNORED_CODES)
+        if (IGNORED_CODES[code]) return [];
+
         // 1) Eventos de proceso (grupo user:{codigo})
         if (code.indexOf('PROCESS_') === 0) {
             return [buildRow({
@@ -193,10 +201,13 @@
         };
     }
 
+    // Vocabulario del monitor: info / warning / error.
+    // El `_sev` de las notificaciones PPL ya llega normalizado y validado por el backend (un valor
+    // fuera del vocabulario se anula alla y llega como 'info'), asi que los alias de aca son para
+    // las OTRAS fuentes que muestra el monitor: 'alert' es el MessageDto.Type del chat.
     function normSeveridad(s) {
         s = String(s || '').toLowerCase();
-        // 'alert' es el valor de MessageDto.Type del chat (info/warning/alert).
-        if (s === 'alerta' || s === 'alert' || s === 'error' || s === 'critical' || s === 'critico') return 'alerta';
+        if (s === 'error' || s === 'alerta' || s === 'alert' || s === 'critical' || s === 'critico') return 'error';
         if (s === 'warning' || s === 'warn' || s === 'advertencia' || s === 'aviso') return 'warning';
         return 'info';
     }
@@ -423,7 +434,7 @@
 
         rows.forEach(function (r) {
             stats.total += 1;
-            if (r.severidad === 'alerta') stats.alerta += 1;
+            if (r.severidad === 'error') stats.error += 1;
             else if (r.severidad === 'warning') stats.warning += 1;
             else stats.info += 1;
             if (r.tipo === 'Proceso') stats.procesos += 1;
@@ -466,7 +477,7 @@
         $('#stat-total').text(stats.total);
         $('#stat-info').text(stats.info);
         $('#stat-warning').text(stats.warning);
-        $('#stat-alerta').text(stats.alerta);
+        $('#stat-error').text(stats.error);
         $('#stat-procesos').text(stats.procesos);
     }
 
@@ -511,7 +522,7 @@
 
         $('#btn-clear').on('click', function () {
             dataTable.clear().draw();
-            stats.total = stats.info = stats.warning = stats.alerta = stats.procesos = 0;
+            stats.total = stats.info = stats.warning = stats.error = stats.procesos = 0;
             updateStats();
         });
     }
