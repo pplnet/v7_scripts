@@ -3,8 +3,9 @@
    ============================================================================
    Replica el informe ESTOPE en una grilla interactiva. Carga las operaciones y
    sus estados desde el backend PPL (bound.execPPL), permite filtrar/ordenar/ver
-   detalle, y se refresca en tiempo real via SignalR cuando llegan eventos de
-   proceso o notificaciones relacionadas con operaciones.
+   detalle, y se refresca en tiempo real via SignalR cuando llega una notificacion
+   de alguno de los grupos de NOTIFICACION del ciclo de vida de una operacion
+   (ALTA, EDICION, BAJA, AVANZA, RETROCEDE).
 
    Endpoint del Hub: https://localhost:44300/hubs/ppl
    ============================================================================ */
@@ -17,7 +18,10 @@
     // ----------------------------------------------------------------------
     const API_BASE_URL = window.API_BASE_URL || 'https://localhost:44300';
     const HUB_URL = API_BASE_URL + '/hubs/ppl';
-    const FIREHOSE_GROUP = '__NOTIF_ALL__';
+    // Grupos de la seccion NOTIFICACION que ameritan refrescar la grilla. Se
+    // matchean EXACTO y son case-sensitive tanto en la suscripcion como en el
+    // filtro: asi son los grupos de SignalR y asi los escribe el catalogo PPL.
+    const NOTIFY_GROUPS = ['ALTA', 'EDICION', 'BAJA', 'AVANZA', 'RETROCEDE'];
     const RECONNECT_DELAY_MS = 3000;
     const MAX_RECONNECT_ATTEMPTS = 15;
     const REFRESH_DEBOUNCE_MS = 1200;    // agrupa rafagas de eventos en un solo refresh
@@ -313,17 +317,9 @@
     }
 
     // Decide si un evento SignalR amerita refrescar la grilla de operaciones.
-    function isOperationEvent(messageCode, payload) {
-        const code = String(messageCode || '');
-        if (code.indexOf('PROCESS_') === 0) return true;   // alta/edicion/avance de op via proceso
-        const g = code.toLowerCase();
-        if (/(oper|orden|trans|minut|opmin)/.test(g)) return true;
-        // Sobre / batch con grupo relacionado a operaciones
-        if (payload && typeof payload === 'object') {
-            const grp = String(payload.grupo || '').toLowerCase();
-            if (/(oper|orden|trans|minut|opmin)/.test(grp)) return true;
-        }
-        return false;
+    // El messageCode de una notificacion PPL ES el nombre del grupo emisor.
+    function isOperationEvent(messageCode) {
+        return NOTIFY_GROUPS.indexOf(String(messageCode || '')) !== -1;
     }
 
     // ======================================================================
@@ -341,8 +337,8 @@
             .configureLogging(signalR.LogLevel.Warning)
             .build();
 
-        hubConnection.on('ReceiveMessage', function (messageCode, payload) {
-            if (isOperationEvent(messageCode, payload)) scheduleRefresh();
+        hubConnection.on('ReceiveMessage', function (messageCode) {
+            if (isOperationEvent(messageCode)) scheduleRefresh();
         });
 
         hubConnection.onreconnecting(function () { setStatus('reconnecting'); });
@@ -375,11 +371,11 @@
             });
     }
 
+    // Se re-invoca en cada (re)conexion: la membresia de grupo de SignalR es por
+    // connectionId y se pierde al reconectar.
     function subscribeAll() {
-        // El grupo user:{codigo} se auto-une en OnConnectedAsync (eventos PROCESS_*).
-        // Nos suscribimos ademas al firehose para captar notificaciones PPL de operaciones.
-        hubConnection.invoke('Subscribe', FIREHOSE_GROUP)
-            .catch(function (err) { console.error('Error suscribiendo al firehose:', err); });
+        hubConnection.invoke('SubscribeMany', NOTIFY_GROUPS)
+            .catch(function (err) { console.error('Error suscribiendo a los grupos de notificacion:', err); });
     }
 
     function setStatus(status) {
