@@ -102,12 +102,22 @@
     border: 1px solid var(--posi4-border);
     border-radius: 4px;
     padding: 0;
-    overflow: hidden;
+    /* El scroll horizontal lo da el contenedor, no el scrollX de DataTables (que partiría
+       la grilla en dos tablas y desalinearía los títulos — ver initDataTable). */
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
-#dt1 { font-size: 13px; margin-bottom: 0; }
+/* ⚠️ TODO lo de la grilla se cuelga de #dt1_wrapper, NO de #dt1.
+   Con `scrollX: true` DataTables parte la grilla en DOS <table>: el cuerpo conserva el
+   id (#dt1) pero la CABECERA se clona a una tabla SIN id dentro de .dataTables_scrollHead.
+   Un selector `#dt1 thead th` no la alcanza: la cabecera se quedaba sin el estilo (fondo,
+   padding) y tomaba el padding-right de 26px que DataTables usa para la flecha de orden,
+   mientras el cuerpo tenía otro → los títulos quedaban DESFASADOS respecto de los datos,
+   con deriva creciente hacia la derecha. #dt1_wrapper envuelve a las dos tablas. */
+#dt1_wrapper table.dataTable { font-size: 13px; margin-bottom: 0; }
 
-#dt1 thead th {
+#dt1_wrapper table.dataTable thead th {
     background: var(--posi4-light);
     color: var(--posi4-dark);
     font-weight: 700;
@@ -119,9 +129,74 @@
     border-top: none;
 }
 
-#dt1 tbody tr { transition: background-color 0.15s; }
-#dt1 tbody tr:hover { background-color: var(--posi4-light); cursor: pointer; }
-#dt1 tbody td { padding: 8px; vertical-align: middle; border-color: var(--posi4-border); }
+#dt1_wrapper table.dataTable tbody tr { transition: background-color 0.15s; }
+#dt1_wrapper table.dataTable tbody tr:hover { background-color: var(--posi4-light); cursor: pointer; }
+#dt1_wrapper table.dataTable tbody td { padding: 8px; vertical-align: middle; border-color: var(--posi4-border); }
+
+/* Líneas verticales muy suaves: separan las columnas y hacen evidente de un vistazo si un
+   dato quedó fuera de su título. Van en la cabecera y DENTRO de las secciones de book —
+   el banner de vehículo y el total de vehículo quedan fuera de las cajas, sin líneas. */
+#dt1_wrapper table.dataTable thead th,
+#dt1_wrapper table.dataTable tbody tr.posi4-sec td { border-right: 1px solid rgba(0, 0, 0, 0.06); }
+
+#dt1_wrapper table.dataTable thead th:last-child { border-right: none; }
+
+/* ── Caja de la sección de book ─────────────────────────────────────────────────────────
+   Cada book es un bloque INDEPENDIENTE: borde exterior en los 4 lados + líneas internas
+   propias, sin compartir bordes con las secciones vecinas (las separa .posi4-sec-gap).
+   Las filas que la componen son: cabecera del book (sec-top), títulos repetidos, filas de
+   datos y Total Book (sec-bottom) — ver renderGroups(). */
+#dt1_wrapper table.dataTable tbody tr.posi4-sec td:first-child {
+    border-left: 1px solid var(--posi4-border);
+}
+
+#dt1_wrapper table.dataTable tbody tr.posi4-sec td:last-child {
+    border-right: 1px solid var(--posi4-border);
+}
+
+#dt1_wrapper table.dataTable tbody tr.posi4-sec-top td {
+    border-top: 1px solid var(--posi4-border);
+}
+
+#dt1_wrapper table.dataTable tbody tr.posi4-sec-bottom td {
+    border-bottom: 1px solid var(--posi4-border);
+}
+
+/* La fila de detalle (drill-down) se inserta dentro de la sección: sin esto, al expandirla
+   la caja quedaba abierta por los costados. */
+#dt1_wrapper table.dataTable tbody tr.child td {
+    border-left: 1px solid var(--posi4-border);
+    border-right: 1px solid var(--posi4-border);
+}
+
+/* Separador entre secciones. Sin bordes y del color de la tarjeta: es el que impide que el
+   borde inferior de una caja y el superior de la siguiente se fusionen. */
+#dt1_wrapper table.dataTable tbody tr.posi4-sec-gap td {
+    height: 14px;
+    padding: 0;
+    background: var(--posi4-white);
+    border: none;
+}
+
+#dt1_wrapper table.dataTable tbody tr.posi4-sec-gap:hover { background-color: transparent; }
+#dt1_wrapper table.dataTable tbody tr.posi4-sec-gap:hover td { cursor: default; }
+
+/* ⚠️ El padding derecho tiene que ser IDÉNTICO en <th> y <td> o el título no cae sobre su
+   dato. Se fija en 26px —el valor que DataTables reserva en el <th> para la flecha de
+   orden— en vez de achicarlo: bajarlo dejaría el título pisando la flecha. */
+#dt1_wrapper table.dataTable thead th.text-right,
+#dt1_wrapper table.dataTable tbody td.text-right { padding-right: 26px; }
+
+/* Tabla del detalle (drill-down): mismas líneas suaves y mismo padding derecho que la
+   grilla principal, para que sus números también caigan bajo su título. */
+.posi4-detail-table th,
+.posi4-detail-table td { border-right: 1px solid rgba(0, 0, 0, 0.06); }
+
+.posi4-detail-table th:last-child,
+.posi4-detail-table td:last-child { border-right: none; }
+
+.posi4-detail-table th.text-right,
+.posi4-detail-table td.text-right { padding-right: 12px; }
 
 /* Details control */
 td.details-control {
@@ -243,6 +318,103 @@ tr.shown td.details-control {
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
+/* Cortes por Vehiculo / Book (equivalentes a los "Total Vehiculo"/"Total Book:" del
+   informe). Los inserta renderGroups() en el drawCallback del DataTable. */
+.posi4-group td {
+    font-weight: 600;
+    background: var(--posi4-light);
+    border-top: 1px solid var(--posi4-border);
+}
+
+.posi4-group-veh td {
+    background: var(--posi4-black);
+    color: var(--posi4-white);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.posi4-group-book td {
+    background: var(--posi4-light);
+    color: var(--posi4-dark);
+    font-size: 12px;
+}
+
+/* ⚠️ Los paddings van con el prefijo #dt1: `#dt1 tbody td { padding: 8px }` lleva un ID y le
+   gana a cualquier selector de clase suelto, así que sin este prefijo el indent y el alto de
+   estas filas se ignoran en silencio. */
+#dt1 tbody tr.posi4-group-book td.posi4-group-label { padding-left: 18px; }
+
+
+/* Títulos repetidos dentro de cada Book. Van en nowrap igual que la cabecera real para que
+   no se partan en dos líneas y "bailen" respecto de las columnas de datos. */
+.posi4-group-titles td {
+    background: var(--posi4-white);
+    color: var(--posi4-mid);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--posi4-border);
+}
+
+#dt1 tbody tr.posi4-group-titles td { padding-top: 4px; padding-bottom: 4px; }
+
+/* El rótulo del corte va en la celda de Especie; nowrap para que se derrame sobre las
+   celdas vacías de al lado en vez de agrandar la fila. */
+.posi4-group-label,
+.posi4-subtotal-label { white-space: nowrap; }
+
+.posi4-subtotal td {
+    font-weight: 600;
+    background: var(--posi4-white);
+    border-top: 1px solid var(--posi4-border);
+}
+
+.posi4-subtotal-book td { color: var(--posi4-dark); }
+
+.posi4-subtotal-veh td {
+    color: var(--posi4-black);
+    border-top: 2px solid var(--posi4-black);
+    border-bottom: 2px solid var(--posi4-black);
+}
+
+/* Corte partido entre páginas: el subtotal es PARCIAL. Se raya para que no se lea como un
+   total cerrado, y el cartel #group-split-warning lo explica arriba. */
+.posi4-subtotal-parcial td {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(0, 0, 0, 0.05),
+        rgba(0, 0, 0, 0.05) 6px,
+        transparent 6px,
+        transparent 12px
+    );
+    font-style: italic;
+}
+
+/* En las CABECERAS sólo se marca con itálica: no se puede tocar el fondo porque el de
+   vehiculo es negro con texto blanco y cualquier aclarado lo dejaría ilegible. El aviso
+   real va en el propio texto ("viene de la página anterior"). */
+.posi4-group-parcial td { font-style: italic; }
+
+.posi4-warning {
+    background: var(--posi4-light);
+    border: 1px solid var(--posi4-border);
+    border-left: 3px solid var(--posi4-black);
+    border-radius: 3px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: var(--posi4-dark);
+    line-height: 1.5;
+}
+
+/* Las filas de corte no son clickeables: el hover de #dt1 tbody tr las marcaría
+   como si abrieran el detalle. */
+#dt1 tbody tr.posi4-group:hover,
+#dt1 tbody tr.posi4-subtotal:hover { cursor: default; }
+
 .posi4-toast.error { border-left: 3px solid #dc3545; }
 .posi4-toast.success { border-left: 3px solid var(--posi4-mid); }
 .posi4-toast.info { border-left: 3px solid var(--posi4-black); }
@@ -250,6 +422,10 @@ tr.shown td.details-control {
 @media (max-width: 768px) {
     .posi4-app { padding: 12px; }
     .posi4-stat-value { font-size: 22px; }
-    #dt1 { font-size: 11px; }
-    #dt1 thead th { padding: 6px 4px; font-size: 10px; }
+    /* Mismo scope que las reglas de arriba: con `#dt1 thead th` (menor especificidad) estos
+       overrides se perderían en silencio. */
+    #dt1_wrapper table.dataTable { font-size: 11px; }
+    #dt1_wrapper table.dataTable thead th { padding: 6px 4px; font-size: 10px; }
+    #dt1_wrapper table.dataTable thead th.text-right,
+    #dt1_wrapper table.dataTable tbody td.text-right { padding-right: 20px; }
 }
