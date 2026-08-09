@@ -190,11 +190,63 @@
         $('#filter-fecha').val(today);
 
         initDataTable();
-        loadInitialData();
         setupEventListeners();
         setupWebSocketConnection();
 
+        // Los combos se cargan ANTES del primer load: el vehiculo por defecto
+        // (VEHICULODE, igual que el informe) forma parte del filtro inicial, asi
+        // que pedir los datos antes mostraria otro conjunto de filas.
+        loadFilterOptions().then(loadInitialData, loadInitialData);
+
         console.log('POSI4: Inicializado');
+    }
+
+    // ========================================================================
+    // Combos de filtro (vehiculo / book)
+    // ========================================================================
+    function loadFilterOptions() {
+        return Promise.all([
+            fillSelect('#filter-vehiculo', 'GetVehiculos()'),
+            fillSelect('#filter-book', 'GetBooks()')
+        ]).then(applyVehiculoDefault);
+    }
+
+    // Puebla un <select> desde una funcion PPL que devuelve Codigo/Descripcion.
+    // Un fallo se loguea y deja el combo en "Todos" — un filtro que no carga no
+    // debe impedir que la grilla muestre datos.
+    function fillSelect(selector, call) {
+        return bound.execPPL(call).then(function(result) {
+            var rows = transformData(result);
+            var $sel = $(selector);
+            $sel.empty().append($('<option>').val('').text('Todos'));
+            rows.forEach(function(r) {
+                var cod = (r.Codigo || '').trim();
+                if (!cod) return;
+                var desc = (r.Descripcion || r.Nombre || '').trim();
+                // .text() escapa: la descripcion viene de la BD, no se interpola HTML.
+                $sel.append($('<option>').val(cod).text(desc ? cod + ' - ' + desc : cod));
+            });
+        }).catch(function(err) {
+            console.error('POSI4: error cargando ' + call, err);
+        });
+    }
+
+    function applyVehiculoDefault() {
+        return bound.execPPL('GetVehiculoDefault()').then(function(result) {
+            var rows = transformData(result);
+            var cod = (rows.length && rows[0].Codigo ? String(rows[0].Codigo) : '').trim();
+            if (!cod) return;
+
+            // Solo se aplica si el codigo existe entre las opciones cargadas; si no,
+            // el select quedaria con un value fantasma y filtraria por nada.
+            var exists = false;
+            $('#filter-vehiculo option').each(function() {
+                if (this.value === cod) exists = true;
+            });
+            if (exists) $('#filter-vehiculo').val(cod);
+        }).catch(function(err) {
+            console.error('POSI4: error resolviendo el vehiculo por defecto', err);
+        });
     }
 
 
@@ -205,11 +257,20 @@
         var fecha = $('#filter-fecha').val() || new Date().toISOString().split('T')[0];
         var especie = ($('#filter-especie').val() || '').trim();
         var tipoEspecie = $('#filter-tipo-especie').val() || '';
-        return { fecha: fecha, especie: especie, tipoEspecie: tipoEspecie };
+        var vehiculo = $('#filter-vehiculo').val() || '';
+        var book = $('#filter-book').val() || '';
+        return {
+            fecha: fecha,
+            especie: especie,
+            tipoEspecie: tipoEspecie,
+            vehiculo: vehiculo,
+            book: book
+        };
     }
 
     function buildGetPosicionesCall(p) {
-        return 'GetPosiciones("' + p.fecha + '", "' + p.especie + '", "' + p.tipoEspecie + '")';
+        return 'GetPosiciones("' + p.fecha + '", "' + p.especie + '", "' + p.tipoEspecie +
+               '", "' + p.vehiculo + '", "' + p.book + '")';
     }
 
     // ========================================================================
@@ -369,8 +430,11 @@
     function loadResultados(posData, row, tr) {
         if (!posData) return;
 
-        var fecha = $('#filter-fecha').val() || new Date().toISOString().split('T')[0];
-        var call = 'GetResultados("' + (posData.Especie || '') + '", "' + fecha + '")';
+        // El detalle respeta los mismos filtros que la grilla: sin esto mostraria
+        // operaciones de otros vehiculos/books que no suman a la fila abierta.
+        var p = getFilterParams();
+        var call = 'GetResultados("' + (posData.Especie || '') + '", "' + p.fecha +
+                   '", "' + p.vehiculo + '", "' + p.book + '")';
 
         bound.execPPL(call).then(function(result) {
             var ops = transformData(result);

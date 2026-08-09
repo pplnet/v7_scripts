@@ -10,11 +10,14 @@
 ** ============================================================================
 ** Funcion: Obtener posiciones netas agrupadas desde POSICIONES
 ** Usa la misma logica que el informe POSI4:
-**   - Tabla POSICIONES con Book=TITULOS
 **   - NrSaldo IN (171,31,44,43,45,41,42,137,136)
 **   - Subquery MAX(Fecha) para obtener ultima posicion hasta la fecha
+**   - Filtros opcionales de Vehiculo y Book (vacio = todos, igual que el informe)
+**
+** El Book ya NO se hardcodea a 'TITULOS': el informe no lo hace y esa constante
+** era una de las causas de que ambos scripts mostraran valores distintos.
 ** ============================================================================
-def GetPosiciones(fec, especie, tipoEspecie)
+def GetPosiciones(fec, especie, tipoEspecie, vehiculo, book)
     &sql := "SELECT "
     &sql := &sql ~ "RTRIM(P.Especie) as Especie, "
     &sql := &sql ~ "RTRIM(ISNULL(E.Nombre, '')) as EspecieNombre, "
@@ -28,9 +31,12 @@ def GetPosiciones(fec, especie, tipoEspecie)
 
     &sql := &sql ~ "FROM POSICIONES P "
     &sql := &sql ~ "JOIN ESPECIES E ON E.Codigo = P.Especie "
+    ** El informe une contra VEHICULOS exigiendo Cliente = Vehiculo = VEHICULOS.Codigo.
+    ** Sin ese join, el filtro por Cliente de mas abajo dejaria pasar filas cuyo
+    ** Vehiculo es otro, y los totales no coincidirian con los del informe.
+    &sql := &sql ~ "JOIN VEHICULOS V ON V.Codigo = P.Cliente AND V.Codigo = P.Vehiculo "
 
-    &sql := &sql ~ "WHERE P.Book = 'TITULOS' "
-    &sql := &sql ~ "AND P.NrSaldo IN (171,31,44,43,45,41,42,137,136) "
+    &sql := &sql ~ "WHERE P.NrSaldo IN (171,31,44,43,45,41,42,137,136) "
     &sql := &sql ~ "AND P.Fecha <= CONVERT(datetime, '" ~ fec ~ "', 126) "
 
     ** Subquery: solo la ultima fecha de cada posicion
@@ -73,6 +79,17 @@ def GetPosiciones(fec, especie, tipoEspecie)
         &sql := &sql ~ "AND E.Jerarquia <= (SELECT Jerarquia + REPLICATE('9', 15 - LEN(Jerarquia)) FROM ESPECIES WHERE RTRIM(Codigo) = '" ~ tipoEspecie ~ "') "
     EndIf
 
+    ** Filtro por vehiculo. Se filtra por Cliente igual que el informe; el join a
+    ** VEHICULOS de arriba garantiza que Vehiculo tenga el mismo valor.
+    If NoVacio(vehiculo)
+        &sql := &sql ~ "AND P.Cliente = '" ~ vehiculo ~ "' "
+    EndIf
+
+    ** Filtro por book (vacio = todos)
+    If NoVacio(book)
+        &sql := &sql ~ "AND P.Book = '" ~ book ~ "' "
+    EndIf
+
     &sql := &sql ~ "GROUP BY P.Especie, E.Nombre, E.Cotiza "
     &sql := &sql ~ "ORDER BY P.Especie"
 
@@ -82,8 +99,9 @@ end
 
 ** ============================================================================
 ** Funcion: Obtener detalle de operaciones para una especie/book (solo del dia)
+** Respeta los mismos filtros de vehiculo y book que la grilla principal.
 ** ============================================================================
-def GetResultados(especie, fec)
+def GetResultados(especie, fec, vehiculo, book)
     &sql := "SELECT "
     &sql := &sql ~ "RTRIM(O.TipoOp) as TipoOp, "
     &sql := &sql ~ "RTRIM(O.NrOperacion) as NrOperacion, "
@@ -94,8 +112,16 @@ def GetResultados(especie, fec)
     &sql := &sql ~ "ISNULL(O.TotalBrutoCli1, 0) as Monto "
     &sql := &sql ~ "FROM OPERACIONES O "
     &sql := &sql ~ "WHERE O.Especie = '" ~ especie ~ "' "
-    &sql := &sql ~ "AND O.Book1 = 'TITULOS' "
     &sql := &sql ~ "AND O.FechaOp = CONVERT(datetime, '" ~ fec ~ "', 126) "
+
+    If NoVacio(vehiculo)
+        &sql := &sql ~ "AND O.Vehiculo1 = '" ~ vehiculo ~ "' "
+    EndIf
+
+    If NoVacio(book)
+        &sql := &sql ~ "AND O.Book1 = '" ~ book ~ "' "
+    EndIf
+
     &sql := &sql ~ "ORDER BY O.FechaOp DESC, O.NrOperacion DESC"
 
     &resultado := QueryTable(&sql)
@@ -110,6 +136,36 @@ def GetVehiculos()
         SELECT RTRIM(Codigo) as Codigo, RTRIM(ISNULL(Descripcion, '')) as Descripcion
         FROM VEHICULOS
         ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Obtener books disponibles para el filtro
+** El informe arma su combo con SQLSet("Select Codigo from BOOKS"): sin filtrar.
+** ============================================================================
+def GetBooks()
+    &sql := <<
+        SELECT RTRIM(Codigo) as Codigo, RTRIM(ISNULL(Descripcion, '')) as Descripcion
+        FROM BOOKS
+        ORDER BY Codigo
+    >>
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** ============================================================================
+** Funcion: Vehiculo por defecto del filtro
+** El informe arranca con Vehiculo = Var('VEHICULODE'). Aca se lee la tabla
+** VARIABLES en vez de usar Var() porque Var() TIRA si la variable no existe
+** y eso rompe la carga del combo; sin variable, el filtro debe quedar en Todos.
+** ============================================================================
+def GetVehiculoDefault()
+    &sql := <<
+        SELECT RTRIM(ISNULL(Valor, '')) as Codigo
+        FROM VARIABLES
+        WHERE UPPER(RTRIM(Codigo)) = 'VEHICULODE'
     >>
     &resultado := QueryTable(&sql)
     return &resultado
