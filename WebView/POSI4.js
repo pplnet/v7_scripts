@@ -33,7 +33,9 @@
     // Key mapping
     // ========================================================================
     var keyMap = {
-        // Posiciones
+        // Posiciones — claves de corte (Vehiculo/Book) + datos
+        'vehiculo': 'Vehiculo', 'Vehiculo': 'Vehiculo',
+        'book': 'Book', 'Book': 'Book',
         'especie': 'Especie', 'Especie': 'Especie',
         'especienombre': 'EspecieNombre', 'EspecieNombre': 'EspecieNombre',
         'contraespecie': 'ContraEspecie', 'ContraEspecie': 'ContraEspecie',
@@ -107,8 +109,15 @@
     // ========================================================================
     // DataTable columns
     // ========================================================================
+    // Vehiculo y Book van ocultas: se muestran en las filas de corte que arma
+    // renderGroups(), igual que los "Total Vehiculo"/"Total Book" del informe.
+    var COL_VEHICULO = 1;
+    var COL_BOOK = 2;
+
     var colsConfig = [
         { className: 'details-control', orderable: false, data: null, defaultContent: '' },
+        { data: 'Vehiculo', title: 'Vehículo', visible: false },
+        { data: 'Book', title: 'Book', visible: false },
         {
             data: 'Especie',
             title: 'Especie',
@@ -124,6 +133,7 @@
         {
             data: 'PosInicial',
             title: 'Pos. Inicial',
+            className: 'text-right',
             render: function(data, type) {
                 if (type === 'display') {
                     var v = data || 0;
@@ -136,6 +146,7 @@
         {
             data: 'Compras',
             title: 'Compras',
+            className: 'text-right',
             render: function(data, type) {
                 return type === 'display' ? $$.numberFormat(data || 0, 0, false, false) : data;
             }
@@ -143,6 +154,7 @@
         {
             data: 'Ventas',
             title: 'Ventas',
+            className: 'text-right',
             render: function(data, type) {
                 return type === 'display' ? $$.numberFormat(data || 0, 0, false, false) : data;
             }
@@ -150,6 +162,7 @@
         {
             data: 'PosicionNeta',
             title: 'Posici\u00f3n Neta',
+            className: 'text-right',
             render: function(data, type) {
                 if (type === 'display') {
                     var v = data || 0;
@@ -162,6 +175,7 @@
         {
             data: 'PrecioFin',
             title: 'Precio Fin',
+            className: 'text-right',
             render: function(data, type) {
                 return type === 'display' ? $$.numberFormat(data || 0, 4, false, false) : data;
             }
@@ -169,6 +183,7 @@
         {
             data: 'Valuacion',
             title: 'Valuaci\u00f3n',
+            className: 'text-right',
             render: function(data, type) {
                 if (type === 'display') {
                     var v = data || 0;
@@ -231,22 +246,24 @@
         });
     }
 
-    function applyVehiculoDefault() {
-        return bound.execPPL('GetVehiculoDefault()').then(function(result) {
-            var rows = transformData(result);
-            var cod = (rows.length && rows[0].Codigo ? String(rows[0].Codigo) : '').trim();
-            if (!cod) return;
+    // Vehiculo con el que arranca el filtro. El informe usa Var('VEHICULODE'); acá es una
+    // constante por pedido explícito (STD). Los books arrancan en "Todos", igual que el
+    // multiselect Lista1 vacío del informe.
+    var DEFAULT_VEHICULO = 'STD';
 
-            // Solo se aplica si el codigo existe entre las opciones cargadas; si no,
-            // el select quedaria con un value fantasma y filtraria por nada.
-            var exists = false;
-            $('#filter-vehiculo option').each(function() {
-                if (this.value === cod) exists = true;
-            });
-            if (exists) $('#filter-vehiculo').val(cod);
-        }).catch(function(err) {
-            console.error('POSI4: error resolviendo el vehiculo por defecto', err);
+    function applyVehiculoDefault() {
+        // Solo se aplica si el codigo existe entre las opciones cargadas; si no, el select
+        // quedaria con un value fantasma y filtraria por nada.
+        var exists = false;
+        $('#filter-vehiculo option').each(function() {
+            if (this.value === DEFAULT_VEHICULO) exists = true;
         });
+        if (exists) {
+            $('#filter-vehiculo').val(DEFAULT_VEHICULO);
+        } else {
+            console.warn('POSI4: el vehiculo por defecto (' + DEFAULT_VEHICULO +
+                         ') no existe en VEHICULOS; el filtro queda en Todos');
+        }
     }
 
 
@@ -298,7 +315,13 @@
         var dtSelector = '#dt1';
 
         dataTable = $(dtSelector).DataTable({
-            scrollX: true,
+            // ⚠️ NADA de `scrollX: true`. Partía la grilla en dos <table> (cabecera clonada
+            // + cuerpo) y, como ambas usan table-layout:auto, cada una repartía el ancho
+            // según SU propio contenido: la celda Especie del cuerpo se estiraba por el
+            // nombre largo de la especie y la cabecera no, así que los títulos quedaban
+            // desfasados respecto de los datos y era imposible alinearlos por CSS.
+            // Con una sola tabla, cabecera y datos comparten columna por construcción; el
+            // scroll horizontal lo da .posi4-table-card con overflow-x.
             searching: true,
             lengthChange: true,
             pageLength: 50,
@@ -313,11 +336,231 @@
                 lengthMenu: "Mostrar _MENU_",
                 paginate: { first: "Primera", last: "\u00daltima", next: ">", previous: "<" }
             },
-            order: [[1, 'asc']]
+            // orderFixed mantiene el corte Vehiculo\u2192Book aunque el usuario ordene por otra
+            // columna: sin esto, un click en "Especie" mezclar\u00eda los grupos y las filas de
+            // corte quedar\u00edan mintiendo.
+            orderFixed: [[COL_VEHICULO, 'asc'], [COL_BOOK, 'asc']],
+            order: [[3, 'asc']],
+            drawCallback: function() { renderGroups(this.api()); }
         });
 
         $$.setDataTable(dataTable, dtSelector);
         $$.setKeyNames(["Especie"]);
+    }
+
+    // ========================================================================
+    // Cortes por Vehiculo / Book (equivalente a los "Total Book:" y "Total
+    // Vehiculo" que el informe intercala cuando cambia fbn('Book')/fbn('Vehiculo'))
+    // ========================================================================
+
+    // Índices de columna de colsConfig (0 = details, 1-2 = Vehiculo/Book ocultas).
+    var COL_ESPECIE = 3;
+    var COL_POSINICIAL = 5;
+    var COL_VALUACION = 10;
+
+    function emptyAcc() {
+        return { PosInicial: 0, Compras: 0, Ventas: 0, PosicionNeta: 0, Valuacion: 0 };
+    }
+
+    function addToAcc(acc, row) {
+        acc.PosInicial += parseFloat(row.PosInicial) || 0;
+        acc.Compras += parseFloat(row.Compras) || 0;
+        acc.Ventas += parseFloat(row.Ventas) || 0;
+        acc.PosicionNeta += parseFloat(row.PosicionNeta) || 0;
+        acc.Valuacion += parseFloat(row.Valuacion) || 0;
+        return acc;
+    }
+
+    function esc(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
+    /**
+     * Arma una fila de corte con EXACTAMENTE una celda por columna visible, sin `colspan`.
+     *
+     * Con `table-layout: auto` el ancho de cada columna lo fija el contenido de TODAS sus
+     * celdas, y una celda con `colspan` participa de varias a la vez: alcanza para correr las
+     * columnas y desalinear los datos respecto de sus títulos. Emitir una celda por columna
+     * mantiene la correspondencia 1:1.
+     *
+     * Se itera sobre las columnas REALES del DataTable (no sobre una lista paralela), así
+     * agregar u ocultar una columna en colsConfig no puede desfasar los cortes.
+     */
+    function buildGroupRow(api, cls, cellHtmlFor) {
+        var html = '<tr class="' + cls + '">';
+        api.columns().every(function(idx) {
+            if (!this.visible()) return;
+            html += cellHtmlFor(idx);
+        });
+        return html + '</tr>';
+    }
+
+    function groupHeaderRow(api, label, cls) {
+        return buildGroupRow(api, 'posi4-group ' + cls, function(idx) {
+            return idx === COL_ESPECIE
+                ? '<td class="posi4-group-label">' + esc(label) + '</td>'
+                : '<td></td>';
+        });
+    }
+
+    /**
+     * Fila vacía que separa una sección de book de la anterior.
+     *
+     * ⚠️ Tiene que ser una FILA, no un `border-top` en la cabecera del book: la tabla usa
+     * `border-collapse: collapse`, así que el borde inferior de una sección y el superior de
+     * la siguiente se FUSIONAN en uno solo si las filas son adyacentes — y el pedido es que
+     * cada sección tenga sus 4 bordes propios, sin compartir. La fila espaciadora, que no
+     * tiene bordes, corta esa fusión.
+     */
+    function spacerRow(api) {
+        return buildGroupRow(api, 'posi4-sec-gap', function() { return '<td></td>'; });
+    }
+
+    /**
+     * Repite los títulos de las columnas dentro de cada Book. Los toma del <thead> REAL
+     * (no de una lista paralela) para que no puedan quedar desfasados ni desactualizados.
+     */
+    function columnTitlesRow(api) {
+        return buildGroupRow(api, 'posi4-group-titles posi4-sec', function(idx) {
+            var title = $(api.column(idx).header()).text() || '';
+            var align = idx >= COL_POSINICIAL ? ' text-right' : '';
+            return '<td class="posi4-titles-cell' + align + '">' + esc(title) + '</td>';
+        });
+    }
+
+    // Cada número cae bajo SU columna. Precio Fin queda vacío a propósito: es un precio,
+    // no un acumulable.
+    function subtotalRow(api, label, acc, cls) {
+        var valores = {};
+        valores[COL_POSINICIAL] = $$.numberFormat(acc.PosInicial, 0, false, false);
+        valores[COL_POSINICIAL + 1] = $$.numberFormat(acc.Compras, 0, false, false);
+        valores[COL_POSINICIAL + 2] = $$.numberFormat(acc.Ventas, 0, false, false);
+        valores[COL_POSINICIAL + 3] = $$.numberFormat(acc.PosicionNeta, 0, false, false);
+        valores[COL_VALUACION] = $$.numberFormat(acc.Valuacion, 2, false, false);
+
+        return buildGroupRow(api, 'posi4-subtotal ' + cls, function(idx) {
+            if (idx === COL_ESPECIE) {
+                return '<td class="posi4-subtotal-label">' + esc(label) + '</td>';
+            }
+            return valores[idx] !== undefined
+                ? '<td class="text-right">' + valores[idx] + '</td>'
+                : '<td></td>';
+        });
+    }
+
+    // ⚠️ Los subtotales se calculan sobre la PÁGINA VISIBLE, así que un grupo que se parte
+    // entre dos páginas rinde un subtotal PARCIAL en cada una (comportamiento estándar de
+    // agrupar en DataTables; el informe no pagina y ahí el corte siempre es único).
+    // Se detecta comparando los bordes de la página contra el dataset completo ordenado, y
+    // se avisa de dos formas: marcando la fila de subtotal y mostrando el cartel de arriba.
+    var PARCIAL_SIGUE = ' — PARCIAL, sigue en la página siguiente';
+    var PARCIAL_VIENE = ' — viene de la página anterior';
+
+    function vehKey(d) { return (d && d.Vehiculo) || ''; }
+    function bookKey(d) { return vehKey(d) + ' ' + ((d && d.Book) || ''); }
+
+    function updateSplitWarning(hayCorteDividido) {
+        var $w = $('#group-split-warning');
+        if ($w.length) $w.toggle(!!hayCorteDividido);
+    }
+
+    /**
+     * Intercala las filas de corte sobre la página visible. Se llama desde drawCallback,
+     * así que corre en cada draw (orden, búsqueda, paginado) sobre las filas ya ordenadas.
+     */
+    function renderGroups(api) {
+        var rowsQuery = api.rows({ page: 'current', search: 'applied', order: 'applied' });
+        var nodes = rowsQuery.nodes();
+        var data = rowsQuery.data();
+        if (!data || data.length === 0) {
+            updateSplitWarning(false);
+            return;
+        }
+
+        // Dataset completo (mismo filtro y orden, sin paginar) para mirar qué hay del otro
+        // lado de los bordes de la página.
+        var all = api.rows({ search: 'applied', order: 'applied' }).data();
+        var info = api.page.info();
+        var primero = data[0] || {};
+        var ultimo = data[data.length - 1] || {};
+
+        var bookViene = info.start > 0 && bookKey(all[info.start - 1]) === bookKey(primero);
+        var bookSigue = info.end < all.length && bookKey(all[info.end]) === bookKey(ultimo);
+        var vehViene = info.start > 0 && vehKey(all[info.start - 1]) === vehKey(primero);
+        var vehSigue = info.end < all.length && vehKey(all[info.end]) === vehKey(ultimo);
+
+        updateSplitWarning(bookViene || bookSigue || vehViene || vehSigue);
+
+        var lastVeh = null, lastBook = null;
+        var bookAcc = emptyAcc(), vehAcc = emptyAcc();
+
+        for (var i = 0; i < data.length; i++) {
+            var d = data[i] || {};
+            var veh = d.Vehiculo || '';
+            var book = d.Book || '';
+            var $row = $(nodes).eq(i);
+            var esPrimera = (i === 0);
+
+            // Cierre de los grupos abiertos (book primero, después vehiculo). El Total Book
+            // es la última fila de la sección: lleva el borde inferior del bloque.
+            if (lastBook !== null && (veh !== lastVeh || book !== lastBook)) {
+                $row.before(subtotalRow(api, 'Total Book: ' + lastBook, bookAcc,
+                    'posi4-subtotal-book posi4-sec posi4-sec-bottom'));
+                bookAcc = emptyAcc();
+            }
+            if (lastVeh !== null && veh !== lastVeh) {
+                // Aire también acá: el borde de 2px del total de vehículo, al colapsar contra
+                // la fila de arriba, se comería el borde inferior de la última caja de book.
+                $row.before(spacerRow(api));
+                $row.before(subtotalRow(api, 'Total Vehículo: ' + lastVeh, vehAcc, 'posi4-subtotal-veh'));
+                vehAcc = emptyAcc();
+            }
+
+            // Apertura de los grupos nuevos. La cabecera de la primera fila de la página
+            // avisa si ese grupo ya venía abierto de la página anterior.
+            var abreVehiculo = (veh !== lastVeh);
+            if (abreVehiculo) {
+                $row.before(groupHeaderRow(api,
+                    'VEHÍCULO: ' + (veh || '(sin vehículo)') + (esPrimera && vehViene ? PARCIAL_VIENE : ''),
+                    'posi4-group-veh' + (esPrimera && vehViene ? ' posi4-group-parcial' : '')));
+            }
+            if (abreVehiculo || book !== lastBook) {
+                // Aire respecto de la tabla del book anterior. NO va en el primer book de cada
+                // vehículo: ahí el separador es el propio banner del vehículo, y además no hay
+                // "book anterior" del que separarse.
+                if (!abreVehiculo) $row.before(spacerRow(api));
+
+                // La cabecera del book es la primera fila de la sección: lleva el borde
+                // superior del bloque.
+                $row.before(groupHeaderRow(api,
+                    'Book: ' + (book || '(sin book)') + (esPrimera && bookViene ? PARCIAL_VIENE : ''),
+                    'posi4-group-book posi4-sec posi4-sec-top' +
+                    (esPrimera && bookViene ? ' posi4-group-parcial' : '')));
+                // Los títulos se repiten en cada book: con el corte de por medio, la
+                // cabecera del DataTable queda lejos y no se sabe qué columna es cuál.
+                $row.before(columnTitlesRow(api));
+            }
+
+            // Las filas de datos también son parte de la sección (bordes laterales del bloque).
+            $row.addClass('posi4-sec');
+
+            addToAcc(bookAcc, d);
+            addToAcc(vehAcc, d);
+            lastVeh = veh;
+            lastBook = book;
+        }
+
+        // Cierre del último grupo. El orden de los .after() es inverso al visual:
+        // el segundo insertado queda pegado a la fila, así que el vehiculo va primero.
+        var $lastRow = $(nodes).eq(data.length - 1);
+        $lastRow.after(subtotalRow(api,
+            'Total Vehículo: ' + lastVeh + (vehSigue ? PARCIAL_SIGUE : ''),
+            vehAcc, 'posi4-subtotal-veh' + (vehSigue ? ' posi4-subtotal-parcial' : '')));
+        $lastRow.after(spacerRow(api));
+        $lastRow.after(subtotalRow(api,
+            'Total Book: ' + lastBook + (bookSigue ? PARCIAL_SIGUE : ''),
+            bookAcc, 'posi4-subtotal-book posi4-sec posi4-sec-bottom' +
+            (bookSigue ? ' posi4-subtotal-parcial' : '')));
     }
 
     // ========================================================================
@@ -430,16 +673,17 @@
     function loadResultados(posData, row, tr) {
         if (!posData) return;
 
-        // El detalle respeta los mismos filtros que la grilla: sin esto mostraria
-        // operaciones de otros vehiculos/books que no suman a la fila abierta.
+        // El detalle se acota al vehiculo/book DE LA FILA, no al del filtro: ahora cada fila
+        // es un (Vehiculo, Book, Especie), así que las operaciones que la componen son las
+        // de ese corte. Con el filtro en "Todos" mostraría operaciones de otros books.
         var p = getFilterParams();
         var call = 'GetResultados("' + (posData.Especie || '') + '", "' + p.fecha +
-                   '", "' + p.vehiculo + '", "' + p.book + '")';
+                   '", "' + (posData.Vehiculo || '') + '", "' + (posData.Book || '') + '")';
 
         bound.execPPL(call).then(function(result) {
             var ops = transformData(result);
 
-            var html = '<table class="table table-sm mb-0" style="font-size:12px">';
+            var html = '<table class="table table-sm mb-0 posi4-detail-table" style="font-size:12px">';
             html += '<thead><tr style="background:#f4f5f6">';
             html += '<th>Tipo</th><th>Nro</th><th>Fecha</th><th>Cliente</th><th class="text-right">Cantidad</th><th class="text-right">Precio</th><th class="text-right">Monto</th>';
             html += '</tr></thead><tbody>';

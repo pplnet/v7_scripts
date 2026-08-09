@@ -19,6 +19,12 @@
 ** ============================================================================
 def GetPosiciones(fec, especie, tipoEspecie, vehiculo, book)
     &sql := "SELECT "
+    ** Vehiculo y Book son claves de AGRUPACION, no sumatoria: el informe emite una fila
+    ** por (Vehiculo, Book, Especie) y subtotaliza en cada corte (ORDER BY P.Vehiculo,
+    ** P.Book, ...). Sin ellos en el GROUP BY, el webview colapsaba todos los books y
+    ** vehiculos en una sola fila por especie.
+    &sql := &sql ~ "RTRIM(P.Vehiculo) as Vehiculo, "
+    &sql := &sql ~ "RTRIM(P.Book) as Book, "
     &sql := &sql ~ "RTRIM(P.Especie) as Especie, "
     &sql := &sql ~ "RTRIM(ISNULL(E.Nombre, '')) as EspecieNombre, "
     &sql := &sql ~ "RTRIM(ISNULL(E.Cotiza, '')) as ContraEspecie, "
@@ -90,8 +96,19 @@ def GetPosiciones(fec, especie, tipoEspecie, vehiculo, book)
         &sql := &sql ~ "AND P.Book = '" ~ book ~ "' "
     EndIf
 
-    &sql := &sql ~ "GROUP BY P.Especie, E.Nombre, E.Cotiza "
-    &sql := &sql ~ "ORDER BY P.Especie"
+    ** Excluye la moneda local (MONELOCA, tipicamente ARP). Es el mismo filtro que el
+    ** informe agrega con su Check1 'Incluye $' en 0, que es su valor por defecto.
+    **
+    ** La variable se lee de VARIABLES en vez de con Var('MONELOCA') porque Var() TIRA si
+    ** no existe y romperia toda la carga de la grilla. Si no esta definida no se filtra
+    ** nada: preferible mostrar de mas a esconder filas por una variable ausente.
+    &moneloca := Query("SELECT RTRIM(ISNULL(Valor, '')) FROM VARIABLES WHERE UPPER(RTRIM(Codigo)) = 'MONELOCA'")
+    If NoVacio(&moneloca)
+        &sql := &sql ~ "AND P.Especie <> '" ~ &moneloca ~ "' "
+    EndIf
+
+    &sql := &sql ~ "GROUP BY P.Vehiculo, P.Book, P.Especie, E.Nombre, E.Cotiza "
+    &sql := &sql ~ "ORDER BY P.Vehiculo, P.Book, P.Especie"
 
     &resultado := QueryTable(&sql)
     return &resultado
@@ -155,21 +172,6 @@ def GetBooks()
     return &resultado
 end
 
-** ============================================================================
-** Funcion: Vehiculo por defecto del filtro
-** El informe arranca con Vehiculo = Var('VEHICULODE'). Aca se lee la tabla
-** VARIABLES en vez de usar Var() porque Var() TIRA si la variable no existe
-** y eso rompe la carga del combo; sin variable, el filtro debe quedar en Todos.
-** ============================================================================
-def GetVehiculoDefault()
-    &sql := <<
-        SELECT RTRIM(ISNULL(Valor, '')) as Codigo
-        FROM VARIABLES
-        WHERE UPPER(RTRIM(Codigo)) = 'VEHICULODE'
-    >>
-    &resultado := QueryTable(&sql)
-    return &resultado
-end
 
 ** ============================================================================
 ** Funcion: Obtener tipos de especie raiz para el filtro
