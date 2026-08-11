@@ -1246,6 +1246,14 @@ var PERFILES = {};
         // tras parseScript en refreshTabDataTables).
         $('#chk-dir-admin').prop('checked', dirAdmin).prop('disabled', isReadonly);
         $('#directorios-sin-permiso').toggle(!storageRootsAccessible);
+        // Solo un admin del filesystem puede ASIGNAR DIF: el panel se oculta para el resto.
+        // storageRootsAccessible sale del 403 de /storage/roots (admin-only), asi que hereda
+        // el gate real del backend (SuperUser | perfil ADMIN | DIF) sin duplicar la regla acá
+        // — incluido el caso multi-perfil de USUARIOS.Perfiles, que el backend resuelve con
+        // Any() sobre la lista. Se OCULTA (no se resetea) a proposito: dirAdmin conserva lo
+        // que parseo del Script y generateScript lo re-emite, asi que un no-admin que edita
+        // un perfil con DIF no se lo borra sin querer.
+        $('#panel-dir-admin').toggle(storageRootsAccessible);
 
         // Listener global para checkboxes
         setupCheckboxListeners();
@@ -1376,6 +1384,8 @@ var PERFILES = {};
         // estado ya parseado del Script (parseScript corre antes de este refresh).
         $('#chk-dir-admin').prop('checked', dirAdmin);
         $('#directorios-sin-permiso').toggle(!storageRootsAccessible);
+        // Ver initTabDataTables: el panel de DIF solo se muestra al admin del filesystem.
+        $('#panel-dir-admin').toggle(storageRootsAccessible);
     }
 
     // ========================================================================
