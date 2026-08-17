@@ -171,19 +171,19 @@ Cantidad3 (21) ─────────────────┘
 
 ### 1. Compilar el script
 ```bash
-cd v7/compiler/ops/bin
-./ppl ../../../ppl_tests/RemoteTest/RECALC_TEST.ppl
+cd v7_transpiler/compiler/ops/bin
+./ppl ../../../../v7_scripts/RemoteTest/RECALC_TEST.ppl
 ```
 
 ### 2. Iniciar el backend
 ```bash
-cd v7_proto/PPLRuntime
+cd v7_back/PPLRuntime
 dotnet run
 ```
 
 ### 3. Iniciar el frontend
 ```bash
-cd v7_web
+cd v7_front
 npm run dev
 ```
 
@@ -204,8 +204,8 @@ npm run dev
 ### 6. Ejecutar tests automáticos (opcional)
 Si el backend soporta ejecutar tests:
 ```bash
-# Desde v7/compiler/ops/bin
-./ppl -r ../../../ppl_tests/RemoteTest/RECALC_TEST.ppl
+# Desde v7_transpiler/compiler/ops/bin
+./ppl -r ../../../../v7_scripts/RemoteTest/RECALC_TEST.ppl
 ```
 
 ---

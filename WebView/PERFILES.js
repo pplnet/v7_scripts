@@ -23,7 +23,7 @@ var PERFILES = {};
     var currentPerfilIndex = -1;
 
     // Object Storage (permisos de directorio por perfil). API_BASE_URL lo reescribe el
-    // frontend antes de montar el iframe (ver CLAUDE.md de v7_proto); el default local
+    // frontend antes de montar el iframe (ver CLAUDE.md de v7_back); el default local
     // es solo un fallback de desarrollo.
     var API_BASE_URL = window.API_BASE_URL || 'https://localhost:44300';
     var STORAGE_URL  = API_BASE_URL + '/storage';
