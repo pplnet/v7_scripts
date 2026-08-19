@@ -22,6 +22,14 @@ var PERFILES = {};
     var formMode = null;        // 'alta', 'modificacion', 'visualizacion'
     var currentPerfilIndex = -1;
 
+    // Object Storage (permisos de directorio por perfil). API_BASE_URL lo reescribe el
+    // frontend antes de montar el iframe (ver CLAUDE.md de v7_back); el default local
+    // es solo un fallback de desarrollo.
+    var API_BASE_URL = window.API_BASE_URL || 'https://localhost:44300';
+    var STORAGE_URL  = API_BASE_URL + '/storage';
+    var dirAdmin = false;                  // flag DIF (admin del filesystem, escalar por perfil)
+    var storageRootsAccessible = true;     // false si GET /storage/roots devolvio 403/error
+
     // DataTables de las tabs de permisos
     var tabDataTables = {};
 
@@ -38,7 +46,8 @@ var PERFILES = {};
         variables: [],
         instancias: [],
         webviews: [],
-        canales: []
+        canales: [],
+        directorios: []
     };
 
     // ========================================================================
@@ -81,6 +90,7 @@ var PERFILES = {};
     var BASE_INSTANCIAS = [];
     var BASE_WEBVIEWS = [];
     var BASE_CANALES = [];
+    var BASE_DIRECTORIOS = [];
 
     // Flag para cargar datos base una sola vez por sesion
     var baseDataLoaded = false;
@@ -169,7 +179,8 @@ var PERFILES = {};
             loadVariables(),
             loadInstancias(),
             loadWebViews(),
-            loadCanales()
+            loadCanales(),
+            loadStorageRoots()
         ]).then(function() {
             baseDataLoaded = true;
             console.log('Datos base cargados desde la BD');
@@ -377,6 +388,42 @@ var PERFILES = {};
             console.warn('Error cargando canales:', e);
             BASE_CANALES = [];
         });
+    }
+
+    // ========================================================================
+    // Directorios raiz del object storage (SeaweedFS)
+    // ------------------------------------------------------------------------
+    // Salen del endpoint REST GET /storage/roots (admin-only), NO de una funcion PPL.
+    // Un 403 (el editor del perfil no es admin del filesystem) o cualquier error deja
+    // la lista vacia y marca 'sin permiso'; igual se veran los directorios ya asignados
+    // en el Script del perfil (ver parseScript, que mergea ambos). La cookie de sesion
+    // viaja con credentials:'include'. NO pasa por transformData/capitalizeKey: el
+    // endpoint devuelve un string[] plano.
+    // ========================================================================
+    function loadStorageRoots() {
+        storageRootsAccessible = true;
+        return fetch(STORAGE_URL + '/roots', { credentials: 'include' })
+            .then(function(resp) {
+                if (!resp.ok) {
+                    storageRootsAccessible = false;
+                    BASE_DIRECTORIOS = [];
+                    console.warn('No se pudo listar /storage/roots (status ' + resp.status + ')');
+                    return null;
+                }
+                return resp.json();
+            })
+            .then(function(roots) {
+                if (roots === null) return;
+                BASE_DIRECTORIOS = (roots || []).map(function(name) {
+                    return { dir: String(name || '').trim(), permiso: 'ninguno' };
+                }).filter(function(d) { return d.dir.length > 0; });
+                console.log('Directorios raiz cargados:', BASE_DIRECTORIOS.length);
+            })
+            .catch(function(e) {
+                storageRootsAccessible = false;
+                BASE_DIRECTORIOS = [];
+                console.warn('Error cargando directorios raiz:', e);
+            });
     }
 
     // ========================================================================
@@ -701,7 +748,8 @@ var PERFILES = {};
             'search-variables': '#tab-variables',
             'search-instancias': '#tab-instancias',
             'search-webviews': '#tab-webviews',
-            'search-canales': '#tab-canales'
+            'search-canales': '#tab-canales',
+            'search-directorios': '#tab-directorios'
         };
 
         Object.keys(searchMap).forEach(function(searchId) {
@@ -864,6 +912,8 @@ var PERFILES = {};
         permData.instancias = cloneArray(BASE_INSTANCIAS);
         permData.webviews = cloneArray(BASE_WEBVIEWS);
         permData.canales = cloneArray(BASE_CANALES);
+        permData.directorios = cloneArray(BASE_DIRECTORIOS);
+        dirAdmin = false;
     }
 
     // ========================================================================
@@ -937,6 +987,31 @@ var PERFILES = {};
         // Canales: NO se parsean del script. Desde FPAV7-387 los permisos de canal
         // viven en MENSAJES_CANALES_PERFIL (ver loadCanalesPerfil); los tokens
         // #{id}_OB / #{id}_OP del script ya no los lee el backend.
+
+        // Directorios (object storage): DIR{dir} / DIW{dir} + DIF pelado (admin).
+        // Se parsea sobre el token CRUDO (siglaSet esta en mayusculas y los paths de
+        // SeaweedFS distinguen may/min). DIW gana sobre DIR (niveles anidados). DIF de
+        // EXACTAMENTE 3 chars = admin del filesystem; DIF{sufijo} se ignora (token
+        // desconocido para el backend). Mergea los roots ya cargados con directorios que
+        // solo esten en el script (asi se ven aunque /storage/roots haya fallado).
+        siglas.forEach(function(raw) {
+            if (!raw) return;
+            var p3 = raw.substring(0, 3).toUpperCase();
+            if (raw.length === 3 && p3 === 'DIF') { dirAdmin = true; return; }
+            if (raw.length <= 3) return;
+            if (p3 !== 'DIR' && p3 !== 'DIW') return;
+            var dir = raw.substring(3);                 // case preservado (path case-sensitive)
+            var entry = null;
+            for (var i = 0; i < permData.directorios.length; i++) {
+                if (permData.directorios[i].dir === dir) { entry = permData.directorios[i]; break; }
+            }
+            if (!entry) {
+                entry = { dir: dir, permiso: 'ninguno' };
+                permData.directorios.push(entry);
+            }
+            if (p3 === 'DIW') entry.permiso = 'diw';
+            else if (entry.permiso !== 'diw') entry.permiso = 'dir';
+        });
     }
 
     // ========================================================================
@@ -1003,6 +1078,16 @@ var PERFILES = {};
 
         // Canales: NO se emiten tokens al script. Se persisten en
         // MENSAJES_CANALES_PERFIL (SaveCanalesPerfil) -- una sola fuente de verdad.
+
+        // Directorios (object storage): DIR{dir} / DIW{dir}, case preservado. El backend
+        // (ProfileService.TryAddDirectoryGrant) parsea el nombre del directorio verbatim.
+        permData.directorios.forEach(function(d) {
+            if (d.permiso === 'dir')      siglas.push('DIR' + d.dir);
+            else if (d.permiso === 'diw') siglas.push('DIW' + d.dir);
+        });
+        // DIF admin del filesystem: token PELADO de 3 chars (nunca DIF{sufijo}, que el
+        // backend trataria como token desconocido).
+        if (dirAdmin) siglas.push('DIF');
 
         return siglas.join(' ');
     }
@@ -1136,6 +1221,40 @@ var PERFILES = {};
             paging: false, searching: true, info: false, ordering: true, scrollY: '300px', scrollCollapse: true
         });
 
+        // Directorios de object storage (radios: ninguno / dir / diw). Con DIF (dirAdmin)
+        // activo, los radios quedan deshabilitados: el admin del filesystem cubre todo.
+        tabDataTables['#tab-directorios'] = $('#dt-directorios').DataTable({
+            data: permData.directorios,
+            columns: [
+                { data: 'dir', title: 'Directorio' },
+                {
+                    data: 'permiso', title: 'Permiso', className: 'text-center',
+                    render: function(data, type, row, meta) {
+                        if (type !== 'display') return data;
+                        var name = 'dir-' + meta.row;
+                        var dis = (isReadonly || dirAdmin) ? ' disabled' : '';
+                        return '<label class="radio-inline mr-3"><input type="radio" name="' + name + '" value="ninguno"' + (data === 'ninguno' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> Ninguno</label>' +
+                               '<label class="radio-inline mr-3"><input type="radio" name="' + name + '" value="dir"' + (data === 'dir' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> DIR</label>' +
+                               '<label class="radio-inline"><input type="radio" name="' + name + '" value="diw"' + (data === 'diw' ? ' checked' : '') + dis + ' data-row="' + meta.row + '"> DIW</label>';
+                    }
+                }
+            ],
+            paging: false, searching: true, info: false, ordering: true, scrollY: '300px', scrollCollapse: true
+        });
+
+        // Estado inicial del checkbox DIF y del aviso de sin-permiso (se re-sincronizan
+        // tras parseScript en refreshTabDataTables).
+        $('#chk-dir-admin').prop('checked', dirAdmin).prop('disabled', isReadonly);
+        $('#directorios-sin-permiso').toggle(!storageRootsAccessible);
+        // Solo un admin del filesystem puede ASIGNAR DIF: el panel se oculta para el resto.
+        // storageRootsAccessible sale del 403 de /storage/roots (admin-only), asi que hereda
+        // el gate real del backend (SuperUser | perfil ADMIN | DIF) sin duplicar la regla acá
+        // — incluido el caso multi-perfil de USUARIOS.Perfiles, que el backend resuelve con
+        // Any() sobre la lista. Se OCULTA (no se resetea) a proposito: dirAdmin conserva lo
+        // que parseo del Script y generateScript lo re-emite, asi que un no-admin que edita
+        // un perfil con DIF no se lo borra sin querer.
+        $('#panel-dir-admin').toggle(storageRootsAccessible);
+
         // Listener global para checkboxes
         setupCheckboxListeners();
         updateTabCounts();
@@ -1182,6 +1301,26 @@ var PERFILES = {};
             }
             updateTabCounts();
         });
+
+        // Listener para radio buttons de directorios (object storage)
+        $('#tab-directorios').on('change', 'input[type="radio"]', function() {
+            var rowIdx = $(this).data('row');
+            var value = $(this).val();
+            if (permData.directorios[rowIdx]) {
+                permData.directorios[rowIdx].permiso = value;
+            }
+            updateTabCounts();
+        });
+
+        // Checkbox DIF (admin del filesystem). Plan A: al tildarlo, los permisos por
+        // directorio quedan deshabilitados (DIF ya cubre todo); se rehabilitan al destildar.
+        $('#chk-dir-admin').on('change', function() {
+            dirAdmin = $(this).is(':checked');
+            if (tabDataTables['#tab-directorios']) {
+                tabDataTables['#tab-directorios'].rows().invalidate().draw(false);
+            }
+            updateTabCounts();
+        });
     }
 
     // ========================================================================
@@ -1200,7 +1339,8 @@ var PERFILES = {};
             'variables': permData.variables.filter(function(r) { return r.hab; }).length,
             'instancias': permData.instancias.filter(function(i) { return i.alta || i.baja || i.modificacion || i.avanzar || i.retroceder; }).length,
             'webviews': permData.webviews.filter(function(r) { return r.hab; }).length,
-            'canales': permData.canales.filter(function(c) { return c.permiso === 'asignado'; }).length
+            'canales': permData.canales.filter(function(c) { return c.permiso === 'asignado'; }).length,
+            'directorios': permData.directorios.filter(function(d) { return d.permiso !== 'ninguno'; }).length
         };
 
         Object.keys(counts).forEach(function(key) {
@@ -1230,7 +1370,8 @@ var PERFILES = {};
             '#tab-variables': permData.variables,
             '#tab-instancias': permData.instancias,
             '#tab-webviews': permData.webviews,
-            '#tab-canales': permData.canales
+            '#tab-canales': permData.canales,
+            '#tab-directorios': permData.directorios
         };
 
         Object.keys(tabMap).forEach(function(key) {
@@ -1238,6 +1379,13 @@ var PERFILES = {};
                 tabDataTables[key].clear().rows.add(tabMap[key]).draw();
             }
         });
+
+        // Directorios: sincronizar el checkbox DIF y el aviso de sin-permiso con el
+        // estado ya parseado del Script (parseScript corre antes de este refresh).
+        $('#chk-dir-admin').prop('checked', dirAdmin);
+        $('#directorios-sin-permiso').toggle(!storageRootsAccessible);
+        // Ver initTabDataTables: el panel de DIF solo se muestra al admin del filesystem.
+        $('#panel-dir-admin').toggle(storageRootsAccessible);
     }
 
     // ========================================================================
@@ -1254,6 +1402,8 @@ var PERFILES = {};
         // Limpiar listeners de checkboxes y radio buttons
         $('.tab-pane').off('change', 'input[type="checkbox"][data-tab]');
         $('#tab-canales').off('change', 'input[type="radio"]');
+        $('#tab-directorios').off('change', 'input[type="radio"]');
+        $('#chk-dir-admin').off('change');
     }
 
     // ========================================================================
@@ -1285,6 +1435,9 @@ var PERFILES = {};
             });
         } else if (tabName === 'canales') {
             data.forEach(function(c) { c.permiso = value ? 'asignado' : 'restringido'; });
+        } else if (tabName === 'directorios') {
+            if (dirAdmin) return;   // DIF cubre todo; los grants por-directorio estan deshabilitados
+            data.forEach(function(d) { d.permiso = value ? 'dir' : 'ninguno'; });
         } else {
             data.forEach(function(r) { r.hab = value; });
         }
@@ -1294,7 +1447,8 @@ var PERFILES = {};
             'menu': '#tab-menu', 'tablas': '#tab-tablas', 'tiposop': '#tab-tiposop',
             'tipostr': '#tab-tipostr', 'tiposord': '#tab-tiposord', 'informes': '#tab-informes',
             'eventos': '#tab-eventos', 'especiales': '#tab-especiales', 'variables': '#tab-variables',
-            'instancias': '#tab-instancias', 'webviews': '#tab-webviews', 'canales': '#tab-canales'
+            'instancias': '#tab-instancias', 'webviews': '#tab-webviews', 'canales': '#tab-canales',
+            'directorios': '#tab-directorios'
         };
 
         var dtKey = tabKeyMap[tabName];
