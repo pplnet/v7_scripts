@@ -163,6 +163,13 @@
         $$.setDataTable(dataTable, '#dt1');
         $$.setKeyNames(['NrOperacion']);
 
+        // Las tarjetas de resumen se recalculan en CADA draw: es el unico evento
+        // por el que pasan los tres caminos que cambian lo listado — la recarga
+        // por fecha (server-side, via $$.setData), los filtros de Tipo/Instancia
+        // (client-side, column().search().draw()) y el buscador. Engancharlos uno
+        // por uno dejaria afuera al proximo que se agregue.
+        $('#dt1').on('draw.dt', updateStats);
+
         // Doble click -> modal de detalle
         $('#dt1 tbody').on('dblclick', 'tr', function () {
             const row = dataTable.row(this);
@@ -225,19 +232,54 @@
         });
     }
 
-    function loadEstadisticas() {
-        bound.execPPL('GetEstadisticas()').then(function (result) {
-            let s = result;
-            if (Array.isArray(result) && result.length > 0) {
-                s = Array.isArray(result[0]) ? transformRow(result[0])
-                    : (result[0].key !== undefined ? transformRow(result) : result[0]);
-            }
-            if (!s) return;
-            $('#stat-total').text(s.TotalOperaciones || 0);
-            $('#stat-hoy').text(s.OperacionesHoy || 0);
-            $('#stat-especies').text(s.EspeciesDistintas || 0);
-            $('#stat-tipos').text(s.TiposDistintos || 0);
-        }).catch(function (err) { console.error('Error cargando estadisticas:', err); });
+    // ======================================================================
+    // Tarjetas de resumen
+    // ======================================================================
+    // Se calculan en el CLIENTE sobre las filas que la grilla tiene filtradas
+    // (mismo criterio que los graficos de POSI4, que se re-renderizan con cada
+    // carga): asi las tarjetas describen SIEMPRE lo que se esta viendo.
+    //
+    // ⚠️ Antes salian de `GetEstadisticas()`, que NO recibe ningun filtro y
+    // cuenta la tabla OPERACIONES entera: cambiar cualquier filtro movia la
+    // grilla y dejaba las tarjetas clavadas. Y no alcanzaba con volver a
+    // llamarla en cada cambio — los filtros de Tipo e Instancia son
+    // client-side (DataTables), asi que el backend ni se entera de ellos.
+    //
+    // ⚠️ El universo son las filas CARGADAS: `GetOperaciones` corta en TOP 500,
+    // asi que estos numeros resumen lo listado, no toda la base. Es el precio
+    // de que la tarjeta y la grilla no puedan contradecirse.
+    function filteredRows() {
+        if (!dataTable) return [];
+        return dataTable.rows({ search: 'applied' }).data().toArray();
+    }
+
+    // dd/MM/yyyy (CONVERT 103 del .ppl) -> yyyyMMdd, comparable como string.
+    // Cualquier otra cosa -> '' (no participa del maximo).
+    function fechaKey(v) {
+        const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(v || '').trim());
+        return m ? m[3] + m[2] + m[1] : '';
+    }
+
+    function updateStats() {
+        const rows = filteredRows();
+        const especies = {}, tipos = {};
+        let maxFecha = '';
+
+        rows.forEach(function (r) {
+            if (r.Especie) especies[r.Especie] = true;
+            if (r.TipoOp) tipos[r.TipoOp] = true;
+            const k = fechaKey(r.FechaOp);
+            if (k > maxFecha) maxFecha = k;
+        });
+
+        const delUltimoDia = maxFecha
+            ? rows.filter(function (r) { return fechaKey(r.FechaOp) === maxFecha; }).length
+            : 0;
+
+        $('#stat-total').text(rows.length);
+        $('#stat-hoy').text(delUltimoDia);
+        $('#stat-especies').text(Object.keys(especies).length);
+        $('#stat-tipos').text(Object.keys(tipos).length);
     }
 
     function buildFilters() {
@@ -312,7 +354,7 @@
     function scheduleRefresh() {
         if (refreshTimer) clearTimeout(refreshTimer);
         refreshTimer = setTimeout(function () {
-            loadOperaciones(false).then(loadEstadisticas);
+            loadOperaciones(false);
         }, REFRESH_DEBOUNCE_MS);
     }
 
@@ -326,6 +368,16 @@
     // SignalR
     // ======================================================================
     function setupWebSocket() {
+        // Sin la libreria de SignalR no hay tiempo real, pero la grilla y los
+        // filtros funcionan igual: sin esta guarda el `new signalR...` tira un
+        // ReferenceError, el chip queda en "Conectando..." para siempre y la
+        // pantalla aparenta estar sana. Mismo criterio que POSI4 con Chart.js.
+        if (typeof signalR === 'undefined') {
+            console.error('ESTOPE: signalR no disponible — la grilla no se va a refrescar sola');
+            setStatus('error');
+            return;
+        }
+
         hubConnection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, { withCredentials: true })
             .withAutomaticReconnect({
@@ -420,7 +472,6 @@
             }
             loadOperaciones(true);
         });
-        loadEstadisticas();
         buildFilters();
         setupEventListeners();
         setupWebSocket();
@@ -429,7 +480,6 @@
     function setupEventListeners() {
         $('#btn-refresh').on('click', function () {
             loadOperaciones(true).then(function () {
-                loadEstadisticas();
                 showToast('Datos actualizados', 'success');
             });
         });
