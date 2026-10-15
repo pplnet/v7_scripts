@@ -741,6 +741,12 @@
     function setupWebSocketConnection() {
         console.log('POSI4: Conectando WS:', HUB_URL);
 
+        if (typeof signalR === 'undefined') {
+            console.error('POSI4: signalR no disponible — la grilla no se va a refrescar sola');
+            updateWsStatus('error');
+            return;
+        }
+
         hubConnection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, {
                 transport: signalR.HttpTransportType.WebSockets,

@@ -920,6 +920,12 @@
     function setupWebSocketConnection() {
         console.log('TIC: Conectando WS:', HUB_URL);
 
+        if (typeof signalR === 'undefined') {
+            console.error('TIC: signalR no disponible — POSI4 no se va a enterar de los cambios');
+            updateWsStatus('error');
+            return;
+        }
+
         hubConnection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, { transport: signalR.HttpTransportType.WebSockets, withCredentials: true })
             .withAutomaticReconnect({

@@ -1109,6 +1109,12 @@
     function setupWebSocketConnection() {
         console.log('OTIC: Conectando WS:', HUB_URL);
 
+        if (typeof signalR === 'undefined') {
+            console.error('OTIC: signalR no disponible — ESTOR2 no se va a enterar de los cambios');
+            updateWsStatus('error');
+            return;
+        }
+
         hubConnection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, {
                 transport: signalR.HttpTransportType.WebSockets,

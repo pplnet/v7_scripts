@@ -414,6 +414,12 @@
     function setupWebSocketConnection() {
         console.log('ESTOR2: Conectando WS:', HUB_URL);
 
+        if (typeof signalR === 'undefined') {
+            console.error('ESTOR2: signalR no disponible — la grilla no se va a refrescar sola');
+            updateWsStatus('error');
+            return;
+        }
+
         hubConnection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, {
                 transport: signalR.HttpTransportType.WebSockets,
