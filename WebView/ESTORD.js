@@ -485,6 +485,12 @@
     function setupWebSocketConnection() {
         console.log('Conectando a WebSocket:', HUB_URL);
 
+        if (typeof signalR === 'undefined') {
+            console.error('ESTORD: signalR no disponible — la grilla no se va a refrescar sola');
+            updateConnectionStatus('error');
+            return;
+        }
+
         hubConnection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, {
                 transport: signalR.HttpTransportType.WebSockets,

@@ -531,6 +531,12 @@
     // SignalR
     // ======================================================================
     function setupWebSocket() {
+        if (typeof signalR === 'undefined') {
+            console.error('MNTNTF: signalR no disponible — no van a llegar notificaciones');
+            setStatus('error');
+            return;
+        }
+
         hubConnection = new signalR.HubConnectionBuilder()
             .withUrl(HUB_URL, { withCredentials: true })
             .withAutomaticReconnect({
