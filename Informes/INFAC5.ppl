@@ -1,0 +1,310 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+    Fecha1:    'Fecha Liq:' ;1;;;;;NoVacio(Dialogo.Fecha1);'Ingrese una fecha';NO;FSys;
+    Vehiculo1: 'Vehiculo:'  ;2;;;;;NOVACIO(Dialogo.Vehiculo1);;;VAR('VEHICULODE')
+    Mercado1:  'Mercado'    ;;;;;;;;
+    Cliente1:  'Cliente'    ;;1;;;;;;;;
+    Especie1:  'Especie'    ;;1;;;;;;;
+    Mercado2 :'Mercado Neg.';;;;;;;;;;;;;;" EsNegociacion='SI' "
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+CrearFont(1, "Arial,11,BU")
+CrearFont(2, "Arial,9,B"  )
+CrearFont(3, "Arial,8,"   )
+CrearFont(4, "Arial,10,B")
+
+SetFilaActual(1)
+
+**-- Encabezado --**
+ACT(a:FAC, 'Pendientes de liquidacion - Rueda Garantizada')
+SetFont(a:1..a:FAC, 1)
+
+ACT(a:FAC+2, 'Fecha Liq.: '~Dialogo.Fecha1)
+
+If NoVacio(Dialogo.Mercado1)
+   ACT(a:FAC+3, 'Mercado: '~SQL("Select descripcion from "~DBO~".Mercados where codigo = '"~Dialogo.Mercado1~"'"))
+Else
+   ACT(a:FAC+3, 'Mercado: Todos')
+Endif
+If NoVacio(Dialogo.Cliente1)
+   ACT(a:FAC+4, 'Cliente: '~SQL("Select RazonSocial from "~DBO~".Clientes where codigo = '"~Dialogo.Cliente1~"'"))
+Else
+   ACT(a:FAC+4, 'Cliente: Todos')
+Endif
+If NoVacio(Dialogo.Especie1)
+   ACT(a:FAC+5, 'Especie: '~SQL("Select Nombre from "~DBO~".Especies where codigo = '"~Dialogo.Especie1~"'"))
+Else
+   ACT(a:FAC+5, 'Especie: Todos')
+Endif
+
+If NoVacio(Dialogo.Mercado2)
+   ACT(a:FAC+6, 'Mercado Negociacion: '~SQL("Select descripcion from "~DBO~".Mercados where codigo = '"~Dialogo.Mercado2~"'"))
+Else
+   ACT(a:FAC+6, 'Mercado Negociacion: Todos')
+Endif
+SetFont(a:FAC+2..b:FAC+6, 2) 
+SetFilaActual(FAC+6)
+
+
+act(ba1,'Primer corte')
+act(ba2,'Segundo corte')
+act(ba3,'Fila Subtotales anterior')
+act(ba4,'Especie anterior')
+act(ba5,'Valor Teorico anterior')
+aco(53,20)
+
+SQL.ADD("SELECT M.*, E.Jerarquia, E.Nombre EsNombre, E.CodMAEContado, E.Codigo4,E.VTeorico, E.CodNumCajaValores,   E.CodAlfCajaValores CodBYMA, ")
+SQL.ADD("       O.CB4 CYO, O.Mercado4 MercaNeg, O.TipoOp, O.Cliente1 CliOpe, O.Vehiculo1 VehOpe, O.NrBoleto, O.FechaOp, O.Convenio, O.FechaVto, O.FechaPago, ")
+SQL.ADD("       CASE WHEN O.CB4=1 THEN M.Cliente ELSE M.EnteCustodia END AS CarteraCyO, O.ContraEspecie, O.AfectaLS, ")
+SQL.ADD("       O.Precio1, O.TotalBrutoCli1, O.TotalNetoCli1, O.TotalIntereses, ")
+SQL.ADD("       ME.Descripcion DesMer, C.RazonSocial, C.NrMae, C.NrBYMA, E1.InteresesC, M.Especie as EspeMov ")
+SQL.ADD(" from  "~DBO~".MOVPENDIENTES M,"~DBO~".ESPECIES E,"~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B, ")
+SQL.ADD("       "~DBO~".MERCADOS ME, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E1   ")
+SQL.ADD(" where M.NrOperacion = B.NrOperacion ")
+SQL.ADD("  and  M.Especie     = E.Codigo      ")
+SQL.ADD("  and  O.Especie     = E1.Codigo      ")
+SQL.ADD("  and  M.NrOperacion = O.NrOperacion ")
+SQL.ADD("  and  M.Mercado = ME.Codigo         ")
+SQL.ADD("  and  M.Cliente  = C.Codigo         ")
+SQL.ADD("  and  M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and  M.FechaMov  <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("  and  B.NrBit       = 10            ")
+SQL.ADD("  and  B.Valor       = '1'           ")
+SQL.ADD("  and  O.TipoOp in('TIC','TIV') and (O.CB4=1 or O.Cliente1=O.Vehiculo1 )  ")
+If NoVacio(Dialogo.Mercado1)
+   SQL.ADD("  and  M.Mercado = '"~Dialogo.Mercado1~"'         ") 
+Endif
+SQL.ADD("  and  M.Mercado Not IN ("~Pipe2Comillas(VAR('MERCAACMC'))~") ")
+If NoVacio(Dialogo.Mercado2)
+   SQL.ADD("  and  O.Mercado4    = '"~Dialogo.Mercado2~"' ")
+endif
+If NoVacio(Dialogo.Cliente1)   
+   SQL.ADD("  and M.Cliente = '"~Dialogo.Cliente1~"' ")
+Endif
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD("  and M.Especie = '"~Dialogo.Especie1~"' ")
+Endif
+SQL.ADD(" order by O.Mercado4, M.MercADO, CarteraCyO, M.Especie, M.Cuenta, O.CB4, O.Contraespecie,O.AfectaLS, m.NrGrupo, M.NrOperacion, M.NrMov ")
+watch(SQL.BATCH())
+
+Recorrer SQL
+
+     IF Not EqStr(Val(bb:1),fbn('MercaNeg'))
+        IFA
+        IFA
+        ACT(a:FAC, 'Mercado de Negociacion: '~FBN['MercaNeg'])
+        AgregarMarco(a:FAC..o:FAC,2,0,EXE('COLOR1'))
+        SetFont(a:FAC, 4)
+        IFA
+     ENDIF
+     IF Not EqStr(Val(bb:2),fbn('MercaNeg')~fbn('Mercado')~fbn('CarteraCyO')~fbn('Especie')~fbn('Cuenta')~FSTR(fbn('CYO'),1,0)~fbn('ContraEspecie')~fbn('AfectaLS')~FSTR(fbn('NrGrupo'),3,0))
+        IFA
+        ACT(a:FAC, 'Mercado: '~FBN['Mercado']~' - '~FBN['DesMer']~' - Especie: '~fbn('Especie')~' - '~FBN['EsNombre']~' - Cuenta: '~fbn('Cuenta'))
+        SetFont(a:FAC, 2)
+        IFA
+        ACT(a:FAC, 'Nro.Oper.' )
+        ACT(b:FAC, 'Tipo Op.'  )
+        ACT(c:FAC, 'Boleto'    )
+        ACT(d:FAC, 'Cliente'   )
+        ACT(e:FAC, 'Fecha Op.' )
+        ACT(f:FAC, 'Fecha Vto.')
+        ACT(g:FAC, 'Especie'   )
+        ACT(h:FAC, 'Cod CV'    )
+        ACT(i:fac, 'Cod Mercado')
+        ACT(j:FAC, 'Cantidad'  )
+        ACT(k:FAC, 'Cont.Esp.' )
+        ACT(l:FAC, 'Precio'    )
+        ACT(m:FAC, 'Monto'     )
+        ACT(n:FAC, 'Int. Corr.')
+        ACT(o:FAC, 'Neto'      )
+        AgregarMarco(a:FAC..o:FAC, 2,0,Exe('COLOR6'))
+        AlinearCeldas(a:FAC..d:FAC, 'I')
+        AlinearCeldas(h:FAC..h:FAC, 'D')
+        AlinearCeldas(e:FAC..g:FAC, 'C')
+        AlinearCeldas(k:FAC..k:FAC, 'C')
+        AlinearCeldas(l:FAC..o:FAC, 'D')
+        SetFont(a:FAC..o:FAC,2)
+        IFA
+
+        if NoVacio(val(bb:2)) 
+           If DesciendedeEspecie(Val(bb4), 'MONEDA')
+              ACT(g:Val(bb3),'Total a Pagar '~Val(bb4)~': ')
+              ACN(j:Val(bb3), Abs(Val(tp1)))
+              ACT(l:Val(bb3),'Total a Cobrar '~Val(bb4)~': ')
+              ACN(n:Val(bb3), Abs(Val(tc1)))
+              ACN(d:val(bb3), Val(n:Val(bb3))-Val(j:Val(bb3)))
+           Else
+              ACT(g:Val(bb3),'Total a Entregar '~Val(bb4)~': ')
+              ACN(j:Val(bb3), Abs(Val(tp2)))
+              ACN(k:val(bb3), val(j:val(bb3)) * val(bb5))
+              ACT(l:Val(bb3),'Total a Recibir '~Val(bb4)~': ')
+              ACN(n:Val(bb3), Abs(Val(tc2)))
+              ACN(o:val(bb3), val(n:val(bb3)) * val(bb5))
+              ACN(d:val(bb3), Val(n:Val(bb3))-Val(j:Val(bb3)))
+              ACN(e:val(bb3), Val(d:Val(bb3)) * val(bb5))
+           Endif
+           ACN(tc1, 0)
+           ACN(tp1, 0)
+           ACN(tc2, 0)
+           ACN(tp2, 0)
+           SetFont(a:val(bb3)..o:val(bb3),2)
+           FormatoCeldas(a:val(bb3)..p:val(bb3),EXE('F2'))
+       Endif
+        
+       ACT(a:FAC,'Neto '~FBN['Especie']~  IIF(Eqstr(FBN['MercaNeg'], VAR('AMBMAE')),  ' (MAE: '~FBN['CodMAEContado'],IIF(Eqstr(FBN['MercaNeg'], VAR('AMBBYMA')),  ' (BYMA: '~FBN['CodBYMA'],' ('~FBN['MercaNeg']))~' - Cod.Interno: '~fbn('Codigo4')~') ')     
+       AgregarMarco(a:FAC..o:FAC,2,0,EXE('COLOR1'))
+       SetFont(a:FAC..o:FAC,2)
+       * Fila de Totales
+       acn(bb3,FAC)
+       ACT(bb4, FBN['Especie'])
+       ACT(bb5, FBN['VTeorico'])
+       IFA
+     endif     
+     **-- Linea de Detalle  
+     ACT(a:FAC, FBN['NrOperacion']  )
+     ACLO(a:FAC, FBN['NrOperacion'] )
+     ACT(b:FAC, FBN['TipoOp']       )
+     ACT(c:FAC, FBN['NrBoleto']     )
+     ACT(d:FAC, FBN['CliOpe']~' - '~FBN['RazonSocial'] ~IIF(Eqstr(FBN['MercaNeg'], VAR('AMBMAE')),' Nro.MAE '~FBN['NrMAE'],IIF(Eqstr(FBN['MercaNeg'], VAR('AMBBYMA')),' Nro.BYMA '~FBN['NrBYMA'],FBN['MercaNeg'])))
+     ACD(e:FAC, FBN['FechaOp']      )
+     if Incluido(FBN['TipoOp'],'TIC|TIV|TIFC|TIFV|TCOPRI')
+        if FBN['Convenio']=1
+           * Operaciones Diferidas
+            ACD(f:FAC, FBN['FechaPago'])
+        else
+            ACD(f:FAC, FBN['FechaVto'])
+        endif
+     else
+        ACD(f:FAC, FBN['FechaVto'])
+     endif
+     ACT(g:FAC, FBN['Especie']      )
+     *Anterior:
+     *ACT(h:fac, FBN['CodMAEContado']) 
+     ACT(h:fac, IIF(Eqstr(FBN['MercaNeg'], VAR('AMBMAE')), FBN['CodMAEContado'], IIF(Eqstr(FBN['MercaNeg'], VAR('AMBBYMA')), FBN['CodBYMA'], '')))
+     ACT(i:fac, FBN['CodNumCajaValores'])
+     * Ex cantmov
+     *ACN(j:FAC, FBN['Cantidad']      )
+     ACT(k:FAC, FBN['ContraEspecie'])
+     ACN(l:FAC, FBN['Precio1']      )
+     
+     if DesciendeDeEspecie(FBN['EspeMov'],'TITULO') o DesciendeDeEspecie(Val(g:FAC),'CUPON')
+        ACN(j:FAC, -FBN['Cantidad']      )
+     else   
+        ACN(m:FAC, -FBN['Cantidad']      )
+     endif   
+        
+     If FBN['NrMov']<>1000
+        If Incluido(FBN['TipoOp'], 'TIC|TIFC') o [Incluido(FBN['TipoOp'], 'TCOPRI') y EQSTR(fbn('CliOpe'),Dialogo.Vehiculo1)]
+        *ACN(m:FAC, FBN['TotalBrutoCli1'])
+
+           IF EqStr(FBN['InteresesC'],'CLE')
+              ACN(n:FAC, FBN['TotalIntereses'])
+           EndIf
+           
+           If DesciendedeEspecie(Val(bb4), 'MONEDA')
+              ACN(o:FAC, -FBN['TotalNetoCli1'])
+           Else
+              ACN(o:FAC, FBN['TotalNetoCli1'])
+           Endif
+           
+        Else
+        *ACN(m:FAC, -FBN['TotalBrutoCli1'])
+
+           IF EqStr(FBN['InteresesC'],'CLE')
+              ACN(n:FAC, -FBN['TotalIntereses'])
+           EndIf
+
+           If DesciendedeEspecie(Val(bb4), 'MONEDA')
+              ACN(o:FAC, FBN['TotalNetoCli1'])
+           Else
+              ACN(o:FAC, -FBN['TotalNetoCli1'])
+           Endif
+        EndIf
+     Else 
+        ACN(o:FAC, FBN['Cantidad'])
+     EndIf
+
+     *-                 
+     If DesciendedeEspecie(Val(bb4), 'MONEDA')
+        * Comisiones y Derechos
+        If FBN['NrGrupo']=15
+           SCN(tc1, FBN['Cantidad'])
+        else        
+           If FBN['NrGrupo']=16
+              SCN(tp1, FBN['Cantidad'])
+           else        
+              If Incluido(FBN['TipoOp'], 'TIC|TIFC') o [Incluido(FBN['TipoOp'], 'TCOPRI') y EQSTR(fbn('CliOpe'),Dialogo.Vehiculo1)]
+                 SCN(tp1, FBN['Cantidad'])
+              Else
+                 SCN(tc1, FBN['Cantidad'])
+              Endif
+           Endif    
+        Endif   
+     Else
+        If Incluido(FBN['TipoOp'], 'TIC|TIFC') o [Incluido(FBN['TipoOp'], 'TCOPRI') y EQSTR(fbn('CliOpe'),Dialogo.Vehiculo1)]
+           SCN(tc2, FBN['Cantidad'])
+        Else
+           SCN(tp2, FBN['Cantidad'])
+        Endif
+     Endif
+     SetFont(a:FAC..s:FAC, 3)
+     AlinearCeldas(e:FAC..g:FAC, 'C')
+     AlinearCeldas(k:FAC..k:FAC, 'C')                
+     FormatoCeldas(j:fac..o:fac, EXE('F2'))
+     FormatoCeldas(l:fac..l:fac, EXE('F6'))
+        
+     ACT(bb:1,fbn('MercaNeg'))
+     ACT(bb:2,fbn('MercaNeg')~fbn('Mercado')~fbn('CarteraCyO')~fbn('Especie')~fbn('Cuenta')~FSTR(fbn('CYO'),1,0)~fbn('ContraEspecie')~fbn('AfectaLS')~FSTR(fbn('NrGrupo'),3,0))
+
+Proximo
+If DesciendedeEspecie(Val(bb4), 'MONEDA')
+   ACT(g:Val(bb3),'Total a Pagar '~Val(bb4)~': ')
+   ACN(j:Val(bb3), Abs(Val(tp1)))
+   ACT(l:Val(bb3),'Total a Cobrar '~Val(bb4)~': ')
+   ACN(n:Val(bb3), Abs(Val(tc1)))
+   ACN(d:val(bb3), Val(n:Val(bb3))-Val(j:Val(bb3)))
+Else
+   ACT(g:Val(bb3),'Total a Entregar '~Val(bb4)~': ')
+   ACN(j:Val(bb3), Abs(Val(tp2)))
+   ACN(k:val(bb3), val(j:val(bb3)) * val(bb5))
+   ACT(l:Val(bb3),'Total a Recibir '~Val(bb4)~': ')
+   ACN(n:Val(bb3), Abs(Val(tc2)))
+   ACN(o:val(bb3), val(n:val(bb3)) * val(bb5))
+   ACN(d:val(bb3), Val(n:Val(bb3))-Val(j:Val(bb3)))
+   ACN(e:val(bb3), Val(d:Val(bb3)) * val(bb5))
+Endif
+SetFont(a:val(bb3)..o:val(bb3),2)
+FormatoCeldas(a:val(bb3)..p:val(bb3),EXE('F2'))
+
+ifa
+ifa
+*
+
+Impresion(1,2)
+SetPrintFit(3,70)
+ACT(a:fac, 'Fin del Informe.')
+SetFont(a:fac..a:fac,2)
+LimitesVision(p:fac)
+RangoTitulo(a:1..p:FAC, 6)
+
+*-- Ajuste de celdas
+ACO(1,7)
+ACO(2,5)
+ACO(3,6)
+ACO(4,31)
+ACO(5,8)
+ACO(6,8)
+ACO(7,5)
+ACO(8,6)
+ACO(9,9)
+ACO(10,10)
+ACO(11,4)
+ACO(12,7)
+ACO(13,10)
+ACO(14,10)
+ACO(15,10)
+ACO(16,1)

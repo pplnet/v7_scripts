@@ -1,0 +1,575 @@
+﻿*********************** Si el mensaje fue un Baja de operacion (Baja = 9) **********************
+* Mensaje que dio origen a la respuesta fue :                                                  *
+*      0302 : Baja para la venta hoy              0402 : Baja para la compra hoy               *
+*      0304 : Baja para la venta ayer             0404 : Baja para la compra ayer              *
+* con el primer digito de la secuencia = 9 Operacion - 7 OpMinorista                           *
+************************************************************************************************
+Message('----- Codigo Mensaje Recibido : Baja '~Copy(Val(A:FAC),32,4))
+BorrarCeldas(e:1..g:3)
+if EqStr(Copy(Val(A:FAC),47,1),'5')
+  * Informacion Baja Correcta y confirmada desde op.
+  ACT(E:1,'SI')
+  ACT(E:2,'OK')
+else
+  if EqStr(Copy(Val(A:FAC),47,1),'6')
+    * Informacion Baja Correcta pero NO Confirmada por Agente
+    ACT(E:1,'NO')
+    ACT(E:2,'REC')
+  else
+    if EqStr(Copy(Val(A:FAC),47,1),'7')
+      * Informacion Baja Correcta pero NO Confirmada en Tiempo
+      ACT(E:1,'NO')
+      ACT(E:2,'VEN')
+    else
+      if EqStr(Copy(Val(A:FAC),47,1),'N')
+        * Informacion Incorrecta
+        ACT(E:1,'NO')
+        ACT(E:2,'ERR')
+      endif
+    endif
+  endif
+endif
+
+if Vacio(Val(E:1))
+  Message('Error Codido Respuesta Alta RECMAE02')
+  if Eqstr(Var('LOGERRMAE'),'SI')
+    AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+    EscribirASCII(Pad('Error Cod.Res.Baja RECMAE02',30)~'-'~Val(A:FAC))
+    CerrarASCII
+  endif
+else
+  ACN(v4, 0)
+  if EqStr(Copy(Val(A:FAC),42,1),'9')
+    * Baja Operacion
+    SQL.ADD("Select O.NrOperacion, O.PaseCB, O.NrOperacion3, O.OperacionRef, O.TipoOp, O.Cliente1, OB.NrBit ")
+    SQL.ADD("  from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB ")
+    SQL.ADD(" Where O.NrOperacion Like '"~'T___'~Copy(Val(A:FAC),43,4)~"' ")
+    SQL.ADD("   and O.NrOperacion = OB.NrOperacion ")
+    SQL.ADD("   and (OB.NrBit = 62 ")
+    if EqStr(Copy(Val(A:FAC),5,4),Var('MERSIOP')~Var('AGESIOP'))
+      SQL.ADD(" or OB.NrBit = 61 ")
+    endif
+    SQL.ADD(" ) ")
+    SQL.ADD("   and OB.Valor = '1' ")
+    Recorrer SQL
+      DFA
+      SCN(v4, 1)
+      if Val(v4)>1
+        Message('Mas de una Operacion RECMAE02')
+        if Eqstr(Var('LOGERRMAE'),'SI')
+          AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+          EscribirASCII(Pad('Mas de una Operacion RECMAE02',30)~'-'~Val(A:FAC))
+          CerrarASCII
+        endif
+        break
+      endif
+
+      ACT(f:1, fbn('Cliente1'))
+      ACT(f:2, Pad0(BuscarCampo('CLIENTES','NrMAE','Codigo',fbn('Cliente1')),3))
+      if Vacio(Val(f:2)) o EqStr(Val(f:2),'000')
+        * Operacion con tercero
+        ACN(g:1, 0)
+      else
+        * Operacion con Agente
+        ACN(g:1, 1)
+      endif
+      if Incluido(FBN['TipoOp'],'TIC|TIFC')
+        ACN(g:2, 0)
+      else
+        ACN(g:2, 1)
+      endif
+      if Val(g:1)=0 o Val(g:2)=0
+        * Terceros  o Compra
+        ACN(v5, 0)
+        SQL.ADD("Select * from "~DBO~".MENSAJESMAE ")
+        SQL.ADD(" where Codigo    = 'CONBAJ' ")
+        SQL.ADD("   and Secuencia = '"~Copy(Val(A:FAC),23,5)~"' ")
+        SQL.ADD("   and FechaMAE  = '"~Copy(Val(A:FAC),36,6)~"' ")
+        SQL.ADD("   and Estado    = 'PEN' ")
+        Recorrer SQL
+          DFA
+          ACT(ab:1, fbn('Codigo'))
+          ACT(ab:2, fbn('FechaMAE'))
+          ACT(ab:3, fbn('HoraMAE'))
+          ACT(ab:4, fbn('Secuencia'))
+          ACT(ab:5, fbn('CodigoMAE'))
+          ACT(ab:6, fbn('Estado'))
+          SCN(v5,1)
+        proximo
+        if Val(v5)=1
+          SQL.ADD("Update "~DBO~".MENSAJESMAE ")
+          SQL.ADD("   Set Estado    = '"~Val(E:2)~"' ")
+          SQL.ADD(" Where Codigo    = '"~Val(ab:1)~"' ")
+          SQL.ADD("   and FechaMAE  = '"~Val(ab:2)~"' ")
+          SQL.ADD("   and HoraMAE   = '"~Val(ab:3)~"' ")
+          SQL.ADD("   and Secuencia = '"~Val(ab:4)~"' ")
+          SQL.ADD("   and CodigoMAE = '"~Val(ab:5)~"' ")
+          SQL.ADD("   and Estado    = 'PEN' ")
+          SQL.NEW
+        else
+          if Eqstr(Var('LOGERRMAE'),'SI')
+            if Val(v5)=0
+              if Not Incluido(Val(E:2),'ERR|OK') o SI
+                *** Error 7020/0302
+                AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+                EscribirASCII(Pad('7020|0302 No Existe PEN (1)',30)~'-'~Val(A:FAC))
+                CerrarASCII
+              endif
+            else
+              *** Error 7020/0302
+              AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+              EscribirASCII(Pad('7020|0302 Multi.Reg. PEN (1)',30)~'-'~Val(A:FAC))
+              CerrarASCII
+            endif
+          endif
+        endif
+        ACN(v7, 0)
+        SQL.ADD("Select * from "~DBO~".MENSAJESMAE ")
+        SQL.ADD(" where Codigo    = 'CONBAJ' ")
+        SQL.ADD("   and Secuencia = '"~Copy(Val(A:FAC),23,5)~"' ")
+        SQL.ADD("   and FechaMAE  = '"~Copy(Val(A:FAC),36,6)~"' ")
+        SQL.ADD("   and Estado    = 'CON' ")
+        Recorrer SQL
+          DFA
+          ACT(ab:1, fbn('Codigo'))
+          ACT(ab:2, fbn('FechaMAE'))
+          ACT(ab:3, fbn('HoraMAE'))
+          ACT(ab:4, fbn('Secuencia'))
+          ACT(ab:5, fbn('CodigoMAE'))
+          ACT(ab:6, fbn('Estado'))
+          SCN(v7,1)
+        proximo
+        if Val(v7)=1
+          SQL.ADD("Update "~DBO~".MENSAJESMAE ")
+          SQL.ADD("   Set Estado    = '"~Val(E:2)~"' ")
+          SQL.ADD(" Where Codigo    = '"~Val(ab:1)~"' ")
+          SQL.ADD("   and FechaMAE  = '"~Val(ab:2)~"' ")
+          SQL.ADD("   and HoraMAE   = '"~Val(ab:3)~"' ")
+          SQL.ADD("   and Secuencia = '"~Val(ab:4)~"' ")
+          SQL.ADD("   and CodigoMAE = '"~Val(ab:5)~"' ")
+          SQL.ADD("   and Estado    = 'CON' ")
+          SQL.NEW
+        else
+          if Eqstr(Var('LOGERRMAE'),'SI')
+            if Val(v7)=0
+              if Not Incluido(Val(E:2),'ERR|OK') o SI
+                *** Error 7020/0302
+                AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+                EscribirASCII(Pad('7020|0302 No Existe CON (1)',30)~'-'~Val(A:FAC))
+                CerrarASCII
+              endif
+            else
+              *** Error 7020/0302
+              AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+              EscribirASCII(Pad('7020|0302 Multi.Reg. CON (1)',30)~'-'~Val(A:FAC))
+              CerrarASCII
+            endif
+          endif
+        endif
+      endif
+
+      if EqStr(Copy(Val(A:FAC),32,2),'04')
+        ACT(E:3, 'BACO%')
+      else
+        ACT(E:3, 'BAVT%')
+      endif
+      ACN(v6, 0)
+      SQL.ADD("Select * from "~DBO~".MENSAJESMAE ")
+      SQL.ADD(" where Codigo    like '"~Val(E:3)~"' ")
+      SQL.ADD("   and Secuencia = '"~Copy(Val(A:FAC),42,5)~"' ")
+      SQL.ADD("   and FechaMAE  = '"~Copy(Val(A:FAC),36,6)~"' ")
+      SQL.ADD("   and Estado    = 'INF' ")
+      Recorrer SQL
+        DFA
+        ACT(ac:1, fbn('Codigo'))
+        ACT(ac:2, fbn('FechaMAE'))
+        ACT(ac:3, fbn('HoraMAE'))
+        ACT(ac:4, fbn('Secuencia'))
+        ACT(ac:5, fbn('CodigoMAE'))
+        ACT(ac:6, fbn('Estado'))
+        SCN(v6,1)
+      proximo
+      if Val(v6)=1
+        SQL.ADD("Update "~DBO~".MENSAJESMAE ")
+        SQL.ADD("   Set Estado    = '"~Val(E:2)~"' ")
+        SQL.ADD(" Where Codigo    = '"~Val(ac:1)~"' ")
+        SQL.ADD("   and FechaMAE  = '"~Val(ac:2)~"' ")
+        SQL.ADD("   and HoraMAE   = '"~Val(ac:3)~"' ")
+        SQL.ADD("   and Secuencia = '"~Val(ac:4)~"' ")
+        SQL.ADD("   and CodigoMAE = '"~Val(ac:5)~"' ")
+        SQL.ADD("   and Estado    = 'INF' ")
+        SQL.NEW
+      else
+        if Eqstr(Var('LOGERRMAE'),'SI')
+          if Val(v6)=0
+            *** Error 7020/0302
+            AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+            EscribirASCII(Pad('7020|0302 No Existe INF (2)',30)~'-'~Val(A:FAC))
+            CerrarASCII
+          else
+            *** Error 7020/0302
+            AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+            EscribirASCII(Pad('7020|0302 Multi.Reg. INF (2)',30)~'-'~Val(A:FAC))
+            CerrarASCII
+          endif
+        endif
+      endif
+
+      if EqStr(Val(E:1),'NO')
+        Message('---------- '~FBN['NrOperacion']~' Error en Baja, va a Compliance')
+        * Error en Baja operacion, actualiza Operaciones
+        SQL.ADD("Update "~DBO~".OPERACIONES ")
+        SQL.ADD("   Set CodErrorMAE = '"~Copy(Val(A:FAC),47,1)~"', ")
+        SQL.ADD("       ObsErrorMAE = '"~Copy(Val(A:FAC),48,15)~"' ")
+        SQL.ADD(" Where NrOperacion = '"~FBN['NrOperacion']~"' ")
+        SQL.NEW
+        SQL.ADD("Insert into "~DBO~".EXCEPCIONES ( ")
+        SQL.ADD(" NrOperacion, Fecha, Tipo, Descripcion ")
+        SQL.ADD(" ) Values ( ")
+        SQL.ADD(" '"~FBN['NrOperacion']~"', ")
+        SQL.ADD(" "~SQLAhora~", ")
+        SQL.ADD(" 'ERRORBAJA', ")
+        SQL.ADD(" '"~'Baja-'~Copy(Val(A:FAC),48,55)~"' ")
+        SQL.ADD(" ) ")
+        SQL.NEW
+        SQL.EXEC
+        EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=1, Radio2=1, Entero1=fbn('NrBit'), Entero2=69)
+      else
+        Message('---------- '~FBN['NrOperacion']~' Ok Baja, va a Eliminacion Automatica')
+        * Ok baja operacion, actualiza Operaciones
+        BorrarCeldas(K9..K12)
+        ACT(K11,Copy(Val(A:FAC),15,2)~'/'~Copy(Val(A:FAC),13,2)~'/'~Copy(Val(A:FAC),11,2)~' '~Copy(Val(A:FAC),17,2)~':'~Copy(Val(A:FAC),19,2)~':'~Copy(Val(A:FAC),21,2))  
+        ACT(K12,SQLFechaStr(Val(K11),Exe('FORFECHOR')))
+        SQL.ADD("Update "~DBO~".OPERACIONES ")
+        SQL.ADD("   Set FechaBajaMAE = "~Val(K12)~", ")
+        SQL.ADD("       NroBajaMAE   = '"~Copy(Val(A:FAC),23,5)~"' ")
+        SQL.ADD(" Where NrOperacion  = '"~FBN['NrOperacion']~"' ")
+        SQL.NEW
+        SQL.EXEC
+        ****************************************
+        ** Cambio Solicitado por Malisa 21/10/05
+        ****************************************
+        EjecutarEvento('DESAFE', NrOperacion1=fbn['NrOperacion'])
+* FJL 06/09/18 - No existe  Intancia 12
+*        EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=1, Radio2=1, Entero1=fbn('NrBit'), Entero2=12)
+        EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=1, Radio2=1, Entero1=fbn('NrBit'), Entero2=30)
+      endif
+      if EqStr(FBN['PaseCB'],'1')
+** FJL 17/03/20 - En STD el pase es OperacionRef
+*        ACT(w1, BuscarCampo('OPERACIONES','NroBajaMAE','NrOperacion',FBN['NrOperacion3']))
+        ACT(w1, BuscarCampo('OPERACIONES','NroBajaMAE','NrOperacion',FBN['OperacionRef']))
+        if EqStr(Val(E:1),'SI')
+          ACT(w2,'OK  ')
+        else
+          ACT(w2,'ERRO')
+        endif
+        if Incluido(FBN['TipoOp'],'TIC|TIV')
+          ACT(w3, Pad(Val(w2),4)~Copy(Val(w1),5,4))
+        else
+          ACT(w3, Copy(Val(w1),1,4)~Pad(Val(w2),4))
+        endif
+        SQL.ADD("Update "~DBO~".OPERACIONES ")
+        SQL.ADD("   Set NroBajaMAE  = '"~Val(w3)~"' ")
+** FJL 17/03/20 - En STD el pase es OperacionRef
+*        SQL.ADD(" Where NrOperacion = '"~FBN['NrOperacion3']~"' ")
+        SQL.ADD(" Where NrOperacion = '"~FBN['OperacionRef']~"' ")
+        SQL.NEW
+        SQL.EXEC
+      endif
+    Proximo
+    if Val(v4)=0
+      if EqStr(Copy(Val(A:FAC),42,5),Copy(Val(A:FAC),54,5)) y EqStr(Copy(Val(A:FAC),47,1),'5')
+        Message('----- Mensaje de Baja Operacion Oferta MAE1')
+        ACT(t:1, 'BAJREL')
+        ACT(t:2, Copy(Val(a:FAC),11,6))
+        ACT(t:3, Copy(Val(a:FAC),17,6))
+        ACT(t:4, Copy(Val(a:FAC),23,5))
+        ACT(t:5, Copy(Val(a:FAC),28,4))
+        ACT(t:6, 'ING')
+        ACT(t:7, Copy(Val(a:FAC),1,250))
+        if Longitud(Val(a:FAC))>250
+          ACT(t:8, Copy(Val(a:FAC),251,250))
+        endif
+        if Longitud(Val(a:FAC))>500
+          ACT(t:9, Copy(Val(a:FAC),501,250))
+        endif
+        (.'GRAMENMAE'.)
+      else
+        Message('Operacion NO encontrada RECMAE02')
+        if Eqstr(Var('LOGERRMAE'),'SI')
+          AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+          EscribirASCII(Pad('Op. NO encontrada RECMAE02',30)~'-'~Val(A:FAC))
+          CerrarASCII
+        endif
+      endif
+    endif
+********************
+** Fin Operaciones
+********************      
+  else
+    if EqStr(Copy(Val(A:FAC),42,1),'7') y NO
+********************
+** OpMinorista
+********************      
+      * Baja Operacion Minorista
+      SQL.ADD("Select O.NrOperacion, O.PaseCB, O.OperacionRef, O.TipoOp, ")
+      SQL.ADD("       OB.NrBit, O.ConceptoBCRA ")
+      SQL.ADD("  from "~DBO~".OPMINORISTAS O, "~DBO~".OPERACIONESBITS OB ")
+      SQL.ADD(" Where O.NrOperacion Like '"~'MT__'~Copy(Val(A:FAC),43,4)~"' ")
+      SQL.ADD("   and O.NrOperacion = OB.NrOperacion ")
+      SQL.ADD("   and (OB.NrBit = 62 ")
+      if EqStr(Copy(Val(A:FAC),5,4),Var('MERSIOP')~Var('AGESIOP'))
+        SQL.ADD(" or OB.NrBit = 61 ")
+      endif
+      SQL.ADD(" ) ")
+      SQL.ADD("   and OB.Valor = '1' ")
+      Recorrer SQL
+        DFA
+        SCN(v4, 1)
+        if Val(v4)>1
+          Message('Mas de una Operacion RECMAE02')
+          if Eqstr(Var('LOGERRMAE'),'SI')
+            AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+            EscribirASCII(Pad('Mas de 1 OpMinorista RECMAE02',30)~'-'~Val(A:FAC))
+            CerrarASCII
+          endif
+          break
+        endif
+
+        ACN(v5, 0)
+        SQL.ADD("Select * from "~DBO~".MENSAJESMAE ")
+        SQL.ADD(" where Codigo    = 'CONBAJ' ")
+        SQL.ADD("   and Secuencia = '"~Copy(Val(A:FAC),23,5)~"' ")
+        SQL.ADD("   and FechaMAE  = '"~Copy(Val(A:FAC),36,6)~"' ")
+        SQL.ADD("   and Estado    = 'PEN' ")
+        Recorrer SQL
+          DFA
+          ACT(ab:1, fbn('Codigo'))
+          ACT(ab:2, fbn('FechaMAE'))
+          ACT(ab:3, fbn('HoraMAE'))
+          ACT(ab:4, fbn('Secuencia'))
+          ACT(ab:5, fbn('CodigoMAE'))
+          ACT(ab:6, fbn('Estado'))
+          SCN(v5,1)
+        proximo
+        if Val(v5)=1
+          SQL.ADD("Update "~DBO~".MENSAJESMAE ")
+          SQL.ADD("   Set Estado    = '"~Val(E:2)~"' ")
+          SQL.ADD(" Where Codigo    = '"~Val(ab:1)~"' ")
+          SQL.ADD("   and FechaMAE  = '"~Val(ab:2)~"' ")
+          SQL.ADD("   and HoraMAE   = '"~Val(ab:3)~"' ")
+          SQL.ADD("   and Secuencia = '"~Val(ab:4)~"' ")
+          SQL.ADD("   and CodigoMAE = '"~Val(ab:5)~"' ")
+          SQL.ADD("   and Estado    = 'PEN' ")
+          SQL.NEW
+        else
+          if Eqstr(Var('LOGERRMAE'),'SI')
+            if Val(v5)=0
+              if Not Incluido(Val(E:2),'ERR|OK') o SI
+                *** Error 7020/0500
+                AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+                EscribirASCII(Pad('7020|0302 No Existe PEN (3)',30)~'-'~Val(A:FAC))
+                CerrarASCII
+              endif
+            else
+              *** Error 7020/0500
+              AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+              EscribirASCII(Pad('7020|0302 Multi.Reg. PEN (3)',30)~'-'~Val(A:FAC))
+              CerrarASCII
+            endif
+          endif
+        endif
+        ACN(v7, 0)
+        SQL.ADD("Select * from "~DBO~".MENSAJESMAE ")
+        SQL.ADD(" where Codigo    = 'CONBAJ' ")
+        SQL.ADD("   and Secuencia = '"~Copy(Val(A:FAC),23,5)~"' ")
+        SQL.ADD("   and FechaMAE  = '"~Copy(Val(A:FAC),36,6)~"' ")
+        SQL.ADD("   and Estado    = 'CON' ")
+        Recorrer SQL
+          DFA
+          ACT(ab:1, fbn('Codigo'))
+          ACT(ab:2, fbn('FechaMAE'))
+          ACT(ab:3, fbn('HoraMAE'))
+          ACT(ab:4, fbn('Secuencia'))
+          ACT(ab:5, fbn('CodigoMAE'))
+          ACT(ab:6, fbn('Estado'))
+          SCN(v7,1)
+        proximo
+        if Val(v7)=1
+          SQL.ADD("Update "~DBO~".MENSAJESMAE ")
+          SQL.ADD("   Set Estado    = '"~Val(E:2)~"' ")
+          SQL.ADD(" Where Codigo    = '"~Val(ab:1)~"' ")
+          SQL.ADD("   and FechaMAE  = '"~Val(ab:2)~"' ")
+          SQL.ADD("   and HoraMAE   = '"~Val(ab:3)~"' ")
+          SQL.ADD("   and Secuencia = '"~Val(ab:4)~"' ")
+          SQL.ADD("   and CodigoMAE = '"~Val(ab:5)~"' ")
+          SQL.ADD("   and Estado    = 'CON' ")
+          SQL.NEW
+        else
+          if Eqstr(Var('LOGERRMAE'),'SI')
+            if Val(v7)=0
+              if Not Incluido(Val(E:2),'ERR|OK') o SI
+                *** Error 7020/0302
+                AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+                EscribirASCII(Pad('7020|0302 No Existe CON (3)',30)~'-'~Val(A:FAC))
+                CerrarASCII
+              endif
+            else
+              *** Error 7020/0302
+              AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+              EscribirASCII(Pad('7020|0302 Multi.Reg. CON (3)',30)~'-'~Val(A:FAC))
+              CerrarASCII
+            endif
+          endif
+        endif
+
+        if EqStr(Copy(Val(A:FAC),32,2),'04')
+          ACT(E:3, 'BACOTR')
+        else
+          ACT(E:3, 'BAVTTR')
+        endif
+        ACN(v6, 0)
+        SQL.ADD("Select * from "~DBO~".MENSAJESMAE ")
+        SQL.ADD(" where Codigo    like '"~Val(E:3)~"' ")
+        SQL.ADD("   and Secuencia = '"~Copy(Val(A:FAC),42,5)~"' ")
+        SQL.ADD("   and FechaMAE  = '"~Copy(Val(A:FAC),36,6)~"' ")
+        SQL.ADD("   and Estado    = 'INF' ")
+        Recorrer SQL
+          DFA
+          ACT(ac:1, fbn('Codigo'))
+          ACT(ac:2, fbn('FechaMAE'))
+          ACT(ac:3, fbn('HoraMAE'))
+          ACT(ac:4, fbn('Secuencia'))
+          ACT(ac:5, fbn('CodigoMAE'))
+          ACT(ac:6, fbn('Estado'))
+          SCN(v6,1)
+        proximo
+        if Val(v6)=1
+          SQL.ADD("Update "~DBO~".MENSAJESMAE ")
+          SQL.ADD("   Set Estado    = '"~Val(E:2)~"' ")
+          SQL.ADD(" Where Codigo    = '"~Val(ac:1)~"' ")
+          SQL.ADD("   and FechaMAE  = '"~Val(ac:2)~"' ")
+          SQL.ADD("   and HoraMAE   = '"~Val(ac:3)~"' ")
+          SQL.ADD("   and Secuencia = '"~Val(ac:4)~"' ")
+          SQL.ADD("   and CodigoMAE = '"~Val(ac:5)~"' ")
+          SQL.ADD("   and Estado    = 'INF' ")
+          SQL.NEW
+        else
+          if Eqstr(Var('LOGERRMAE'),'SI')
+            if Val(v6)=0
+              *** Error 7020/0302
+              AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+              EscribirASCII(Pad('7020|0302 No Existe INF (4)',30)~'-'~Val(A:FAC))
+              CerrarASCII
+            else
+              *** Error 7020/0302
+              AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+              EscribirASCII(Pad('7020|0302 Multi.Reg. INF (4)',30)~'-'~Val(A:FAC))
+              CerrarASCII
+            endif
+          endif
+        endif
+
+        if EqStr(Val(E:1),'NO')
+          Message('---------- '~FBN['NrOperacion']~' Error en Baja, va a Compliance')
+          * Error en Baja operacion, actualiza Operaciones
+          SQL.ADD("Update "~DBO~".OPMINORISTAS ")
+          SQL.ADD("   Set CodErrorMAE = '"~Copy(Val(A:FAC),47,1)~"', ")
+          SQL.ADD("       ObsErrorMAE = '"~Copy(Val(A:FAC),48,15)~"' ")
+          SQL.ADD(" Where NrOperacion = '"~FBN['NrOperacion']~"' ")
+          SQL.NEW
+          SQL.ADD("Insert into "~DBO~".EXCEPCIONES ( ")
+          SQL.ADD(" NrOperacion, Fecha, Tipo, Descripcion ")
+          SQL.ADD(" ) Values ( ")
+          SQL.ADD(" '"~FBN['NrOperacion']~"', ")
+          SQL.ADD(" "~SQLAhora~", ")
+          SQL.ADD(" 'ERRORBAJA', ")
+          SQL.ADD(" '"~'Baja-'~Copy(Val(A:FAC),48,55)~"' ")
+          SQL.ADD(" ) ")
+          SQL.NEW
+          SQL.EXEC
+          EjecutarEvento('CBOINS', String1=fbn['NrOperacion'], Radio1=0, Radio2=1, Entero1=fbn('NrBit'), Entero2=69)
+        else
+          Message('---------- '~FBN['NrOperacion']~' Ok Baja, va a Eliminacion Automatica')
+          * Ok baja operacion, actualiza Operaciones
+          BorrarCeldas(K9..K12)
+          ACT(K11,Copy(Val(A:FAC),15,2)~'/'~Copy(Val(A:FAC),13,2)~'/'~Copy(Val(A:FAC),11,2)~' '~Copy(Val(A:FAC),17,2)~':'~Copy(Val(A:FAC),19,2)~':'~Copy(Val(A:FAC),21,2))  
+          ACT(K12,SQLFechaStr(Val(K11),Exe('FORFECHOR')))
+          SQL.ADD("Update "~DBO~".OPMINORISTAS ")
+          SQL.ADD("   Set FechaBajaMAE = "~Val(K12)~", ")
+          SQL.ADD("       NroBajaMAE   = '"~Copy(Val(A:FAC),23,5)~"' ")
+          SQL.ADD(" Where NrOperacion  = '"~FBN['NrOperacion']~"' ")
+          SQL.NEW
+          SQL.EXEC
+          
+          if NoVacio(fbn('ConceptoBCRA')) y [Not EqStr(fbn('ConceptoBCRA'),'000000')] y [Not EqStr(fbn('ConceptoBCRA'),'')]
+             SQL.ADD("Update "~DBO~".OPMINORISTAS ")
+             SQL.ADD("   Set RB2 = '1' ")
+             SQL.ADD(" Where NrOperacion = '"~FBN['NrOperacion']~"' ")
+             SQL.NEW
+             SQL.EXEC
+  
+             EjecutarEvento('CBOINS', String1=FBN['NrOperacion'], Radio1=0, Radio2=1, Entero1=fbn('NrBit'), Entero2=21)
+            else
+             EjecutarEvento('ANULOR',NrOpMinorista1=FBN['NrOperacion'],Check1=1)
+             EjecutarEvento('CBOINS', String1=FBN['NrOperacion'], Radio1=0, Radio2=1, Entero1=fbn('NrBit'), Entero2=30)
+          endif
+        endif
+      Proximo
+      if Val(v4)=0
+        if EqStr(Copy(Val(A:FAC),42,5),Copy(Val(A:FAC),54,5)) y EqStr(Copy(Val(A:FAC),47,1),'5')
+          Message('----- Mensaje de Baja Operacion Oferta MAE1')
+          ACT(t:1, 'BAJREL')
+          ACT(t:2, Copy(Val(a:FAC),11,6))
+          ACT(t:3, Copy(Val(a:FAC),17,6))
+          ACT(t:4, Copy(Val(a:FAC),23,5))
+          ACT(t:5, Copy(Val(a:FAC),28,4))
+          ACT(t:6, 'ING')
+          ACT(t:7, Copy(Val(a:FAC),1,250))
+          if Longitud(Val(a:FAC))>250
+            ACT(t:8, Copy(Val(a:FAC),251,250))
+          endif
+          if Longitud(Val(a:FAC))>500
+            ACT(t:9, Copy(Val(a:FAC),501,250))
+          endif
+          (.'GRAMENMAE'.)
+        else
+          Message('Operacion NO encontrada RECMAE02')
+          if Eqstr(Var('LOGERRMAE'),'SI')
+            AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+            EscribirASCII(Pad('Op.Min. NO encontrada RECMAE02',30)~'-'~Val(A:FAC))
+            CerrarASCII
+          endif
+        endif
+      endif
+********************
+** Fin Minorista
+********************      
+    else
+      if EqStr(Copy(Val(A:FAC),42,5),Copy(Val(A:FAC),54,5)) y EqStr(Copy(Val(A:FAC),47,1),'5')
+        Message('----- Mensaje de Baja Operacion Oferta MAE1')
+        ACT(t:1, 'BAJREL')
+        ACT(t:2, Copy(Val(a:FAC),11,6))
+        ACT(t:3, Copy(Val(a:FAC),17,6))
+        ACT(t:4, Copy(Val(a:FAC),23,5))
+        ACT(t:5, Copy(Val(a:FAC),28,4))
+        ACT(t:6, 'ING')
+        ACT(t:7, Copy(Val(a:FAC),1,250))
+        if Longitud(Val(a:FAC))>250
+          ACT(t:8, Copy(Val(a:FAC),251,250))
+        endif
+        if Longitud(Val(a:FAC))>500
+          ACT(t:9, Copy(Val(a:FAC),501,250))
+        endif
+        (.'GRAMENMAE'.)
+      else
+        Message('Digito Secuencia incorrecto RECMAE02')
+        if Eqstr(Var('LOGERRMAE'),'SI')
+          AbrirASCII(Val(z2)~'\ERRORMAE.TXT',0)
+          EscribirASCII(Pad('Digito incorrecto RECMAE02',30)~'-'~Val(A:FAC))
+          CerrarASCII
+        endif
+      endif
+    endif
+  endif
+endif

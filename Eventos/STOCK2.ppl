@@ -1,0 +1,348 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Especie1: 'Especie'      ;1;1;;;;NOVACIO(Dialogo.Especie1) y NOT DESCIENDEDEESPECIE(Dialogo.Especie1,'MONEDA');'Debe ingresar una Especie valida';NO;;;;;;" Jerarquia Like '"~Jerarquia('ESPECIES','ACCION')~"%' "
+  Fecha1:   'Record Date'  ;2;2;;;;NOVACIO(Dialogo.Fecha1);'Debe ingresar una Fecha valida';NO;fsys
+  Fecha2:   'Fecha Pago'   ;3;2;;;;NOVACIO(Dialogo.Fecha2);'Debe ingresar una Fecha valida';NO;fsys
+  Mercado1: 'Mercado'      ;2;1;;;;
+  Vehiculo1:'Vehiculo'     ;3;1;;;;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;VAR('VEHICULODE')
+  Radio1:   'Anular|Novedad|Confirmacion|Todos|';4;1;;;;;;;;2
+  Radio2:   'Anula|Saldos|Posiciones|Ambos|';5;1;;NO;NO;;;;;0
+  Operador1:'Operador'     ;1;2;;NO;;NoVacio(Dialogo.Operador1);'Operador Invalido';NO;USUARIOACTIVO
+FinDialogo
+
+IF NOT OK
+   Cancelar
+ENDIF
+
+***---Obtengo datos de la especie
+SQL.ADD(" Select Nombre, ISIN, LaminaMinima ")
+SQL.ADD(" From "~DBO~".ESPECIES ")
+SQL.ADD(" Where Codigo = '"~Dialogo.Especie1~"' ")
+Recorrer SQL
+  DFA
+  ACT(NM:1, fbn('Nombre'))
+  ACT(AI:1, fbn('ISIN'))
+  ACN(LM:1, IIF(fbn('LaminaMinima')=0,1,fbn('LaminaMinima')))
+Proximo
+
+* Saldos Libre
+ACT(sl:2, VAR('LIBREDISP'))
+* Saldos Bloquedos
+ACT(sl:3, VAR('BLOQUEOS'))
+* Saldos Parking
+ACT(sl:4, VAR('SALPARK'))
+
+ACN(z:1,0)
+ACN(z:10,0)
+
+If Dialogo.Radio2=0 o Dialogo.Radio2=2
+   ***--- SALDOS Y MOVIMIENTOS
+   SQL.ADD(" SELECT T.Especie, T.Cupon1, T.Vehiculo1, T.Mercado1, T.Cliente1, T.Cuenta1, T.Cantidad1, T.Precio1, T.Precio1, ")
+   SQL.ADD(" T.Cantidad2, T.Cantidad3, T.NrTrans, T.Cuenta4, T.RB1, C.RazonSocial, E.TamanioLote, ")
+   SQL.ADD(" T.Especie1, T.Especie2, T.Cuenta2, T.Cuenta5, T.Cantidad9, T.Cantidad10, T.Cantidad11, T.Cambio5, T.Cliente2 ")
+   SQL.ADD(" FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E ")
+   SQL.ADD(" WHERE T.Cliente1 = C.Codigo ")
+   SQL.ADD(" AND   T.Especie  = '"~Dialogo.Especie1~"'")
+   SQL.ADD(" AND   T.Especie  = E.Codigo ")
+   SQL.ADD(" AND   T.TipoTr2  = 'STOCK' ")
+   If Dialogo.Radio2=0 o Dialogo.Radio2=2
+   SQL.ADD("  AND  T.RB1 > 0 ")
+   EndIf
+   if Dialogo.Radio1 = 0
+      SQL.ADD(" AND T.RB2 = 0 ")
+   endif
+   if Dialogo.Radio1 = 1
+      SQL.ADD(" AND T.RB2 = 1 ")
+   endif
+   SQL.ADD(" AND  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+   SQL.ADD(" AND   T.Fecha1   = '"~IdxDate(Dialogo.Fecha2)~"'")
+   SQL.ADD(" AND   T.Fecha2   = '"~IdxDate(Dialogo.Fecha1)~"'")
+   IF NOVACIO(Dialogo.Mercado1) 
+     SQL.ADD(" AND   T.Mercado1 = '"~Dialogo.Mercado1~"'")
+   ENDIF
+   SQL.ADD(" ORDER BY T.Cliente1, T.NrTrans")
+   
+   ACN(z:1,0)
+   
+   Recorrer SQL
+     if Incluido(fbn('Cambio5'),Val(sl:4))
+       DFA
+       SCN(z:10, 1)
+       ACT(bb:Val(z:10), fbn('Mercado1'))
+       ACT(bc:Val(z:10), fbn('Cliente1'))
+       ACT (bd:Val(z:10), fbn('Especie1'))
+       ACT(be:Val(z:10), fbn('Especie2'))
+       ACT(bf:Val(z:10), fbn('NrTrans'))
+       ACT(bi:Val(z:10), fbn('Cuenta2'))
+       ACT(bj:Val(z:10), fbn('Cuenta5'))
+       ACT(bv:Val(z:10), fbn('Mercado1'))
+       
+       ACN(bl:Val(z:10), fbn('Cantidad9')) 
+       ACN(bm:Val(z:10), fbn('Cantidad10'))
+       ACN(bn:Val(z:10), fbn('Cantidad11'))
+       ACN(bo:Val(z:10), fbn('Cambio5'))
+       ACT(bs:Val(z:10), fbn('Cliente2'))
+     else
+       SCN(z:1, 1)
+       ACN(z:2, fbn('TamanioLote'))
+       ACN(x:fac, 1) 
+       ACT(a:fac, fbn('Especie'))
+       ACT(b:fac, fbn('Cupon1'))
+       ACT(d:fac, fbn('Vehiculo1'))
+       ACT(e:fac, fbn('Mercado1'))
+       ACT(f:fac, fbn('RazonSocial'))
+       ACT(g:fac, fbn('Cliente1'))
+       ACT(h:fac, fbn('Cuenta1'))
+       ACN(k:fac, fbn('Precio1'))
+       ACN(PR:1, fbn('Precio1'))
+       ACN(j:fac, fbn('Cantidad1'))
+       ACN(l:fac, fbn('Cantidad2'))
+       ACN(m:fac, fbn('Cantidad3'))
+       ACT(n:fac, fbn('NrTrans'))
+       ACT(nn:fac, fbn('Cuenta4'))
+     endif
+   Proximo
+   
+   IF Val(z:1)=0
+     MessageBox('No se registran Transacciones de Saldos y Movimientos con estas especificaciones.')
+   ELSE
+     CrearListBox ; 'Arial,8,';BuscarCampo('ESPECIES','Nombre','Codigo',Dialogo.Especie1)~' (ISIN: '~BuscarCampo('ESPECIES','ISIN','Codigo',Dialogo.Especie1)~') Anulacion '~IIF(Dialogo.Radio1=0,' Novedad',' Novedad y Confirmacion')~' - SALDOS y MOVPENDIENTES'
+       'Ok?'           ;x:1..x:fac;SI;;;30 ;CHECK ;RGB(255,255,193)
+       'NrTrans'       ;n:1..n:FAC;NO;;;60 ;STRING;;RGB(220,220,193);
+       'Especie'       ;a:1..a:FAC;NO;;;60 ;STRING;;RGB(220,220,193);
+       'Vehiculo'      ;d:1..d:FAC;NO;;;80 ;STRING;;RGB(220,220,193);
+       'Mercado'       ;e:1..e:FAC;NO;;;60 ;STRING;;RGB(220,220,193);
+       'Cliente'       ;f:1..f:FAC;NO;;;90 ;STRING;;RGB(220,220,193);
+       'Cuenta'        ;h:1..h:FAC;NO;;;100;STRING;;RGB(220,220,193);
+       'Saldo'         ;j:1..j:FAC;NO;;;80 ;NUMERO;'##,###,###.##';RGB(220,220,193);
+       '%'             ;k:1..k:FAC;NO;;;40 ;NUMERO;'###.##';RGB(220,220,193);
+       'Total'         ;l:1..l:FAC;NO;;;70 ;NUMERO;'##,###,###.##';RGB(220,220,193);
+       'Nuevo saldo'   ;m:1..m:FAC;NO;;;80 ;NUMERO;'##,###,###.##';RGB(220,220,193);
+       'Cta.Pesos'     ;nn:1..nn:fac;NO;;;90;STRING;;RGB(220,220,193)
+     FinListBox
+     IF NOT OK
+       Cancelar
+     ENDIF
+      
+      Recorrer&i 1,fac 
+        IF Val(x:&i)=1 
+           * ANULO CONFIRMACION
+           If Dialogo.Radio1 = 1
+              ***---Anulo la Confirmacion
+              SQL.ADD("UPDATE "~DBO~".TRANSACCIONES2 ")
+              SQL.ADD("   Set Fecha3  = Null, ")
+              SQL.ADD("       RB2     = '0' ")
+              SQL.ADD(" Where NrTrans = '"~Val(n:&i)~"'")
+              SQL.NEW
+              SQL.ADD("Delete from "~DBO~".MOVPENDIENTES ")
+              SQL.ADD(" WHERE NrOperacion = '"~Val(n:&i)~"' ")
+              SQL.NEW
+              SQL.ADD("Delete from "~DBO~".MOVEJECUTADOS ")
+              SQL.ADD(" WHERE NrOperacion = '"~Val(n:&i)~"' ")
+              SQL.NEW
+              SQL.EXEC
+              
+              SQL.ActualizarMovimientosT2(Val(n:&i),SI,NO,NO,NO)
+              SQL.EXEC
+           Else
+              ***---Anulo TODO
+              SQL.ADD("Delete from "~DBO~".MOVPENDIENTES ")
+              SQL.ADD(" WHERE NrOperacion = '"~Val(n:&i)~"' ")
+              SQL.NEW
+              SQL.ADD("Delete from "~DBO~".MOVEJECUTADOS ")
+              SQL.ADD(" WHERE NrOperacion = '"~Val(n:&i)~"' ")
+              SQL.NEW
+** FJL 19/05/21
+*              SQL.ADD(" delete from "~DBO~".MOVPOSPENACCION ")
+*              SQL.ADD(" WHERE  NrOperacion = '"~Val(n:&i)~"' ")
+*              SQL.NEW
+*              SQL.ADD(" delete from "~DBO~".MOVPOSEJEACCION ")
+*              SQL.ADD(" WHERE  NrOperacion = '"~Val(n:&i)~"' ")
+*              SQL.NEW
+              SQL.ADD("Delete from "~DBO~".OPERACIONESBITS ")
+              SQL.ADD(" where NrOperacion = '"~Val(n:&i)~"' ")
+              SQL.NEW
+              SQL.ADD("Delete from "~DBO~".TRANSACCIONES2 ")
+              SQL.ADD(" where NrTrans = '"~Val(n:&i)~"' ")
+              SQL.NEW
+              SQL.EXEC
+              
+              Message('Transaccion '~Val(n:&i)~' anulada.')
+           EndIf
+        ENDIF
+      Proximo
+      
+      if Val(z:10)>0
+        recorrer&i 1,Val(z:10)
+          if Dialogo.Radio1 = 1
+            ***---Anulo la Confirmacion
+            SQL.ADD("UPDATE "~DBO~".TRANSACCIONES2 ")
+            SQL.ADD("   Set Fecha3  = Null, ")
+            SQL.ADD("       RB2     = '0' ")
+            SQL.ADD(" Where NrTrans = '"~Val(bf:&i)~"'")
+            SQL.NEW
+            SQL.ADD("Delete from "~DBO~".MOVPENDIENTES ")
+            SQL.ADD(" WHERE NrOperacion = '"~Val(bf:&i)~"' ")
+            SQL.NEW
+            SQL.ADD("Delete from "~DBO~".MOVEJECUTADOS ")
+            SQL.ADD(" WHERE NrOperacion = '"~Val(bf:&i)~"' ")
+            SQL.NEW
+            SQL.EXEC
+            SQL.ActualizarMovimientosT2(Val(bf:&i),SI,NO,NO,NO)
+            SQL.EXEC
+          else
+            ***---Anulo TODO
+            SQL.ADD("Delete from "~DBO~".MOVPENDIENTES ")
+            SQL.ADD(" WHERE NrOperacion = '"~Val(bf:&i)~"' ")
+            SQL.NEW
+            SQL.ADD("Delete from "~DBO~".MOVEJECUTADOS ")
+            SQL.ADD(" WHERE NrOperacion = '"~Val(bf:&i)~"' ")
+            SQL.NEW
+            SQL.ADD("Delete from "~DBO~".OPERACIONESBITS ")
+            SQL.ADD(" where NrOperacion = '"~Val(bf:&i)~"' ")
+            SQL.NEW
+            SQL.ADD("Delete from "~DBO~".TRANSACCIONES2 ")
+            SQL.ADD(" where NrTrans = '"~Val(bf:&i)~"' ")
+            SQL.NEW
+            SQL.EXEC
+          endif
+        Proximo
+      EndIf
+
+      ACN(z:3,Val(z:2)-Val(z:2)*Val(PR:1)/(100+Val(PR:1)))
+      
+      SQL.ADD(" UPDATE "~DBO~".ESPECIES SET TamanioLote = "~FSTR(Val(z:3),1,0)~" ")
+      SQL.ADD(" WHERE Codigo = '"~Dialogo.Especie1~"' ")
+      SQL.NEW
+      SQL.EXEC
+      
+      Message('Lote de la Especie actulizado.')
+   EndIf
+EndIf
+
+ACN(FI:1,fac+1)
+
+If Dialogo.Radio2=1 o Dialogo.Radio2=2
+   ***--- POSICIONES
+   SQL.ADD(" SELECT T.Especie, T.Cupon1, T.Vehiculo1, T.Mercado1, T.Cliente1, T.Cuenta1, T.Cantidad1, T.Precio1, ")
+   SQL.ADD(" T.Cantidad2, T.Cantidad3, T.NrTrans, T.Cuenta4, T.Book1, C.RazonSocial, E.TamanioLote ")
+   SQL.ADD(" FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E ")
+   SQL.ADD(" WHERE T.Cliente1 = C.Codigo ")
+   SQL.ADD(" AND   T.Especie  = '"~Dialogo.Especie1~"'")
+   SQL.ADD(" AND   T.Especie  = E.Codigo ")
+   SQL.ADD(" AND   T.TipoTr2  = 'STOCK' ")
+   SQL.ADD(" AND   T.RB1 = 0 ")
+   if Dialogo.Radio1 = 0
+      SQL.ADD(" AND T.RB2 = 0 ")
+   endif
+   if Dialogo.Radio1 = 1
+      SQL.ADD(" AND T.RB2 = 1 ")
+   endif
+   SQL.ADD(" AND  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+   SQL.ADD(" AND   T.Fecha1   = '"~IdxDate(Dialogo.Fecha2)~"'")
+   SQL.ADD(" AND   T.Fecha2   = '"~IdxDate(Dialogo.Fecha1)~"'")
+   IF NOVACIO(Dialogo.Mercado1) 
+     SQL.ADD(" AND   T.Mercado1 = '"~Dialogo.Mercado1~"'")
+   ENDIF
+   SQL.ADD(" ORDER BY T.Cliente1, T.NrTrans")
+   
+   ACN(z:1,fac)
+   ACN(z:4,0)
+   
+   Recorrer SQL
+     SCN(z:1,1)
+     ACN(z:4,1)
+     ACN(z:2, fbn('TamanioLote'))
+     ACT(a:fac, fbn('Especie'))
+     ACT(b:fac, fbn('Cupon1'))
+     ACT(d:fac, fbn('Vehiculo1'))
+     ACT(e:fac, fbn('Mercado1'))
+     ACT(f:fac, fbn('RazonSocial'))
+     ACT(g:fac, fbn('Cliente1'))
+     ACT(h:fac, fbn('Book1'))
+     ACN(j:fac, fbn('Cantidad1'))
+     ACN(k:fac, fbn('Precio1'))
+     ACN(PR:1, fbn('Precio1'))
+     ACN(l:fac, fbn('Cantidad2'))
+     ACN(m:fac, fbn('Cantidad3'))
+     ACT(n:fac, fbn('NrTrans'))
+     ACT(nn:fac, fbn('Cuenta4'))
+     ACN(x:fac, 1) 
+   Proximo
+   
+   IF Val(z:4)=0
+      Cancelar('No se registran Transacciones de Posiciones con estas especificaciones.')
+   ELSE
+      CrearListBox ; 'Arial,8,';BuscarCampo('ESPECIES','Nombre','Codigo',Dialogo.Especie1)~' (ISIN: '~BuscarCampo('ESPECIES','ISIN','Codigo',Dialogo.Especie1)~') Anulacion '~IIF(Dialogo.Radio1=0,' Novedad',' Novedad y Confirmacion')~' - POSICIONES'
+        'Ok?'           ;x:Val(FI:1)..x:Val(z:1);SI;;;30 ;CHECK ;RGB(255,255,193)
+        'NrTrans'       ;n:Val(FI:1)..n:Val(z:1);NO;;;60 ;STRING;;RGB(220,220,193);
+        'Especie'       ;a:Val(FI:1)..a:Val(z:1);NO;;;60 ;STRING;;RGB(220,220,193);
+        'Vehiculo'      ;d:Val(FI:1)..d:Val(z:1);NO;;;80 ;STRING;;RGB(220,220,193);
+        'Mercado'       ;e:Val(FI:1)..e:Val(z:1);NO;;;60 ;STRING;;RGB(220,220,193);
+        'Cliente'       ;f:Val(FI:1)..f:Val(z:1);NO;;;90 ;STRING;;RGB(220,220,193);
+        'Book'          ;h:Val(FI:1)..h:Val(z:1);NO;;;100;STRING;;RGB(220,220,193);
+        'Saldo'         ;j:Val(FI:1)..j:Val(z:1);NO;;;80 ;NUMERO;'##,###,###.##';RGB(220,220,193);
+        '%'             ;k:Val(FI:1)..k:Val(z:1);NO;;;40 ;NUMERO;'###.##';RGB(220,220,193);
+        'Total'         ;l:Val(FI:1)..l:Val(z:1);NO;;;70 ;NUMERO;'##,###,###.##';RGB(220,220,193);
+        'Nuevo saldo'   ;m:Val(FI:1)..m:Val(z:1);NO;;;80 ;NUMERO;'##,###,###.##';RGB(220,220,193);
+        'Cta.Pesos'     ;nn:Val(FI:1)..nn:Val(z:1);NO;;;90;STRING;;RGB(220,220,193)
+      FinListBox
+      
+      IF NOT OK
+         Cancelar
+      ENDIF
+      
+      Recorrer&i Val(FI:1),Val(z:1) 
+        IF Val(x:&i)=1 
+           * ANULO CONFIRMACION
+           If Dialogo.Radio1 = 1
+              ***---Anulo la Confirmacion
+              SQL.ADD(" UPDATE "~DBO~".TRANSACCIONES2 ")
+              SQL.ADD(" Set RB2 = '0' ")
+              SQL.ADD(" Where NrTrans = '"~Val(n:&i)~"'")
+              SQL.NEW
+              SQL.EXEC
+              
+              SQL.ActualizarMovimientosT2(Val(n:&i),NO,NO,NO,SI)
+              SQL.EXEC
+           Else
+              ***---Anulo TODO
+              SQL.ADD(" delete from "~DBO~".MOVPENDIENTES ")
+              SQL.ADD(" WHERE  NrOperacion = '"~Val(n:&i)~"' ")
+              SQL.NEW
+              SQL.ADD(" delete from "~DBO~".MOVEJECUTADOS ")
+              SQL.ADD(" WHERE  NrOperacion = '"~Val(n:&i)~"' ")
+              SQL.NEW
+** FJL 19/05/21
+*              SQL.ADD(" delete from "~DBO~".MOVPOSPENACCION ")
+*              SQL.ADD(" WHERE  NrOperacion = '"~Val(n:&i)~"' ")
+*              SQL.NEW
+*              SQL.ADD(" delete from "~DBO~".MOVPOSEJEACCION ")
+*              SQL.ADD(" WHERE  NrOperacion = '"~Val(n:&i)~"' ")
+*              SQL.NEW
+              SQL.ADD(" delete from "~DBO~".OPERACIONESBITS ")
+              SQL.ADD(" where  NrOperacion = '"~Val(n:&i)~"' ")
+              SQL.NEW
+              SQL.ADD(" delete from "~DBO~".TRANSACCIONES2 ")
+              SQL.ADD(" where  NrTrans = '"~Val(n:&i)~"' ")
+              SQL.NEW
+              SQL.EXEC
+              
+              Message('Transaccion '~Val(n:&i)~' anulada.')
+           EndIf
+        ENDIF
+      Proximo
+      
+      ACN(z:3,Val(z:2)-Val(z:2)*Val(PR:1)/(100+Val(PR:1)))
+      
+      SQL.ADD(" UPDATE "~DBO~".ESPECIES SET TamanioLote = "~FSTR(Val(z:3),1,0)~" ")
+      SQL.ADD(" WHERE Codigo = '"~Dialogo.Especie1~"' ")
+      SQL.NEW
+      SQL.EXEC
+      
+      Message('Lote de la Especie actulizado.')
+   EndIf
+EndIf
+   
+   
+   

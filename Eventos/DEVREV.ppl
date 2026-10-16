@@ -1,0 +1,254 @@
+﻿*HojaVisible(SI)
+CrearDialogo
+   Fecha1  : 'Fecha'  ;;;;;;Dialogo.Fecha1<=Fsys;'La Fecha NO DEBE ser superior a la fecha del sistema';NO;FSys
+FinDialogo
+
+If Not OK
+   Cancelar
+Endif
+
+ACT(y1,'NO')
+
+
+* FO 08/02/2006 - Armo una lista con las operaciones que no deben revaluarse
+* Son los call de titulos que vencen dia siguiente a un feriado, los intereses se cerraron
+* con la cot del dia habil anterior por lo que no habria que revaluar esto porque no 
+* coincidirian intereses en pesos de la op con resultados INTLEN + RINTLE
+*SQL.ADD(" SELECT NrOperacion, FechaVto FROM "~DBO~".OPERACIONES ")
+*SQL.ADD(" WHERE TipoOp IN ('TICO','TIPO','TIDE','TICT') ")
+*SQL.ADD(" AND FechaVto = "~IDXDATE2(Dialogo.Fecha1)~"   ")
+*Recorrer SQL
+*   If not EsHabil(fbn('FechaVto')-1,'ARG')
+*      ACT(li:1, Val(li:1)~fbn('NrOperacion')~'|')
+*   Endif
+*Proximo
+
+
+SQL.ADD(" Select  Sum(M.Monto) TotOperac, M.EspecieRef, M.TipoDevengado, M.Cliente, ")
+SQL.ADD("         M.NrSaldo, M.Especie, M.FechaEj, M.Book, M.Cupon  ")
+SQL.ADD(" FROM "~DBO~".MOVDEVENGADOS M, "~DBO~".OPERACIONES O ")
+SQL.ADD(" Where  Fecha < "~idxdate2(Dialogo.Fecha1)  )
+SQL.ADD(" and    M.TipoDevengado Not in ('MTM')     ")
+SQL.ADD(" and    O.NrOperacion = M.NrOperacion      ")
+SQL.ADD(" and    M.Especie <> '"~VAR('MONELOCA')~"' ")
+SQL.ADD(" and    M.TipoDevengado not in ('INTFON','FONDEO')   ")
+IF NO
+* FO 09/02/2006 - INCIDENTE 71 UAT
+SQL.ADD(" and    (M.TipoDevengado not in ('INTFON','FONDEO')   ")
+SQL.ADD("               or O.TipoOp in ('IMMPF')                ")
+SQL.ADD("               or substring(O.OperacionRef,1,1) = 'M' ")
+SQL.ADD("               or O.CB10 = '0' ) ")
+ENDIF
+SQL.ADD(" and exists(Select 1 From "~DBO~".OPERACIONES  ")
+SQL.ADD("             Where NrOperacion = M.NrOperacion ")
+SQL.ADD("             and   (FechaVto>="~idxdate2(Dialogo.Fecha1)~"  ")
+SQL.ADD("                      or (RB3='1' and FechaVto2>="~idxdate2(Dialogo.Fecha1)~" ")
+SQL.ADD("                                  and TipoOp in ('TICO','TICT','TIDE','TIPO','ISL'))")
+SQL.ADD("                    )")
+SQL.ADD("            )")
+* FO 08/02/2006 - No hay movdev en la fecha vto, la valuacion de los intereses se hace con fechavto-1
+* entonces no deberia tener un revaluo en fechavto para no tener dif con el monto en pesos de la op
+SQL.ADD(" AND (O.FechaVto > "~IDXDATE2(Dialogo.Fecha1)~" OR O.TipoOp NOT IN ('TICO','TIPO','TIDE','TICT') ) ")
+
+SQL.ADD(" group by M.TipoDevengado, M.Cliente, M.NrSaldo, M.Book, ")
+SQL.ADD("          M.Especie, M.Cupon, M.FechaEj, M.EspecieRef    ")
+SQL.ADD(" order by M.Especie, M.Cupon, M.Book ")
+Recorrer Sql
+   ACT(a:fac,FBN['EspecieRef'])
+   ACT(b:fac,FBN['Cliente'])
+   ACT(g:fac,FBN['Cupon'])
+   ACT(h:fac,FBN['NrSaldo'])
+   ACT(i:fac,FBN['Especie'])
+   ACT(j:fac,FBN['TipoDevengado'])
+   ACD(k:fac,FBN['FechaEj'])
+   ACT(o:fac,FBN['Book'])
+
+   *-- Si encontre algo para revaluar lo marco --
+   ACT(y1,'SI')
+
+   *--- Busco la cotizacion correspondiente ---
+   ACN(s:fac, Cotizacion(fbn('Especie'),,,,Dialogo.Fecha1,5,SI))
+
+   ACN(r:fac, FBN['TotOperac'])
+
+   *--- Traigo  de Devengado el ultimo Precio al cual se revalu? -------
+
+   SQL.ADD("Select D.PrecioDevARP  FROM "~DBO~".DEVENGADOS D ")
+   SQL.ADD("Where D.Fecha < "~idxdate2(Dialogo.Fecha1))
+   SQL.ADD("  and D.TipoDevengado = '"~FBN['TipoDevengado']~"' ")
+   SQL.ADD("  and D.NrSaldo       = "~Fstr(FBN['NrSaldo'],3,0)~" ")
+   SQL.ADD("  and D.Especie       = '"~FBN['Especie']~"'  ")
+   SQL.ADD("  and D.Book          = '"~FBN['Book']~"' ")
+   SQL.ADD("  and D.FechaEj       = "~Idxdate2(FBN['FechaEj'])~" ")
+   SQL.ADD("  and D.EspecieRef    = '"~FBN['EspecieRef']~"' ")
+   SQL.ADD("  and D.Fecha IN (SELECT MAX(Fecha) FROM "~DBO~".DEVENGADOS ")
+   SQL.ADD("                  Where Fecha < "~idxdate2(Dialogo.Fecha1))
+   SQL.ADD("                    and D.TipoDevengado = TipoDevengado ")
+   SQL.ADD("                    and D.NrSaldo       = NrSaldo ")
+   SQL.ADD("                    and D.Especie       = Especie ")
+   SQL.ADD("                    and D.Book          = Book    ")
+   SQL.ADD("                    and (FechaEj = D.FechaEj OR (FechaEj IS NULL AND D.FechaEj IS NULL )) ")
+   SQL.ADD("                    and D.EspecieRef    = EspecieRef ) ")
+   Recorrer SQL
+     DFA
+     ACN(t:fac,FBN['PrecioDevARP'])
+   proximo
+
+   SQL.ADD("Select D.*  FROM "~DBO~".DEVENGADOS D ")
+   SQL.ADD("Where D.Fecha < "~idxdate2(Dialogo.Fecha1))
+   SQL.ADD("  and D.TipoDevengado = '"~FBN['TipoDevengado']~"' ")
+   SQL.ADD("  and D.NrSaldo       = "~Fstr(FBN['NrSaldo'],3,0)~" ")
+   SQL.ADD("  and D.Especie       = '"~FBN['Especie']~"'  ")
+   SQL.ADD("  and D.Book          = '"~FBN['Book']~"' ")
+   SQL.ADD("  and D.Cupon         = '"~FBN['Cupon']~"' ")
+   SQL.ADD("  and D.FechaEj       = "~Idxdate2(FBN['FechaEj'])~" ")
+   SQL.ADD("  and D.EspecieRef    = '"~FBN['EspecieRef']~"' ")
+   SQL.ADD("  and D.Fecha IN (SELECT MAX(Fecha) FROM "~DBO~".DEVENGADOS ")
+   SQL.ADD("                  Where Fecha < "~idxdate2(Dialogo.Fecha1))
+   SQL.ADD("                    and D.TipoDevengado = TipoDevengado ")
+   SQL.ADD("                    and D.NrSaldo       = NrSaldo  ")
+   SQL.ADD("                    and D.Especie       = Especie  ")
+   SQL.ADD("                    and D.Book          = Book     ")
+   SQL.ADD("                    and (Cupon   = D.Cupon   OR (Cupon   IS NULL AND D.Cupon   IS NULL )) ")
+   SQL.ADD("                    and (FechaEj = D.FechaEj OR (FechaEj IS NULL AND D.FechaEj IS NULL )) ")
+   SQL.ADD("                    and D.EspecieRef    = EspecieRef ) ")
+   Recorrer SQL
+     DFA
+     ACT(ab:33 ,"      ")
+     ACT(ab:33, Val(ab:33)~" select sum(Day) from "~DBO~".RESULTADOS ")
+     ACT(ab:33, Val(ab:33)~" where       Book  ='"~FBN['Book']~"' ")
+     ACT(ab:33, Val(ab:33)~" and      NrSaldo  ="~Fstr(FBN['NrSaldo'],3,0))
+     ACT(ab:33, Val(ab:33)~" and TipoResultado = 'R"~Copy(FBN['TipoDevengado'],1,5)~"'")
+     iF eQSTR(FBN['TipoDevengado'],'TIDEV')
+        * Para los pases se graba como especie la EspecieRef
+        ACT(ab:33, Val(ab:33)~" and       Especie ='"~FBN['EspecieRef']~"' ")
+     Else
+        ACT(ab:33, Val(ab:33)~" and       Especie ='"~FBN['Especie']~"' ")
+     Endif
+     ACT(ab:33, Val(ab:33)~" and         Cupon ='"~FBN['Cupon']~"' ")
+     ACT(ab:33, Val(ab:33)~" and       FechaEj ="~Idxdate2(FBN['FechaEj']) )
+     ACT(ab:33, Val(ab:33)~" and         Fecha ="~idxdate2(Dialogo.Fecha1) )
+     ACT(ab:33, Val(ab:33)~" and       abs(Day)>0.001 ")
+     ACN(ab:34, sql(val(ab:33)))
+
+     *-- Si Cotizacion >0 y cambio, Actualizo el precio de Reseteo de AV.Cost en Devengados----
+     If Val(s:fac) >0 y [ Val(t:fac)<>Val(s:fac) o [Val(t:fac)=Val(s:fac) y val(ab:34)<>0] ]
+
+       ACN(u:fac,  Val(r:fac) * (Val(s:fac) - Val(t:fac)) )
+
+       *--- Actualizo Resultados x Revaluo solo si el ultimo PrecioDev es distinto de cero
+       If Val(t:fac) > 0
+         ACT(v:fac, 'OK')
+
+         SQL.ADD(" EXEC "~DBO~".ActualizaResultados2 ")
+         SQL.ADD(" "~IdxDate2(Dialogo.Fecha1)~", ")
+         SQL.ADD(" '"~FBN['Cliente']~"', ")
+         SQL.ADD(" '"~FBN['Vehiculo']~"', ")
+         SQL.ADD(" '"~FBN['Unidad']~"', ")
+         SQL.ADD(" '"~FBN['Centro']~"', ")
+         SQL.ADD(" '"~FBN['Sector']~"', ")
+         SQL.ADD(" '"~FBN['Sucursal']~"', ")
+         SQL.ADD(" "~Fstr(FBN['NrSaldo'],3,0)~", ")
+         iF eQSTR(FBN['TipoDevengado'],'TIDEV')
+            SQL.ADD(" '"~FBN['EspecieRef']~"', ")
+         Else
+            SQL.ADD(" '"~FBN['Especie']~"', ")
+         Endif
+         If FBN['PrecioEj']<>0
+            SQL.ADD(" "~Fstr(FBN['PrecioEj'],8,0)~", ")
+         Else
+            SQL.ADD(" NULL, ")
+         Endif
+         SQL.ADD(" "~IdxDate2(FBN['FechaEj'])~", ")
+         SQL.ADD(" '"~FBN['CallPut']~"', ")
+         SQL.ADD(" '"~FBN['Estrategia']~"', ")
+         SQL.ADD(" '"~FBN['Cartera']~"', ")
+         SQL.ADD(" '"~FBN['Book']~"', ")
+         SQL.ADD(" '"~FBN['Trader']~"', ")
+         SQL.ADD(" '"~FBN['TipoNegocio']~"', ")
+         SQL.ADD(" 'R"~FBN['TipoDevengado']~"', ")
+         SQL.ADD(" "~Fstr(Val(u:fac),15,8)~", ")
+         SQL.ADD(" '"~FBN['Responsable']~"', ")
+         SQL.ADD(" '"~FBN['TipoPosicion']~"', ")
+         SQL.ADD(" '"~FBN['Producto']~"', ")
+         SQL.ADD(" '"~FBN['GrupoEspecie']~"' ")
+         SQL.NEW
+         SQL.EXEC
+
+         ** Corte de cupon
+         ** --------------
+         ** Cuando corto un cupon no terminan de cerrar los revaluos
+         ** de los devengados. Lo que necesito hacer es:
+         **    RevaluoHoy = sum(Devengados)*(precioHoy-PrecioAyer)
+         **
+         ** Al cortar cupon, necesito:
+         **    RevaluoHoy[Especie,Cupon] = Sum(Devengados[Especie])*(PrecioHoy[Especie]-PrecioAyer[Especie])
+         **                              + Sum(Devengados[Cupon  ])*(PrecioHoy[Cupon  ]- 0                 )
+         **  (0 porque ayer no tenia precio el cupon....)
+         **
+         ** Hasta ahora, no se esta generando el segundo sumando (el del cupon)
+         ** Esto seria mejor resolverlo AL cortar el cupon, pero no
+         ** hay una forma elegante, asi que vamos a contemplar aca
+         ** los resultados a generar.
+         **
+         ** Traigo la especie del cupon (si hay!)
+         ** (no hago un query para no pisar los fbn...)
+         **
+
+** V6: FBN2 no esta implementado todavia, este es el unico lugar donde se usa... por ahora lo reemplazamos con FBN (+ las comillas)
+**         ACT(es:1, SQL("SELECT Alias9  FROM "~DBO~".ESPECIES WHERE Codigo="~fbn2['Especie']~" AND FechaCorteCupon="~IdxDate2(Dialogo.Fecha1)))
+         ACT(es:1, SQL("SELECT Alias9  FROM "~DBO~".ESPECIES WHERE Codigo= '"~fbn['Especie']~"' AND FechaCorteCupon="~IdxDate2(Dialogo.Fecha1)))
+
+         *MessageBox('Especie del cupon' ~ val(es:1))
+         *MessageBox('Nro del cupon' ~ val(cu:1))
+         *MessageBox('Nro del cupon' ~ fbn['Cupon'])
+         ** Si hubo alguna (podria no haber cortado ningun cupon HOY)...
+
+         if not EqStr(val(es:1),'')
+            ** Vamos a generar un RINTLE para Cespecie
+            ** Traigo el precio del cupon
+            ACN(w:fac,Cotizacion(val(es:1),,,,Dialogo.Fecha1,5,SI) )
+            *--      (PrecioHoy[Cupon]) * Dev.aRevaluar
+            ACN(x:fac,  Val(r:fac) * (Val(w:fac)) )
+
+            SQL.ADD(" EXEC "~DBO~".ActualizaResultados2 ")
+            SQL.ADD(" "~IdxDate2(Dialogo.Fecha1)~", ")
+            SQL.ADD(" '"~FBN['Cliente']~"', ")
+            SQL.ADD(" '"~FBN['Vehiculo']~"', ")
+            SQL.ADD(" '"~FBN['Unidad']~"', ")
+            SQL.ADD(" '"~FBN['Centro']~"', ")
+            SQL.ADD(" '"~FBN['Sector']~"', ")
+            SQL.ADD(" '"~FBN['Sucursal']~"', ")
+            SQL.ADD(" "~Fstr(FBN['NrSaldo'],3,0)~", ")
+            iF eQSTR(FBN['TipoDevengado'],'TIDEV')
+               SQL.ADD(" '"~FBN['EspecieRef']~"', ")
+            Else
+               SQL.ADD(" '"~FBN['Especie']~"', ")
+            Endif
+            If FBN['PrecioEj']<>0
+               SQL.ADD(" "~Fstr(FBN['PrecioEj'],8,0)~", ")
+            Else
+               SQL.ADD(" NULL, ")
+            Endif
+            SQL.ADD(" "~IdxDate2(FBN['FechaEj'])~", ")
+            SQL.ADD(" '"~FBN['CallPut']~"', ")
+            SQL.ADD(" '"~FBN['Estrategia']~"', ")
+            SQL.ADD(" '"~FBN['Cartera']~"', ")
+            SQL.ADD(" '"~FBN['Book']~"', ")
+            SQL.ADD(" '"~FBN['Trader']~"', ")
+            SQL.ADD(" '"~FBN['TipoNegocio']~"', ")
+            SQL.ADD(" 'R"~FBN['TipoDevengado']~"', ")
+            SQL.ADD(" "~Fstr(Val(x:fac),15,8)~", ")
+            SQL.ADD(" '"~FBN['Responsable']~"', ")
+            SQL.ADD(" '"~FBN['TipoPosicion']~"', ")
+            SQL.ADD(" '"~FBN['Producto']~"', ")
+            SQL.ADD(" '"~FBN['GrupoEspecie']~"' ")
+            SQL.NEW
+            SQL.EXEC
+         endif
+       Endif
+     Endif
+   proximo
+Proximo
+
+

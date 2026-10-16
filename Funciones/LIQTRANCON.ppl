@@ -1,0 +1,191 @@
+﻿*- Movimiento DTP - RTP por CONTRAPARTE
+*- Transferencia por Montos Negativos RTP para Cuenta Puente contra Cuenta Agente
+*-                          Positivos DTP para Cuenta Puente contra Cuenta Cliente
+
+** ASI ERA EN LA NATIVA, PERO LO CAMBIO YA QUE LA LIQUIDACION GENERA RET EN LUGAR DE DEP Y
+** DEP EN LUGAR DE RET
+***************************************************************************************
+*If Eqstr(Val(l:&i),'RET')             
+*   ACT(w:&i, 'DTP')
+*else
+*   ACT(w:&i, 'RTP')
+*endif  
+*If val(s:&i)=0
+*   *- Es Interna => Caso de Patagonia Uruguay
+*   If Eqstr(Val(l:&i),'RET')             
+*      ACT(w:&i, 'RTP')
+*   else
+*      ACT(w:&i, 'DTP')
+*   endif  
+*EndIf
+***************************************************************************************
+
+***************************************************************************************
+If Eqstr(Val(l:&i),'DEP')             
+   ACT(w:&i, 'DTP')
+else
+   ACT(w:&i, 'RTP')
+endif  
+
+If val(s:&i)=0
+   *- Es Interna => Caso de Patagonia Uruguay
+   If Eqstr(Val(l:&i),'DEP')             
+      ACT(w:&i, 'RTP')
+   else
+      ACT(w:&i, 'DTP')
+   endif  
+EndIf
+***************************************************************************************
+*- Parametros para Ingresar Transferencias 
+*- ta1: Especie ta2: TipoTr2  ta81: Vehiculo1 ta39: Fecha1
+*- ta50: CB1 ta103: Mercado1 ta4: Cliente1   ta9: Cuenta1
+*- ta6: Cliente3 ta7: Cliente4 ta104: Mercado2 ta5: Cliente2 ta10: Cuenta2
+*- ta115: ComitenteExt ta60: RB1 ta40: Fecha2 ta41: Fecha3  ta24: Cantidad1 ta25: Cantidad2 
+*- ta17: Especie4 ta18: Especie5  ta52: CB3  ta42: Fecha4 ta29: Precio1 
+*- ta107: Cupon1 ta51: CB2 ta61: RB2 ta62: RB3 ta55: CB6 (Marca de Automatico)
+ 
+act(ta1  ,Val(d:&i) )
+act(ta81 ,Val(a:&i) )
+acd(ta39 ,Val(ak:&i) ) 
+act(ta50 ,'1')
+*act(ta103,Val(mc:&i) )
+act(ta203,Val(bk:&i) )
+act(ta4  ,Val(b:&i) )
+act(ta9  ,val(ca:&i) )
+act(ta6  ,Val(a:&i) ) 
+act(ta7  ,BuscarCampo('CLIENTES','CodDepCajaValores','Codigo',val(ta6)) ) 
+act(ta104,VAR('CLHODEFA') )
+act(ta5  ,Val(a:&i) )
+
+
+*- Cuenta Puente
+act(ta10 ,Val(j:&i) )
+act(ta115,'' )
+act(ta60 ,'-1' )
+
+* Si es una TCOPRI de contraparte sin custodia en el Banco invierto el signo de la custodia y busco el mercado
+if Eqstr(SQL("SELECT TipoOp FROM "~DBO~".OPERACIONES WHERE NrOperacion=(SELECT NrOperacionRef1 FROM "~DBO~".TRANSACCIONES2 WHERE NrTrans='"~val(g:&i)~"' ) "),'TCOPRI')
+   acn(xx:1,SQL("SELECT IsNull(Corporate,0) FROM "~DBO~".OPERACIONES WHERE NrOperacion='"~val(i:&i)~"' "))
+   if val(xx:1)=0
+      act(ta103,SQL("SELECT Mercado FROM "~DBO~".CUENTAS where Codigo='"~val(ta10)~"'") )
+      If Eqstr(Val(l:&i),'DEP')             
+         ACT(w:&i, 'RTP')
+      else
+         ACT(w:&i, 'DTP')
+      endif  
+   else
+      act(ta103,Val(mc:&i))
+   endif      
+else
+   act(ta103,Val(mc:&i))
+endif
+act(ta2  ,Val(w:&i) )
+
+act(ta40, '' )
+act(ta41, '' )
+acn(ta24,Abs(Val(dd:&i)))
+
+*- Valor Teorico
+acn(ta200, ValorTeorico2(val(ta1),val(ta39)) )
+acn(ta25,val(ta24)*val(ta200) )
+act(ta17,'CUS')
+act(ta18,'CUS')
+act(ta52,'0')
+act(ta42,'')
+acn(ta29,COTIZACION(val(ta1),,,,val(ta39),1) )
+act(ta107,Fstr(NrCupon2(val(ta1),val(ta39)),0,0) )
+*If EqStr(val(ta107),'0')
+*   act(ta107,'')
+*EndIf
+
+act(ta51,'1') 
+act(ta61,'0') 
+act(ta62,'0') 
+
+act(ta201,BuscarCampo('ESPECIES','InteresesC','Codigo',val(ta1)) ) 
+acn(ta202,val(ta29) ) 
+
+*- Resolucion 1585
+ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', Val(ta1)))
+
+If Not EqStr(val(ta201),'DIR')
+   *** calcula precio sucio ***
+   act(ca:fac,val(ta1))
+   acd(ck:fac,val(ta39))
+   (."SUCIO".)
+
+   
+   IF Incluido(Val(al4), '1585')
+      acn(ta202,(val(ta29)+(val(cj:fac)*Val(ta29)))*val(ci:fac) ) 
+   Else
+      acn(ta202,(val(ta29)+val(cj:fac))*val(ci:fac) ) 
+   Endif
+EndIf
+
+*- ta34: Cambio1 ta35: Cambio2 ta36: Cambio3 ta37: Cambio4
+*- ta28: Cantidad5  ta30: Precio2 ta31: Precio3 ta32: Precio4 ta33: Precio5 ta11: Cuenta3
+*- ta38: Cambio5 ta26: Cantidad3
+acn(ta35, IIF(Incluido('LETES',Ascendientes('ESPECIES',val(ta1))),(1-val(ta29))*36000/(FechaMaduracion(val(ta1))-val(ta39)),0) )
+acn(ta36, val(cj:fac) )
+
+*- Monto de la Transferencia 
+acn(ta37, IIF(Eqstr(BuscarCampo('ESPECIES','InteresesC','Codigo',val(ta1)),'CLE'),IIF(BuscarCampo('ESPECIES','Tasa1','Codigo',val(ta1))=0,val(ta29)*val(ta24)*val(ta200),(val(ta29)*val(ta24)*(ValorNominal(val(ta1))+BuscarCampo('ESPECIES','IntsCapitalizados','Codigo', val(ta1))))),val(ta29)*val(ta24)) )
+
+*- Total
+acn(ta34, val(ta24)*val(ta202) )
+
+act(ta55,'1') 
+
+*- ta91: Operacion de Referencia
+act(ta91,Val(i:&i) ) 
+
+*- ta92: Operacion de Referencia1 ta92: Operacion de Referencia2
+act(ta91,Val(g:&i) ) 
+
+* - Fechacargasys
+acd(ta80,fsys) 
+
+* Campos de desbloqueo
+acn(ta116, Abs(val(aw:&i)) )
+acn(ta117, Abs(val(an:&i)) )
+acn(ta118, Abs(val(as:&i)) )
+ACT(ta16,  val(ao:&i) )
+
+*- RB4
+IF Val(dr:&i) >= 0
+   act(ta63,FStr(Val(dr:&i),0,0)) 
+ELSE
+   act(ta63,'0') 
+ENDIF
+
+If val(s:&i)>0
+   * Transf. NO INTERNA
+   act(ta4  ,val(ta81) )
+   act(ta9  ,val(j:&i))
+   act(ta6  ,Val(b:&i) ) 
+   act(ta7  ,BuscarCampo('CLIENTES','CodDepCajaValores','Codigo',val(ta6)) ) 
+   act(ta5  ,Val(b:&i) )
+
+    *- Cuenta Agente
+    act(ta10 ,Val(v:&i) )
+    act(ta115,BuscarCampo('CUENTAS','NrDepositante','Codigo',val(ta10)) )
+
+    act(ta60 ,Fstr(val(z:&i),0,0) )
+
+    If val(y:&i)=0
+       act(ta40, '' )
+    Else 
+       act(ta40, val(y:&i) )
+    EndIf
+
+    If val(x:&i)=0
+       act(ta41, '' )
+    Else 
+       act(ta41, val(x:&i) )
+    EndIf
+
+   act(ta51,'0') 
+EndIf 
+(.'GENTRANS2'.)
+
+ACT(az:&i, val(ta3) )

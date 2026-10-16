@@ -1,0 +1,351 @@
+﻿MostrarCuadrodeMensajes
+GrillaVisible(NO)
+*ModoReproceso(ConDialogo)
+CrearDialogo
+  Vehiculo1  : "Vehiculo"   ;;;;;;Novacio(Dialogo.Vehiculo1);'Vehiculo Incorrecto ';NO;;VAR('VEHICULO')
+  Cliente1   :'Cliente'     ;;;;;;
+  RazonSocial:'Razon Social';;;;;;NoVacio(Dialogo.Cliente1) o NoVacio(Dialogo.RazonSocial);'Debe ingresar un Cliente';NO;
+  Fecha1     :'Vigencia' ;;;;;;Dialogo.Fecha1<>0;'Fecha No Valida';NO;Fsys
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+*(.'ABCDARIO'.)
+
+CrearFont(1,'Arial,9,')
+CrearFont(2,'Arial,9,B')
+CrearFont(3,'Arial,10,B')
+CrearFont(4,'Arial Black,14,')
+
+SetFilaActual(1)
+
+AgregarBMP(l1, Exe('LOGO'), Exe('ESCALOGO'))
+
+ACT(ay:1, 'Moneda Local')
+ACT(az:1, VAR("MONELOCA"))
+
+ACT(a:fac,Meses(Mes(Dialogo.Fecha1))~' '~FSTR(Dia(Dialogo.Fecha1),1,0)~', '~Fstr(Anio(Dialogo.Fecha1),1,0))
+SetFont(a:fac,3)
+*IFA
+SetfilaActual(4)
+ACT(a:FAC, 'Consolidado por Cliente ')
+SetFont(a:FAC,3)
+IFA
+
+if NoVacio(Dialogo.RazonSocial)
+   ACT(a:fac, Dialogo.RazonSocial )
+   ACT(x6,BuscarCampo('CLIENTES','Codigo','RazonSocial',Dialogo.RazonSocial) )
+else
+   ACT(a:fac, BuscarCampo('CLIENTES','RazonSocial','Codigo',Dialogo.Cliente1) )
+   ACT(x6,Dialogo.Cliente1)
+endif
+SetFont(a:FAC,3)
+SetFilaActual(fac+2)
+
+act(a:fac,'Operaciones Vigentes')
+SetFont(a:fac,3)
+ifa
+ACT(a:fac,'Tipo Op.')
+ACT(b:fac,'Nro. Op.')
+ACT(c:fac,'Fecha Op.')
+ACT(d:fac,'Fecha Vto.')
+ACT(e:fac,'Especie')
+ACT(f:fac,'Cantidad')
+ACT(g:fac,'Precio')
+ACT(h:fac,'Plazo')
+ACT(i:fac,'C.Esp.')
+ACT(j:fac,'Total')
+ACT(k:fac,'Custodia')
+
+AlinearCeldas(a:fac..k:fac,'C')
+SetFont(a:fac..k:fac,2)
+AgregarMarco(a:fac..k:fac,2,0,Exe('COLOR12'))
+
+*- Ops Vigentes
+SQL.ADD(" Select O.TipoOp, O.NrOperacion, O.FechaOp, O.FechaVto, O.Cliente1,  ")
+SQL.ADD(" O.Especie, O.Cantidad, O.Precio1, O.Plazo, ")
+SQL.ADD(" O.ContraEspecie, O.TotalNetoCli1, CB8 Custodia  ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES O ")
+SQL.ADD(" WHERE O.Cliente1='"~Dialogo.Cliente1~"'")
+SQL.ADD("   AND O.TipoOp Not IN('FXCT','FXVT') ")
+SQL.ADD("   AND ((O.FechaOp<="~IdxDate2(Dialogo.Fecha1)~" AND O.FechaVto>"~IdxDate2(Dialogo.Fecha1)~")")
+SQL.ADD("    OR (O.FechaOp=O.FechaVto AND O.FechaOp="~IdxDate2(Dialogo.Fecha1)~"))")
+SQL.ADD(" ORDER BY TipoOp, Especie, FechaOp ")
+
+acn(fi:1,fac+1)
+
+Recorrer SQL
+
+   ACT(a:fac,fbn['TipoOp'])
+   ACT(b:fac,fbn['NrOperacion'])
+   ACLO(b:fac,fbn['NrOperacion'])
+   ACT(c:fac,fbn['FechaOp'])
+   ACT(d:fac,fbn['FechaVto'])
+   AlinearCeldas(b:fac..d:fac,'C')
+
+   ACT(e:fac,fbn['Especie'])
+
+   ACN(f:fac,fbn['Cantidad'])
+   FormatoCeldas(f:fac,Exe('F2'))
+
+   ACN(g:fac,fbn['Precio1'])
+   FormatoCeldas(g:fac,Exe('F2'))
+
+   ACN(h:fac,fbn['Plazo'])
+   FormatoCeldas(h:fac,Exe('F0'))
+   ACT(i:fac,fbn['ContraEspecie'])
+
+   ACN(j:fac,fbn['TotalNetoCli1'])
+   FormatoCeldas(j:fac,Exe('F2'))
+   if Incluido(fbn['TipoOp'],'MMCDA|MMCCDA') y Eqstr(FBN['Custodia'],'1')
+      ACT(k:fac,'SI')
+   endif
+
+Proximo
+
+SQL.ADD(" Select O.TipoOp, O.Especie, O.Cliente1, O.ContraEspecie, O.FechaVto,   ")
+SQL.ADD(" Sum(O.Cantidad) Cantidad, SUM(O.TotalBrutoCli1) TotalBrutoCli1, Sum(Plazo) Plazo, Count(1) Cuantos ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES O ")
+SQL.ADD(" WHERE O.Cliente1='"~Dialogo.Cliente1~"'")
+SQL.ADD("   AND O.TipoOp IN('FXCT','FXVT') ")
+SQL.ADD("   AND ((O.FechaOp<="~IdxDate2(Dialogo.Fecha1)~" AND O.FechaVto>"~IdxDate2(Dialogo.Fecha1)~")")
+SQL.ADD("    OR (O.FechaOp=O.FechaVto AND O.FechaOp="~IdxDate2(Dialogo.Fecha1)~"))")
+SQL.ADD(" GROUP BY O.TipoOp, O.Especie, O.Cliente1, O.ContraEspecie, O.FechaVto ")
+SQL.ADD(" ORDER BY TipoOp--, Especie ")
+ 
+Recorrer SQL
+
+   ACT(a:fac,fbn['TipoOp'])
+   ACT(d:fac,fbn['FechaVto'])
+   AlinearCeldas(b:fac..d:fac,'C')
+
+   ACT(e:fac,fbn['Especie'])
+
+   ACN(f:fac,fbn['Cantidad'])
+   FormatoCeldas(f:fac,Exe('F2'))
+
+   ACN(g:fac,fbn['TotalBrutoCli1']/fbn['Cantidad'])
+   FormatoCeldas(g:fac,Exe('F2'))
+
+   ACN(h:fac,fbn['Plazo']/FBN['Cuantos'])
+   FormatoCeldas(h:fac,Exe('F0'))
+   ACT(i:fac,fbn['ContraEspecie'])
+
+   ACN(j:fac,fbn['TotalBrutoCli1'])
+   FormatoCeldas(j:fac,Exe('F2'))
+
+Proximo
+SetFont(a:val(fi:1)..j:fac,1)
+
+SetFilaActual(FAC+2)
+
+
+act(a:fac,'Tenencias')
+SetFont(a:fac,3)
+ifa
+
+ACT(a:fac,'Especie')
+ACT(b:fac,'Nombre')
+ACT(c:fac,'Cupon')
+ACT(d:fac,'Saldo')
+ACT(e:fac,'Cuenta')
+ACT(f:fac,'Tipo')
+ACT(g:fac,'Prox.Cupon')
+
+*AlinearCeldas(a:fac..l:fac,'C')
+SetFont(a:fac..g:fac,2)
+AgregarMarco(a:fac..g:fac,2,0,Exe('COLOR12'))
+
+SQL.ADD("SELECT S1.Especie, E.Nombre, S1.Mercado, S1.Cliente, S1.Cuenta, S1.NrSaldo, C.RazonSocial, ")
+SQL.ADD("       E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, E.ZeroCoupon, ")
+SQL.ADD("       SUM(S1.Saldo) Saldo,E.Alias5, E.InteresesC, '1' Tipo,S1.Cupon ")
+SQL.ADD("FROM "~DBO~".SALDOSDIA S1, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E ")
+SQL.ADD("WHERE S1.Cliente = C.Codigo AND ")
+SQL.ADD("      S1.Cliente='"~Dialogo.Cliente1~"' AND ")
+SQL.ADD("      E.Codigo = S1.Especie AND ")
+SQL.ADD("      (E.Jerarquia LIKE '"~Var('JERTITULOS')~"%'  OR ")
+SQL.ADD("       E.Jerarquia LIKE '"~Var('JERFONDOS')~"%' ) AND ")
+SQL.ADD("      S1.EnteCustodia = '"~Dialogo.Vehiculo1~"' AND ")
+SQL.ADD("      S1.NrSaldo=1 AND ")
+SQL.ADD("      S1.Saldo <> 0 AND ")
+SQL.ADD("      (S1.Especie Not In ("~Pipe2Comillas(Var('ESPNOCP1'))~") AND S1.Especie Not In ("~Pipe2Comillas(Var('ESPNOCP2'))~"))  AND ")
+SQL.ADD("      S1.Fecha = (SELECT MAX(S2.Fecha) ")
+SQL.ADD("                  FROM "~DBO~".SALDOSDIA S2 ")
+SQL.ADD("                  WHERE S2.Cliente = S1.Cliente AND ")
+SQL.ADD("                        S2.Especie = S1.Especie AND ")
+SQL.ADD("                        S2.EnteCustodia = S1.EnteCustodia AND ")
+SQL.ADD("                        S2.Mercado = S1.Mercado AND ")
+SQL.ADD("                        S2.NrSaldo = S1.NrSaldo AND ")
+ SQL.ADD("                        S2.Cupon = S1.Cupon AND ")
+SQL.ADD("                        S2.Cuenta = S1.Cuenta AND ")
+SQL.ADD("                        S2.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"' ) ")
+SQL.ADD("GROUP BY S1.Especie, E.Nombre, S1.Mercado, S1.Cliente, S1.Cuenta, S1.NrSaldo, C.RazonSocial, ")
+SQL.ADD("         E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, E.ZeroCoupon, E.Alias5, E.InteresesC, Tipo,S1.Cupon ")
+SQL.ADD("ORDER BY S1.Especie, Tipo, S1.Mercado, S1.Cliente, S1.Cuenta, S1.NrSaldo ")
+
+acn(fi:1,fac+1)
+
+Recorrer SQL
+
+  ACT(a:fac,fbn['Especie'])
+  ACT(b:fac,fbn['Nombre'])
+  ACT(c:fac,fbn['Cupon'])
+  ACN(d:fac,-fbn['Saldo'])
+  FormatoCeldas(d:fac,Exe('F2'))
+
+  ACT(e:fac,fbn['Cuenta'])
+  if DesciendeDeEspecie(FBN['Especie'],'DEUDA')
+     ACT(f:fac,'Renta Fija')
+  else
+     if DesciendeDeEspecie(FBN['Especie'],'PRIVA')
+        ACT(f:fac,'Acciones')
+     else
+        if DesciendeDeEspecie(FBN['Especie'],'FONDOS')
+           ACT(f:fac,'Fondos')
+        else
+           ACT(f:fac,'Otros')
+        endif
+     endif
+  endif
+  if Not Eqstr(fbn['ZeroCoupon'],'SI')
+     ACD(g:fac,ProxCupon2(fbn['Especie'],Dialogo.Fecha1))
+  endif
+
+Proximo
+OrdenarFilas(Val(fi:1)+1,fac,6,'A')
+SetFont(a:val(fi:1)..g:fac,1)
+
+SetFilaActual(fac+2)
+
+*--------------------
+act(a:fac,'Pendientes de Liquidacion')
+SetFont(a:fac,3)
+ifa
+ACT(a:fac,'Fecha')
+ACT(b:fac,'Tipo')
+ACT(c:fac,'Especie')
+ACT(d:fac,'Cantidad')
+ACT(e:fac,'Detalle')
+
+*AlinearCeldas(a:fac..l:fac,'C')
+SetFont(a:fac..e:fac,2)
+AgregarMarco(a:fac..e:fac,2,0,Exe('COLOR12'))
+
+SQL.ADD(" Select O.TipoOp, O.NrOperacion, M.FechaMov, M.Especie, M.Cantidad, M.Leyenda ")
+SQL.ADD("  FROM "~DBO~".OPERACIONES O, "~DBO~".MOVPENDIENTES M, "~DBO~".OPERACIONESBITS OB, "~DBO~".TIPOSOPERACION T ")
+SQL.ADD(" WHERE O.Cliente1='"~Dialogo.Cliente1~"'")
+SQL.ADD("   AND O.NrOperacion=M.NrOperacion ")
+SQL.ADD("   AND O.NrOperacion=OB.NrOperacion ")
+SQL.ADD("   AND O.TipoOp=T.Codigo ")
+SQL.ADD("   AND OB.Valor=1 ")
+SQL.ADD("   AND M.FechaMov<="~IdxDate2(Dialogo.Fecha1))
+SQL.ADD(" ORDER BY M.FechaMov, O.TipoOp, M.Especie ")
+
+acn(fi:1,fac+1)
+
+Recorrer SQL
+
+  ACD(a:fac,fbn['FechaMov'])
+  ACT(b:fac,fbn['TipoOp'])
+  ACT(c:fac,fbn['Especie'])
+  ACN(d:fac,fbn['Cantidad'])
+  FormatoCeldas(d:fac,Exe('F2'))
+  ACT(e:fac,fbn['Leyenda'])
+
+Proximo
+SetFont(a:val(fi:1)..e:fac,1)
+
+SetFilaActual(fac+2)
+
+
+*--------------------
+act(a:fac,'Volumenes')
+SetFont(a:fac,3)
+ifa
+act(b:fac,  'A.Corriente')
+act(e:fac,  'A.Calendario')
+act(h:fac,  'M.Corriente')
+act(k:fac,  'F.Ultima')
+act(k:fac+1,'Operacion')
+AlinearCeldas(a:fac..l:fac,'C')
+ifa
+act(b:fac,  'Monto')
+act(c:fac,  'Cantidad Op.')
+act(d:fac,  'Comisiones')
+act(e:fac,  'Monto')
+act(f:fac,  'Cantidad Op.')
+act(g:fac,  'Comisiones')
+act(h:fac,  'Monto')
+act(i:fac,  'Cantidad Op.')
+act(j:fac,  'Comisiones')
+
+AgregarMarco(a:fac-1..k:fac,2,0,Exe('COLOR12'))
+AlinearCeldas(a:fac..k:fac,'D')
+
+ifa
+act(a:fac,  'Renta Fija')
+act(a:fac+1,'Acciones')
+act(a:fac+2,'Fondos')
+act(a:fac+3,'Moneda')
+SetFont(a:fac..a:fac+3,2)
+AgregarMarco(a:fac-2..a:fac+3,2,0,Exe('COLOR12'))
+
+scn(co:1,2)
+
+* Año corriente
+acd(fe:1,Fecha('01/01/'~Fstr(Anio(Dialogo.Fecha1),4,0)))
+acd(fe:2,Fecha('31/12/'~Fstr(Anio(Dialogo.Fecha1),4,0)))
+
+acd(val(co:1)+1:fac-2,val(fe:1))
+acd(val(co:1)+2:fac-2,val(fe:2))
+AgregarMarco(val(co:1):fac-2..val(co:1)+2:fac+3,2,0)
+
+acn(fi:1,fac)
+
+(.'TABVOLUMEN'.)
+
+* Año calendario
+acd(fe:1,Dialogo.Fecha1-365)
+acd(fe:2,Dialogo.Fecha1)
+
+scn(co:1,3)
+acd(val(co:1)+1:fac-2,val(fe:1))
+acd(val(co:1)+2:fac-2,val(fe:2))
+AgregarMarco(val(co:1):fac-2..val(co:1)+2:fac+3,2,0)
+
+(.'TABVOLUMEN'.)
+
+* Mes corriente
+acd(fe:1,PrideMes(Dialogo.Fecha1))
+acd(fe:2,FindeMes(Dialogo.Fecha1))
+
+scn(co:1,3)
+acd(val(co:1)+1:fac-2,val(fe:1))
+acd(val(co:1)+2:fac-2,val(fe:2))
+AgregarMarco(val(co:1):fac-2..val(co:1)+2:fac+3,2,0)
+
+(.'TABVOLUMEN'.)
+SetFont(b:val(fi:1)-2..val(co:1)+3:fac-1,2)
+SetFont(b:val(fi:1)..val(co:1)+3:fac+3,1)
+
+AgregarMarco(val(co:1)+3:fac-2..val(co:1)+3:fac+3,2,0)
+
+ACO(1,10)
+ACO(2,10)
+ACO(3,10)
+ACO(4,10)
+ACO(5,10)
+ACO(6,10)
+ACO(7,10)
+ACO(8,10)
+ACO(9,10)
+ACO(10,10)
+ACO(11,10)
+ACO(12,10)
+ACO(13,10)
+ACO(14,1)
+
+Limitesvision(n:fac+5)
+Impresion(1,2)

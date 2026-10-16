@@ -1,0 +1,785 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1   : 'Fecha'                   ;1;1;;  ;  ;Dialogo.Fecha1 <> 0;'Fecha Invalida';NO;FSys
+  Check1   : 'Ver Hoja'                ;1;2;;NO;NO;;;;0;
+  Vehiculo1: 'Vehiculo'                ;2;1;;NO;  ;NoVacio(DIalogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+  Check2   : 'Llamado'                 ;2;2;;NO;NO;;;;0;
+  Cliente1 : 'Agente'                  ;3;1;;  ;  ;Vacio(Dialogo.Cliente1) O Incluido(Dialogo.Cliente1, SQLSet(" Select Codigo From "~DBO~".CLIENTES Where NrMAE Is Not Null AND NrMAE <> '0' AND NrMAE <> '00' AND NrMAE <> '000' "));'Agente Invalido';NO;;;;;;" NrMAE Is Not Null AND NrMAE <> '0' AND NrMAE <> '00' AND NrMAE <> '000' ";
+  TipoOp1  : 'Tipo Op.'                ;3;2;;NO;NO;
+  Radio1   : '|Resumen|Detalle Ops'    ;4;1;;  ;  ;;;;0;
+  Radio2   : 'Resultado|Mensual|Anual|Historico|Otro';5;1;;;;;;;0;
+  Fecha2   : 'Fecha Desde'             ;5;2;;Dialogo.Radio2=3;Dialogo.Radio2=3;[Dialogo.Fecha1>0 o Dialogo.Radio2=2] y Dialogo.Fecha2<=Dialogo.Fecha1;'Fecha desde Invalida';NO;;iif(Dialogo.Radio2=0,PriDeMes(Dialogo.Fecha1,SI),iif(Dialogo.Radio2=1,SumarMeses(Dialogo.Fecha1,-(Mes(Dialogo.Fecha1)-1),1),iif(Dialogo.Radio2=2,-1,Dialogo.Fecha1)));
+  Radio3   : 'Precios|Reales|Simulados';6;1;;  ;  ;;;;0;
+  Fecha3   : 'Fecha Vto'               ;6;2;;NO;NO;
+  Lista1   : 'Fixing'                  ;7;1;;  ;  ;;;;;;SQLSet("Select Codigo from "~DBO~".ESPECIES where SUBSTRING(Jerarquia,10,3)<>'000' AND SUBSTRING(Jerarquia,1,9)= (Select SUBSTRING(Jerarquia,1,9) from "~DBO~".ESPECIES where Codigo='OCTFIX') ")
+FinDialogo
+if not Ok 
+  Cancelar
+endif
+if Dialogo.Check2=1
+  ModoReproceso(SinDialogo)
+endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+ACD(x1, Dialogo.Fecha2)
+ACD(x2, Dialogo.Fecha1-1)
+ACD(x3, Dialogo.Fecha1)
+ACD(z6, Dialogo.Fecha3)
+ACT(y1, Dialogo.Vehiculo1)
+ACT(y2, Dialogo.Cliente1)
+ACT(y3, Dialogo.TipoOp1)
+ACT(w3, Dialogo.Lista1)
+ACN(z1, Dialogo.Radio1)
+ACN(z2, Dialogo.Radio2)
+ACN(z3, Dialogo.Radio3)
+ACN(z4, Dialogo.Check1)
+ACN(z5, Dialogo.Check2)
+
+if Dialogo.Radio3=1
+  * Simulado
+  if Dialogo.Check2=0
+    * No es LLamado
+    SQL.ADD("Select O.FechaVto, O.ContraEspecie, O.ContraEspecie2, O.EnteCus1, ")
+    SQL.ADD("       O.Especie,  O.TipoOp, ")
+    SQL.ADD("       Case When CB6 = '1' Then FechaPrecan Else FechaVto End as FechaFixing ")
+    SQL.ADD("  from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB ")
+    SQL.ADD(" where O.NrOperacion = OB.NrOperacion ")
+    SQL.ADD("   and OB.NrBit       = 30 ")
+    SQL.ADD("   and OB.Valor       <> '1' ")
+    SQL.ADD("   and O.TipoOp In ('FXCF','FXVF') ")
+    SQL.ADD("   and O.FechaOp  <= "~IdxDate2(Dialogo.Fecha1)~" ")
+    SQL.ADD("   and O.FechaVto >= "~IdxDate2(Dialogo.Fecha1)~" ")
+    SQL.ADD("   and (O.FechaPrecan is Null or O.FechaPrecan >= "~IdxDate2(Dialogo.Fecha1)~") ")
+    SQL.ADD("   and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+    if NoVacio(Dialogo.Cliente1)
+      SQL.ADD(" and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+    endif
+    if NoVacio(Dialogo.TipoOp1)
+      SQL.ADD(" and O.TipoOp = '"~Dialogo.TipoOp1~"' ")
+    endif
+    if Dialogo.Fecha3>0
+      SQL.ADD(" and O.FechaVto = "~IdxDate2(Dialogo.Fecha3)~" ")
+    endif
+    if NoVacio(Dialogo.Lista1)
+      SQL.ADD(" and O.ContraEspecie2 in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+    endif
+    SQL.ADD(" order by O.EnteCus1,O.FechaVto ")
+    Recorrer SQL
+      if fbn['FechaFixing']=DIalogo.Fecha1
+        ACN(dq:2, 0)
+        if Val(dq:1)>0
+          recorrer&i 1,Val(dq:1)
+            if EqStr(fbn['ContraEspecie2'],Val(dr:&i))
+              ACN(dq:2, &i)
+              Break
+            endif
+          proximo
+        endif
+        if Val(dq:2)=0
+          SCN(dq:1, 1)
+          ACT(dr:Val(dq:1), fbn['ContraEspecie2'])
+          if Val(w4)=1
+            ACN(ds:Val(dq:1), CotizacionC(fbn['ContraEspecie2'],,,,Dialogo.Fecha1,1,,fbn['ContraEspecie']))
+          else
+*            if EqStr(fbn('TipoOp'),'FXOCTC')
+*              ACN(ds:Val(dq:1), CotizacionFX('LIBRE',fbn['Especie'],Dialogo.Fecha1,0,'SI',2,NO,'LOC'))
+*            else
+*              ACN(ds:Val(dq:1), CotizacionFX('LIBRE',fbn['Especie'],Dialogo.Fecha1,0,'SI',1,NO,'LOC'))
+*            endif
+            ACN(ds:Val(dq:1), (CotizacionFX('LIBRE',fbn['Especie'],Dialogo.Fecha1,0,'SI',2,NO,'LOC')+CotizacionFX('LIBRE',fbn['Especie'],Dialogo.Fecha1,0,'SI',1,NO,'LOC'))/2)
+          endif
+          ACD(dt:Val(dq:1), SQL("Select Max(Fecha) from "~DBO~".COTIZACIONES where Codigo='"~fbn['ContraEspecie2']~"' and Fecha<='"~IdxDate(Dialogo.Fecha1)~"' and CallPut='CON' and Precio1>0 "))
+          ACN(du:Val(dq:1), Val(ds:Val(dq:1)))
+        endif
+      else
+        ACN(dk:2, 0)
+        if Val(dk:1)>0
+          recorrer&i 1,Val(dk:1)
+            if EqStr(fbn['EnteCus1'],Val(dl:&i)) y fbn['FechaVto']=Val(dm:&i)
+              ACN(dk:2, &i)
+              Break
+            endif
+          proximo
+        endif
+        if Val(dk:2)=0
+          SCN(dk:1, 1)
+          ACT(dl:Val(dk:1), fbn['EnteCus1'])
+          ACD(dm:Val(dk:1), fbn['FechaVto'])
+          ACN(dn:Val(dk:1), CotizacionC(fbn['EnteCus1'],'FUT',fbn['FechaVto'],,Dialogo.Fecha1,1,,fbn['ContraEspecie']))
+          ACD(do:Val(dk:1), SQL("Select Max(Fecha) from "~DBO~".COTIZACIONES where Codigo='"~fbn['EnteCus1']~"' and Fecha<='"~IdxDate(Dialogo.Fecha1)~"' and CallPut='FUT' and FechaEj='"~IdxDate(fbn['FechaVto'])~"' and Precio1>0 "))
+          ACN(dp:Val(dk:1), Val(dn:Val(dk:1)))
+        endif
+      endif
+    proximo
+    EscribirObjeto('INOCT1DK1',Val(dk:1))
+    if Val(dk:1)>0
+      ACN(x4, 420)
+      ACN(x5, 55+Val(dk:1)*20)
+      CrearDialogo
+        Fecha1   : 'Fecha'                   ;1;1;;NO;  ;;;;Val(x3)
+        Check1   : 'Ver Hoja'                ;1;2;;NO;NO;;;;Val(z4)
+        Vehiculo1: 'Vehiculo'                ;2;1;;NO;  ;;;;Val(y1)
+        Check2   : 'Llamado'                 ;2;2;;NO;NO;;;;Val(z5)
+        Cliente1 : 'Cliente'                 ;3;1;;NO;  ;;;;Val(y2)
+        TipoOp1  : 'Tipo Op.'                ;3;2;;NO;NO;;;;Val(y3)
+        Radio1   : '|Resumen|Det.Ops'        ;4;1;;NO;  ;;;;Val(z1)
+        Radio2   : 'Acumulado|Mensual|Anual|Historico|Otro';5;1;;NO;;;;;Val(z2)
+        Fecha2   : 'Fecha Desde'             ;5;2;;NO;Dialogo.Radio2=3;;;;Val(x1)
+        Radio3   : 'Precios|Reales|Simulados';6;1;;NO;  ;;;;Val(z3)
+        Fecha3   : 'Fecha Vto'               ;6;2;;NO;NO;;;;Val(z6)
+        Lista1   : 'Fixing'                  ;7;1;;NO;  ;;;;Val(w3);;SQLSet("Select Codigo from "~DBO~".ESPECIES where SUBSTRING(Jerarquia,10,3)<>'000' AND SUBSTRING(Jerarquia,1,9)= (Select SUBSTRING(Jerarquia,1,9) from "~DBO~".ESPECIES where Codigo='OCTFIX') ")
+        Label1   :                           ;8;1;;  ;  ;;;;'Ingrese las cotizaciones de MTM'
+        ListBox  ; 'Arial,8,B';Val(x4);Val(x5)
+          'Cotiz. Calculo'    ;dp:1..dp:Val(dk:1);  ;;;;90;NUMERO ;'###.########'
+          'Esp. MTM'          ;dl:1..dl:Val(dk:1);NO;;;;60 ;STRING
+          'Fecha Vto'         ;dm:1..dm:Val(dk:1);NO;;;;70 ;FECHA
+          'Cotiz. Tabla'      ;dn:1..dn:Val(dk:1);NO;;;;90;NUMERO ;'###.########'
+          'Fecha Cotiz.'      ;do:1..do:Val(dk:1);NO;;;;70 ;FECHA
+        FinListBox
+      FinDialogo
+      if Not OK
+        Cancelar('Simulacion Cancelada')
+      endif
+      SetFont(dk:1..dk:2,1)
+      SetFont(dl:1..dp:Val(dk:1),1)
+      recorrer&i 1,Val(dk:1)
+        EscribirObjeto('INOCT1DL'~FStr(&i,1,0),Pad(Val(dl:&i),6)~Fecha(Val(dm:&i))~Pad0(FStr(Val(dn:&i),1,8),15)~Fecha(Val(do:&i))~Pad0(FStr(Val(dp:&i),1,8),15))
+      proximo
+    endif
+    EscribirObjeto('INOCT1DQ1',Val(dq:1))
+    if Val(dq:1)>0
+      ACN(y4, 380)
+      ACN(y5, 55+Val(dq:1)*20)
+      CrearDialogo
+        Fecha1   : 'Fecha'                   ;1;1;;NO;  ;;;;Val(x3)
+        Check1   : 'Ver Hoja'                ;1;2;;NO;NO;;;;Val(z4)
+        Vehiculo1: 'Vehiculo'                ;2;1;;NO;  ;;;;Val(y1)
+        Check2   : 'Llamado'                 ;2;2;;NO;NO;;;;Val(z5)
+        Cliente1 : 'Cliente'                 ;3;1;;NO;  ;;;;Val(y2)
+        TipoOp1  : 'Tipo Op.'                ;3;2;;NO;NO;;;;Val(y3)
+        Radio1   : '|Resumen|Det.Ops'        ;4;1;;NO;  ;;;;Val(z1)
+        Radio2   : 'Acumulado|Mensual|Anual|Historico|Otro';5;1;;NO;;;;;Val(z2)
+        Fecha2   : 'Fecha Desde'             ;5;2;;NO;Dialogo.Radio2=3;;;;Val(x1)
+        Radio3   : 'Precios|Reales|Simulados';6;1;;NO;  ;;;;Val(z3)
+        Fecha3   : 'Fecha Vto'               ;6;2;;NO;NO;;;;Val(z6)
+        Lista1   : 'Fixing'                  ;7;1;;NO;  ;;;;Val(w3);;SQLSet("Select Codigo from "~DBO~".ESPECIES where SUBSTRING(Jerarquia,10,3)<>'000' AND SUBSTRING(Jerarquia,1,9)= (Select SUBSTRING(Jerarquia,1,9) from "~DBO~".ESPECIES where Codigo='OCTFIX') ")
+        Label1   :                           ;8;1;;  ;  ;;;;'Ingrese las cotizaciones de Fixing'
+        ListBox  ; 'Arial,8,B';Val(y4);Val(y5)
+          'Cotizacion Calculo'    ;du:1..du:Val(dq:1);  ;;;;90;NUMERO ;'###.########'
+          'Esp. Fixing'           ;dr:1..dr:Val(dq:1);NO;;;;60 ;STRING
+          'Cotizacion Tabla'      ;ds:1..ds:Val(dq:1);NO;;;;90;NUMERO ;'###.########'
+          'Fecha Cotizacion'      ;dt:1..dt:Val(dq:1);NO;;;;70 ;FECHA
+        FinListBox
+      FinDialogo
+      if Not OK
+        Cancelar('Simulacion Cancelada')
+      endif
+      SetFont(dq:1..dq:2,1)
+      SetFont(dr:1..du:Val(dq:1),1)
+      recorrer&i 1,Val(dq:1)
+        EscribirObjeto('INOCT1DR'~FStr(&i,1,0),Pad(Val(dr:&i),6)~Pad0(FStr(Val(ds:&i),1,8),15)~Fecha(Val(dt:&i))~Pad0(FStr(Val(du:&i),1,8),15))
+      proximo
+    endif
+  else
+    * Es LLamado
+    ACT(dk:2, LeerObjeto('INOCT1DK1'))
+    ACN(dk:1, Num(Val(dk:2)))
+    SetFont(dk:1..dk:2,1)
+    if Val(dk:1)>0
+      recorrer&i 1,Val(dk:1)
+        ACT(dv:&i, LeerObjeto('INOCT1DL'~FStr(&i,1,0)))
+        ACT(dl:&i, Copy(Val(dv:&i),1,6))
+        ACD(dm:&i, Fecha(Copy(Val(dv:&i),7,10)))
+        ACN(dn:&i, Num(Copy(Val(dv:&i),17,15)))
+        ACD(do:&i, Fecha(Copy(Val(dv:&i),32,10)))
+        ACN(dp:&i, Num(Copy(Val(dv:&i),42,15)))
+      proximo
+      SetFont(dl:1..dp:Val(dk:1),1)
+      SetFont(dv:1..dv:Val(dk:1),1)
+    endif
+    ACT(dq:2, LeerObjeto('INOCT1DQ1'))
+    ACN(dq:1, Num(Val(dq:2)))
+    SetFont(dq:1..dq:2,1)
+    if Val(dq:1)>0
+      recorrer&i 1,Val(dq:1)
+        ACT(dw:&i, LeerObjeto('INOCT1DR'~FStr(&i,1,0)))
+        ACT(dr:&i, Copy(Val(dw:&i),1,6))
+        ACN(ds:&i, Num(Copy(Val(dw:&i),7,15)))
+        ACD(dt:&i, Fecha(Copy(Val(dw:&i),22,10)))
+        ACN(du:&i, Num(Copy(Val(dw:&i),32,15)))
+      proximo
+      SetFont(dr:1..du:Val(dq:1),1)
+      SetFont(dw:1..dw:Val(dq:1),1)
+    endif
+  endif
+endif
+
+*  ACN(an:FAC, SQL("Select PrecioEj from "~DBO~".MOVEJECUTADOS where NrOperacion='"~fbn['NrOperacion']~"' and NrSaldo=100 and FechaMov='"~IdxDate(Val(am:FAC))~"' "))
+if Val(x1)<=Val(x2)
+  SQL.ADD("Select Sum(M.Cantidad) as ResAnterior from "~DBO~".MOVEJECUTADOS M, "~DBO~".OPERACIONES E ")
+  SQL.ADD(" where M.NrSaldo      =100 ")
+  SQL.ADD("   and M.FechaMov     Between '"~IdxDate(Val(x1))~"' and '"~IdxDate(Val(x2))~"' ")
+  SQL.ADD("   and M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+  SQL.ADD("   and M.NrOperacion  = E.NrOperacion ")
+  if NoVacio(Dialogo.Cliente1)
+    SQL.ADD(" and M.Cliente      = '"~Dialogo.Cliente1~"' ")
+  endif
+  if NoVacio(Dialogo.TipoOp1)
+    SQL.ADD(" and E.TipoOp       = '"~Dialogo.TipoOp1~"' ")
+  endif
+  if NoVacio(Dialogo.Lista1)
+     SQL.ADD(" and E.ContraEspecie2 in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+  endif
+  if Dialogo.Fecha3>0
+    SQL.ADD(" and M.FechaEj      = "~IdxDate2(Dialogo.Fecha3)~" ")
+  endif
+  SQL.ADD("   and M.NrOperacion  Not in ( ")
+  SQL.ADD("Select O.NrOperacion ")
+  SQL.ADD("  from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS OB ")
+  SQL.ADD(" where O.NrOperacion = OB.NrOperacion ")
+  SQL.ADD("   and OB.NrBit       = 30 ")
+  SQL.ADD("   and OB.Valor       <> '1' ")
+  SQL.ADD("   and O.TipoOp In ('FXOCTC','FXOCTV') ")
+  SQL.ADD("   and O.FechaOp  <= "~IdxDate2(Dialogo.Fecha1)~" ")
+  SQL.ADD("   and O.FechaVto >= "~IdxDate2(Dialogo.Fecha1)~" ")
+  SQL.ADD("   and (O.FechaPrecan is Null or O.FechaPrecan >= "~IdxDate2(Dialogo.Fecha1)~") ")
+  SQL.ADD("   and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+  if NoVacio(Dialogo.Cliente1)
+    SQL.ADD(" and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+  endif
+  if NoVacio(Dialogo.TipoOp1)
+    SQL.ADD(" and O.TipoOp = '"~Dialogo.TipoOp1~"' ")
+  endif
+  if NoVacio(Dialogo.Lista1)
+     SQL.ADD(" and O.ContraEspecie2 in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+  endif
+  if Dialogo.Fecha3>0
+    SQL.ADD(" and O.FechaVto = "~IdxDate2(Dialogo.Fecha3)~" ")
+  endif
+  SQL.ADD("   ) ")
+  recorrer SQL
+    SCN(aa:1, fbn['ResAnterior'])
+    SCN(aa:2, 1)
+  proximo
+
+  SQL.ADD("Select Sum(Cantidad) as ResAnterior from "~DBO~".MOVEJECUTADOS ")
+  SQL.ADD(" where NrSaldo=100 ")
+  SQL.ADD("   and FechaMov Between '"~IdxDate(Val(x1))~"' and '"~IdxDate(Val(x2))~"' ")
+  SQL.ADD("   and EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+  if NoVacio(Dialogo.Cliente1)
+    SQL.ADD("   and Cliente = '"~Dialogo.Cliente1~"' ")
+  endif
+  recorrer SQL
+    SCN(ab:1, fbn['ResAnterior'])
+    SCN(ab:2, 1)
+  proximo
+endif
+
+**AgregarBMP(A:1, Exe('LOGO'), 60)
+ACT(a:FAC, CodigoInforme)
+SetFilaActual(4)
+ACT(a:FAC, 'Informe Front OCT al '~Dialogo.Fecha1)
+
+if SQL("SELECT 1 FROM "~DBO~".FLAGSOCT WHERE Registro = '4427' and Fecha = "~IdxDate2(Dialogo.Fecha1)) = 1
+  ACN(w4,1)
+  ACT(d:fac+2, 'Con precios de cierre informados a la fecha solicitada')
+else
+  ACN(w4,0)
+  ACT(d:fac+2, 'Sin precios de cierre informados a la fecha solicitada')
+endif
+SetFont(a:FAC..d:fac+2, 3)
+
+SetFilaActual(FAC+2)
+if NoVacio(Dialogo.Cliente1)
+  ACT(a:FAC, 'Agente: '~Dialogo.Cliente1)
+else
+  ACT(a:FAC, 'Agentes: Todos')
+endif
+ACT(a:FAC+1, 'Vehiculo: '~Dialogo.Vehiculo1)
+if Dialogo.Radio1=0
+  ACT(a:FAC+2, 'Informe Resumen')
+else
+  ACT(a:FAC+2, 'Detalle de Operaciones')
+endif
+if Dialogo.Radio2=0
+  ACT(a:FAC+3, 'Resultados Mensuales')
+else
+  if Dialogo.Radio2=1
+    ACT(a:FAC+3, 'Resultados Anuales')
+  else
+    if Dialogo.Radio2=2
+      ACT(a:FAC+3, 'Resultados Historicos')
+    else
+      ACT(a:FAC+3, 'Resultados desde '~Dialogo.Fecha2)
+    endif
+  endif
+endif
+if Dialogo.Radio3=0
+  ACT(a:FAC+4, 'Cotizaciones Reales')
+else
+  ACT(a:FAC+4, 'Cotizaciones Simuladas')
+endif
+if NoVacio(Dialogo.Lista1)
+  ACT(A:FAC+5, 'Fixing: '~Pipe2Comillas(Dialogo.Lista1))
+else
+  ACT(A:FAC+5, 'Fixing: Todos')
+endif
+
+if NoVacio(Dialogo.TipoOp1)
+  if EqStr(Dialogo.TipoOp1,'FXOCTC')
+    ACT(d:FAC+3, 'Solo Compras')
+  else
+    ACT(d:FAC+3, 'Solo Ventas')
+  endif
+endif
+if Dialogo.Fecha3>0
+  ACT(d:FAC+4, 'Vencimientos del '~Dialogo.Fecha3)
+endif
+
+ACT(l:FAC+4, 'Acumulado Cartera Vencida')
+ACN(p:FAC+4, Val(aa:1))
+FormatoCeldas(p:FAC+4..p:FAC+4, Exe('F0R'))
+SetFont(a:FAC..p:FAC+5, 2)
+
+if Dialogo.Check1=1
+  ACD(o:FAC+4, Val(x1))
+  ACD(o:FAC+5, Val(x2))
+  SetFont(o:FAC+4..o:FAC+5, 1)
+endif
+
+SetFilaActual(FAC+7)
+ACT(a:FAC, 'Operacion')
+ACT(b:FAC, 'TipoOp')
+ACT(c:FAC, 'Cliente')
+ACT(d:FAC, 'Nr.MAE')
+ACT(e:FAC, 'Fecha')
+ACT(e:FAC+1, 'Operacion')
+ACT(f:FAC, 'Fecha')
+ACT(f:FAC+1, 'Precanc.')
+ACT(g:FAC, 'Fecha')
+ACT(g:FAC+1, 'Vencim.')
+ACT(h:FAC, 'Cantidad')
+ACT(i:FAC, 'Precio')
+ACT(i:FAC+1, 'Operacion')
+ACT(j:FAC, 'Break Even')
+ACT(j:FAC+1, 'Price')
+ACT(k:FAC, 'Precio')
+ACT(k:FAC+1, 'Anterior')
+ACT(l:FAC, 'Precio')
+if Dialogo.Radio3=0
+  ACT(l:FAC+1, 'Hoy')
+else
+  ACT(l:FAC+1, 'Hoy (Sim)')
+endif
+ACT(m:FAC, 'Fixing')
+ACT(m:FAC+1, 'Tipo')
+ACT(n:FAC, 'Daily')
+ACT(o:FAC, 'Acumulado')
+ACT(o:FAC+1, 'Ayer')
+ACT(p:FAC, 'Resultado')
+ACT(p:FAC+1, 'Total')
+AlinearCeldas(a:FAC..p:FAC+1, 'C')
+AgregarMarco(a:FAC..p:FAC+1, 0, 0, Exe('COLOR'))
+SetFont(a:FAC..p:FAC+1, 2)
+
+ACT(r:FAC, 'P.Ant')
+ACT(s:FAC, 'P.Hoy')
+
+ACT(aa:FAC, 'FechaOp')
+ACT(ab:FAC, 'D.F1/FechaOp')
+ACT(ac:FAC, 'FechaFix')
+ACT(ad:FAC, 'D.F1/FechaFix')
+ACT(ae:FAC, 'FechaEj')
+ACT(af:FAC, 'PrecioEj')
+ACT(ag:FAC, 'D.F1/FechaEj')
+ACT(ah:FAC, 'FechaUltCup')
+ACT(ai:FAC, 'PrecioMer')
+ACT(aj:FAC, 'ContraEspecie2')
+ACT(ak:FAC, 'EnteCus1')
+ACT(al:FAC, 'FechaPrecan')
+ACT(am:FAC, 'Ult.Fecha')
+ACT(an:FAC, 'Pre.<D.F1')
+ACT(ao:FAC, 'Pre.=D.F1')
+SetFont(r:FAC..az:FAC, 2)
+
+SetFilaActual(FAC+2)
+ACN(w1, FAC)
+
+SQL.ADD("Select O.NrOperacion,   O.TipoOp,         O.Cliente1,    O.FechaOp,  ")
+SQL.ADD("       O.FechaVto,      O.FechaPrecan,    O.Cantidad,    O.CB6,      ")
+SQL.ADD("       O.ContraEspecie, O.Precio1,        O.FechaEj,     O.PrecioEj, ")
+SQL.ADD("       O.FechaUltCupon, O.PrecioMer,      O.ObsErrorMAE, O.Especie,  ")
+SQL.ADD("       O.MB1,           O.ContraEspecie2, O.EnteCus1,    ")
+SQL.ADD("       Case When CB6 = '1' Then FechaPrecan Else FechaVto End as FechaFixing ")
+SQL.ADD("  from "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS OB  ")
+SQL.ADD(" where O.NrOperacion = OB.NrOperacion ")
+SQL.ADD("   and OB.NrBit      = 30 ")
+SQL.ADD("   and OB.Valor      <> '1' ")
+SQL.ADD("   and O.TipoOp      IN ('FXOCTC','FXOCTV') ")
+SQL.ADD("   and O.FechaOp     <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   and O.FechaVto    >= "~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("   and (O.FechaPrecan is Null or O.FechaPrecan >= "~IdxDate2(Dialogo.Fecha1)~") ")
+SQL.ADD("   and O.Vehiculo1   = '"~Dialogo.Vehiculo1~"' ")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD(" and O.Cliente1    = '"~Dialogo.Cliente1~"' ")
+endif
+if NoVacio(Dialogo.TipoOp1)
+  SQL.ADD(" and O.TipoOp      = '"~Dialogo.TipoOp1~"' ")
+endif
+if NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and O.ContraEspecie2 in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+endif
+if Dialogo.Fecha3>0
+  SQL.ADD(" and O.FechaVto    = "~IdxDate2(Dialogo.Fecha3)~" ")
+endif
+SQL.ADD(" Order By O.FechaVto,O.TipoOp,O.NrOperacion ")
+
+Recorrer SQL
+  if fbn['FechaVto']<>Val(v1) o Not EqStr(fbn['TipoOp'],Val(v2))
+    if FAC>Val(w1)+1
+      if Dialogo.Radio1=0
+        BorrarCeldas(a:Val(w2)..az:FAC-1)
+        SetFilaActual(Val(w2))
+      else
+        SetFont(a:Val(w2)..p:FAC-1, 1)
+      endif
+      if EqStr(Val(v2),'FXOCTC')
+        ACT(a:FAC, 'Total compras '~Fecha(Val(v1)))
+      else
+        ACT(a:FAC, 'Total ventas '~Fecha(Val(v1)))
+      endif
+      if Dialogo.Radio1=0
+        ACL(a:FAC, 'INOCT1', Fecha1=Dialogo.Fecha1, Check1=0, Vehiculo1=Dialogo.Vehiculo1, Check2=1, Cliente1=Dialogo.Cliente1, TipoOp1=Val(v2), Radio1=1, Radio2=Dialogo.Radio2, Fecha2=Dialogo.Fecha2, Radio3=Dialogo.Radio3, Fecha3=Val(v1), Lista1=Dialogo.Lista1)
+      endif
+      ACN(h:FAC, Val(r1))
+      ACN(i:FAC, Val(u1)/Val(r1))
+      ACN(k:FAC, Val(u2)/Val(r1))
+      ACN(l:FAC, Val(u3)/Val(r1))
+      ACN(n:FAC, Val(r2))
+      ACN(o:FAC, Val(r3))
+      ACN(p:FAC, Val(r4))
+      if EqStr(Val(v2),'FXOCTC')
+        ACN(ad1, Val(i:FAC))
+        ACN(ad2, Val(k:FAC))
+        ACN(ad3, Val(l:FAC))
+        ACN(ad4, Val(u1))
+        SCN(s1, Val(r1))
+      else
+        ACN(ae1, Val(i:FAC))
+        ACN(ae2, Val(k:FAC))
+        ACN(ae3, Val(l:FAC))
+        ACN(ae4, Val(u1))
+        SCN(s1, -Val(r1))
+      endif
+      SCN(s2, Val(r2))
+      SCN(s3, Val(r3))
+      SCN(s4, Val(r4))
+      BorrarCeldas(r1..r4)
+      BorrarCeldas(u1..u3)
+      SetFont(a:FAC..p:FAC, 2)
+      IFA
+      if fbn['FechaVto']<>Val(v1)
+        IFA
+        ACT(a:FAC, 'Total contrato '~Fecha(Val(v1)))
+        if Dialogo.Radio1=0
+          ACL(a:FAC, 'INOCT1', Fecha1=Dialogo.Fecha1, Check1=0, Vehiculo1=Dialogo.Vehiculo1, Check2=1, Cliente1=Dialogo.Cliente1, TipoOp1='', Radio1=1, Radio2=Dialogo.Radio2, Fecha2=Dialogo.Fecha2, Radio3=Dialogo.Radio3, Fecha3=Val(v1), Lista1=Dialogo.Lista1)
+        endif
+        ACN(h:FAC, Val(s1))
+        if Val(h:FAC)>=0
+          ACN(i:FAC, Val(ad1))
+          ACN(k:FAC, Val(ad2))
+          ACN(l:FAC, Val(ad3))
+        else
+          ACN(i:FAC, Val(ae1))
+          ACN(k:FAC, Val(ae2))
+          ACN(l:FAC, Val(ae3))
+        endif
+        ACN(j:FAC, (Val(ad4)-Val(ae4))/Val(h:FAC))
+        ACN(n:FAC, Val(s2))
+        ACN(o:FAC, Val(s3))
+        ACN(p:FAC, Val(s4))
+        SCN(t1, Val(s1))
+        SCN(t2, Val(s2))
+        SCN(t3, Val(s3))
+        SCN(t4, Val(s4))
+        BorrarCeldas(ad1..ae4)
+        BorrarCeldas(s1..s4)
+        SetFont(a:FAC..p:FAC, 2)
+        AgregarMarco(a:FAC..p:FAC, 0, 0, Exe('COLOR2'))
+        IFA
+      endif
+      IFA
+    endif
+    ACD(v1, fbn['FechaVto'])
+    ACT(v2, fbn['TipoOp'])
+    ACN(w2, FAC)
+  endif
+
+  ACT(a:FAC, fbn['NrOperacion'])
+  ACLO(a:FAC, fbn['NrOperacion'])
+  ACT(b:FAC, fbn['TipoOp'])
+  ACT(c:FAC, fbn['Cliente1'])
+  ACT(d:FAC, BuscarCampo('CLIENTES','NrMAE','Codigo',fbn['Cliente1']) )
+  ACD(e:FAC, fbn['FechaOp'])
+  if fbn['CB6'] = 1 Y fbn['FechaPrecan'] = Dialogo.Fecha1
+    ACD(f:FAC, fbn['FechaPrecan'])
+  endif
+  ACD(g:FAC, fbn['FechaVto'])
+  ACN(h:FAC, fbn['Cantidad'])
+  ACN(i:FAC, fbn['Precio1'])
+
+  ACD(aa:FAC, fbn['FechaOp'])
+  ACD(ac:FAC, fbn['FechaFixing'])
+  ACD(ae:FAC, fbn['FechaEj'])
+  ACN(af:FAC, fbn['PrecioEj'])
+  ACD(ah:FAC, fbn['FechaUltCupon'])
+  ACN(ai:FAC, fbn['PrecioMer'])
+  ACT(aj:FAC, fbn['EnteCus1'])
+  ACT(ak:FAC, fbn['ContraEspecie2'])
+  ACD(al:FAC, fbn['FechaPrecan'])
+
+  if Dialogo.Fecha1=fbn['FechaOp']
+    ACT(ab:FAC, 'Alta')
+  endif
+  if Dialogo.Fecha1=fbn['FechaFixing']
+    ACT(ad:FAC, 'Fixing')
+  endif
+  * Precio Anterior
+  if Dialogo.Fecha1=fbn['FechaEj']
+    ACT(ag:FAC, '= Ult. MTM')
+    ACT(r:FAC, 'PrecioMer')
+    ACN(k:FAC, fbn['PrecioMer'])
+  else
+    if Dialogo.Fecha1<fbn['FechaEj'] o fbn['FechaEj']<1
+      ACT(ag:FAC, '< Ult. MTM')
+      if  Dialogo.Fecha1=fbn['FechaOp']
+        ACT(r:FAC, 'PrecioOp')
+        ACN(k:FAC, fbn['Precio1'])
+      else
+        ACT(r:FAC, fbn['EnteCus1']~' DF1-1')
+        ACN(k:FAC, CotizacionC(fbn['EnteCus1'],'FUT',fbn['FechaVto'],,Dialogo.Fecha1-1,1,,fbn['ContraEspecie']))
+      endif
+    else
+      ACT(ag:FAC, '> Ult. MTM')
+      ACT(r:FAC, 'PrecioEj')
+      ACN(k:FAC, fbn['PrecioEj'])
+    endif
+  endif
+  ACD(am:FAC, SQL("Select Max(FechaMov) from "~DBO~".MOVEJECUTADOS where NrOperacion='"~fbn['NrOperacion']~"' and NrSaldo=100 and FechaMov<'"~IdxDate(Dialogo.Fecha1)~"' "))
+  ACN(an:FAC, SQL("Select PrecioEj from "~DBO~".MOVEJECUTADOS where NrOperacion='"~fbn['NrOperacion']~"' and NrSaldo=100 and FechaMov='"~IdxDate(Val(am:FAC))~"' "))
+  ACN(ao:FAC, SQL("Select PrecioEj from "~DBO~".MOVEJECUTADOS where NrOperacion='"~fbn['NrOperacion']~"' and NrSaldo=100 and FechaMov='"~IdxDate(Dialogo.Fecha1)~"' "))
+  * Precio Hoy
+  if Dialogo.Radio3=0
+    * Cotizaciones Reales
+    if Dialogo.Fecha1=fbn['FechaEj']
+      ACT(s:FAC, 'PrecioEj')
+      ACN(l:FAC, fbn['PrecioEj'])
+    else
+      if Dialogo.Fecha1>fbn['FechaEj']
+        if Dialogo.Fecha1=fbn['FechaFixing']
+          if Val(w4)=1 
+            ACT(s:FAC, fbn['ContraEspecie2']~' DF.1')
+            ACN(l:FAC, CotizacionC(fbn['ContraEspecie2'],,,,Dialogo.Fecha1,1,,fbn['ContraEspecie']))
+          else
+            ACT(s:FAC, 'VHP Libre DF.1')
+*            if EqStr(fbn('TipoOp'),'FXOCTC')
+*              ACN(l:FAC, CotizacionFX('LIBRE',fbn['Especie'],Dialogo.Fecha1,0,'SI',2,NO,'LOC'))
+*            else
+*              ACN(l:FAC, CotizacionFX('LIBRE',fbn['Especie'],Dialogo.Fecha1,0,'SI',1,NO,'LOC'))
+*            endif
+            ACN(l:FAC, (CotizacionFX('LIBRE',fbn['Especie'],Dialogo.Fecha1,0,'SI',2,NO,'LOC')+CotizacionFX('LIBRE',fbn['Especie'],Dialogo.Fecha1,0,'SI',1,NO,'LOC'))/2)
+          endif
+        else
+          ACT(s:FAC, fbn['EnteCus1']~' DF.1')
+          ACN(l:FAC, CotizacionC(fbn['EnteCus1'],'FUT',fbn['FechaVto'],,Dialogo.Fecha1,1,,fbn['ContraEspecie']))
+        endif
+      else
+        * D.F1<fbn(FechaEj)
+        if Dialogo.Fecha1=fbn['FechaFixing']
+          ACT(s:FAC, fbn['ContraEspecie2']~' DF.1')
+          ACN(l:FAC, CotizacionC(fbn['ContraEspecie2'],,,,Dialogo.Fecha1,1,,fbn['ContraEspecie']))
+*          ACN(r:FAC, fbn['Precio2'])
+        else
+          ACT(s:FAC, fbn['EnteCus1']~' DF.1')
+          ACN(l:FAC, CotizacionC(fbn['EnteCus1'],'FUT',fbn['FechaVto'],,Dialogo.Fecha1,1,,fbn['ContraEspecie']))
+        endif
+      endif
+    endif
+  else
+    * Cotizaciones Simuladas
+    if Dialogo.Fecha1=fbn['FechaFixing']
+      * Fixing o Precan
+      recorrer&i 1,Val(dq:1)
+        if EqStr(fbn['ContraEspecie2'],Val(dr:&i))
+          ACT(s:FAC, 'Valor du')
+          ACN(l:FAC, Val(du:&i))
+          Break
+        endif
+      proximo
+      if Val(l:FAC)=0
+        ACT(s:FAC, fbn['ContraEspecie2']~' DF.1')
+        ACN(l:FAC, CotizacionC(fbn['ContraEspecie2'],,,,Dialogo.Fecha1,1,,fbn['ContraEspecie']))
+      endif
+    else
+      recorrer&i 1,Val(dk:1)
+        if EqStr(fbn['EnteCus1'],Val(dl:&i)) y fbn['FechaVto']=Val(dm:&i)
+          ACT(s:FAC, 'Valor dp')
+          ACN(l:FAC, Val(dp:&i))
+          Break
+        endif
+      proximo
+      if Val(l:FAC)=0
+        ACT(s:FAC, fbn['EnteCus1']~' D.F1')
+        ACN(l:FAC, CotizacionC(fbn['EnteCus1'],'FUT',fbn['FechaVto'],,Dialogo.Fecha1,1,,fbn['ContraEspecie']))
+      endif
+    endif
+  endif
+*  if [fbn['CB6'] = 1 Y fbn['FechaPrecan'] = Dialogo.Fecha1] o fbn['FechaVto'] = Dialogo.Fecha1
+    ACT(m:FAC, fbn['ContraEspecie2'])
+*  endif
+  if Eqstr(fbn['TipoOp'], 'FXOCTC')
+    ACN(n:FAC, fbn['Cantidad'] * (Val(l:FAC)-Val(k:FAC)))
+  else
+    ACN(n:FAC, fbn['Cantidad'] * (Val(k:FAC)-Val(l:FAC)))
+  endif
+  if Dialogo.Fecha1=Dialogo.Fecha2
+    ACN(o:FAC, 0)
+  else
+    ACN(o:FAC, SQL("Select Sum(Cantidad) from "~DBO~".MOVEJECUTADOS where NrOperacion='"~fbn['NrOperacion']~"' and NrSaldo=100 and FechaMov between '"~IdxDate(Val(x1))~"' and '"~IdxDate(Val(x2))~"' "))
+  endif
+  ACL(o:FAC, 'DETVIG', NrOperacion1 = Val(a:FAC), Vehiculo1 = Dialogo.Vehiculo1, Fecha1 = Val(x1), Fecha2 = Val(x2), Cantidad1 = Val(o:FAC), Radio1 = 2)
+  ACN(p:FAC, Val(n:FAC)+Val(o:FAC))
+  SCN(r1, Val(h:FAC))
+  SCN(r2, Val(n:FAC))
+  SCN(r3, Val(o:FAC))
+  SCN(r4, Val(p:FAC))
+  SCN(u1, Val(h:FAC)*Val(i:FAC))
+  SCN(u2, Val(h:FAC)*Val(k:FAC))
+  SCN(u3, Val(h:FAC)*Val(l:FAC))
+Proximo
+if Val(w2)>0
+  if Dialogo.Radio1=0
+    BorrarCeldas(a:Val(w2)..az:FAC)
+    SetFilaActual(Val(w2)-1)
+  else
+    SetFont(a:Val(w2)..p:FAC, 1)
+  endif
+  IFA
+  if EqStr(Val(v2),'FXOCTC')
+    ACT(a:FAC, 'Total compras '~Fecha(Val(v1)))
+  else
+    ACT(a:FAC, 'Total ventas '~Fecha(Val(v1)))
+  endif
+  if Dialogo.Radio1=0
+    ACL(a:FAC, 'INOCT1', Fecha1=Dialogo.Fecha1, Check1=0, Vehiculo1=Dialogo.Vehiculo1, Check2=1, Cliente1=Dialogo.Cliente1, TipoOp1=Val(v2), Radio1=1, Radio2=Dialogo.Radio2, Fecha2=Dialogo.Fecha2, Radio3=Dialogo.Radio3, Fecha3=Val(v1), Lista1=Dialogo.Lista1)
+  endif
+  ACN(h:FAC, Val(r1))
+  ACN(i:FAC, Val(u1)/Val(r1))
+  ACN(k:FAC, Val(u2)/Val(r1))
+  ACN(l:FAC, Val(u3)/Val(r1))
+  ACN(n:FAC, Val(r2))
+  ACN(o:FAC, Val(r3))
+  ACN(p:FAC, Val(r4))
+  if EqStr(Val(v2),'FXOCTC')
+    ACN(ad1, Val(i:FAC))
+    ACN(ad2, Val(k:FAC))
+    ACN(ad3, Val(l:FAC))
+    ACN(ad4, Val(u1))
+    SCN(s1, Val(r1))
+  else
+    ACN(ae1, Val(i:FAC))
+    ACN(ae2, Val(k:FAC))
+    ACN(ae3, Val(l:FAC))
+    ACN(ae4, Val(u1))
+    SCN(s1, -Val(r1))
+  endif
+  SCN(s2, Val(r2))
+  SCN(s3, Val(r3))
+  SCN(s4, Val(r4))
+  SetFont(a:FAC..p:FAC, 2)
+  SetFilaActual(FAC+2)
+  ACT(a:FAC, 'Total contrato '~Fecha(Val(v1)))
+  if Dialogo.Radio1=0
+    ACL(a:FAC, 'INOCT1', Fecha1=Dialogo.Fecha1, Check1=0, Vehiculo1=Dialogo.Vehiculo1, Check2=1, Cliente1=Dialogo.Cliente1, TipoOp1='', Radio1=1, Radio2=Dialogo.Radio2, Fecha2=Dialogo.Fecha2, Radio3=Dialogo.Radio3, Fecha3=Val(v1), Lista1=Dialogo.Lista1)
+  endif
+  ACN(h:FAC, Val(s1))
+  if Val(h:FAC)>=0
+    ACN(i:FAC, Val(ad1))
+    ACN(k:FAC, Val(ad2))
+    ACN(l:FAC, Val(ad3))
+  else
+    ACN(i:FAC, Val(ae1))
+    ACN(k:FAC, Val(ae2))
+    ACN(l:FAC, Val(ae3))
+  endif
+  ACN(j:FAC, (Val(ad4)-Val(ae4))/Val(h:FAC))
+  ACN(n:FAC, Val(s2))
+  ACN(o:FAC, Val(s3))
+  ACN(p:FAC, Val(s4))
+  SCN(t1, Val(s1))
+  SCN(t2, Val(s2))
+  SCN(t3, Val(s3))
+  SCN(t4, Val(s4))
+  SetFont(a:FAC..p:FAC, 2)
+  AgregarMarco(a:FAC..p:FAC, 0, 0, Exe('COLOR2'))
+endif
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Total Contratos Seleccionados')
+if Dialogo.Radio1=0
+  ACL(a:FAC, 'INOCT1', Fecha1=Dialogo.Fecha1, Check1=0, Vehiculo1=Dialogo.Vehiculo1, Check2=1, Cliente1=Dialogo.Cliente1, TipoOp1='', Radio1=1, Radio2=Dialogo.Radio2, Fecha2=Dialogo.Fecha2, Radio3=Dialogo.Radio3, Fecha3=0, Lista1=Dialogo.Lista1)
+endif
+ACN(h:FAC, Val(t1))
+ACN(n:FAC, Val(t2))
+ACN(o:FAC, Val(t3))
+ACN(p:FAC, Val(t4))
+SetFont(a:FAC..p:FAC, 2)
+AgregarMarco(a:FAC..p:FAC, 0, 0, Exe('COLOR6'))
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Resultados Acumulados')
+ACN(p:FAC, Val(aa:1)+Val(t4))
+SetFont(a:FAC..p:FAC, 2)
+AgregarMarco(a:FAC..p:FAC, 0, 0, Exe('COLOR6'))
+
+FormatoCeldas(h:Val(w1)..h:FAC, Exe('F0R'))
+FormatoCeldas(i:Val(w1)..l:FAC, Exe('F5'))
+*FormatoCeldas(j:Val(w1)..j:FAC, Exe('F7'))
+FormatoCeldas(n:Val(w1)..p:FAC, Exe('F0R'))
+FormatoCeldas(r:Val(w1)..r:FAC, Exe('F5'))
+FormatoCeldas(af:Val(w1)..af:FAC, Exe('F5'))
+FormatoCeldas(ai:Val(w1)..ai:FAC, Exe('F5'))
+FormatoCeldas(an:Val(w1)..ao:FAC, Exe('F5'))
+SetFont(r:Val(w1)..az:FAC, 1)
+SetFont(r1..ae6, 1)
+
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'Fin del Informe')
+SetFont(a:FAC, 2)
+
+ACO(1, 6)
+ACO(2, 6)
+ACO(3, 6)
+ACO(4, 4)
+ACO(5, 7)
+ACO(6, 7)
+ACO(7, 7)
+ACO(8, 8)
+ACO(9, 6)
+ACO(10, 6)
+ACO(11, 6)
+ACO(12, 6)
+ACO(13, 5)
+ACO(14, 8)
+ACO(15, 8)
+ACO(16, 8)
+
+if Dialogo.Check1=0
+  LimitesVision(p:FAC)
+endif
+Impresion(1,2)
+RangoTitulo(a:1..p:FAC, Val(w1))
+SetPrintFit(3,90)

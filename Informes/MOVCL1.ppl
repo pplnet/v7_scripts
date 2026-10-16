@@ -1,0 +1,749 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Lista1     : "Especies"                          ;;;;;;;;;;;SQLSet("SELECT Codigo FROM "~DBO~".ESPECIES WHERE Status='HAB' ORDER BY Codigo ");SI
+  * Radio1     : "Moneda|Pesos|Dolares"              ;; ;;;;;;;0;
+  Check1     : "Mov. Comision"                     ;; ;;;;;;;0;
+  Fecha1     : "Fecha Desde"                       ;;1;;;;Dialogo.Fecha1<=Fsys y Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;FSys
+  Fecha2     : "Fecha Hasta"                       ;; ;;;;Dialogo.Fecha2>=Dialogo.Fecha1 y Dialogo.Fecha2<=Fsys;'Debe Ingresar la Fecha';NO;FSys;
+  ListaTabla2: 'Clientes'                          ;;;;;;;;;;;;;;" CategDepositante='CLI' ";'Codigo';'Codigo;RazonSocial';'CLIENTES'
+  Vehiculo1  : "Vehiculo"                          ;;2;;NO;NO;;;;VAR('VEHICULODE');;;;
+FinDialogo
+
+If Not Ok
+  Cancelar
+Endif
+
+** Check1 indica si muestra o no movimientos de Comision e IVA
+
+SetFilaActual(2)
+
+CrearFont(1, 'Arial,10,B')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,8,')
+
+ACT(a:FAC, 'Extracto Unificado de Movimientos del Cliente')
+ACT(o:FAC, 'MOVCL1')
+SetFont(a:FAC..a:FAC, 1)
+SetFont(o:FAC..o:FAC, 3)
+AlinearCeldas(o:FAC..o:FAC, 'D')
+
+ACD(fh1, Habiles(Dialogo.Fecha2,3,'ARG',SI))
+
+ACT(a:FAC+2, 'Vehiculo: '~Dialogo.Vehiculo1)
+ACT(a:FAC+3, 'Fecha Desde: '~Dialogo.Fecha1)
+ACT(e:FAC+3, 'Fecha Hasta: '~Dialogo.Fecha2)
+
+If NoVacio(Dialogo.ListaTabla2)
+   ACT(a:FAC+4, 'Cliente: '~Dialogo.ListaTabla2~' - '~BuscarCampo('CLIENTES','RazonSocial','Codigo',Dialogo.ListaTabla2))
+Else
+   ACT(a:FAC+4, 'Cliente: Todos')
+Endif
+
+If NoVacio(Dialogo.Lista1)
+   ACT(a:FAC+5, 'Especies: '~Pipe2Coma(Dialogo.Lista1))
+Else
+   ACT(a:FAC+5, 'Especies: Todas')
+Endif
+
+*ACT(e:FAC+2, 'Moneda: ')
+*If Dialogo.Radio1 = 0
+*   ACT(e:FAC+2, Val(e:FAC+2)~'Pesos')
+*Else
+*   ACT(e:FAC+2, Val(e:FAC+2)~'Dolares')
+*Endif
+
+ACT(g:FAC+2, 'Listado '~iif(Dialogo.Check1=1,'con ','sin ')~'movimientos de Comisiones e IVA ')
+
+ACT(g:FAC+3, 'Movs Ejecutados: Azul')
+ACT(g:FAC+4, 'Movs Pendientes: Verde')
+
+SetFont(a:FAC+2..g:FAC+5, 2)
+SetFilaActual(FAC+7)
+
+**-- Encabezado
+ACT(a:FAC, 'EJE/PEN')
+ACT(b:FAC, 'Fecha Vto')
+ACT(c:FAC, 'Fecha Conc')
+ACT(d:FAC, 'Nro. Op.')
+ACT(e:FAC, 'Concepto')
+ACT(f:FAC, 'Debito VN')
+ACT(g:FAC, 'Debito VR')
+ACT(h:FAC, 'Debito $/U$S')
+ACT(i:FAC, 'Credito VN')
+ACT(j:FAC, 'Credito VR')
+ACT(k:FAC, 'Credito $/U$S')
+ACT(l:FAC, 'Saldo VN')
+ACT(m:FAC, 'Saldo VR')
+*ACT(n:FAC, 'Saldo $/U$S')
+ACT(N:FAC, 'Precio')
+ACT(O:FAC, 'VR a la Fecha')
+
+SetFont(a:FAC..O:FAC, 2)
+AlinearCeldas(a:FAC..O:FAC, 'C')
+AgregarMarco(a:FAC..O:FAC,0,1,EXE('COLOR'))
+
+ACO(1, 5)
+ACO(2, 6)
+ACO(3, 6)
+ACO(4, 6)
+ACO(5,20)
+ACO(6,10)
+ACO(7,10)
+ACO(8,10)
+ACO(9,10)
+ACO(10,10)
+ACO(11,10)
+ACO(12,10)
+ACO(13,10)
+ACO(14,10)
+ACO(15, 8)
+ACO(16, 8)
+
+SetFilaActual(FAC)
+
+
+*- Saldo Libre Disponibilidad 
+ACN(sl1,BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALLIBRECU')) )
+***---Saldo Bloq. x ventas
+ACN(SB:1,BuscarCampo('EstadosCustodia','NrSaldo','Codigo',VAR('SALBLOQVTA')) )
+
+ACT(MN:1, Descendientes('ESPECIES','MONEDA'))
+
+(.'SELMOVCLI'.)
+
+watch(SQL.BATCH())
+
+* Primera vez
+ACT(v0, 'NO')
+ACT(v10, 'NO')
+ACT(v11, 'NO')
+* Variable de Cliente
+ACT(v1, '')
+* Variable de Especie
+ACT(v2, '')
+* Variable de Estado
+ACN(v4, 0)
+* Acumulador Cliente
+ACN(z1, 0)
+* Variable que tiene suma de Comision e IVA
+ACN(zz1,0)
+***---Totales Columnas H y K para monedas
+ACN(TH:1, 0)
+ACN(TK:1, 0)
+
+ACN(fi1, 8)
+SetFilaActual(Val(fi1))
+
+Recorrer SQL
+** AA 03-10-2022 van las comisiones del banco al cliente???
+**   IF fbn('NrMov') <> 4 y fbn('NrMov') <> 5
+       ***---Excluyo las comisiones
+       **-- Corte por Cliente
+       If Not EqStr(FBN['Cliente'], Val(v1))
+          If EqStr(Val(v0),'SI')
+*             If Not DesciendedeEspecie(Val(v2), 'MONEDA')
+             If Not Incluido(Val(V:2), Val(MN:1))
+                 ACT(a:FAC, 'Total Estado')
+                 ACN(l:FAC, Val(l:(FAC-1)))
+                 ACN(m:FAC, Val(m:(FAC-1)))
+*                 ACN(n:FAC, Val(n:(FAC-1)))
+                 ACN(O:FAC, Val(z5))
+                 SCN(z2, Val(l:FAC))
+                 SCN(z3, Val(m:FAC))
+*                 SCN(z4, Val(n:FAC))
+                 SetFont(a:FAC..O:FAC, 2)
+                 FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+                 FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+                 FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+                 FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+                 FormatoCeldas(O:FAC..O:FAC, Exe('F7'))
+                 IFA
+                 ACT(a:FAC, 'Total Especie '~Val(v2))
+                 AgregarMarco(a:FAC..O:FAC,2,0,Exe('COLOR8'))
+                 ACN(l:FAC, Val(z2))
+                 ACN(m:FAC, Val(z3))
+*                 ACN(n:FAC, Val(z4))
+                 ACN(O:FAC, Val(z6))
+*                 SCN(z1, Val(n:FAC))
+                 ACN(z2, 0)
+                 ACN(z3, 0)
+                 ACN(z4, 0)
+                 ACN(z5, 0)
+                 ACN(z6, 0)
+                 SetFont(a:FAC..O:FAC, 2)
+                 FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+                 FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+                 FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+                 FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+                 FormatoCeldas(O:FAC..O:FAC, Exe('F7'))
+                 IFA
+             ELSE
+                 ACT(A:fac, 'Total Especie '~Val(V:2))
+                 AgregarMarco(A:fac..O:fac,2,0,Exe('COLOR8'))
+                 IF Val(TH:1) <> 0
+                     ACN(H:fac, Val(TH:1))
+                 ENDIF
+                 IF Val(TK:1) <> 0
+                     ACN(K:fac, Val(TK:1))
+                 ENDIF
+                 ACN(TH:1, 0)
+                 ACN(TK:1, 0)
+                 FormatoCeldas(H:fac..H:fac, Exe('F2'))
+                 FormatoCeldas(K:fac..K:fac, Exe('F2'))
+                 ifa
+             Endif
+             ACT(a:FAC, 'Total Cliente')
+*             ACN(n:FAC, Val(z1))
+             ACN(z1, 0)
+             ACT(v1, FBN['Cliente'])
+             ACT(v2, FBN['Especie'])
+             ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', FBN['Especie']))
+             ACN(v4, FBN['NrSaldo'])
+             SetFont(a:FAC..O:FAC, 2)
+             FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+             FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+             FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+             FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+             ACT(v0, 'SI')
+             ACT(v10, 'SI')
+             ACT(v11, 'SI')
+          Endif
+       Endif
+       **-- Corte por especie
+       If Not EqStr(FBN['Especie'], Val(v2))
+          If EqStr(Val(v10),'SI')
+*             If Not DesciendedeEspecie(Val(v2), 'MONEDA')
+             If Not Incluido(Val(V:2), Val(MN:1))
+                 ACT(a:FAC, 'Total Estado')
+                 ACN(l:FAC, Val(l:(FAC-1)))
+                 ACN(m:FAC, Val(m:(FAC-1)))
+*                 ACN(n:FAC, Val(n:(FAC-1)))
+                 ACN(O:FAC, Val(z5))
+                 SCN(z2, Val(l:FAC))
+                 SCN(z3, Val(m:FAC))
+*                 SCN(z4, Val(n:FAC))
+                 SetFont(a:FAC..O:FAC, 2)
+                 FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+                 FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+                 FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+                 FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+                 FormatoCeldas(O:FAC..O:FAC, Exe('F7'))
+                 IFA
+                 ACT(a:FAC, 'Total Especie '~Val(v2))
+                 AgregarMarco(a:FAC..O:FAC,2,0,Exe('COLOR8'))
+                 ACN(l:FAC, Val(z2))
+                 ACN(m:FAC, Val(z3))
+*                 ACN(n:FAC, Val(z4))
+                 ACN(O:FAC, Val(z6))
+*                 SCN(z1, Val(n:FAC))
+                 ACN(z2, 0)
+                 ACN(z3, 0)
+                 ACN(z4, 0)
+                 ACN(z5, 0)
+                 ACN(z6, 0)
+                 SetFont(a:FAC..O:FAC, 2)
+                 FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+                 FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+                 FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+                 FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+                 FormatoCeldas(O:FAC..O:FAC, Exe('F7'))
+                 IFA
+             ELSE
+                 ACT(A:fac, 'Total Especie '~Val(V:2))
+                 AgregarMarco(A:fac..O:fac,2,0,Exe('COLOR8'))
+                 IF Val(TH:1) <> 0
+                     ACN(H:fac, Val(TH:1))
+                 ENDIF
+                 IF Val(TK:1) <> 0
+                     ACN(K:fac, Val(TK:1))
+                 ENDIF
+                 ACN(TH:1, 0)
+                 ACN(TK:1, 0)
+                 SetFont(A:fac..O:fac, 2)
+                 FormatoCeldas(H:fac..H:fac, Exe('F2'))
+                 FormatoCeldas(K:fac..K:fac, Exe('F2'))
+                 ifa
+             Endif
+          Endif
+          IFA
+          ACT(a:FAC, 'Especie: '~FBN['Especie']~' - '~FBN['Nombre'])
+          SetFont(a:FAC..O:FAC,2)
+          AgregarMarco(a:FAC..O:FAC,2,0,Exe('COLOR8'))
+          IFA
+          ACT(a:FAC, 'Saldo Inicial '~FBN['Descripcion'])
+          SetFont(a:FAC..O:FAC,2)
+          ACT(v2, FBN['Especie'])
+          ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', FBN['Especie']))
+          ACN(v4, FBN['NrSaldo'])
+*          If Not DesciendedeEspecie(Val(v2), 'MONEDA')      
+             If Not Incluido(Val(V:2), Val(MN:1))
+          **-- Saldo Inicial de cada estado 
+          If EqStr(FBN['TipoOp'],'SALINI')
+             ACN(l:FAC, FBN['Cantidad'])
+** FJL 29/06/23 - Issue 6041 - Tomaba 0 cuando el bono estaba madurado
+*             ACN(m:FAC, FBN['Cantidad']*VALORTEORICO2(FBN['Especie'],Dialogo.Fecha2-1))
+             ACN(m:FAC, FBN['Cantidad']*VALORTEORICO2(FBN['Especie'],Dialogo.Fecha1-1))
+             ** AA 04-10-22 NO se revaluaran los valores en moneda
+             *If Dialogo.Radio1 = 0
+             *   ACN(cf:FAC, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1-1,1,SI,VAR('MONELOCA')))
+             *Else
+             *   ACN(cf:FAC, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1-1,1,SI,VAR('MONEEXTR')))
+             *Endif
+             ACN(cf:FAC, 1)
+             **-- Parametros para la funcion INTERESCLE
+             ACN(yt1, FAC)
+             ACD(yu:FAC, Dialogo.Fecha1-1)
+             ACT(yv:FAC, FBN['Especie'])
+             ACN(yw:FAC, FBN['Cantidad'])
+             ACD(yx:FAC, FBN['FechaCambioTasa'])
+             ACN(yy:FAC, FBN['TasaIntAnterior'])
+             ACN(yz:FAC, FBN['TasaIntVigente'])
+             (.'INTERESCLE'.)
+             If EqStr(FBN['InteresesC'],'CLE')
+                If Incluido(Val(al4), '1585')
+*                   ACN(n:FAC, Val(m:FAC)*Val(cf:FAC)+(Val(zz:FAC)*Val(cf:FAC)) )
+                Else
+*                   ACN(n:FAC, Val(m:FAC)*Val(cf:FAC)+Val(zz:FAC))
+                Endif
+             Else
+*                ACN(n:FAC, Val(l:FAC)*Val(cf:FAC))
+             Endif
+          Endif
+          Endif
+          AgregarMarco(a:FAC..O:FAC,2,0,Exe('COLOR6'))
+          SetFont(a:FAC..O:FAC, 2)
+          FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+          FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+          FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+          FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+          IFA
+          ACT(v10, 'SI')
+          ACT(v11, 'SI')
+       Endif
+       **-- Corte por Estado (se chequea el NrSaldo)
+       If FBN['NrSaldo'] <> Val(v4)
+          If EqStr(Val(v11),'SI')
+*             If Not DesciendedeEspecie(Val(v2), 'MONEDA')
+             If Not Incluido(Val(V:2), Val(MN:1))
+             ACT(a:FAC, 'Total Estado')
+             ACN(l:FAC, Val(l:(FAC-1)))
+             ACN(m:FAC, Val(m:(FAC-1)))
+*             ACN(n:FAC, Val(n:(FAC-1)))
+             ACN(O:FAC, Val(z5) )
+             SCN(z2, Val(l:FAC))
+             SCN(z3, Val(m:FAC))
+*             SCN(z4, Val(n:FAC))
+             ACN(z5,0)
+             SetFont(a:FAC..O:FAC, 2)
+             FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+             FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+             FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+             FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+             FormatoCeldas(O:FAC..O:FAC, Exe('F7'))
+             Endif
+          Endif
+          IFA
+          ACT(a:FAC, 'Saldo Inicial '~FBN['Descripcion'])
+          SetFont(a:FAC..O:FAC,2)
+          ACN(v4, FBN['NrSaldo'])
+*          If Not DesciendedeEspecie(Val(v2), 'MONEDA')
+             If Not Incluido(Val(V:2), Val(MN:1))
+          **-- Saldo Inicial de cada estado
+          If EqStr(FBN['TipoOp'],'SALINI')
+             ACN(l:FAC, FBN['Cantidad'])
+** FJL 29/06/23 - Issue 6041 - Tomaba 0 cuando el bono estaba madurado
+*             ACN(m:FAC, FBN['Cantidad']*VALORTEORICO2(FBN['Especie'],Dialogo.Fecha2-1))
+              ACN(m:FAC, FBN['Cantidad']*VALORTEORICO2(FBN['Especie'],Dialogo.Fecha1-1))
+             *If Dialogo.Radio1 = 0
+             *   ACN(cf:FAC, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1-1,1,SI,VAR('MONELOCA')))
+             *Else
+             *   ACN(cf:FAC, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1-1,1,SI,VAR('MONEEXTR')))
+             *Endif
+             ACN(cf:FAC, 1)
+             **-- Parÿmetros para la funci:n INTERESCLE
+             ACN(yt1, FAC)
+             ACD(yu:FAC, Dialogo.Fecha1-1)
+             ACT(yv:FAC, FBN['Especie'])
+             ACN(yw:FAC, FBN['Cantidad'])
+             ACD(yx:FAC, FBN['FechaCambioTasa'])
+             ACN(yy:FAC, FBN['TasaIntAnterior'])
+             ACN(yz:FAC, FBN['TasaIntVigente'])
+             (.'INTERESCLE'.)
+             If EqStr(FBN['InteresesC'],'CLE')
+                If Incluido(Val(al4), '1585')
+*                   ACN(n:FAC, Val(m:FAC)*Val(cf:FAC)+(Val(zz:FAC)*Val(cf:FAC)) )
+                Else
+*                   ACN(n:FAC, Val(m:FAC)*Val(cf:FAC)+Val(zz:FAC))
+                Endif
+             Else
+*                ACN(n:FAC, Val(l:FAC)*Val(cf:FAC))
+             Endif
+          Endif
+          Endif
+          AgregarMarco(a:FAC..O:FAC,2,0,Exe('COLOR6'))
+          SetFont(a:FAC..O:FAC, 2)
+          FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+          FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+          FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+          FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+          FormatoCeldas(O:FAC..O:FAC, Exe('F7'))
+          IFA
+          ACT(v11, 'SI') 
+       Endif
+       **-- Proceso todos los movs. de transacciones y operaciones
+       If Not EqStr(FBN['TipoOp'],'SALINI')
+          ACT(a:FAC, FBN['Auxiliar'])
+          ACD(b:FAC, FBN['FechaMov'])
+          ACD(c:FAC, FBN['FechaOp'])
+          ACT(d:FAC, FBN['NrOperacion'])
+          **-- Plazo de la Operacion en Horas 
+          If FBN['Plazo'] MOD2(24) = 0
+             ACN(pl1, FBN['Plazo'])
+          Else
+             ACN(pl1, FBN['Plazo2'])
+          Endif
+          If Incluido(FBN['TipoOp'], 'DTP|RTP|CAMEST|PDIVID|CUPON|LCUPON|DRT|CANJE|STOCK|DENOP|RENOP|TRNOP')
+             ACLT(d:FAC, FBN['NrOperacion'])
+             ACT(e:FAC, FBN['Leyenda'])
+             ACT(v5, CotizaEn(FBN['Especie']))
+             ** Sumo las comisiones (comision e IVA) de pago de dividendos y liq. corte cupon
+             If Incluido(FBN['TipoOp'], 'PDIVID|LCUPON|')
+                ACN(zz1,SQL("SELECT Sum(Cantidad) FROM "~DBO~".MOVEJECUTADOS WHERE NrOperacion='"~FBN['NrOperacion']~"' and Cliente='"~FBN['Cliente']~"' and NrSaldo=4 AND Mercado='"~FBN['Mercado']~"'") )
+             Endif
+          Else
+             ACT(pf1, COPY(FBN['NrOperacion'],1,2))
+             if EqStr(Val(pf1),'OR')
+                ACLR(d:FAC, FBN['NrOperacion'])
+                ACT(e:FAC, FBN['Leyenda'])
+                ACT(v5, CotizaEn(FBN['Especie']))
+             Else
+                if Incluido(Val(pf1),'DV|CA|CJ')
+                   ACLT(d:FAC, FBN['NrOperacion'])
+                else
+                   ACLO(d:FAC, FBN['NrOperacion'])
+                endif
+                If Incluido(FBN['TipoOp'], 'TIC|TIV|CTC|CTP|VTC|VTP|TCC|VFTP|CFTP|TIPO|TIDE|TICO|TICT|TCP|TVC|TVP|TIFC|TIFV|')
+                   ACT(e:FAC, FBN['Leyenda']~'/'~FStr(Val(pl1),0,0)~' Hs.')
+                   ACT(v5, CotizaEn(FBN['Especie']))
+                   **** Invierto la Leyenda para ponerla en cara del cliente
+                   IF EqStr(FBN['CPC1'],'NO')   y not Incluido(fbn('NrMov'), '11|12|13|14')
+                      IF Incluido(FBN['TipoOp'], 'TIC|TIFC')
+                         ACT(e:FAC, 'Venta'~Copy(Val(e:FAC),Longitud('Compra')+1,Longitud(Val(e:FAC))) )
+                      Endif
+                      IF Incluido(FBN['TipoOp'], 'TIV|TIFV')
+                         ACT(e:FAC, 'Compra'~Copy(Val(e:FAC),Longitud('Venta')+1,Longitud(Val(e:FAC))) )
+                      Endif
+                      IF Incluido(FBN['TipoOp'], 'TICT|')
+                        ACN(xy1, Posicion('Tomado',Val(e:fac), 1, Longitud(Val(e:fac))) -1)
+                        ACT(xy2, Copy(val(e:fac),1,val(xy1))~'Otorgado '~Copy(val(e:fac),8+Val(xy1),Longitud(Val(e:fac))))
+                        ACT(e:FAC, Val(xy2))
+                      Endif
+                      IF Incluido(FBN['TipoOp'], 'TICO|')
+                        ACN(xy1, Posicion('Otorgado',Val(e:fac), 1, Longitud(Val(e:fac))) -1)
+                        ACT(xy2, Copy(val(e:fac),1,val(xy1))~'Tomado '~Copy(val(e:fac),10+Val(xy1),Longitud(Val(e:fac))))
+                        ACT(e:FAC, Val(xy2))
+                      Endif
+                      IF Incluido(FBN['TipoOp'], 'TIPO|')
+                        ACN(xy1, Posicion('Otorgado',Val(e:fac), 1, Longitud(Val(e:fac))) -1)
+                        ACT(xy2, Copy(val(e:fac),1,val(xy1))~''~Copy(val(e:fac),10+Val(xy1),Longitud(Val(e:fac))))
+                        ACT(e:FAC, Val(xy2))
+                      Endif                       
+                   Endif
+                Else 
+                   ACT(e:FAC, FBN['Leyenda'])
+                Endif
+             Endif
+          Endif
+          **-- Cotizacion de Especie contra moneda del reporte 
+          ** AA 04-10-22 No se revalua 
+          *If Dialogo.Radio1 = 0
+             ACN(cf:FAC, CotizacionC(FBN['Especie'],,,,FBN['FechaMov'],1,SI,FBN['ContraEspecie']))
+          *Else
+          *   ACN(cf:FAC, CotizacionC(FBN['Especie'],,,,FBN['FechaMov'],1,SI,VAR('MONEEXTR')))
+          *Endif
+          **- Cotizacion de CotizaEn contra Moneda del reporte 
+          *If Dialogo.Radio1 = 0 y EqStr(Val(v5), VAR('MONELOCA'))
+          *   ACN(cg:FAC, 1)
+          *Endif
+          *If Dialogo.Radio1 = 0 y EqStr(Val(v5), VAR('MONEEXTR'))
+          *   ACN(cg:FAC, CotizacionC(Val(v5),,,,FBN['FechaMov'],1,SI,VAR('MONELOCA')))
+          *Endif
+          *If Dialogo.Radio1 = 1 y EqStr(Val(v5), VAR('MONEEXTR'))   
+          *   ACN(cg:FAC, 1)
+          *Endif
+          *If Dialogo.Radio1 = 1 y EqStr(Val(v5), VAR('MONELOCA'))   
+          *   ACN(cg:FAC, CotizacionC(Val(v5),,,,FBN['FechaMov'],1,SI,VAR('MONEEXTR')))
+          *Endif
+          ******ACN(cf:FAC, 1)
+          ACN(cg:FAC, 1)
+          
+          *- Debito o Credito 
+          if Incluido(Val(V:2), Val(MN:1)) y Incluido(fbn('NrMov'), '11|12|13|14')
+             ACN(co1, 9)
+             ACN(co2,10)
+             ACN(co3, 8)
+          Else          
+             IF EqStr(FBN['CPC1'],'SI') 
+                if Incluido(FBN['TipoOp'], 'TIC|')
+                   ACN(co1, 9)
+                   ACN(co2,10)
+                   ACN(co3, 8)
+                else
+                   ACN(co1, 6)
+                   ACN(co2, 7)
+                   ACN(co3,11)
+                endif
+         Else
+          If [EqStr(FBN['Origen'],'OP') y Incluido(FBN['TipoOp'],'CBC|CFTC|CFTP|CTC|CTP|PABC|TIV|TIFV|TCOPRI')] o [EqStr(FBN['Origen'],'OR') y Incluido(FBN['TipoOp'],'CBC|CTC|CTP|PABC|TIC|')] o [EqStr(FBN['Origen'],'OR') y Incluido(FBN['TipoOp'],'VTP|') y FBN['NrSaldo']=207]
+             *** COMPRAS DE CLIENTE: Acredita Titulos y Debita Moneda ***
+             ACN(co1, 9)
+             ACN(co2,10)
+             ACN(co3, 8)
+          Else
+          If [EqStr(fbn('Origen'),'OP') y Incluido(fbn('TipoOp'),'CBT|VFTC|VFTP|VTC|VTP|PABT|TIC|TIFC')] o [EqStr(fbn('Origen'),'OR') y Incluido(fbn('TipoOp'),'CBT|VTC|PABT|TIV|')] o [EqStr(FBN['Origen'],'OR') y Incluido(FBN['TipoOp'],'VTP|') y FBN['NrSaldo']<>207]
+                *** VENTAS DE CLIENTE: Acredita Moneda y Debita Titulos ***
+                ACN(co1, 6)
+                ACN(co2, 7)
+                ACN(co3,11)
+             Else
+                If [EqStr(FBN['Origen'],'OP') y Incluido(FBN['TipoOp'],'TIPO|TIDE|TICT|TICO')] y Not Incluido(FBN['Especie'], Val(MN:1))
+                   if FBN['Cantidad'] < 0
+                      ACN(co1, 6)
+                      ACN(co2, 7)
+                      ACN(co3,11)
+                   else 
+                      ACN(co1, 9)
+                      ACN(co2,10)
+                      ACN(co3, 8)
+                   endif   
+                Else
+                   *** Lo demas sigue como se definio originalmente
+                   If FBN['Cantidad'] < 0
+                      ACN(co1, 6)
+                      ACN(co2, 7)
+                      ACN(co3, 8)
+                   Else
+                      ACN(co1, 9)
+                      ACN(co2,10)
+                      ACN(co3,11)
+                   Endif
+                Endif
+             Endif
+          Endif
+          endif
+         ENDIF
+          *- Si es debito saco el teorico de fecha anterior al corte
+          *- Si es credito saco teorico de fecha posterior al corte
+          If FBN['Cantidad'] < 0
+             ACN(vt1,ValorTeorico2(val(v2),FBN['FechaMov']-1))
+          Else
+             ACN(vt1,ValorTeorico2(val(v2),FBN['FechaMov']) )
+          Endif
+          ACN(co4,15)
+          If Not EqStr(Val(zz5),FBN['NrOperacion'])
+             ACT(zz5,FBN['NrOperacion'])
+          Endif
+*          If DesciendedeEspecie(FBN['Especie'], 'MONEDA')
+          If Incluido(fbn('Especie'), Val(MN:1))
+          *If Incluido(FBN['TipoOp'], 'LCUPON')
+          *      ACN(Val(co1):FAC, ABS(FBN['Cantidad']))
+          *      ACN(Val(co2):FAC, ABS(FBN['Cantidad']))
+          *   Endif
+             ACN(Val(co3):FAC, ABS(FBN['Cantidad'])*Val(cf:FAC)-Val(zz1))
+             *- La moneda no lleva valor residual
+*             If Dialogo.Check1=0
+                If Incluido(FBN['TipoOp'], 'CTC|CTP|VTC|CBT') 
+                   ACN(Val(co3):FAC,Val(Val(co3):FAC)+Round(FBN['TotalAux3'],2)+Round(FBN['TotalIVA'],2)) 
+                Else
+                   If Incluido(FBN['TipoOp'], 'VFTP|VTP|CBC') 
+                      ACN(Val(co3):FAC,Round(Val(Val(co3):FAC),2)-Round(FBN['TotalAux3'],2)-Round(FBN['TotalIVA'],2))       
+                   Else
+                      If Incluido(FBN['TipoOp'], 'VFTC')
+                         ACN(Val(co3):FAC,Round(FBN['TotalBrutoCli1'],2)+Round(FBN['TotalIntereses'],2))
+                      Else
+                         If Incluido(FBN['TipoOp'], 'TCOPRI,TIC,TIFC,TIFV,TIV')
+                            ACN(Val(co3):FAC,FBN['TotalNetoCli1'])       
+                         Endif
+                      Endif
+                   Endif
+                Endif
+*             Endif
+             IF Val(CO:3) = 8
+                 SCN(TH:1, Val(Val(CO:3):fac))
+             ELSE
+                 SCN(TK:1, Val(Val(CO:3):fac))
+             ENDIF
+          Else
+          If Incluido(FBN['TipoOp'], 'CTC|CTP|TCOPRI|TIC|TIFC|TIFV|TIV|VFTC|VFTP|VTC|VTP|CBT|CBC|TICO|TICT|TIPO|TIDE')
+                ACN(Val(co1):FAC, ABS(FBN['Cantidad']))
+                ACN(Val(co2):FAC, ABS(FBN['Cantidad'])*ValorTeorico2(val(v2),FBN['FechaMov']))
+                ACN(Val(co3):FAC, ABS(FBN['TotalNetoCli1'])*Val(cg:FAC))   
+                ACN(Val(co4):FAC, FBN['Cantidad']*ValorTeorico2(val(v2),Dialogo.Fecha1))
+             Endif
+             If Incluido(FBN['TipoOp'], 'DTP|RTP|DRT')
+                ACN(Val(co1):FAC, ABS(FBN['Cantidad']))
+                ACN(Val(co2):FAC, ABS(FBN['TotalNetoCli2']))
+                ACN(Val(co3):FAC, ABS(FBN['TotalNetoCli1'])*Val(cg:FAC))      
+                ACN(Val(co4):FAC, FBN['TotalNetoCli2'])
+             Endif
+             **AA  29-09-22
+             **If Incluido(FBN['TipoOp'], 'CAMEST|CUPON|PDIVID|LCUPON')
+             If Incluido(FBN['TipoOp'], 'CAMEST|CUPON|PDIVID|LCUPON|CANJE|STOCK')
+                ACN(yt1, FAC)
+                ACD(yu:FAC, FBN['FechaMov'])
+                ACT(yv:FAC, FBN['Especie'])
+                ACN(yw:FAC, FBN['Cantidad'])
+                ACD(yx:FAC, FBN['FechaCambioTasa'])
+                ACN(yy:FAC, FBN['TasaIntAnterior'])
+                ACN(yz:FAC, FBN['TasaIntVigente'])
+                (.'INTERESCLE'.)
+                ACN(Val(co1):FAC, ABS(FBN['Cantidad']))
+                If Incluido(FBN['TipoOp'], 'CUPON')
+                   * Si es cupon
+                   ACN(Val(co2):FAC, ABS(FBN['Cantidad'])*Val(vt1))
+                Else
+                **AA  29-09-22
+                **If Not Incluido(FBN['TipoOp'], 'PDIVID|LCUPON')
+                   If Not Incluido(FBN['TipoOp'], 'PDIVID|LCUPON|CANJE|STOCK')
+                      ACN(Val(co2):FAC, ABS(FBN['Cantidad'])*ValorTeorico2(val(v2),FBN['FechaMov']))
+                    Endif
+                Endif
+                ACN(Val(co4):FAC, FBN['Cantidad']*ValorTeorico2(val(v2),Dialogo.Fecha1))
+                If EqStr(FBN['InteresesC'],'CLE')
+                   If Incluido(Val(al4), '1585')
+                      ACN(Val(co3):FAC, Val(Val(co2):FAC)*Val(cf:FAC)+(Val(zz:FAC)*Val(cf:FAC)) )
+                   Else
+                      ACN(Val(co3):FAC, Val(Val(co2):FAC)*Val(cf:FAC)+Val(zz:FAC))
+                   Endif
+                Else
+                   ACN(Val(co3):FAC, Val(Val(co1):FAC)*Val(cf:FAC))
+                Endif    
+                ** Resto las comisiones de liquid. corte cupon
+                If Incluido(FBN['TipoOp'], 'LCUPON')
+                   ACN(Val(co3):FAC,Val(Val(co3):FAC)-Val(zz1))
+                Endif
+             Endif
+             If Incluido(FBN['TipoOp'], 'TCC|TVC|TCP|TVP')
+                ACN(Val(co1):FAC, ABS(FBN['Cantidad']))
+                ACN(Val(co2):FAC, ABS(FBN['Cantidad'])*ValorTeorico2(val(v2),FBN['FechaMov']))
+                ACN(Val(co3):FAC, ABS(FBN['TotalBrutoCli1'])*Val(cg:FAC))      
+                ACN(Val(co4):FAC, FBN['Cantidad']*ValorTeorico2(val(v2),Dialogo.Fecha1))
+             Endif
+          Endif
+          ** Formateo el VR de acuerdo a la cantidad de decimales definidos en la especie
+*          If Not DesciendedeEspecie(Val(v2), 'MONEDA')      
+          If Not Incluido(Val(V:2), Val(MN:1))
+             ACN(de1,FBN['Alias5'])
+             If Not Incluido(FBN['TipoOp'], 'PDIVID|LCUPON')
+                ACN(Val(co2):FAC, Round(Val(Val(co2):FAC),Val(de1) ) )
+             Endif
+             ACN(Val(co4):FAC, Round(Val(Val(co4):FAC),Val(de1) ) )
+             ACN(l:FAC, Val(l:(FAC-1)) - Val(f:FAC) + Val(i:FAC))
+             ACN(m:FAC, Val(m:(FAC-1)) - Val(g:FAC) + Val(j:FAC))
+*          ACN(n:FAC, Val(n:(FAC-1)) - Val(h:FAC) + Val(k:FAC))
+             SCN(z5,Val(Val(co4):FAC) )
+             SCN(z6,Val(Val(co4):FAC) )
+             If [Not EqStr(FBN['TipoOp'], 'CAMEST')] y [FBN['Precio1'] <> 0]
+                ACN(N:FAC, FBN['Precio1'])
+             Endif
+          endif      
+          If EqStr(FBN['Auxiliar'],'EJE')
+             ColorCeldas(a:FAC..O:FAC, clBLUE)
+          Else
+             ColorCeldas(a:FAC..O:FAC, clGREEN)
+          Endif      
+          SetFont(a:FAC..O:FAC, 3)
+          FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+          FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+          FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+          FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+          FormatoCeldas(N:FAC..N:FAC, Exe('F9'))
+          FormatoCeldas(O:FAC..O:FAC, Exe('F7'))
+*          If DesciendedeEspecie(FBN['Especie'], 'MONEDA')
+          If Incluido(fbn('Especie'), Val(MN:1))
+             FormatoCeldas(g:FAC..g:FAC, Exe('F2'))
+             FormatoCeldas(j:FAC..j:FAC, Exe('F2'))
+          ENDIF
+       Else
+          DFA
+       Endif
+** AA 03-10-2022 van las comisiones del banco al cliente???
+**   ELSE
+**   DFA
+**   ENDIF
+Proximo  
+
+IFA
+*If Not DesciendedeEspecie(Val(v2), 'MONEDA')
+If Not Incluido(Val(V:2), Val(MN:1))
+    ACT(a:FAC, 'Total Estado')
+    ACN(l:FAC, Val(l:(FAC-1)))
+    ACN(m:FAC, Val(m:(FAC-1)))
+*    ACN(n:FAC, Val(n:(FAC-1)))
+    ACN(O:FAC, Val(z5) )
+    SCN(z2, Val(l:FAC))
+    SCN(z3, Val(m:FAc))
+*    SCN(z4, Val(n:FAc))
+    SCN(z5, Val(O:FAc))
+    SetFont(a:FAC..O:FAC, 2)
+    FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+    FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+    FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+    FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+    FormatoCeldas(O:FAC..O:FAC, Exe('F7'))
+    IFA
+    ACT(a:FAC, 'Total Especie '~Val(v2))
+    AgregarMarco(a:FAC..O:FAC,2,0,Exe('COLOR8'))
+    ACN(l:FAC, Val(z2))
+    ACN(m:FAC, Val(z3))
+*    ACN(n:FAC, Val(z4))
+    ACN(O:FAC, Val(z6))
+*    SCN(z1, Val(n:FAC))
+    ACN(z2, 0)
+    ACN(z3, 0)
+    ACN(z4, 0)
+    ACN(z5, 0)
+    SetFont(a:FAC..O:FAC, 2)
+    FormatoCeldas(e:FAC..M:FAC, Exe('F2'))
+    FormatoCeldas(g:FAC..g:FAC, Exe('F8'))
+    FormatoCeldas(j:FAC..j:FAC, Exe('F8'))       
+    FormatoCeldas(m:FAC..m:FAC, Exe('F8'))
+    FormatoCeldas(O:FAC..O:FAC, Exe('F7'))
+    IFA
+ELSE
+    ACT(A:fac, 'Total Especie '~Val(V:2))
+    AgregarMarco(A:fac..O:fac,2,0,Exe('COLOR8'))
+    IF Val(TH:1) <> 0
+        ACN(H:fac, Val(TH:1))
+    ENDIF
+    IF Val(TK:1) <> 0
+        ACN(K:fac, Val(TK:1))
+    ENDIF
+    ACN(TH:1, 0)
+    ACN(TK:1, 0)
+    SetFont(A:fac..O:fac, 2)
+    FormatoCeldas(H:fac..H:fac, Exe('F2'))
+    FormatoCeldas(K:fac..K:fac, Exe('F2'))
+    ifa
+Endif
+ACT(a:FAC, 'Total Cliente')
+*ACN(n:FAC, Val(z1))
+ACN(z1, 0)
+SetFont(a:FAC..O:FAC+2, 2)
+FormatoCeldas(e:FAC..M:FAC+2, Exe('F2'))
+FormatoCeldas(g:FAC..g:FAC+2, Exe('F8'))
+FormatoCeldas(j:FAC..j:FAC+2, Exe('F8'))       
+FormatoCeldas(m:FAC..m:FAC+2, Exe('F8'))
+FormatoCeldas(O:FAC..O:FAC+2, Exe('F7'))
+
+SetFilaActual(FAC+2)
+
+ACT(a:FAC+2, 'FIN DEL LISTADO')
+SetFont(a:FAC+2..a:FAC, 2)    
+
+SetMargins(0,0,0,2)
+Impresion(1,2)
+SetPrintFit(3,65)
+RangoTitulo(a1..O:FAC, 9)
+LimitesVision(O:FAC+2)
+FijarFila(10)

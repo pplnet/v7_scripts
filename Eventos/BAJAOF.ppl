@@ -1,0 +1,106 @@
+﻿ACT(V1, Var('CONBAOF'))
+ACT(V2, Val(V1)~'*.TXT')
+ACT(V3, PrimerArchivo(Val(V2)))
+
+If Not Ok 
+  Cancelar
+EndIf
+***** Cantidad de archivos que procesa por ejecucion
+
+ACN(Z2,100)
+
+Recorrer&I 1,Val(Z2)
+
+  BorrarCeldas(A1..T8)
+  Message('----- Preparando Informacion de Busqueda de Ops.Oferta BAJA')
+  AbrirASCII(Copy(Val(V1),1,Longitud(val(v1))-3)~Copy(Val(V3),1,12),0)
+
+  ACT(A:2, LeerASCII)
+  CerrarASCII
+
+* PRUEBAFO 12/10/2006
+*                   10        20        30        40        50        60        70        80        90       100
+*           1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+*  ACT(A:2, '          0610120000001111191557   0691558                                                        02')
+
+  ***** Calcula el dia en que se recibio el mensaje
+  ACN(K1, Fecha(Copy(Val(A2),15,2)~'/'~Copy(Val(A2),13,2)~'/'~Copy(Val(A2),11,2)))
+  if Incluido(Copy(Val(A:2),99,2),'02')
+     ACN(C6, Hoy)
+  else
+     ACN(C6, Fecha(Copy(Val(a:2),36,2)~'/'~Copy(Val(a:2),34,2)~'/20'~Copy(Val(a:2),32,2)))
+  endif
+
+  */Ahora debo buscar el numero de secuencia y dar de baja la operacion.
+
+*FO 12/10/2006     SQL.ADD(" SELECT NrOperacion ")
+*     SQL.ADD(" FROM "~DBO~".OPERACIONES  Where  NroAltaMAE = '"~Copy(Val(A:2),38,5)~"' ")
+*     SQL.ADD(" and TipoOp in ('TIC','TIV') and FechaOp = '"~IdxDate(Val(C6))~"' and CB5 =1 ")
+
+     SQL.ADD(" SELECT NrOperacion, OperacionRef ,PaseCB ")
+     SQL.ADD(" FROM "~DBO~".OPERACIONES OP Where  NroAltaMAE = '"~Copy(Val(A:2),38,5)~"' ")
+     SQL.ADD(" and TipoOp in ('TIC','TIV','TIFC','TIFV') and FechaOp = '"~IdxDate(Val(C6))~"' and CB5='1' ")
+     SQL.ADD(" AND   Cliente1 IS NOT NULL and Cliente1 <> '' and Cliente1 <> ' ' ")
+     SQL.ADD(" AND   NrOperacion NOT IN (SELECT M.NrOperacion FROM "~DBO~".MOVEJECUTADOS M WHERE M.NrOperacion = OP.NrOperacion AND M.NrSaldo<>9 ) ")
+
+     Recorrer SQL
+       Message('Operacion de Oferta '~ fbn('NrOperacion')~' Encontrada - Baja Aprobada')
+
+       Message('---------- '~FBN['NrOperacion']~' Ok Baja, va a Eliminacion Automatica')
+
+       * Ok baja operacion, actualiza Operaciones
+       BorrarCeldas(K9..K12)
+       ACT(K11,Copy(Val(A:2),15,2)~'/'~Copy(Val(A:2),13,2)~'/'~Copy(Val(A:2),11,2)~' '~Copy(Val(A:2),17,2)~':'~Copy(Val(A:2),19,2)~':'~Copy(Val(A:2),21,2))  
+       ACT(K12,SQLFechaStr(Val(K11),Exe('FORFECHOR')))
+
+       SQL.ADD(" UPDATE "~DBO~".OPERACIONES ")
+       SQL.ADD(" SET AceptaMAE = 'SI', FechaBajaMAE = "~Val(K12)~", ")
+       SQL.ADD(" NroBajaMAE = '"~Copy(Val(A:2),23,5)~"' ")
+       SQL.ADD(" Where NrOperacion= '"~FBN['NrOperacion']~"' ")
+       SQL.NEW
+
+       * Ok Baja operacion, pasa la Operacion a la Inst. Eliminacion Manual
+       SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS ")
+       SQL.ADD(" SET Valor = '0' ")
+       SQL.ADD(" Where  NrOperacion= '"~FBN['NrOperacion']~"' ")
+       SQL.NEW
+
+       SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS ")
+       SQL.ADD(" SET Valor = '1' ")
+       SQL.ADD(" Where  NrBit=31 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+       SQL.NEW
+
+       If Eqstr(fbn('PaseCB'),'1')
+          SQL.ADD(" SELECT NrOperacion ")
+          SQL.ADD(" FROM "~DBO~".OPERACIONES OP Where PaseCB = '1' and FechaOp = '"~IdxDate(Val(C6))~"'")
+          SQL.ADD(" and (OperacionRef = '"~fbn('OperacionRef')~"' or NrOperacion = '"~fbn('OperacionRef')~"') ")
+          Recorrer SQL
+            SQL.ADD(" UPDATE "~DBO~".OPERACIONES ")
+            SQL.ADD(" SET AceptaMAE = 'SI', FechaBajaMAE = "~Val(K12)~", ")
+            SQL.ADD(" NroBajaMAE = '"~Copy(Val(A:2),23,5)~"' ")
+            SQL.ADD(" Where NrOperacion= '"~FBN['NrOperacion']~"' ")
+            SQL.NEW
+
+            * Ok Baja operacion, pasa la Operacion a la Inst. Eliminacion Manual
+            SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS ")
+            SQL.ADD(" SET Valor = '0' ")
+            SQL.ADD(" Where  NrOperacion= '"~FBN['NrOperacion']~"' ")
+            SQL.NEW
+ 
+            SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS ")
+            SQL.ADD(" SET Valor = '1' ")
+            SQL.ADD(" Where  NrBit=31 and NrOperacion= '"~FBN['NrOperacion']~"' ")
+            SQL.NEW
+          Proximo
+       Endif
+
+       SQL.EXEC                        
+       BorrarArchivo(Copy(Val(V1),1,Longitud(val(v1))-3)~Copy(Val(V3),1,12))
+    Proximo
+
+  ***** Avanza al proximo archivo de operacion no encontrada (si existe)
+  ACT(V3, ProximoArchivo)
+  If Not Ok
+     Break
+  EndIf
+Proximo

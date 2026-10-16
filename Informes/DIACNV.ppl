@@ -1,0 +1,263 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1     : 'Fecha'           ; 1;1;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys
+  Mercado1   : 'Merc.Negociacion';  ; ;;;;Vacio(Dialogo.MERCADO1) o EqStr(BuscarCampo('MERCADOS','EsNegociacion','Codigo',Dialogo.Mercado1),'SI');'Debe ingresar un Mercado de Negociacion';NO;;;;;;" EsNegociacion = 'SI' "
+FinDialogo
+
+If Not OK
+  Cancelar
+EndIf
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+ACT(aa:1,VAR('MONELOCA'))
+ACT(aa:2,VAR('ESPBILLETE'))
+
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+SetFilaActual(4)
+ACT(a:FAC, 'Clientes Operaciones Diarias')
+SetFont(a:FAC..a:FAC,3)
+SetFilaActual(FAC+1)
+
+ACT(xx1,BuscarCampo('CLIENTES','RazonSocial','Codigo',VAR('VEHICULODE')))
+ACT(xx2,BuscarCampo('CLIENTES','CUIT','Codigo',VAR('VEHICULODE')))
+
+If eqStr(Dialogo.Mercado1, 'MAE')
+    ACT(a:FAC, 'Agente MAE Nº '~BuscarCampo('Clientes', 'NrMAE', 'Codigo', VAR('VEHICULODE')))
+Else
+    If eqStr(Dialogo.Mercado1, 'BYMA')
+        ACT(a:FAC, 'Agente BYMA Nº '~BuscarCampo('Clientes', 'NrBYMA', 'Codigo', VAR('VEHICULODE')))
+    Else
+        If Vacio(Dialogo.Mercado1)
+           #ifdef MLASA
+              ACT(a:FAC, 'Agente MAE Nº '~BuscarCampo('Clientes', 'NrMAE', 'Codigo', VAR('VEHICULODE')))
+           #else
+              ACT(a:FAC, 'Agente BYMA Nº '~BuscarCampo('Clientes', 'NrBYMA', 'Codigo', VAR('VEHICULODE'))~' / MAE Nº '~BuscarCampo('Clientes', 'NrMAE', 'Codigo', VAR('VEHICULODE')))
+           #endif
+        Else 
+            ACT(a:fac, 'Agente '~Dialogo.Mercado1)
+        EndIf
+    EndIf
+EndIf
+
+
+ACT(b:FAC, 'Denominación del Agente: '~BuscarCampo('Clientes', 'RazonSocial', 'Codigo', VAR('VEHICULODE')))
+SetFont(a:FAC..b:FAC,2)
+SetFilaActual(FAC+1)
+ACT(a:FAC, 'Fecha de Concertadas: '~Dialogo.Fecha1)
+SetFont(a:FAC,2)
+SetFilaActual(FAC+1)
+If not Vacio(Dialogo.Mercado1)
+   ACT(a:FAC, 'Mercado Negociacion: '~Dialogo.Mercado1)
+   SetFont(a:FAC,2)
+Endif 
+
+SetFilaActual(FAC+1)
+
+ACT(a:FAC, 'Denominación Cliente')
+ACT(b:FAC, 'Nº CUIT/CUIL/CDI')
+ACT(c:FAC, 'Especie')
+ACT(d:FAC, 'Plazo')
+ACT(e:FAC, 'Moneda')
+if EqStr(VAR('DIACNVMEP'),'SI')
+   ACT(f:FAC, '')
+else
+   ACT(f:FAC, 'MEP/EXT')
+endif
+ACT(g:FAC, 'Cantidad Comprada')
+ACT(h:FAC, 'Precio Promedio')
+ACT(h:FAC+1, 'Compra')
+ACT(i:FAC, 'Monto Comprado')
+ACT(j:FAC, 'Cantidad Vendida')
+ACT(k:FAC, 'Precio Promedio')
+ACT(k:FAC+1, 'Venta')
+ACT(l:FAC, 'Monto Vendido')
+
+AlinearCeldas(a:FAC..l:FAC+1,'C')
+SetFont(a:fac..z:FAC+1,2)
+AgregarMarco(a:FAC..l:FAC+1,1,0,Exe('COLOR6'))
+ifa
+ACN(w1,FAC)
+
+SQL.ADD(" Select Especie, Plazo, Contraespecie, Sum(CantidadC) CantidadC, Sum(CantidadV) CantidadV, ")
+SQL.ADD("  Sum(TotalBrutoCli1C) TotalBrutoCli1C, Sum(TotalBrutoCli1V) TotalBrutoCli1V, MercadoMon, RazonSocial, CUIT ")
+SQL.ADD("  From ")  
+SQL.ADD(" (Select O.Especie, O.Plazo, O.Contraespecie, ")
+SQL.ADD("    CASE when TipoOp IN ('TIC','TIFC') Then Sum(O.Cantidad)       else 0 END CantidadC,       ")
+SQL.ADD("    CASE when TipoOp IN ('TIV','TIFV') Then Sum(O.Cantidad)       else 0 END CantidadV,       ")
+SQL.ADD("    CASE when TipoOp IN ('TIC','TIFC') then SUM(O.TotalBrutoCli1) Else 0 End TotalBrutoCli1C, ")
+SQL.ADD("    CASE when TipoOp IN ('TIV','TIFV') then SUM(O.TotalBrutoCli1) Else 0 End TotalBrutoCli1V, ")
+SQL.ADD("    Case O.ContraEspecie when 'ARP' Then '' Else Case O.Mercado2 when '"~VAR('MERCBCRA')~"' then 'MEP' when '"~VAR('MERMCMEP')~"' then 'MEP' else 'EXT'end end MercadoMon, ")
+SQL.ADD("    C.RazonSocial, C.Cuit ")
+SQL.ADD("  From "~DBO~".OPERACIONES O, "~DBO~".CLIENTES C ")
+SQL.ADD("Where  O.FechaOp ="~IdxDate2(Dialogo.Fecha1))
+**SQL.ADD("  and (CB4 = 1 OR ((O.Cliente1 = '"~VAR('VEHICULODE')~"' OR O.Cliente1 = '"~VAR('CLIENTEMAE')~"') and NrOrden1<>'')) ")
+SQL.ADD("  and O.Cliente1 = C.Codigo ")
+SQL.ADD("  and IsNull(O.EsTBills,'')    <> 'SI'  ")
+SQL.ADD("  and O.TipoOp in ('TIC','TIV','TIFC','TIFV') ")
+SQL.ADD("  and UDN2 <> 'SENEBI' ")
+#ifdef MLASA
+  SQL.ADD("  and  O.NrOperacion in (Select NrOperacion from "~DBO~".OPERACIONESBITS OB where NrBit in (10,70) and Valor=1 ) ")
+  SQL.ADD("  and (C.Jerarquia like  ('"~VAR('JERCLIENTE')~"%') OR C.Jerarquia like  ('"~VAR('JERVINCULA')~"%') OR C.Vinculado ='SI') ")
+#endif
+if NoVacio(Dialogo.Mercado1)
+  SQL.ADD("  and  O.Mercado4='"~Dialogo.Mercado1~"' ")
+endif
+SQL.ADD("  GROUP BY O.Especie, O.Plazo, O.Contraespecie, O.TipoOp,O.CB4, O.Mercado2, O.Cliente1, C.RazonSocial, C.Cuit ")
+SQL.ADD(" UNION ALL")
+SQL.ADD(" Select O.Especie, O.Plazo, O.Contraespecie, ")
+SQL.ADD("    CASE when TipoOp IN ('TIV','TIFV') Then Sum(O.Cantidad)       else 0 END CantidadC,       ")
+SQL.ADD("    CASE when TipoOp IN ('TIC','TIFC') Then Sum(O.Cantidad)       else 0 END CantidadV,       ")
+SQL.ADD("    CASE when TipoOp IN ('TIV','TIFV') then SUM(O.TotalBrutoCli1) Else 0 End TotalBrutoCli1C, ")
+SQL.ADD("    CASE when TipoOp IN ('TIC','TIFC') then SUM(O.TotalBrutoCli1) Else 0 End TotalBrutoCli1V, ")
+SQL.ADD("    Case O.ContraEspecie when 'ARP' Then '' Else Case O.Mercado2 when '"~VAR('MERCBCRA')~"' then 'MEP' when '"~VAR('MERMCMEP')~"' then 'MEP' else 'EXT'end end MercadoMon, ")
+SQL.ADD("    C.RazonSocial, C.Cuit ")
+SQL.ADD("  From "~DBO~".OPERACIONES O, "~DBO~".CLIENTES C ")
+SQL.ADD("Where  O.FechaOp ="~IdxDate2(Dialogo.Fecha1))
+**SQL.ADD("  and (CB4 = 1 OR ((O.Cliente1 = '"~VAR('VEHICULODE')~"' OR O.Cliente1 = '"~VAR('CLIENTEMAE')~"') and NrOrden1<>'')) ")
+SQL.ADD("  and O.Cliente1 = C.Codigo ")
+SQL.ADD("  and IsNull(O.EsTBills,'')    <> 'SI'  ")
+SQL.ADD("  and O.TipoOp in ('TIC','TIV','TIFC','TIFV') ")
+SQL.ADD("  and UDN2 = 'SENEBI' and O.Cliente1 <> '"~VAR('VEHICULODE')~"' ")
+#ifdef MLASA
+  SQL.ADD("  and  O.NrOperacion in (Select NrOperacion from "~DBO~".OPERACIONESBITS OB where NrBit in (10,70) and Valor=1 ) ")
+  SQL.ADD("  and (C.Jerarquia like  ('"~VAR('JERCLIENTE')~"%') OR C.Jerarquia like  ('"~VAR('JERVINCULA')~"%') OR C.Vinculado ='SI') ")
+#endif
+if NoVacio(Dialogo.Mercado1)
+  SQL.ADD("  and  O.Mercado4='"~Dialogo.Mercado1~"' ")
+endif
+SQL.ADD("  GROUP BY O.Especie, O.Plazo, O.Contraespecie, O.TipoOp,O.CB4, O.Mercado2, O.Cliente1, C.RazonSocial, C.Cuit ")
+SQL.ADD(" UNION ALL")
+SQL.ADD(" Select O.Especie, O.Plazo, O.Contraespecie, ")
+SQL.ADD("    CASE when TipoOp IN ('TIC','TIFC') Then Sum(O.Cantidad)       else 0 END CantidadC, ")
+SQL.ADD("    CASE when TipoOp IN ('TIV','TIFV') Then Sum(O.Cantidad)       else 0 END CantidadV, ")
+SQL.ADD("    CASE when TipoOp IN ('TIC','TIFC') then SUM(O.TotalBrutoCli1) Else 0 End TotalBrutoCli1C, ")
+SQL.ADD("    CASE when TipoOp IN ('TIV','TIFV') then SUM(O.TotalBrutoCli1) Else 0 End TotalBrutoCli1V,  ")
+SQL.ADD("    Case O.ContraEspecie when 'ARP' Then '' Else Case O.Mercado2 when '"~VAR('MERCBCRA')~"' then 'MEP' when '"~VAR('MERMCMEP')~"' then 'MEP' else 'EXT'end end MercadoMon, ")
+SQL.ADD("    C.RazonSocial, C.Cuit ")
+SQL.ADD("  From "~DBO~".OPERACIONES O, "~DBO~".CLIENTES C ")
+SQL.ADD(" WHERE O.FechaOp = "~IdxDate2(Dialogo.Fecha1)~"    ")
+SQL.ADD("      and O.Cliente1 <> '"~VAR('VEHICULODE')~"'  ")
+SQL.ADD("      and IsNull(O.EsTBills,'')    <> 'SI'  ")
+SQL.ADD("      and C.Codigo = '"~VAR('VEHICULODE')~"'  ")
+SQL.ADD("      and O.TipoOp   In ('TIC','TIV','TCOPRI')  ")
+SQL.ADD("      and (O.NrBoleto2 <> '' AND O.NrBoleto2 <> ' ' AND O.NrBoleto2 IS NOT NULL ) ")
+SQL.ADD("      and  UDN2 = 'SENEBI' ")
+if NoVacio(Dialogo.Mercado1)
+  SQL.ADD("  and  O.Mercado4='"~Dialogo.Mercado1~"' ")
+else
+  SQL.ADD("      and O.Mercado4 in ("~Pipe2Comillas(VAR('AMBBYMA')~"|")~")  ")
+endif
+SQL.ADD("  GROUP BY O.Especie, O.Plazo, O.Contraespecie, O.TipoOp,O.CB4, O.Mercado2, C.RazonSocial, C.Cuit ")
+SQL.ADD("  ) as AUX ")
+SQL.ADD("  GROUP BY Especie, Plazo, Contraespecie, MercadoMon,  RazonSocial, Cuit ")
+SQL.ADD("  ORDER BY RazonSocial, Especie, Plazo, Contraespecie, MercadoMon ")
+
+watch(SQL.BATCH())
+Recorrer SQL
+   Message(FBN['RazonSocial']~' '~fbn['Especie'])
+   ACT(a:fac, FBN['RazonSocial'])
+   ACT(b:fac, FBN['Cuit'])
+   ACT(c:fac, FBN['Especie'])
+   if FBN['Plazo']=72
+      ACT(d:FAC, '3')
+   else
+       if FBN['Plazo']=48
+          ACT(d:FAC, '2')
+       else
+           if FBN['Plazo']=24
+              ACT(d:FAC, '1')
+           else
+              ACT(d:FAC, FSTR(FBN['Plazo'],1,0))
+           endif   
+       endif   
+   endif   
+   if Eqstr(val(aa:1),FBN['ContraEspecie'])
+      ACT(e:FAC, '$')
+   else
+      ACT(e:FAC, 'D')
+      **      if Incluido(FBN['ContraEspecie'],val(aa:2))
+      **if Incluido(FBN['MercadoMon'],VAR('MERMCMEP')) o Incluido(FBN['MercadoMon'],VAR('MERCBCRA'))
+         **ACT(f:FAC, 'MEP')
+         if EqStr(VAR('DIACNVMEP'),'SI')
+            ACT(f:FAC, '')
+         else
+            ACT(f:FAC, FBN['MercadoMon'])
+         endif
+         **else
+         **ACT(f:FAC, 'EXT')
+         **endif   
+   endif
+   *IF Eqstr(FBN['TipoOp'],'TIC')
+    IF FBN['CantidadC'] <> 0
+       ACN(g:fac, FBN['CantidadC'])
+       ACN(i:fac, FBN['TotalBrutoCli1C'])
+       ACN(h:fac, FBN['TotalBrutoCli1C']/FBN['CantidadC'])
+    Endif
+    IF FBN['CantidadV'] <> 0
+       * else
+       ACN(j:fac, FBN['CantidadV'])
+       ACN(l:fac, FBN['TotalBrutoCli1V'])
+       ACN(k:fac, FBN['TotalBrutoCli1V']/FBN['CantidadV'])
+    Endif
+       *endif
+   AlinearCeldas(b:FAC..f:FAC,'C')
+Proximo
+
+SetFont(a:Val(w1)+1..z:fac,1)
+AlinearCeldas(b:Val(w1)+1..f:FAC,'C')
+FormatoCeldas(g:Val(w1)+1..j:fac,Exe('F2'))
+FormatoCeldas(h:Val(w1)+1..h:fac,Exe('F9'))
+FormatoCeldas(k:Val(w1)+1..k:fac,Exe('F9'))
+
+ACO(1,20)
+ACO(2,12)
+ACO(3,7)
+ACO(4,7)
+ACO(5,7)
+if EqStr(VAR('DIACNVMEP'),'SI')
+  ACO(6,0)
+else
+  ACO(6,10)
+endif
+ACO(7,12)
+ACO(8,12)
+ACO(9,12)
+ACO(10,12)
+ACO(11,12)
+ACO(12,12)
+ACO(13,1)
+
+Impresion(1,2)
+
+SetFilaActual(fac+2)
+ACT(a:fac,'FIN DEL INFORME')
+SetFont(a:fac,2)
+
+#ifdef MLASA
+  SetFilaActual(fac+2)
+  ACT(a:FAC, BuscarCampo('Clientes', 'RazonSocial', 'Codigo', VAR('VEHICULODE')))
+  ACT(a:FAC+1, BuscarCampo('Clientes', 'Direccion', 'Codigo', VAR('VEHICULODE')))
+  ACT(a:FAC+2, BuscarCampo('Clientes', 'CodigoPostal', 'Codigo', VAR('VEHICULODE'))~' - '~BuscarCampo('Clientes', 'Localidad', 'Codigo', VAR('VEHICULODE')))
+  ACT(a:FAC+3, BuscarCampo('PAISES', 'Nombre', 'Codigo', BuscarCampo('Clientes', 'Pais', 'Codigo', VAR('VEHICULODE'))))
+  ACT(a:FAC+4, BuscarCampo('Clientes', 'Telefono', 'Codigo', VAR('VEHICULODE')))
+
+  ACT(l:FAC, 'Agente ALyC y AN PROPIO')
+  ACT(l:FAC+1, 'Registro bajo el N° 121 de la CNV')
+  ACT(l:FAC+3, 'BofA Securities es una marca utilizada')
+  ACT(l:FAC+4, 'por Merrill Lynch Argentina S.A.')
+  AlinearCeldas(l:FAC..l:FAC+4,'D')
+
+  SetFont(a:fac..l:fac+4,2)
+  SetFilaActual(fac+4)
+#endif
+
+SetPrintFit(3,65)
+if val(aa:1)=1
+    LimitesVision(q:FAC)
+else
+    LimitesVision(p:FAC)
+endif    
+LimitesVision(m:fac+2)
+RangoTitulo(a:1..r:fac+1, 10)

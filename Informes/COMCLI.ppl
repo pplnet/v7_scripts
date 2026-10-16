@@ -1,0 +1,230 @@
+﻿ModoReproceso(SinDialogo)
+CrearDialogo
+  Fecha1     :'Fec.Liq.Desde'                      ;  ; ;;;;Dialogo.Fecha1<>0;'Fecha No V lida';NO;PriDeMes(Fsys,SI,'ARG')
+  Fecha2     :'Fec.Liq.Hasta'                      ;  ; ;;;;Dialogo.Fecha2>=Dialogo.Fecha1;'Fecha No V lida';NO;FinDeMes(Fsys,SI,'ARG')
+  Radio1     : "Tipo Cliente|Sudameris|Caja|Todos" ;  ; ;;NO;NO;;;;2;
+  ListaTabla1: "Oficial de Cta."                   ; 5; ;;;;;;;;;;;;;'Descripcion' ; 'Codigo;Descripcion' ; 'OFICIALESCUENTA'
+  ListaTabla2: 'Clientes'                          ; 5;2;;;;;;;;;;;;;'Codigo' ; 'Codigo;RazonSocial' ; 'vCLIENTES01'
+*  ListaTabla1     : "Oficial de Cta."                   ; 6; ;;;;;;;;;SQLSet("SELECT Descripcion FROM "~DBO~".OFICIALESCUENTA ORDER BY Descripcion ");
+FinDialogo
+if Not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,9,B")
+CrearFont(4,"Arial,10,B")
+
+ACT(e1, 'Fecha: '~Var('FECHASYS'))
+SetFont(d1,2)
+ACT(a3, 'Comisiones por Clientes desde el '~Dialogo.Fecha1~' al '~Dialogo.Fecha2) 
+SetFont(a3,4)
+
+* Variable de Cliente Ant.
+ACT(x1, '')
+* Variable de Especie Ant.
+ACT(x2, '')
+* Contador de comision por Cliente
+ACN(x3, 0)
+
+SetFilaActual(4)
+SQL.ADD("SELECT T.TipoTr2, M.Leyenda, M.Cliente, M.Especie, M.FechaMov, M.Cantidad, M.NrOperacion, ")
+SQL.ADD("       C.RazonSocial, E.Nombre, T.RB1, T.CB1, T.CB2, O.Descripcion, M.NrMov, 'PENDIENTE' Estado ")
+** FJL 14/01/22 - Reemplazado con el Left Join
+*SQL.ADD("FROM "~DBO~".MOVPENDIENTES M, "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E, "~DBO~".OFICIALESCUENTA O ")
+SQL.ADD("FROM "~DBO~".MOVPENDIENTES M, "~DBO~".TRANSACCIONES2 T, "~DBO~".ESPECIES E, "~DBO~".CLIENTES C Left JOIN "~DBO~".OFICIALESCUENTA O WITH (NOLOCK) ON C.OficialCuenta = O.Codigo ")
+SQL.ADD("WHERE M.NrSaldo = 4 AND ")
+SQL.ADD("      T.NrTrans = M.NrOperacion AND ")
+SQL.ADD("      M.FechaMov >= '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+SQL.ADD("      M.FechaMov <= '"~IdxDate(Dialogo.Fecha2)~"' AND ")
+SQL.ADD("      M.Cliente = C.Codigo AND ")
+IF NoVacio(Dialogo.ListaTabla2)
+   SQL.ADD("   M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla2)~") AND ")
+ENDIF
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("   O.Codigo IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") AND ")
+ENDIF
+** FJL 16/11/21 - El =* da error - Ver como reemplazarlo
+*SQL.ADD("      O.Codigo =*C.OficialCuenta AND ")
+** FJL 14/01/22 - Reemplazado con el Left Join
+*SQL.ADD("      O.Codigo =C.OficialCuenta AND ")
+IF Dialogo.Radio1 = 0
+   *- Solamente Clientes SUDAMERIS
+   SQL.ADD("   (C.TipoCliente = '"~VAR('CLISUD')~"' OR ")
+   SQL.ADD("    C.TipoCliente IS NULL OR ")
+   SQL.ADD("    C.TipoCliente = '      ') AND ")
+ENDIF
+IF Dialogo.Radio1 = 1
+   *- Solamente Clientes CAJA
+   SQL.ADD("   C.TipoCliente = '"~VAR('CLICAJA')~"' AND ")
+ENDIF
+SQL.ADD("      E.Codigo = M.Especie ")
+SQL.ADD("UNION ")
+SQL.ADD("SELECT T.TipoTr2, M.Leyenda, M.Cliente, M.Especie, M.FechaMov, M.Cantidad, M.NrOperacion, ")
+SQL.ADD("       C.RazonSocial, E.Nombre, T.RB1, T.CB1, T.CB2, O.Descripcion, M.NrMov, 'EJECUTADO' Estado ")
+** FJL 14/01/22 - Reemplazado con el Left Join
+*SQL.ADD("FROM "~DBO~".MOVEJECUTADOS M, "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".ESPECIES E, "~DBO~".OFICIALESCUENTA O ")
+SQL.ADD("FROM "~DBO~".MOVEJECUTADOS M, "~DBO~".TRANSACCIONES2 T, "~DBO~".ESPECIES E, "~DBO~".CLIENTES C Left JOIN "~DBO~".OFICIALESCUENTA O WITH (NOLOCK) ON C.OficialCuenta = O.Codigo ")
+SQL.ADD("WHERE M.NrSaldo = 4 AND ")
+SQL.ADD("      T.NrTrans = M.NrOperacion AND ")
+SQL.ADD("      M.FechaMov >= '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+SQL.ADD("      M.FechaMov <= '"~IdxDate(Dialogo.Fecha2)~"' AND ")
+SQL.ADD("      M.Cliente = C.Codigo AND ")
+IF NoVacio(Dialogo.ListaTabla2)
+   SQL.ADD("   M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla2)~") AND ")
+ENDIF
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("   O.Codigo IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") AND ")
+ENDIF
+** FJL 16/11/21 - El =* da error - Ver como reemplazarlo
+*SQL.ADD("      O.Codigo =*C.OficialCuenta AND ")
+** FJL 14/01/22 - Reemplazado con el Left Join
+*SQL.ADD("      O.Codigo =C.OficialCuenta AND ")
+IF Dialogo.Radio1 = 0
+   *- Solamente Clientes SUDAMERIS
+   SQL.ADD("   (C.TipoCliente = '"~VAR('CLISUD')~"' OR ")
+   SQL.ADD("    C.TipoCliente IS NULL) AND ")
+ENDIF
+IF Dialogo.Radio1 = 1
+   *- Solamente Clientes CAJA
+   SQL.ADD("   C.TipoCliente = '"~VAR('CLICAJA')~"' AND ")
+ENDIF
+SQL.ADD("      E.Codigo = M.Especie ")
+SQL.ADD("ORDER BY  3, 4, 5 ")
+Recorrer SQL
+
+   IF Not EqStr(FBN['Cliente'], Val(x1))
+      IF Val(x3) <> 0
+         ACT(a:fac, 'Total')
+         ACN(b:fac, Val(x3))
+         SetFont(a:fac..b:fac,2)
+         SetFilaActual(fac+2)
+         ACN(x3, 0)
+      ENDIF
+      ACT(a:fac, FBN['Cliente']~' - '~FBN['RazonSocial']~' ('~FBN['Descripcion']~')')
+      if Vacio(FBN['Descripcion'])
+        ACT(a:fac, FBN['Cliente']~' - '~FBN['RazonSocial']~' (Sin Ofical de cuenta)')
+      endif
+      ACT(x1, FBN['Cliente'])
+      SetFont(a:fac,3)
+      ifa
+
+      ACT(b:fac, FBN['Nombre'])
+      ACT(x2, FBN['Especie'])
+      SetFont(b:fac,2)
+      ifa
+
+      ACT(a:fac, 'Fecha')
+      ACT(b:fac, 'Monto Comision')
+      ACT(c:fac, 'Nº Trans.')
+      ACT(d:fac, 'Estado')
+      ACT(e:fac, 'Concepto')
+
+      SetFont(a:fac..e:fac, 2)
+      AlinearCeldas(a:fac..e:fac,'C')
+      AgregarMarco(a:fac..e:fac,2,2,Exe('COLOR'))
+      ifa
+   ENDIF
+
+   IF Not EqStr(FBN['Especie'], Val(x2))
+      IF Val(x3) <> 0
+         ACT(a:fac, 'Total')
+         ACN(b:fac, Val(x3))
+         SetFont(a:fac..b:fac,2)
+         SetFilaActual(fac+2)
+         ACN(x3, 0)
+      ENDIF
+      ACT(b:fac, FBN['Nombre'])
+      ACT(x2, FBN['Especie'])
+      SetFont(b:fac,2)
+      ifa
+
+      ACT(a:fac, 'Fecha')
+      ACT(b:fac, 'Monto Comision')
+      ACT(c:fac, 'N§ Trans.')
+      ACT(d:fac, 'Estado')
+      ACT(e:fac, 'Concepto')
+
+      SetFont(a:fac..e:fac, 2)
+      AlinearCeldas(a:fac..e:fac,'C')
+      AgregarMarco(a:fac..e:fac,2,2,Exe('COLOR'))
+      ifa
+   ENDIF
+
+
+   ACT(a:fac, FBN['FechaMov'])
+   ACN(b:fac, Abs(FBN['Cantidad']))
+   ACT(c:fac, FBN['NrOperacion'])
+   ACLT(c:fac, FBN['NrOperacion'])
+   ACT(d:fac, FBN['Estado'])
+
+   IF EqStr(Val(d:fac),'PENDIENTE')
+      ColorCeldas(d:fac, clGREEN)
+   ELSE
+      ColorCeldas(d:fac, clRED)
+   ENDIF
+
+   SCN(x3, val(b:fac))
+   If FBN['NrMov']=6
+      *- Iva
+*      ACT(e:fac, 'IVA')
+   Endif
+
+   ACT(e:fac, val(e:fac)~' '~FBN['Leyenda'])
+
+   IF EqStr(FBN['TipoTr2'], 'DTP') o EqStr(FBN['TipoTr2'], 'RTP')
+      IF FBN['CB1'] = 0
+         IF EqStr(FBN['TipoTr2'], 'DTP')
+            ACT(e:fac, val(e:fac)~' Deposito')
+         ELSE
+            ACT(e:fac, val(e:fac)~' Retiro')
+         ENDIF
+      ELSE
+         ACT(e:fac, val(e:fac)~' Transferencia ')
+         IF FBN['CB2'] = 1
+            ACT(e:fac, Val(e:fac)~' Interna')
+         ELSE
+            IF EqStr(FBN['TipoTr2'], 'DTP')
+               ACT(e:fac, Val(e:fac)~' Receptora ')
+            ELSE  
+               ACT(e:fac, Val(e:fac)~' Emisora ')
+            ENDIF
+            IF FBN['RB1'] = 0
+               ACT(e:fac, Val(e:fac)~' Conformada')
+            ENDIF
+            IF FBN['RB1'] = 1
+               ACT(e:fac, Val(e:fac)~' Diferida')
+            ENDIF
+            IF FBN['RB1'] = 2
+               ACT(e:fac, Val(e:fac)~' Inmediata')
+            ENDIF
+         ENDIF
+      ENDIF
+   ENDIF
+   IF EqStr(FBN['TipoTr2'], 'CUSSAL')
+   *      ACT(e:fac, val(e:fac)~' Comision Sobre Saldo Nº '~FBN['NrOperacion'])
+   ENDIF
+
+
+   SetFont(a:fac..e:fac,1)
+Proximo
+IF Val(x3) <> 0
+   ifa
+   ACT(a:fac, 'Total')
+   ACN(b:fac, Val(x3))
+   SetFont(a:fac..b:fac,2)
+   SetFilaActual(fac+2)
+ENDIF
+
+ACT(a:fac, 'FIN DEL LISTADO')
+SetFont(a:fac,2)
+
+ACO(1, 7)
+ACO(2,12)
+ACO(3, 7)
+ACO(4, 8)
+ACO(5,20)
+
+LimitesVision(e:fac)
+RangoTitulo(a:1..e:fac, 3)

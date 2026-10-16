@@ -1,0 +1,111 @@
+﻿CrearDialogo
+  Especie3 : 'Especie'      ;1;;;  ;;NoVacio(Dialogo.Especie3) y DesciendeDeEspecie(Dialogo.Especie3,'TITULO');'Debe Ingresar un Especie Valida';NO;;;;;;"Status = 'HAB' "
+  Especie1 : 'Cupon'        ;2;1;;NO;;NoVacio(Dialogo.Especie1) y EsTerminal(Dialogo.Especie1,Especie);'Debe Ingresar un Especie que sea Cupon';NO;BuscarCampo('ESPECIES','Alias9', 'Codigo', Dialogo.Especie3);BuscarCampo('ESPECIES','Alias9', 'Codigo', Dialogo.Especie3);;;;"Status = 'HAB' "
+  Entero1  : 'Nr.Cupon'     ;3;;;NO;;Dialogo.Entero1>=0;'Debe Ingresar el Numero de Cupon';NO;0;BuscarCampo('ESPECIES','Cupon','Codigo',Dialogo.Especie1)
+  Fecha1   : 'F.Corte'      ;4;;;NO;;;;;SQL(" SELECT FechaPago FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie3~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' ");SQL(" SELECT FechaCorte FROM "~DBO~".AGENDACUPONES WHERE Especie = '"~Dialogo.Especie3~"' AND NrCupon = '"~FSTR(Dialogo.Entero1,1,0)~"' ")
+FinDialogo
+
+If Not OK 
+   Cancelar
+EndIf
+
+*- Verifico que no haya movimientos de  cupones de esa especie
+SQL.ADD("SELECT 1 as Nro FROM "~DBO~".MOVEJECUTADOS WHERE Especie='"~Dialogo.Especie3~"' and Cupon='"~FSTR(Dialogo.Entero1+1,1,0)~"' ")
+Recorrer SQL
+  dfa
+  ACN(at2,FBN['Nro'])
+Proximo
+
+If val(at2)=1
+   Cancelar('Ejecute Previamente la CANCELACION COBRO/PAGO y/o CANCELACION DE CORTE  ')
+EndIf
+
+*- Recupero el registro de la agenda cupones
+ACN(z1,0)
+SQL.ADD(" SELECT * FROM "~DBO~".AGENDACUPONES  ")
+SQL.ADD(" WHERE Especie = '"~Dialogo.Especie3~"' AND NrCupon = '"~Fstr(Dialogo.Entero1,0,0)~"' ")
+
+Recorrer SQL
+
+  IF EqStr(FBN['Estado'],'PEN')
+     MessageBox('Se ha Cancelado con anterioridad la Actualizacion de la Especie !!!')
+     ACN(z1,1)
+  Else
+     *- Verifico que los siguientes cupones no esten procesados
+     ACN(z1,0)
+
+     SQL.ADD("SELECT Max(Convert(Float,NrCupon)) as NrCupon FROM "~DBO~".AGENDACUPONES  WHERE Especie='"~Dialogo.Especie3~"' AND Convert(Float,NrCupon)>"~Fstr(Dialogo.Entero1,0,0)~" and Estado='PRO' ")
+     Recorrer SQL
+        dfa
+        ACN(z1,FBN['NrCupon'])
+     Proximo
+
+     IF val(z1)>Dialogo.Entero1
+        MessageBox('Debe Cancelar Previamente la Actualizacion del Cupon '~Fstr(val(z1),0,0)~' !!!')
+     EndIf
+
+     IF val(z1)=0
+        *- Todo bien   
+        SQL.ADD(" UPDATE "~DBO~".AGENDACUPONES SET ")
+        SQL.ADD(" FechaProceso    =  NULL, ")
+        SQL.ADD(" Estado          = 'PEN', ")
+        SQL.ADD(" IntsCapitalizados = 0 ")
+        SQL.ADD(" WHERE Especie = '"~FBN['Especie']~"' AND NrCupon = '"~FBN['NrCupon']~"' ")
+        SQL.NEW
+
+        message(' Actualizando Especie ')
+
+        *- Valor teorico del cupon anterior si el cupon es distinto de 1
+        If Dialogo.Entero1>1         
+           ACN(ck1,Dialogo.Entero1-1)
+        Else 
+           ACN(ck1,Dialogo.Entero1)
+        EndIf
+
+        SQL.ADD(" SELECT A.FechaCorte, A.FechaPago, A.VTeoricoAnt, A.PorAmCapital, E.VTeorico, A.Especie, A.NrCupon ")
+        SQL.ADD(" FROM "~DBO~".AGENDACUPONES A, "~DBO~".ESPECIES E ")
+        SQL.ADD(" WHERE A.Especie = E.Codigo ")
+        SQL.ADD(" AND   A.Especie ='"~Dialogo.Especie3~"' AND A.NrCupon='"~Fstr(val(ck1),0,0)~"' ")
+        Recorrer SQL
+              dfa
+              If Dialogo.Entero1>1
+                 ACN(z2,FBN['VTeoricoAnt']-(FBN['PorAmCapital']/100))
+              Else
+                 ACN(z2,FBN['VTeoricoAnt']) 
+              EndIf
+              ACD(z3,FBN['FechaCorte'])
+              ACD(z4,FBN['FechaPago'])
+              ACN(z5,FBN['VTeoricoAnt'])
+        Proximo
+
+        SQL.ADD("UPDATE "~DBO~".ESPECIES ")
+        SQL.ADD("SET Cupon = "~FSTR(FBN['NrCupon'],0,0)~", ")
+        SQL.ADD("VTeorico = "~Fstr(val(z2),0,9)~", ")
+        SQL.ADD("    Valor4 = 0, Valor5 = 0, Valor6 = 0,")
+        SQL.ADD("    FechaProximoCorte = FechaCorteCupon,")
+        SQL.ADD("    FechaCorteCupon   = '"~IdxDate(val(z3))~"', ")
+        SQL.ADD("    FechaPagoCupon    = '"~IdxDate(val(z4))~"', ")
+        SQL.ADD("    IntsCapitalizados = "~fstr(fbn('IntsCapitalizados'),0,9)~" ")
+        SQL.ADD("WHERE Codigo = '"~FBN['Especie']~"' ")
+        SQL.NEW
+        SQL.EXEC
+
+      
+        *----------- Modifico LA ESPECIE CUPON -------------*
+        SQL.ADD("UPDATE "~DBO~".ESPECIES ")
+        SQL.ADD("SET Cupon = "~FSTR(FBN['NrCupon']-1,0,0)~", ")
+        SQL.ADD("    Valor1 = 0, Valor2 = 0, Valor3 = 0, ")
+        SQL.ADD("    FechaProximoCorte=FechaCorteCupon,")
+        SQL.ADD("    FechaCorteCupon='"~IdxDate(val(z3))~"',")
+        SQL.ADD("    FechaPagoCupon='"~IdxDate(val(z4))~"', ")
+        SQL.ADD("    VTeorico = "~FSTR(val(z5),0,9)~" ")
+        SQL.ADD("WHERE  Codigo = '"~Dialogo.Especie1~"' ")
+        SQL.NEW
+        SQL.EXEC
+     EndIF 
+  EndIf
+Proximo
+
+EjecutarEvento('CORTEZ', Especie1=Dialogo.Especie3, Entero1=Dialogo.Entero1, Fecha1=0)
+
+        MessageBox('Finalizo la Actualizacion de la Especie !!!')

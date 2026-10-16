@@ -1,0 +1,77 @@
+﻿CrearDialogo
+    Directorio1:    'Path '        ;2;1;1;SI;SI;;;;
+    String1:    'Archivo '         ;3;1;1;SI;SI;;;;
+FinDialogo
+
+If Not OK
+    Cancelar
+Endif
+
+
+If ExisteDirectorio(Dialogo.Directorio1)
+    If EqStr(Copy(Dialogo.Directorio1,Longitud(Dialogo.Directorio1),1),'\')
+        If Not ExisteArchivo(Dialogo.Directorio1~Dialogo.String1)
+            Cancelar('1.El Archivo '~Dialogo.String1~' no existe en el directorio: '~Dialogo.Directorio1)
+        Endif
+    Else
+        If Not ExisteArchivo(Dialogo.Directorio1~'\'~Dialogo.String1)
+            Cancelar('2.El Archivo '~Dialogo.String1~' no existe en el directorio: '~Dialogo.Directorio1)
+        Endif
+    Endif
+Else
+    Cancelar('El directorio '~Dialogo.Directorio1~' no existe')
+Endif
+
+*** Corregir path
+let &pf ''
+If EqStr(Copy(Dialogo.Directorio1,Longitud(Dialogo.Directorio1),1),'\')
+    let &pf Dialogo.Directorio1~Dialogo.String1
+Else
+    let &pf Dialogo.Directorio1~'\'~Dialogo.String1
+Endif
+
+ImportarXLS(A:2..E:10000,AA:2..AE:10000, &pf)
+If Not Ok
+    Cancelar('Error al cargar el archivo'~&pf)
+Endif
+
+Recorrer&i 2, 10000
+
+        If NoVacio(AA:&i)
+
+        SQL.ADD(" Select Codigo,TiposOperacion, Tabla, TiposGrupoEsp, Moneda From "~dbo~".RELACIONCUENTA ")
+            SQL.ADD(" Where Codigo =  '"~Val(AA:&i)~ "' ")
+            Recorrer SQL
+                let &TiposOperacion fbn('TiposOperacion')
+                let &TiposGrupoEsp fbn('TiposGrupoEsp')
+                let &Tabla fbn('Tabla')
+                let &Moneda fbn('Moneda')
+            
+                *Obtener el Código con valor más alto sumandole uno para insertar el siguiente Codigo
+                SQL.ADD(" Select MAX(TRY_CAST(Codigo AS INT))+1 Codigo ")
+                SQL.ADD(" FROM "~dbo~".RELACIONCUENTA ")
+                Recorrer SQL
+                    dfa
+                    let &Codigo fbn('Codigo')
+                Proximo
+                
+                *Insert para crear la nueva Relacion Cuenta duplicada pero con Vehiculo BACS
+                SQL.ADD(" INSERT INTO "~dbo~".RELACIONCUENTA ")
+                SQL.ADD(" (Codigo, TiposOperacion, Cuenta, Tabla, ")
+                SQL.ADD(" TiposGrupoEsp, Moneda, Vehiculos) ")
+                SQL.ADD(" Values('"~Fstr(&Codigo,0,0)~"' ,'"~&TiposOperacion~"' ,'"~Fstr(Val(AC:&i),0,0)~"' ,'"~&Tabla~"' , ")
+                SQL.ADD(" '"~Val(AE:&i)~'|'~"' ,'"~&Moneda~"' ,'BACS|') ")
+                SQL.NEW
+                SQL.EXEC
+           
+                *A la Relacion Cuenta original le actualizo el Vehiculo
+                SQL.ADD (" UPDATE "~dbo~".RELACIONCUENTA  ")
+                SQL.ADD (" Set Vehiculos = 'BIND|' ")
+                SQL.ADD (" Where Codigo =  '"~Val(AA:&i)~ "' ")
+                SQL.NEW
+                SQL.EXEC
+            Proximo
+        Else
+            break
+        Endif
+Proximo

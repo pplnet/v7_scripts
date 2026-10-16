@@ -1,0 +1,270 @@
+﻿*- Movimiento DTP - RTP por el Cliente Para Mercado Distinto a CV
+SQL.ADD("SELECT  O.NrOperacion, O.TipoOp, ")
+SQL.ADD("Case O.TipoOp When 'TCPCEM' then (select Cantidad1 from TRANSACCIONES2 OD where OD.NrTrans = '"~Val(g:&i)~"') else O.Cantidad End Cantidad, ")
+SQL.ADD("O.Cuenta1, O.Cliente1, O.Mercado, O.Especie , IsNull(O.Corporate,0) CartProp,                      ")
+SQL.ADD("(SELECT M.Cuenta FROM dbo.MOVEJECUTADOS M WHERE M.NrOperacion = '"~Val(g:&i)~"' ) CuentaVeh        ")
+SQL.ADD("FROM "~DBO~".OPERACIONES O                                                                         ")
+SQL.ADD("WHERE NrOperacion IN                                                                               ")
+SQL.ADD(" (SELECT M.NrOperacion FROM "~DBO~".MOVEJECUTADOS M with (Index = INDME5)                          ")
+SQL.ADD("         WHERE M.NrTrans2 = '"~Val(g:&i)~"')                                                       ")
+SQL.ADD(" UNION ALL                                                                                         ")
+SQL.ADD("SELECT  O.NrTrans as NrOperacion, O.TipoTr2 as TipoOp , ABS(O.Cantidad1) As Cantidad, O.Cuenta1, O.Cliente1, '"~val(am:&i)~"' as Mercado, O.Especie, 0 CartProp, ")
+SQL.ADD("(SELECT M.Cuenta FROM dbo.MOVEJECUTADOS M WHERE M.NrOperacion = '"~Val(g:&i)~"' ) CuentaVeh        ")
+SQL.ADD("FROM "~DBO~".TRANSACCIONES2 O ")
+SQL.ADD("WHERE O.TipoTr2 = 'TRANSP' AND O.NrTrans IN ")
+SQL.ADD(" (SELECT M.NrOperacion FROM "~DBO~".MOVEJECUTADOS M with (Index = INDME5) ")
+SQL.ADD("         WHERE M.NrTrans2 = '"~Val(g:&i)~"') ")
+watch(SQL.BATCH())
+Recorrer SQL
+   dfa
+   * Depositante de la cuenta es MERRILL 
+*12/08/2005   ACT(dc1,BuscarCampo('CUENTAS','Comitente','Codigo',FBN['Cuenta1']))
+   ACT(dc1, BuscarCampo('CUENTAS','Comitente','Codigo',BuscarCampo('TRANSACCIONES2','Cuenta1','NrTrans',Val(g:&i)))  )
+   * Si no es TRANSP reprogramo los tipotr2 segun el tipoop original del operacion
+   * de otra forma, mantengo lo tipotr2 del CONCUS (w:&i)
+
+   if Not Incluido(FBN['TipoOp'],'TRANSP')
+      If EqStr(val(dc1),Dialogo.Vehiculo1)
+         * Si el Depositante de la cuenta es MERRILL
+         *         I*f Incluido(FBN['TipoOp'],'TIC|TIFC|TCPCEM') o [Incluido(FBN['TipoOp'],'TCOPRI') y Incluido(FBN['Cliente1'],Dialogo.Vehiculo1) ]
+         *         I*f Incluido(FBN['TipoOp'],'TIC|TIFC|TCPCEM') o [Incluido(FBN['TipoOp'],'TCOPRI') y Num(FBN['CartProp'])=0 ]
+         * 07/03/2024 se invierte el signo de las TCOPRI con custodia CRYL
+         If [Incluido(FBN['TipoOp'],'TCOPRI') y Num(FBN['CartProp'])=0 ]
+            ACT(w:&i, 'DTP')
+         else   
+            If Incluido(FBN['TipoOp'],'TIC|TIFC|TCPCEM')
+               ACT(w:&i, 'RTP')
+            Else
+               ACT(w:&i, 'DTP')
+            Endif   
+         Endif  
+      Else
+         * Si el Depositante de la cuenta es OTRO BANCO
+         *         I*f Incluido(FBN['TipoOp'],'TIC|TIFC|TCPCEM') o [Incluido(FBN['TipoOp'],'TCOPRI') y Incluido(FBN['Cliente1'],Dialogo.Vehiculo1) ]
+         If Incluido(FBN['TipoOp'],'TIC|TIFC|TCPCEM') o [Incluido(FBN['TipoOp'],'TCOPRI') y Num(FBN['CartProp'])=1 ]
+            ACT(w:&i, 'DTP')
+         Else
+            ACT(w:&i, 'RTP')
+         Endif  
+      Endif
+        
+   Endif
+ 
+
+*11/08/2005   IF Not Incluido(BuscarCampo('CLIENTES','CategDepositante','Codigo',FBN['Cliente1']), VAR('NOCLIENTES'))
+*06/03/2024   IF Not Incluido(BuscarCampo('CLIENTES','CategDepositante','Codigo',FBN['Cliente1']), VAR('NOCLIENTES')) y Eqstr(FBN['Mercado'], VAR('CLHODEFA'))
+   * Si lleva custodia
+   IF NoVacio(val(dc1)) 
+      * Transferencia
+      ACT(ta50, '1')
+      * Interna
+      * 12/03/2024 para no hacer debito y credito en la misma transaccion
+      if Eqstr(FBN['Cliente1'],VAR('VEHICULODE')) y Eqstr(FBN['TipoOp'],'TCOPRI')
+         ACT(ta51, '0')
+      else
+         ACT(ta51, '1')
+      endif   
+      * Cliente Orig.
+      ACT(ta5, Dialogo.Vehiculo1)
+      * Deposit. Orig.
+      ACT(ta6, Dialogo.Vehiculo1)
+      IF Eqstr(FBN['Mercado'], VAR('CLHODEFA'))
+         * Depositante
+         ACT(ta7, BuscarCampo('CLIENTES','CodDepCajaValores','Codigo',Val(ta5)))
+      endif   
+      * Cuenta
+      * 12/3/2024 Se respeta la cuenta elegida en la transaccion
+      If Eqstr(FBN['TipoOp'],'TCOPRI')
+         ACT(ta10, FBN['CuentaVeh'])
+      else
+         ACT(ta10, SQL("Select Codigo from "~DBO~".CUENTAS where Cliente='"~Val(ta5)~"' and (Especies Like '%TITULO%' or Especies='"~FBN['Especie']~"|') and Estado='HAB' and TipoCuenta In ('CUS','CCO') and Mercado='"~FBN['Mercado']~"' and Comitente='"~Val(ta6)~"' and (Transacciones Like '%DTP%' or Transacciones is NULL or Transacciones='')"))
+      endif   
+      * Mercado
+      ACT(ta104, FBN['Mercado'])
+   ELSE
+      act(ta50 ,'0')
+      act(ta51,'0') 
+      act(ta5  ,'' )
+      act(ta6  ,'' ) 
+      act(ta7  ,'' ) 
+      act(ta10 ,'' )
+      act(ta104,'' )
+   ENDIF
+
+   act(ta92, FBN['NrOperacion'] )
+   act(ta1  ,Val(d:&i) )
+   act(ta2  ,Val(w:&i) )
+   act(ta81 ,Val(a:&i) )
+   acd(ta39 ,Val(ak:&i) ) 
+   act(ta103,Val(mc:&i) )
+   act(ta203,Val(bk:&i) )
+
+   act(ta4  ,Val(b:&i) )
+
+*12/08/2005   act(ta9  ,FBN['Cuenta1'] )
+     ACT(ta9, BuscarCampo('TRANSACCIONES2','Cuenta1','NrTrans',Val(g:&i)))
+
+   *- Cuenta Puente
+   act(ta115,'' )
+   act(ta60 ,'-1' )
+
+   act(ta40, '' )
+   act(ta41, '' )
+
+** FJL 02/06/21 - por liquidacion parcial de EU
+*   acn(ta24,Abs(FBN['Cantidad']))
+   if Incluido(FBN['TipoOp'],'TCPCEM|TRANSP')
+     acn(ta24,Abs(FBN['Cantidad']))
+   else
+     acn(ta24,Abs(SQL("SELECT Sum(Cantidad) FROM "~DBO~".MOVEJECUTADOS WHERE Nroperacion='"~val(g:&i)~"' and Especie='"~val(d:&i)~"' ")))
+   endif
+   *- Valor Teorico
+   acn(ta200, ValorTeorico2(val(ta1),val(ta39)) )
+   If Incluido(FBN['TipoOp'],'TCPCEM')
+      acn(ta25,val(ta24))
+   else      
+      acn(ta25,val(ta24)*val(ta200) )
+   endif
+   act(ta17,'CUS')
+   act(ta18,'CUS')
+   act(ta52,'0')
+   act(ta42,'')
+   acn(ta29,COTIZACION(val(ta1),,,,val(ta39),1) )
+   act(ta107,Fstr(NrCupon2(val(ta1),val(ta39)),0,0) )
+
+*   If EqStr(val(ta107),'0')
+*      act(ta107,'')
+*   EndIf
+
+   act(ta61,'0') 
+   act(ta62,'0') 
+
+   IF Val(dr:&i) >= 0
+      act(ta63,FStr(Val(dr:&i),0,0)) 
+   ELSE
+      act(ta63,'0') 
+   ENDIF
+
+   act(ta201,BuscarCampo('ESPECIES','InteresesC','Codigo',val(ta1)) ) 
+   acn(ta202,val(ta29) ) 
+
+   *- Resolucion 1585
+   ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', Val(ta1)))
+
+   If Not EqStr(val(ta201),'DIR')
+      *** calcula precio sucio ***
+      act(ca:fac,val(ta1))
+      acd(ck:fac,val(ta39))
+
+      (."SUCIO".)
+
+      IF Incluido(Val(al4), '1585')
+         acn(ta202,(val(ta29)+(val(cj:fac)*Val(ta29)))*val(ci:fac) )
+      Else
+         acn(ta202,(val(ta29)+val(cj:fac))*val(ci:fac) )
+      Endif
+   EndIf
+
+   *- ta34: Cambio1 ta35: Cambio2 ta36: Cambio3 ta37: Cambio4
+   *- ta28: Cantidad5  ta30: Precio2 ta31: Precio3 ta32: Precio4 ta33: Precio5 ta11: Cuenta3
+   *- ta38: Cambio5 ta26: Cantidad3
+
+   acn(ta35, IIF(Incluido('LETES',Ascendientes('ESPECIES',val(ta1))),(1-val(ta29))*36000/(FechaMaduracion(val(ta1))-val(ta39)),0) )
+
+   acn(ta36, val(cj:fac) )
+
+   *- Monto de la Transferencia 
+   acn(ta37, IIF(Eqstr(BuscarCampo('ESPECIES','InteresesC','Codigo',val(ta1)),'CLE'),IIF(BuscarCampo('ESPECIES','Tasa1','Codigo',val(ta1))=0,val(ta29)*val(ta24)*val(ta200),(val(ta29)*val(ta24)*(ValorNominal(val(ta1))+BuscarCampo('ESPECIES','IntsCapitalizados','Codigo', val(ta1))))),val(ta29)*val(ta24)) )
+
+   *- Total
+   acn(ta34, val(ta24)*val(ta202) )
+
+   act(ta55,'1') 
+
+   *- ta91: Operacion de Referencia1 ta92: Operacion de Referencia2
+   act(ta91,Val(g:&i) ) 
+
+* - Fechacargasys
+acd(ta80,fsys) 
+
+   * Campos de desbloqueo
+   acn(ta116, Abs(val(aw:&i)) )
+   acn(ta117, Abs(val(an:&i)) )
+   acn(ta118, Abs(val(as:&i)) )
+   ACT(ta16,  val(ao:&i) )
+
+   *- Parametros para Ingresar Movimientos de Custodias
+   *- ta1: Especie ta2: TipoTr2  ta81: Vehiculo1 ta39: Fecha1
+   *- ta50: CB1 ta103: Mercado1 ta4: Cliente1   ta9: Cuenta1
+   *- ta6: Cliente3 ta7: Cliente4 ta104: Mercado2 ta5: Cliente2 ta10: Cuenta2
+   *- ta115: ComitenteExt ta60: RB1 ta40: Fecha2 ta41: Fecha3  ta24: Cantidad1 ta25: Cantidad2 
+   *- ta17: Especie4 ta18: Especie5  ta52: CB3  ta42: Fecha4 ta29: Precio1 
+   *- ta107: Cupon1 ta51: CB2 ta61: RB2 ta62: RB3 ta55: CB6 (Marca de Automatico)
+
+   *- ta92: NrOperacionRef2
+
+*   If Not EqStr(val(dc1),VAR('VEHICULODE'))
+
+   If Not EqStr(val(dc1),Dialogo.Vehiculo1)
+      act(ta4  ,val(ta81))
+      act(ta9  ,val(j:&i))
+      ***act(ta5  ,Val(b:&i) )
+
+      *- Cuenta Agente
+      ***act(ta10 ,Val(v:&i) )
+      ***act(ta115,BuscarCampo('CUENTAS','NrDepositante','Codigo',val(ta10)) )
+
+      ***act(ta60 ,Fstr(val(z:&i),0,0) )
+      ***act(ta51,'0') 
+   EndIf
+   * Tratamiento del Match como transferencia interna PZ 01/08/2020
+   BorrarCeldas(vo1..vo1)
+   ACT(vo1, BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Val(g:&i)))
+   if Eqstr(val(vo1), 'MATCH') y EqStr(val(dc1),Dialogo.Vehiculo1)
+      * Transferencia
+      ACT(ta50, '1')
+      * Interna
+      ACT(ta51, '1')
+      * Cliente2
+      act(ta5,  Dialogo.Vehiculo1)
+      * Cliente3
+      act(ta6,  Dialogo.Vehiculo1)
+      * Cuenta2 
+      ACT(ta10, val(j:&i))
+      * * Match lo saco porque ejecuta los movs automaticamente
+      * act(ta61,'1')
+      * Mercado2
+      ACT(ta104, FBN['Mercado'])
+      * Interna
+      ACT(ta51, '1')
+   ENDIF
+*   Messagebox('GENTRANS2 - 1')
+   * Inicio Func GENTRANS2
+   ***********************
+   (.'GENTRANS2'.)
+   ***********************
+   * Fin Func GENTRANS2
+
+   *** Si el Depositante de la Cuenta es el Vehiculo ***
+*12/08/2005    ACT(dc1, BuscarCampo('CUENTAS','Comitente','Codigo',BuscarCampo('TRANSACCIONES2','Cuenta1','NrTrans',Val(g:&i)))  )
+
+   * Se agrega: solo hace la segunda transaccion si el voucher no es match (01/08/2020)
+   * Se trata distinta la custodia CRYL  
+   If EqStr(val(dc1),Dialogo.Vehiculo1) y Not eqstr(Val(b:&i),Dialogo.Vehiculo1) y Not Eqstr(val(vo1),'MATCH') y NO
+      If Eqstr(val(ta2),'RTP')
+         ACT(ta2,'DTP')
+      Else
+         ACT(ta2,'RTP')
+      Endif
+      ACT(ta4,val(ta81))
+      ACT(ta9,val(j:&i))
+*12/08/2005      ACT(ta9, BuscarCampo('TRANSACCIONES2','Cuenta1','NrTrans',Val(g:&i)))
+*      Messagebox('GENTRANS2 - 2')
+      * Inicio Func GENTRANS2
+      ***********************
+      (.'GENTRANS2'.)
+      ***********************
+      * Fin Func GENTRANS2
+   Endif
+   ACT(az:&i, val(ta3) )
+Proximo

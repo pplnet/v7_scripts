@@ -1,0 +1,287 @@
+﻿HojaVisible(SI)
+MostrarCuadrodeMensajes
+CrearDialogo
+   Fecha1: 'Desde';;;;;;;;;FSYS
+   Fecha2: 'Hasta';;;;;;;;;FSYS
+   Check1: 'Genera_Txt?';;;;;;;;;0
+   String2: 'NomArchivo'   ;  ; ;;NO;NO;;;;'SIINMESTI12.'~FStr(Anio(Dialogo.Fecha1),4,0)~PAD0(FStr(Mes(Dialogo.Fecha1),0,0),2)~PAD0(FStr(Dia(Dialogo.Fecha1),0,0),2);'SIINMESTI12.'~FStr(Anio(Dialogo.Fecha1),4,0)~PAD0(FStr(Mes(Dialogo.Fecha1),0,0),2)~PAD0(FStr(Dia(Dialogo.Fecha1),0,0),2);;;'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'   
+   String: 'Archivo'    ; ; ;;Dialogo.Check1=1;Dialogo.Check1=1;NoVacio(Dialogo.String);'Debe especificar un Archivo';NO;;VAR('PATHSISCEN')~Dialogo.String2;;;  
+   String3:'EntidadBCRA';;;;NO;NO;NoVacio(Dialogo.String3);'Debe Existir Codigo BCRA para Vehiculo';NO;;Pad0(fstr(BuscarCampo('CLIENTES','CodigoBCRA','Codigo',Var('VEHICULODE')),0,0) ,3)
+FinDialogo
+
+If Not OK
+   Cancelar
+Endif
+
+ACT(z2,Fecha(Dialogo.Fecha2,'yyyymmdd'))
+ACN(z3,1)
+
+If Dialogo.Check1=1
+  Message("Borrando Archivo Original "~Dialogo.String)
+  BorrarArchivo(Dialogo.String)
+  Message('Abriendo Archivo '~Dialogo.String)
+  AbrirASCII(Dialogo.String,0)
+  If Not Ok
+     Cancelar('No se pudo abrir el archivo '~Dialogo.String)
+  Endif
+Endif
+
+CrearFont(1, "Arial,8,")
+CrearFont(2, "Arial,8,B")
+CrearFont(3, "Arial,10,B")
+
+AgregarBMP(a1,Exe('LOGO'),80)
+ACT(d1, 'SISCEN12 - Periodo '~Dialogo.Fecha1~' al '~Dialogo.Fecha2)
+SetFont(d1,3)
+
+ACT(a4, 'Tipo Titular')
+ACT(b4, 'Moneda')
+ACT(c4, 'CodSISCEN')
+ACT(d4, 'Tipo Tasa/Trans')
+ACT(e4, 'TipoOp')
+ACT(f4, 'NrOperacion')
+ACT(g4, 'Especie')
+ACT(h4, 'Cliente')
+ACT(i4, 'Cant Op')
+ACT(j4, 'Importe Cpras')
+ACT(k4, 'Importe Vtas')
+SetFont(a:4..k:4,2)
+AgregarMarco(a:4..k:4,2,0,Exe('COLOR6'))
+
+* Liquidacion de Operaciones ConceptoBCRA1
+Message('Liquidacion de Operaciones ConceptoBCRA1')
+
+*- Obtengo Jerarquia de Bancos
+ACT(je1, SQL("SELECT Jerarquia FROM "~DBO~".CLIENTES WHERE Codigo='BLOCAL' "))
+ACT(je2, SQL("SELECT Jerarquia FROM "~DBO~".CLIENTES WHERE Codigo='BEXTER' "))
+ACT(je3, SQL("SELECT Jerarquia FROM "~DBO~".CLIENTES WHERE Codigo='BANCOS' "))
+
+***---Obtengo valores significativos, les saco los ceros de la derecha
+Recorrer&k 0,2 
+
+   IF Num(Val(je:&k+1)) <> 0
+      IF Eqstr(Copy(Val(je:&k+1), 10, 3), '000')
+         IF Eqstr(Copy(Val(je:&k+1), 7, 3), '000')
+            IF Eqstr(Copy(Val(je:&k+1), 4, 3), '000')
+               ACT(je:&k+1, Copy(Val(je:&k+1), 1, 3))
+            Else
+               ACT(je:&k+1, Copy(Val(je:&k+1), 1, 6))
+            EndIf
+         Else
+            ACT(je:&k+1, Copy(Val(je:&k+1), 1, 9))
+         EndIf
+      Else
+         ACT(je:&k+1, Copy(Val(je:&k+1), 1, 12))
+      EndIf
+   Endif
+
+Proximo
+
+SQL.ADD("Select O.TipoOp, O.NrOperacion, Cliente1, O.TotalNetoCli1 Importe, O.FechaVto Fecha , Case TipoOp WHEN 'TIC' THEN '0005' WHEN 'TIV' THEN '0005' ELSE '0006' END TipoTran, ")
+SQL.ADD("       CONVERT(INTEGER, E3.Alias7) CodSISCEN, CONVERT(INTEGER, E1.Alias7) Moneda, O.Especie, C.SectorBCRA, C.Persona, O.FechaOp, O.FechaVto, C.RazonSocial, ")
+SQL.ADD("       CASE WHEN C.Jerarquia like '"~Val(je1)~"%' THEN '0003' ELSE CASE WHEN C.Jerarquia like '"~Val(je2)~"%' THEN '0039' ELSE CASE WHEN C.Jerarquia like '"~Val(je3)~"%' THEN '0001' ELSE CASE C.Persona WHEN 'SI' THEN '0027' ELSE '0031' END END END END  TipoTit ")
+SQL.ADD("From "~DBO~".OPERACIONES O JOIN "~DBO~".OPERACIONESBITS OP ON O.NrOperacion=OP.NrOperacion ")
+SQL.ADD("       JOIN "~DBO~".CLIENTES C ON O.Cliente1 = C.Codigo ")
+SQL.ADD("       JOIN "~DBO~".ESPECIES E3 ON E3.Codigo = O.Especie ")
+SQL.ADD("       JOIN "~DBO~".ESPECIES E1 ON E1.Codigo = E3.MonedaEmision ")
+SQL.ADD("Where  O.TipoOp IN ('TIC','TIV','TIFC','TIFV') AND OP.Valor=1 ")
+SQL.ADD("       and OP.NrBit<>30 and OP.NrBit<>31 ")
+SQL.ADD("   and O.FechaOp >= "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   and O.FechaOp <= "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("Order By TipoTit, Moneda,CodSISCEN,TipoTran ")
+
+*- Codigo Producto
+ACT(z21, '0003')
+*- SubProducto
+ACT(z22, '0000')
+
+If Dialogo.Check1=1
+   *- Cabecera (Fecha de Archivo (8) + Espacios (292))
+   ACT(aa1,Val(z2)~PAD('',292,' '))
+   EscribirASCII(Val(aa1))
+EndIf
+
+*- Recupero Numerador
+ACN(nu1, VAR('NUMSISC12'))
+
+SetFilaActual(4)
+Recorrer SQL
+   message('...'~fbn['NrOperacion'])
+
+   ACT(zz24, FBN['TipoTit'])
+
+   *- Cod Moneda
+   ACT(zz26, PAD0(Copy(FBN['Moneda'],1,4),4))
+
+   *- Cod Especie
+   *   ACT(z27, PAD0(Copy(BuscarCampo('ESPECIES', 'Alias7','Codigo', FBN['Especie']),1,4),4))
+   ACT(zz27, PAD0(Copy(FBN['CodSISCEN'],1,4),4))
+
+   *- Tipo Tasa / Transaccion
+   ACT(zz29, FBN['TipoOp'])
+
+
+   *- Corte por Titular, moneda, especie y Tipo Transaccion                         
+   If NoVacio(Val(z5)) y Not Eqstr(Val(z5),Val(zz24)~Val(zz26)~Val(zz27)~Val(zz29))
+      * Cod Listado / Cod Entidad / Fecha Datos 
+      ACT(a:fac,'Total')
+      ACN(i:fac, Val(Z30))
+      If Incluido(Val(e:fac-1),'TIV|TIFV')
+         ACN(k:fac, Val(Z33))
+      Else
+         ACN(j:fac, Val(Z32))
+      EndIf
+      SetFont(a:fac..k:fac,2)
+      SetFilaActual(FAC+2)
+
+      If Dialogo.Check1=1
+
+         *- Incremento numerador
+         SCN(nu1, 1)
+         ACT(z23,FStr(Val(nu1),0,0))
+
+         *- multiplico por 100 los importes, ya que van con 2 decimales
+         ACN(Z32, Val(Z32)*100)        
+         ACN(Z33, Val(Z33)*100)        
+
+         *- Cod Sector
+         ACT(z25, '0000')
+         *- Cod Moneda
+**       ACT(z26, 
+         *- Cod Especie
+**       ACT(z27, 
+         *- Saldo al Cierre (17) + Capital Depositado (17) + Prom. Saldos (17) + Valor Efectivo (17) + Plazo (7) + Cta Ente Rec.(6) + Tasa (9) + Debitos Mes (17)
+         ACT(z28, PAD0('',107))
+         *- Tipo Tasa / Transaccion
+**       ACT(z29,
+         *- Cant Debitos 
+         ** ACT(z30, 
+         *- Cod Provincia (4) + Cod Sucursal (4) + Cant Cuentas (9) + Cant Certificados (9) 
+         ACT(z31, PAD0('',26))
+         *- Importe Compras (17) 
+         ***ACT(z32, '')
+         *- Importe Ventas (17) 
+         ***ACT(z33, '')
+         *- Cod Origen/Destino (4) + Cod Situacion (1) + Saldo Adeudado (17) + Cod Grupo (2) + Especios (51)
+         ACT(z34, PAD0('',24))
+         ACT(z35, PAD('',51,' '))
+         ACT(aa1,Val(z21)~Val(z22)~PAD0(Val(z23),11)~PAD0(Val(z23),10)~Val(z24)~Val(z25)~Val(z26)~Val(z27)~Val(z28)~Val(z29)~Pad0(MIRT(FStr(val(z30),9,0)),9)~Val(z31)~Pad0(MIRT(FStr(val(z32),17,0)),17)~Pad0(MIRT(FStr(val(z33),17,0)),17)~Val(z34)~Val(z35) )
+         EscribirASCII(Val(aa1))
+      Endif
+      SCN(z3,1)
+      ACN(z4,0)
+      ACN(z6,0)
+      ACN(z30,0)
+      ACN(z32,0)
+      ACN(z33,0)
+   Endif
+   SCN(z4,1)
+
+   ACT(z24,Val(zz24))
+   ACT(z26,Val(zz26))
+   ACT(z27,Val(zz27))
+   ACT(z29,FBN['TipoTran'])
+   ACT(z5,Val(z24)~Val(z26)~Val(z27)~Val(zz29))
+
+   ACT(z9,Val(z24))
+   ACT(z14,fbn['Moneda'])
+
+   ACT(a:fac, Val(z24))
+   ACT(b:fac, Val(z26))
+   ACT(c:fac, Val(z27))
+   ACT(d:fac, Val(z29))
+   ACT(e:fac, fbn['TipoOp'])
+   ACT(f:fac, fbn['NrOperacion'])
+   ACLO(f:fac, fbn['NrOperacion'])
+   ACT(g:fac, fbn['Especie'])
+   ACT(h:fac, fbn['Cliente1']~' - '~fbn['RazonSocial'])
+   SCN(Z30, 1)
+   If Incluido(FBN['TipoOp'],'TIV|TIFV')
+      ACN(k:fac, Fbn['Importe'])
+      SCN(Z33, Fbn['Importe'])
+   Else
+      ACN(j:fac, Fbn['Importe'])
+      SCN(Z32, Fbn['Importe'])
+   EndIf
+
+   *- guardo campos por el ultimo registro
+   ACT(bb:fac, FBN['Moneda'])
+   ACT(bc:fac, FBN['Especie'])
+   ACT(bd:fac, FBN['TipoOp'])
+   ACT(be:fac, fbn['Cliente1'])
+   ACT(bf:fac, FBN['SectorBCRA'])
+   ACT(bg:fac, FBN['Persona'])
+
+   SetFont(a:fac..k:fac,1)
+Proximo
+
+If Not Incluido(Val(z14),'ARP|USD|USB|USC')
+   ACN(z16,Cotizacion('USD',,,,Val(z15),1))
+   ACN(z7, Cotizacion(Val(z14),,,,Val(z15),1)/Val(z16))
+Else
+   ACN(z7,1)
+Endif
+
+If NoVacio(Val(z5))
+   IFA
+   ACT(a:fac,'Total')
+   ACN(i:fac, Val(Z30))
+   If Incluido(Val(e:fac-1),'TIV|TIFV')
+      ACN(k:fac, Val(Z33))
+   Else
+      ACN(j:fac, Val(Z32))
+   EndIf
+   SetFont(a:fac..k:fac,2)
+EndIf
+
+If Dialogo.Check1=1 y NoVacio(Val(z5))
+
+   *- Incremento numerador
+   SCN(nu1, 1)
+   ACT(z23,FStr(Val(nu1),0,0))
+
+   *- multiplico por 100 los importes, ya que van con 2 decimales
+   ACN(Z32, Val(Z32)*100)        
+   ACN(Z33, Val(Z33)*100)        
+
+   *- Cod Sector
+   ACT(z25, '0000')
+
+   *- Saldo al Cierre (17) + Capital Depositado (17) + Prom. Saldos (17) + Valor Efectivo (17) + Plazo (7) + Cta Ente Rec.(6) + Tasa (9) + Debitos Mes (17)
+   ACT(z28, PAD0('',107))
+
+   *- Cod Provincia (4) + Cod Sucursal (4) + Cant Cuentas (9) + Cant Certificados (9) 
+   ACT(z31, PAD0('',26))
+
+   *- Cod Origen/Destino (4) + Cod Situacion (1) + Saldo Adeudado (17) + Cod Grupo (2) 
+   ACT(z34, PAD0('',24))
+   *-Especios (51)
+   ACT(z35, PAD('',51,' '))
+   ACT(aa1,Val(z21)~Val(z22)~PAD0(Val(z23),11)~PAD0(Val(z23),10)~Val(z24)~Val(z25)~Val(z26)~Val(z27)~Val(z28)~Val(z29)~Pad0(MIRT(FStr(val(z30),9,0)),9)~Val(z31)~Pad0(MIRT(FStr(val(z32),17,0)),17)~Pad0(MIRT(FStr(val(z33),17,0)),17)~Val(z34)~Val(z35) )
+   EscribirASCII(Val(aa1))
+
+Endif
+
+If Dialogo.Check1=1
+   *- Actualizo Numerador
+   SQL.ADD("UPDATE "~DBO~".VARIABLES SET Valor= "~FSTR(Val(nu1),0,0)~"  WHERE Codigo='NUMSISC12' ") 
+   SQL.NEW
+   SQL.EXEC
+   CerrarAscii
+   Messagebox('Archivo Interfaz SISCEN12 Ha sido Generado!')
+EndIf
+
+FormatoCeldas(j:5..k:fac+1, Exe('F2'))
+FormatoCeldas(i:5..i:fac+1, Exe('F0'))
+ACO(1,9)
+ACO(2,6)
+ACO(3,7)
+ACO(4,9)
+ACO(5,6)
+ACO(6,9)
+ACO(7,6)
+ACO(8,18)
+ACO(9,11)
+ACO(10,11)
+ACO(11,11)
+LimitesVision(k:fac+2)

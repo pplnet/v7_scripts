@@ -1,0 +1,528 @@
+﻿********************************************
+** Se debe poner if NO para realizar pruebas
+********************************************
+
+  ** Asi debe quedar
+  CrearDialogo
+    Fecha1   : 'Fecha'             ;1;1;;  ;  ;Dialogo.Fecha1>0;'Fecha Invalida';NO;FSys
+    Vehiculo1: 'Vehiculo'          ;2;1;;NO;  ;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+    Radio1   : 'Tipo|Autom.|Manual';1;2;;NO;SI;;;;1;
+    Radio2   : 'Mov.|Cobro|Pago'   ;2;2;;Dialogo.Radio1=1;SI;Dialogo.Radio2=1 o Dialogo.Cantidad1=0 o Dialogo.Precio1=0;'Solo Paso 0 puede ser cobro';NO;1;
+    Check1   : 'Procesa'           ;3;2;;NO;NO;;;;1;
+    Check2   : 'De MAE'            ;4;2;;NO;NO;;;;0;
+    Cantidad1: 'Cantidad a Pagar'  ;3;1;;Dialogo.Radio1=1;Dialogo.Radio1=1;Dialogo.Cantidad1>0 o Dialogo.Radio1=0 o Dialogo.Radio2=0;'La cantidad debe ser positiva';NO;
+    Precio1  : 'Paso'              ;4;1;;Dialogo.Radio1=1;Dialogo.Radio1=1;Dialogo.Precio1>=0  o Dialogo.Radio1=0                   ;'Paso invalido'                ;NO;1;;;;'###'
+    Precio2  : 'Cierre'            ;5;1;;NO;NO;Dialogo.Precio2=0;'Ya se realizo el cierre del dia '~Dialogo.Fecha1;NO;;SQL(" Select 1 From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' and Registro = 'CIED' ")
+  FinDialogo
+
+if Not OK
+  Cancelar
+endif
+if Dialogo.Check1=0
+  * NO Procesa
+  Message('*** NO Procesa ***')
+  HojaVisible(SI)
+endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+
+ACT(f:1, 'Transacciones')
+ACT(r:1, 'Pasos MAE')
+ACT(w:1, 'LIQOCT')
+ACT(ab:1, 'Acreedor')
+ACT(ab:2, 'Deudor')
+ACT(ad:1, 'Total Cob')
+ACT(ad:2, 'Total Pag')
+
+ACT(a:1, 'Fecha')
+ACT(a:2, 'Vehiculo')
+ACT(a:3, 'Tipo')
+ACT(a:4, 'Movimiento')
+ACT(a:5, 'Procesa')
+ACT(a:6, 'De MAE')
+ACT(a:8, 'Ult.Paso')
+ACT(a:9, 'Paso Actual')
+ACT(a:10, 'Cantidad')
+ACT(a:11, 'Accion')
+ACT(a:12, 'TipoTr2')
+ACT(a:13, 'NrTrans')
+ACT(a:14, 'Especie')
+ACT(a:15, 'Mercado')
+ACT(a:16, 'Cuenta')
+ACT(a:17, 'Bit 2')
+ACT(a:18, 'Bit 8')
+
+ACD(b:1, Dialogo.Fecha1)
+ACT(b:2, Dialogo.Vehiculo1)
+ACN(b:3, Dialogo.Radio1)
+if Dialogo.Radio1=0
+  ACT(c:3, 'Autom')
+else
+  ACT(c:3, 'Manual')
+endif
+ACN(b:4, Dialogo.Radio2)
+ACN(d:4, Dialogo.Radio2)
+if Dialogo.Radio2=0
+  ACT(c:4, 'Cobro')
+else
+  if Dialogo.Radio2=1
+    ACT(c:4, 'Pago')
+  else
+    ACT(c:4, 'A Def')
+  endif
+endif
+ACN(d:4, Dialogo.Radio2)
+ACN(b:5, Dialogo.Check1)
+ACN(b:6, Dialogo.Check2)
+
+**************************
+** Pagos/Cobros existentes
+**************************
+SetFilaActual(0)
+SQL.ADD("Select * from "~DBO~".TRANSACCIONES2 ")
+SQL.ADD(" where TipoTr2   in ('OCTDEP','OCTRET') ")
+SQL.ADD("   and Fecha1    = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   and Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+if Dialogo.Check1=0 y Val(c2)=1
+  * No Procesa      y Prueba
+  SQL.ADD("   and Precio5   < "~Dialogo.Precio1~" ")
+endif
+SQL.ADD(" order by Precio5 ")
+recorrer SQL
+  SCN(f:2, 1)
+  ACT(g:fac, fbn('NrTrans'))
+  ACT(h:fac, fbn('TipoTr2'))
+  ACD(i:fac, fbn('Fecha1'))
+  ACD(j:fac, fbn('Fecha2'))
+  ACN(k:fac, fbn('RB1'))
+  if fbn('RB1')=0
+    ACT(l:fac, 'Autom')
+  else
+    ACT(l:fac, 'Manual')
+  endif
+  ACN(m:fac, fbn('Precio5'))
+  if FAC=1
+    if Val(m:fac)<>0
+      ACN(e:2,1)
+      ACT(n:fac, 'Error 0')
+    endif
+  endif
+  if FAC>1
+    if Val(m:fac)<>Val(m:fac-1)+1
+      ACN(e:2,1)
+      ACT(n:fac, 'Error Ant')
+    endif
+  endif
+  ACN(o:fac, fbn('Cantidad1'))
+  if EqStr(fbn('TipoTr2'),'OCTDEP')
+    ACN(p:fac, fbn('Cantidad1'))
+    SCN(ae:1, fbn('Cantidad1'))
+  else
+    ACN(p:fac, -fbn('Cantidad1'))
+    SCN(ae:2, -fbn('Cantidad1'))
+  endif
+proximo
+ACN(b:8, Val(m:fac))
+if Val(e:2)=1
+  ACN(e:1, 1)
+  if Dialogo.Radio1=0 y Val(c2)=0
+    * Automatica      y No Prueba
+    Message('Error en Transacciones ya existentes.')
+  else
+    * Manual
+    MessageBox('Error en Transacciones ya existentes.')
+  endif
+endif
+ACN(b:9, Dialogo.Precio1)
+if Val(f:2)>0
+  * Hay transacciones ingresadas
+  recorrer&i 1,Val(f:2)
+    if Val(b:9)=Val(m:&i)
+      ACN(e:1, 1)
+      if Dialogo.Radio1=0
+        * Automatica
+        if Dialogo.Check1=1 y Val(c2)=0
+          * Procesa         y No Prueba
+          Message('Ya existe transaccion Paso '~FStr(Val(b:9),1,0)~' ('~Val(g:&i)~')')
+        else
+          MessageBox('Ya existe transaccion Paso '~FStr(Val(b:9),1,0)~' ('~Val(g:&i)~')')
+        endif
+      else
+        * Manual
+        if Dialogo.Check1=1
+          * Procesa
+          Cancelar('Ya existe transaccion Paso '~FStr(Val(b:9),1,0)~' ('~Val(g:&i)~')')
+        else
+          MessageBox('Ya existe transaccion Paso '~FStr(Val(b:9),1,0)~' ('~Val(g:&i)~')')
+        endif
+      endif
+      break
+    endif
+  proximo
+  if Val(e:1)=0
+    if Val(b:9)<>Val(b:8)+1
+      ACN(e:1, 1)
+      if Dialogo.Radio1=0
+        * Automatica
+        if Dialogo.Check1=1 y Val(c2)=0
+          * Procesa         y No Prueba
+          Message('ERROR - Paso '~FStr(Val(b:9),1,0)~' NO corresponde a siguiente ('~FStr(Val(b:8)+1,1,0)~')')
+        else
+          MessageBox('ERROR - Paso '~FStr(Val(b:9),1,0)~' NO corresponde a siguiente ('~FStr(Val(b:8)+1,1,0)~')')
+        endif
+      else
+        * Manual
+        if Dialogo.Check1=1
+          * Procesa
+          Cancelar('ERROR - Paso '~FStr(Val(b:9),1,0)~' NO corresponde a siguiente ('~FStr(Val(b:8)+1,1,0)~')')
+        else
+          MessageBox('ERROR - Paso '~FStr(Val(b:9),1,0)~' NO corresponde a siguiente ('~FStr(Val(b:8)+1,1,0)~')')
+        endif
+      endif
+    endif
+  endif
+else
+  * No Hay Transacciones ingresadas
+  if Val(b:9)>0
+    ACN(e:1, 1)
+    if Dialogo.Radio1=0
+      * Automatica
+      if Dialogo.Check1=1 y Val(c2)=0
+        * Procesa         y No Prueba
+        Message('No existen transacciones de Pasos anteriores')
+      else
+        MessageBox('No existen transacciones de Pasos anteriores')
+      endif
+    else
+      * Manual
+      if Dialogo.Check1=1
+        * Procesa
+        Cancelar('No existen transacciones de Pasos anteriores')
+      else
+        MessageBox('No existen transacciones de Pasos anteriores')
+      endif
+    endif
+  endif
+endif
+
+**************************
+** Pasos recibidos del MAE
+**************************
+SetFilaActual(0)
+SQL.ADD("Select Paso,Monto,UtilizadoMTM,UtilizadoGAR ")
+SQL.ADD("  From "~DBO~".MTMOCT ")
+SQL.ADD(" Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   and Paso  <= "~Dialogo.Precio1~" ")
+SQL.ADD("   and (Especie         Is Null or Especie         = '' or Especie         = ' ') ")
+SQL.ADD("   and (TipoNegociacion Is Null or TipoNegociacion = '' or TipoNegociacion = ' ') ")
+SQL.ADD("   and (Cliente         Is Null or Cliente         = '' or Cliente         = ' ') ")
+SQL.ADD(" order by Paso ")
+recorrer SQL
+  SCN(r:2, 1)
+  ACN(s:FAC, fbn('Paso'))
+  ACN(t:FAC, fbn('Monto'))
+  ACN(u:FAC, fbn('UtilizadoMTM'))
+  ACN(v:FAC, fbn('UtilizadoGAR'))
+proximo
+
+**********************
+** Bilaterales del dia
+**********************
+SetFilaActual(0)
+SQL.ADD("Select * from "~DBO~".TRANSACCIONES2 ")
+SQL.ADD(" where TipoTr2   = 'LIQOCT' ")
+SQL.ADD("   and Fecha1    = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   and Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" order by Cliente1 ")
+recorrer SQL
+  SCN(w:2, 1)
+  ACT(x:fac, fbn('NrTrans'))
+  ACT(y:fac, fbn('TipoTr2'))
+  ACT(z:fac, fbn('Cliente1'))
+  ACN(aa:fac, fbn('Cantidad1'))
+  if fbn('Cantidad1')>=0
+    SCN(ac:1, fbn('Cantidad1'))
+  else
+    SCN(ac:2, fbn('Cantidad1'))
+  endif
+proximo
+
+if Dialogo.Radio1=1
+  ** Ingreso Manual
+  ACN(b:10, Dialogo.Cantidad1)
+  if SQL(" Select Count(*) From "~DBO~".TRANSACCIONES2 Where TipoTr2 = 'LIQOCT' AND Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' and Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")=0
+    ACN(e:1, 1)
+    if Dialogo.Check1=1
+      * Procesa
+      Cancelar('El MTM del Dia No Ha Sido Procesado')
+    else
+      MessageBox('El MTM del Dia No Ha Sido Procesado')
+    endif
+  endif
+  if Val(f:2)=0
+    * No hay transacciones para el dia
+    if Val(b:9)>0
+      ACN(e:1, 1)
+      if Dialogo.Check1=1
+        * Procesa
+        Cancelar('No existe transaccion para Paso 0')
+      else
+        MessageBox('No existe transaccion para Paso 0')
+      endif
+    endif
+  else
+    if Val(b:9)<>Val(b:8)+1
+      * Paso ingresado <> anterior +1
+      ACN(e:1, 1)
+      if Dialogo.Check1=1
+        * Procesa
+        Cancelar('El paso ingresado no es valido')
+      else
+        MessageBox('El paso ingresado no es valido')
+      endif
+    endif
+  endif
+else
+  ** Ingreso Automatico
+  if Dialogo.Check2=1
+    ** De MAE (Cantidad No definida)
+    if Val(r:2)=0
+      ACN(e:1, 1)
+      if Val(c2)=1
+        * Prueba
+        MessageBox('ERROR. No se recibieron Pasos del MAE')
+      else
+        Message('ERROR. No se recibieron Pasos del MAE')
+      endif
+    endif
+    if Val(r:2)=1
+      ACN(e:1, 1)
+      if Val(c2)=1
+        * Prueba
+        MessageBox('ERROR. Se recibio un solo Paso del MAE ('~FStr(Val(s:1),1,0)~')')
+      else
+        Message('ERROR. Se recibio un solo Paso del MAE ('~FStr(Val(s:1),1,0)~')')
+      endif
+    endif
+    if Val(r:2)>1
+      if Val(b:9)<>Val(s:Val(r:2))
+        ACN(e:1, 1)
+        if Val(c2)=1
+          * Prueba
+          MessageBox('ERROR. No coincide paso con ultimo recibido del MAE ('~FStr(Val(b:9),1,0)~'<>'~FStr(Val(s:Val(r:2)),1,0)~')')
+        else
+          Message('ERROR. No coincide paso con ultimo recibido del MAE ('~FStr(Val(b:9),1,0)~'<>'~FStr(Val(s:Val(r:2)),1,0)~')')
+        endif
+      else
+        if Val(t:Val(r:2))>-0.01
+          * Ultimo Paso Positivo
+          ACN(b:10, 0)
+          ACN(b:4, 0)
+          ACT(c:4, 'Cobro')
+        else
+          ACN(b:4, 1)
+          ACT(c:4, 'Pago')
+          if Val(t:Val(r:2)-1)>=0
+            ACN(b:10, -Val(t:Val(r:2)))
+          else
+            ACN(b:10, -(Val(t:Val(r:2))-Val(t:Val(r:2)-1)))
+            if Val(b:10)<0.01
+              ACN(b:10, 0)
+              ACN(b:4, 0)
+              ACT(c:4, 'Cobro')
+            endif
+          endif
+        endif
+      endif
+    endif
+  else
+    if Val(b:9)>0
+      ACN(e:1, 1)
+      if Val(c2)=1
+        * Prueba
+        MessageBox('Transacciones de MTM paso > 0')
+      else
+        Message('Transacciones de MTM paso > 0')
+      endif
+    endif
+    ** Cobro/Pago (De MTM Paso 0)
+    ACN(b:10, Dialogo.Cantidad1)
+  endif
+endif
+
+if Val(b:4)=0
+  * Cobro
+  ACN(p:Val(f:2)+1, Val(b:10))
+  SCN(ae:1, Val(b:10))
+else
+  * Pago
+  ACN(p:Val(f:2)+1, -Val(b:10))
+  SCN(ae:2, -Val(b:10))
+endif
+ACN(p:Val(f:2)+2, Sum(p:1..p:Val(f:2)+1))
+
+if Val(ae:1)-Val(ac:1)>0.01
+  ACN(e:1, 1)
+  if Dialogo.Check1=1
+    * Procesa
+    if Dialogo.Radio1=1 y Val(c2)=0
+      ** Ingreso Manual y No Prueba
+      Cancelar('Cantidad Cobrada supera Total Acreedor')
+    else
+      ** Ingreso Automatico
+      Message('Cantidad Cobrada supera Total Acreedor')
+    endif
+  else
+    MessageBox('Cantidad Cobrada supera Total Acreedor')
+  endif
+endif
+if Val(ae:2)-Val(ac:2)<-0.01
+  ACN(e:1, 1)
+  if Dialogo.Check1=1
+    * Procesa
+    if Dialogo.Radio1=1 y Val(c2)=0
+      ** Ingreso Manual y No Prueba
+       Cancelar('Cantidad Pagada supera Total Deudor')
+    else
+      ** Ingreso Automatico
+       Message('Cantidad Pagada supera Total Deudor')
+    endif
+  else
+     MessageBox('Cantidad Pagada supera Total Deudor')
+  endif
+endif
+
+if Val(e:1)=0
+  ACT(b:11, 'Insert')
+  if Val(b:4)=0
+    ACT(b:12, 'OCTDEP')
+    ACT(b:17, '1')
+    ACT(b:18, '0')
+  else
+    ACT(b:12, 'OCTRET')
+    ACT(b:17, '0')
+    ACT(b:18, '1')
+  endif
+  ACT(b:14, 'ARP')
+  ACT(b:15, 'OCT')
+  ACT(b:16, SQL("select Codigo from "~DBO~".CUENTAS WHERE Cliente = '"~Dialogo.Vehiculo1~"' and Especies Like '%ARP%' and Estado = 'HAB' and Permanente = 'SI' ") )
+  if Dialogo.Check1=1
+    * Procesa
+    ACT(b:13, GetNumerador(14))
+    Message('Generando '~Val(b:12)~' '~Val(b:13))
+
+    SQL.ADD("Insert Into "~DBO~".TRANSACCIONES2 ( ")
+    SQL.ADD(" NrTrans,    TipoTr2,       ")
+    SQL.ADD(" Especie,    Fecha2,        ")
+    SQL.ADD(" Fecha1,     Cantidad1,     ")
+    SQL.ADD(" Precio5,    Mercado1,      ")
+    SQL.ADD(" RB1,        ")
+    if Val(b:3)=0
+      SQL.ADD(" RB2,      ")
+    endif
+    SQL.ADD(" Cuenta2,    Vehiculo1,     ")
+    SQL.ADD(" FechaCarga, FechaCargaSys, ")
+    SQL.ADD(" Numerador,  UsrInput       ")
+    SQL.ADD(" ) Values ( ")
+
+    SQL.ADD(" '"~Val(b:13)~"', ")
+    SQL.ADD(" '"~Val(b:12)~"', ")
+
+    SQL.ADD(" '"~Val(b:14)~"', ")
+    SQL.ADD(" '"~IdxDate(Fsys)~"', ")
+
+    SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', ")
+    SQL.ADD(" "~Fstr(Val(b:10),0,2)~", ")
+
+    SQL.ADD(" "~Fstr(Val(b:9),0,0)~", ")
+    SQL.ADD(" '"~Val(b:15)~"', ")
+
+    SQL.ADD(" '"~Fstr(Val(b:3),0,0)~"', ")
+    if Val(b:3)=0
+      SQL.ADD(" '"~Fstr(Val(b:6),0,0)~"', ")
+    endif
+
+    SQL.ADD(" '"~Val(b:16)~"', ")
+    SQL.ADD(" '"~Val(b:2)~"', ")
+
+    SQL.ADD(" "~SQLFecha(Ahora)~", ")
+    SQL.ADD(" '"~IdxDate(Fsys)~"', ")
+
+    SQL.ADD(" 14, ")
+    SQL.ADD(" '"~UsuarioActivo~"' ")
+    SQL.ADD(" ) ")
+    SQL.NEW
+
+    SQL.ADD(" Insert Into "~DBO~".OPERACIONESBITS ( ")
+    SQL.ADD(" NrOperacion, NrBit, Valor ")
+    SQL.ADD(" ) Values ( ")
+    SQL.ADD(" '"~Val(b:13)~"', 2, '"~Val(b:17)~"' ")
+    SQL.ADD(" ) ")
+    SQL.NEW
+
+    SQL.ADD(" Insert Into "~DBO~".OPERACIONESBITS ( ")
+    SQL.ADD(" NrOperacion, NrBit, Valor ")
+    SQL.ADD(" ) Values ( ")
+    SQL.ADD(" '"~Val(b:13)~"', 8, '"~Val(b:18)~"' ")
+    SQL.ADD(" ) ")
+    SQL.NEW
+
+    SQL.EXEC
+  endif
+else
+  ACT(b:11, 'Error')
+  if Dialogo.Check1=1
+    * Procesa
+    if Dialogo.Radio1=1 y Val(c2)=0
+      ** Ingreso Manual y No Prueba
+      Cancelar('Proceso con Error. No Genera transacciones')
+    else
+      ** Ingreso Automatico
+      Message('Proceso con Error. No Genera transacciones')
+    endif
+  else
+    MessageBox('Proceso con Error. No Genera transacciones')
+  endif
+endif
+
+SetFont(a:1..a:20,2)
+SetFont(b:1..e:20,1)
+if Val(f:2)>0
+  SetFont(f:1..q:Val(f:2)+2,1)
+  FormatoCeldas(p:1..p:Val(f:2)+2,Exe('F2'))
+else
+  SetFont(f:1..q:2,1)
+  FormatoCeldas(p:1..p:2,Exe('F2'))
+endif
+if Val(r:2)>0
+  SetFont(r:1..v:Val(r:2),1)
+  FormatoCeldas(t:1..v:Val(r:2),Exe('F2'))
+else
+  SetFont(r:1,1)
+endif
+if Val(w:2)>0
+  SetFont(w:1..aa:Val(w:2),1)
+  FormatoCeldas(aa:1..aa:Val(w:2),Exe('F2'))
+else
+  SetFont(w:1,1)
+endif
+SetFont(ab:1..ab:2,2)
+SetFont(ac:1..ac:2,1)
+SetFont(ad:1..ad:2,2)
+SetFont(ae:1..ae:2,1)
+FormatoCeldas(ac:1..ac:2,Exe('F2'))
+FormatoCeldas(ae:1..ae:2,Exe('F2'))
+
+ACO(1,10)
+ACO(2,10)
+ACO(3,10)
+ACO(6,9)
+ACO(15,10)
+ACO(16,10)
+ACO(20,10)
+ACO(27,10)
+ACO(29,10)
+ACO(31,10)
+
+*MessageBox('Sale CONPAG')

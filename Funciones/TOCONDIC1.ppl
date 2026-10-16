@@ -1,0 +1,65 @@
+﻿VCan17 : 'Lamina Minima'  ;1;3; ;NO;NO;;;;BuscarCampo('Especies','LaminaMinima','Codigo',ESPECIE);BuscarCampo('Especies','LaminaMinima','Codigo',ESPECIE)
+
+VTXT1  : 'Cupon'          ;10;1;2;NO;NO;;;;;NrCupon2(ESPECIE,FECHAORDEN)
+VFEC4  : 'F.CorteCupon'   ; 1;1;2;NO;NO;;;;;Query("SELECT FechaCorte FROM  "~DBO~".AGENDACUPONES WHERE Especie = '"~ESPECIE~"' and NrCupon = '"~VTXT1~"' ")
+
+
+CONDICIONES
+
+VACIO(VTXT1) o EqStr(BuscarCampo('ESPECIES','Tipo','Codigo',ESPECIE),'PRI') o EqStr(BuscarCampo('ESPECIES','ZeroCoupon','Codigo',ESPECIE),'SI') o VFEC4>FECHAORDEN;'Esta trabajando con un cupon anterior (ZeroCoupon='~BuscarCampo('ESPECIES','ZeroCoupon','Codigo',ESPECIE)~' FechaCorte: '~VFEC4~') ';SI;SI;FSys;'CUPONANT'
+
+EqStr(BuscarCampo('Clientes','Status','Codigo',CLIENTE),'HAB');'El cliente No esta Habilitado';NO
+EsTerminal(ContraEspecie,Especie);'La Contraespecie No puede ser una Jerarquia';NO
+EqStr(BuscarCampo('Especies','Status','Codigo',Especie),'HAB');'La Especie No esta Habilitada';NO
+EqStr(BuscarCampo('Especies','Status','Codigo',ContraEspecie),'HAB');'La Contraespecie No esta Habilitada';NO
+
+*FechaOrden > Fecha(Var('FECHAVALOR'));'La Fecha Valor No Debe Superar el '~Var('FECHAVALOR');NO
+*DifDias(FechaOrden,Fsys,'ARG',SI)<=1;'Fecha Valor Mayor a un Dia: '~Fecha(FechaOrden);SI;SI;FSYS;'FECHAVAL'
+DifDias(FechaOrden,Fsys,'ARG',SI)<=Var('FVALORORD') y FechaOrden=Fsys;'Orden Ingresada con Fecha Valor '~Fecha(FechaOrden);SI;SI;FSYS;'FVALOR'
+DifDias(FechaOrden,Fsys,'ARG',SI)<=Var('FVALORORD');'Fecha Valor No Puede Superar '~Var('FVALORORD')~' Dias';NO;
+*FechaOrden <= FSYS y FechaOrden>= Habiles(FSys,-Var('FVALORORD'),'ARG');'Orden Ingresada con Fecha Valor';SI;SI;FSYS;'FVALOR'
+
+EqStr(BuscarCampo('Cuentas','Estado','Codigo',CUENTA1),'HAB');'La Cuenta No esta Habilitada';NO
+Incluido(BuscarCampo('Cuentas','Tipocuenta','Codigo',CUENTA1),'CUS|CCO');'La Cuenta debe ser una Cuenta de Custodia';NO
+
+EqStr(BuscarCampo('Cuentas','Estado','Codigo',CUENTA4),'HAB');'La Cuenta No esta Habilitada';NO
+Incluido(BuscarCampo('Cuentas','Tipocuenta','Codigo',CUENTA4),'CC|CA|CUS|VIS|');'La Cuenta debe ser una Cuenta de moneda';NO
+[VCan17<>0 y [TRUNC(CantidadTotalOrden  Mod2(VCan17))=0]] o VCan17=0 o RB2=1;'Cantidad V.N. no es multiplo de Lamina minima '~PYC(VCAN17,0,0)~'... Debe Ingresar: Cantidad V.N='~PYC(VPRE11,0,2)~' o Monto Neto= '~PYC(VPRE12,0,2);NO
+SI o NOT [PRECIOREAL>0 y [PRECIOLIMITE=0 o [PRECIOLIMITE>=PRECIOREAL y Incluido(TIPOORDEN,'OTIC|')] o [PRECIOLIMITE<=PRECIOREAL Y Incluido(TIPORDEN,'OTIV|')]]] y EqStr(ABM,'A');'La orden esta autocotizada';SI
+[FECHAMADURACION(ESPECIE) >= FECHAORDEN y FECHAMADURACION(ESPECIE)<>0] o FECHAMADURACION(ESPECIE)=0;'La especie esta vencida';SI;SI;FSys;'CUPONPAG'
+[CantidadTotalOrden>=Cantidad1 y CB7=1] o CB7=0;'La cantidad adjudicada excede la orden'
+
+
+VPRE16<=PRECIOREAL*(1+VAR('RPRECIO2')/100) Y VPRE16>=PRECIOREAL*(1-VAR('RPRECIO2')/100);IF(CB7=0,'Precio Limite fuera de rango: ','PRECIO PROMEDIO FUERA DE RANGO: ')~FSTR((PRECIOREAL*(1-VAR('RPRECIO2')/100)),1,7)~' y '~FSTR((PRECIOREAL*(1+VAR('RPRECIO2')/100)),1,7);SI;SI;FSYS;'RANGOPRECI'
+*VPRE16<=PRECIOREAL*(1+VAR('RPRECIO')/100)  Y VPRE16>=PRECIOREAL*(1-VAR('RPRECIO')/100) ;IF(CB7=0,'PRECIO LIMITE FUERA DE RANGO: ','PRECIO PROMEDIO FUERA DE RANGO: ')~FSTR((PRECIOREAL*(1-VAR('RPRECIO')/100)),1,7)~ ' y '~FSTR((PRECIOREAL*(1+VAR('RPRECIO')/100)),1,7) ;SI;SI;FSYS;'RANGOPRE1'
+FechaOrden <= FSYS y FechaOrden>= Habiles(FSys,-Var('FVALORMAX'),'ARG');'Orden Ingresada con Fecha Valor';SI;SI;FSYS;'FVALOR'
+
+* Clientes DVP?
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [EqStr(VTXT7,'1') o Vacio(VTXT19) o VCAN11 = 1 o CB5=0 o ExisteLimite('PRESETTLEM',VTXT19,VAR('MONEEXTR'))]]                                                                                          ; 'PreSettlement Cliente '~VTXT19~' no asignado'                                                                                                                                                                         ;SI;SI;FSYS;'PRESETNOAS'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [EqStr(VTXT7,'1') o Vacio(VTXT19) o VCAN11 = 1 o CB5=0 o Not ExisteLimite('PRESETTLEM',VTXT19,VAR('MONEEXTR')) o VtoLimite('PRESETTLEM',VTXT19,VAR('MONEEXTR')) >= FechaOrden]]                       ; 'PreSettlement Cliente '~VTXT19~' vencido el '~FECHA(VtoLimite('PRESETTLEM',VTXT19,VAR('MONEEXTR')))                                                                                                                   ;SI;SI;FSYS;'PRESETVENC'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [EqStr(VTXT7,'1') o Vacio(VTXT19) o VCAN11 = 1 o CB5=0 o Not LimCancelado('PRESETTLEM',VTXT19,VAR('MONEEXTR'))]]                                                                                      ; 'PreSettlement Cliente '~VTXT19~' cancelado'                                                                                                                                                                           ;SI;SI;FSYS;'PRESETCANC'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [EqStr(VTXT7,'1') o Vacio(VTXT19) o VCAN11 = 1 o CB5=0 o LimAsignado(VTXT19,'PRESETTLEM',VAR('MONEEXTR'),VEHICULO)>=LimConsumido(VTXT19,'PRESETTLEM',VAR('MONEEXTR'),0,VEHICULO,,,NRORDEN)+VCAN47]]   ; 'PreSettlement Cliente '~VTXT19~' excedido en U$D '~PYC(LimConsumido(VTXT19,'PRESETTLEM',VAR('MONEEXTR'),0,VEHICULO,,,NRORDEN)+VCAN47-LimAsignado(VTXT19,'PRESETTLEM',VAR('MONEEXTR'),VEHICULO),0,2)                   ;SI;SI;FECHAORDEN;'PRESETEXCE';
+
+* Controlante DVP
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [EqStr(VTXT7,'1') o Vacio(VTXT10) o VCAN40=1 o CB5=0 o ExisteLimite('PRESETTLEM',VTXT10,VAR('MONEEXTR'))]]                                                                                            ; 'PreSettlement Grupo (Controlante '~VTXT10~') no asignado'                                                                                                                                                             ;SI;SI;FSYS;'PRESETNOAS'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [EqStr(VTXT7,'1') o Vacio(VTXT10) o VCAN40=1 o CB5=0 o Not ExisteLimite('PRESETTLEM',VTXT10,VAR('MONEEXTR')) o VtoLimite('PRESETTLEM',VTXT10,VAR('MONEEXTR')) >= FechaOrden]]                         ; 'PreSettlement Grupo (Controlante '~VTXT10~') vencido el '~FECHA(VtoLimite('PRESETTLEM',VTXT10,VAR('MONEEXTR')))                                                                                                       ;SI;SI;FSYS;'PRESETVENC'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [EqStr(VTXT7,'1') o Vacio(VTXT10) o VCAN40=1 o CB5=0 o Not LimCancelado('PRESETTLEM',VTXT10,VAR('MONEEXTR'))]]                                                                                        ; 'PreSettlement Grupo (Controlante '~VTXT10~') cancelado'                                                                                                                                                               ;SI;SI;FSYS;'PRESETCANC'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [EqStr(VTXT7,'1') o Vacio(VTXT10) o VCAN40=1 o CB5=0 o LimAsignado(VTXT10,'PRESETTLEM',VAR('MONEEXTR'),VEHICULO)>=LimConsumido(VTXT10,'PRESETTLEM',VAR('MONEEXTR'),0,VEHICULO,,,NRORDEN)+VCAN47]]     ; 'Excede el limite de Presettl. Grupo (Controlante '~VTXT10~') en U$D '~PYC(LimConsumido(VTXT10,'PRESETTLEM',VAR('MONEEXTR'),0,VEHICULO,,,NRORDEN)+VCAN47-LimAsignado(VTXT10,'PRESETTLEM',VAR('MONEEXTR'),VEHICULO),0,2);SI;SI;FECHAORDEN;'PRESETEXCE'
+
+* Cartera Propia 
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Vacio(VTXT25) o Not EqStr(VTXT7,'1') o ExisteLimite('ISSUER',VTXT25,VAR('MONEEXTR'))]]                            ; 'Limite Issuer '~VTXT25~' no asignado'                                           ;SI;SI;FSYS;'ISSUERNOAS'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Vacio(VTXT25) o Not EqStr(VTXT7,'1') o NOT ExisteLimite('ISSUER',VTXT25,VAR('MONEEXTR')) o VFEC15 >= FechaOrden]] ; 'Limite Issuer '~VTXT25~' vencido el '~FECHA(VFEC15)                             ;SI;SI;FSYS;'ISSUERVENC'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Vacio(VTXT25) o Not EqStr(VTXT7,'1') o NOT LimCancelado('ISSUER',VTXT25,VAR('MONEEXTR'))]]                        ; 'Limite Issuer '~VTXT25~' Cacnelado'                                             ;SI;SI;FSYS;'ISSUERCANC'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Vacio(VTXT25) o Not EqStr(VTXT7,'1') o VCAN41 >= VCAN25 + CANTIDAD9]]                                             ; 'Limite Issuer '~VTXT25~' excedido en U$D '~PYC(VCAN25 + CANTIDAD9 - VCAN41,0,2) ;SI;SI;FECHAORDEN;'ISSUEREXCE'
+
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Vacio(VTXT26) o Not EqStr(VTXT7,'1') o ExisteLimite('COUNTRY',VTXT26,VAR('MONEEXTR'))]]                           ; 'Limite Country '~VTXT26~' no asignado';SI;SI;FSYS;'COUNTRNOAS'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Vacio(VTXT26) o Not EqStr(VTXT7,'1') o NOT ExisteLimite('COUNTRY',VTXT26,VAR('MONEEXTR')) o VFEC16 >= FechaOrden]]; 'Limite Country '~VTXT26~' vencido el '~FECHA(VFEC16)                            ;SI;SI;FSYS;'COUNTRVENC'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Vacio(VTXT26) o Not EqStr(VTXT7,'1') o NOT LimCancelado('COUNTRY',VTXT26,VAR('MONEEXTR'))]]                       ; 'Limite Country '~VTXT26~' Cacnelado'                                            ;SI;SI;FSYS;'COUNTRCANC'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Vacio(VTXT26) o Not EqStr(VTXT7,'1') o VCAN42 >= VCAN26 + CANTIDAD9]]                                             ; 'Limite Country '~VTXT26~' excedido en U$D '~PYC(VCAN26 + CANTIDAD9 - VCAN42,0,2);SI;SI;FECHAORDEN;'COUNTREXCE'
+
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Not EqStr(VTXT7,'1') o ExisteLimite('BOOK',VEHICULO,VAR('MONEEXTR'),VEHICULO,,BOOK1)]]                            ; 'Limite Book '~BOOK1~' no asignado'                                              ;SI;SI;FSYS;'LBOOKNOAS'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Not EqStr(VTXT7,'1') o NOT ExisteLimite('BOOK',VEHICULO,VAR('MONEEXTR'),VEHICULO,,BOOK1) o VFEC17 >= FechaOrden]] ; 'Limite Book '~BOOK1~' vencido el '~FECHA(VFEC17)                                ;SI;SI;FSYS;'LBOOKVENC'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Not EqStr(VTXT7,'1') o NOT LimCancelado('BOOK',VEHICULO,VAR('MONEEXTR'),VEHICULO,,BOOK1)]]                        ; 'Limite Book '~BOOK1~' Cacnelado'                                                ;SI;SI;FSYS;'LBOOKCANC'
+EqStr(AfectaLS,'Saldos') o [EqStr(AfectaLS,'Limites') y [Not EqStr(VTXT7,'1') o VCAN43 >= VCAN27 + CANTIDAD9]]                                                             ; 'Limite Book '~BOOK1~' excedido en U$D '~PYC(VCAN27 + CANTIDAD9 - VCAN17,0,2)              ;SI;SI;FECHAORDEN;'LBOOKEXCE'
+
+@TSTINV

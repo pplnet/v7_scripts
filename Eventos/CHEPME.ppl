@@ -1,0 +1,114 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  NrOperacion1: 'Nr. Operacion' ;1;1;1;  ;  ;Novacio(Dialogo.NrOperacion1);'Operacion Invalida.';NO;
+  Check1:       'Procesa'       ; ; ;1;SI;SI;;;;0;
+FinDialogo
+if not Ok
+  Cancelar
+endif
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+*MessageBox('CHEPME '~Dialogo.NrOperacion1)
+
+ACT(w:2, VAR('CONTROLAPM'))
+* FJL 18/07/19 - El mensaje pro especie sancionada lo saca de la variable
+ACT(w:4, VAR('MSGSISEXT'))
+
+ACT(a:1, 'Nr Operacion')
+ACT(a:2, 'CB5')
+ACT(a:3, 'CB2')
+ACT(a:4, 'Nr Alta')
+ACT(a:5, 'TipoOp')
+ACT(a:6, 'Especie')
+ACT(a:7, 'Cliente1')
+ACT(a:8, 'ContraEspecie')
+ACT(a:9, 'PME Especie')
+ACT(a:10, 'A Compliance')
+ACT(a:11, 'Accion')
+ACT(a:12, 'Tipo Excep')
+ACT(a:13, 'Desc Excep')
+
+SQL.ADD("Select * from "~DBO~".OPERACIONES ")
+SQL.ADD(" where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+Recorrer SQL
+  ACT(b:1, fbn['NrOperacion'])
+  ACT(b:2, fbn['CB5'])
+  ACT(b:3, fbn['CB2'])
+  ACT(b:4, fbn['NroAltaMAE'])
+  ACT(b:5, fbn['TipoOp'])
+  ACT(b:6, fbn['Especie'])
+  ACT(b:7, fbn['Cliente1'])
+  ACT(b:8, fbn['ContraEspecie'])
+  ***** EstadoOperativo
+  ACT(b:9, BuscarCampo('ESPECIES','EstadoOperativo','Codigo',Val(b:6)))
+  if Vacio(Val(b:9))
+    ACT(b:9, 'NE')
+  endif
+  ***** A Compliance SE
+  ACT(b:10, 'NO')
+* FJL 16/07/19 - Solo controla PME si la variable esta en SI
+  if EqStr(Val(w:2),'SI')
+    if Incluido(Val(b:9),'SI|NE')
+      ACT(b:10, 'SI')
+    endif
+  endif
+  if Dialogo.Check1=1
+    SQL.ADD("Delete "~DBO~".EXCEPCIONES ")
+    SQL.ADD(" where NrOperacion = '"~Val(b:1)~"' ")
+    SQL.ADD("   and Tipo        in ('PMENOINF','PMESANCION') ")
+    SQL.NEW
+    SQL.EXEC
+  endif
+  If EqStr(Val(b:10),'SI')
+    * A Compliance
+    ACT(b:11, 'Queda en inst 9')
+    * Generacion de Excepciones
+    if EqStr(Val(b:9),'NE')
+      ACT(b:12, 'PMENOINF')
+      ACT(b:13, 'La Especie '~Val(b:6)~' no esta informada.')
+    endif
+    if EqStr(Val(b:9),'SI')
+      ACT(b:12, 'PMESANCION')
+* FJL 17/07/19 - Pedido x Angel (mail)
+*      ACT(b:13, 'Error PME. La Especie '~Val(b:6)~' esta sancionada.')
+      if Vacio(Val(w:4))
+        ACT(b:13, 'La Especie '~Val(b:6)~' esta sancionada.')
+      else
+        ACT(b:13, Val(w:4))
+      endif
+    endif
+    if Dialogo.Check1=1
+      SQL.ADD(" Insert into "~DBO~".EXCEPCIONES ( ")
+      SQL.ADD(" NrOperacion, Tipo, Fecha, Descripcion ")
+      SQL.ADD(" ) Values ( ")
+      SQL.ADD(" '"~Val(b:1)~"', '"~Val(b:12)~"', '"~IdxDate(FSYS)~"' , '"~Val(b:13)~"' ")
+      SQL.ADD(" ) ")
+      SQL.NEW
+      SQL.EXEC
+    endif
+    if Dialogo.Check1=1
+      EjecutarEvento('CBOINS', String1=Val(b:1), Radio1=0, Radio2=0, Entero1=1, Entero2=9)
+    endif
+    MessageBox('Operacion '~Val(b:1)~' No cumple alguna condicion y queda en Compliance.  Verifique Excepciones')
+  else
+    * Va a Carga Trader
+    * Lo hace la seccion Bits de la Operacion
+    ACT(b:11, 'Pasa a inst 1')
+  endif
+proximo
+
+if Dialogo.Check1=0 y FAC>0
+  FormatoCeldas(b:3..b:3,Exe('F0'))
+  FormatoCeldas(t:15..t:15,Exe('F2'))
+  FormatoCeldas(t:16..t:16,Exe('F8'))
+  FormatoCeldas(t:23..t:25,Exe('F0'))
+  FormatoCeldas(t:41..t:42,Exe('F0'))
+  FormatoCeldas(t:44..t:44,Exe('F0'))
+
+  ACO(1, 10)
+  ACO(2, 12)
+  ACO(19,15)
+  ACO(20,12)
+endif

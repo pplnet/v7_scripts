@@ -1,0 +1,453 @@
+﻿
+**HojaVisible(SI)
+***---Obtengo carteras que valuan por Partida
+(.'BOOKPARTID'.)
+Recorrer SQL
+    DFA
+    ACT(BK:1, Val(BK:1)~'|'~fbn('Books'))
+Proximo
+
+CrearDialogo
+  Fecha1     : "Fecha"        ;1;1;;;;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;FSys;
+  Book1      : 'Cartera'      ;;;;;;;;;;;;;;" Codigo IN ("~Pipe2Comillas(Val(BK:1))~") ";
+  Lista1     : "Especies"     ;;;;;;;;;;;SQLSET("Select Codigo from "~DBO~".ESPECIES WHERE "~DBO~".DesciendeDeEspecie(Codigo,'TITULO') = 1");;;;;
+  Radio1     : "Expresado En|ARP|USD" ;;;;;;;;;0;
+  Check1     : "Ejec. Cont."  ;;;;;;;;;0;;
+FinDialogo 
+
+if Not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,15,B")
+
+ACD(FV:1,Dialogo.Fecha1)
+
+SetFilaActual(1)
+ACT(a:fac, 'Informe de Partidas')
+SetFont(a:fac,3)
+IFA
+IFA
+ACT(a:fac,'Fecha : '~Dialogo.Fecha1)
+SetFont(a:fac,2)
+if NoVacio(Dialogo.Book1)
+  ACT(a:FAC+1, 'Cartera : '~Dialogo.Book1)
+else
+  ACT(a:FAC+1, 'Cartera : Todos')
+endif
+SetFont(a:fac+1,2)
+if NoVacio(Dialogo.Lista1)
+  ACT(a:FAC+2, 'Especies : '~Dialogo.Lista1)
+else
+  ACT(a:FAC+2, 'Especies : Todos')
+endif
+SetFont(a:fac+2,2)
+If Dialogo.Radio1 = 0
+    ACT(EX:1,'ARP')
+Else
+    ACT(EX:1,'USD')
+EndIf
+ACT(a:FAC+3,'Expresado en : '~val(EX:1))
+SetFont(a:fac+3,2)
+SetFilaActual(8)
+
+ACT(A:FAC, "Nr Partida")
+ACT(b:FAC, "Tipo Tasa")
+ACT(c:FAC, "Fecha Op")
+ACT(d:FAC, "Fecha Vto.")
+ACT(e:FAC, "Cantidad")
+ACT(f:FAC, "Precio Op")
+ACT(g:FAC, "TIR Inicial")
+ACT(h:FAC, "Cant Disponible")
+*
+ACT(i:FAC, "Precio Fin")
+ACT(j:FAC, "Valuacion")
+*
+ACT(k:FAC, "Cant Vendida")
+*
+ACT(l:FAC, "Resultado Vta Diario")
+ACT(m:FAC, "Devengado Diario")
+*
+ACT(n:FAC, "Resultado Vtas Acu")
+ACT(o:FAC, "Dev Acumulado")
+
+*AlinearCeldas(a:FAC..h:FAC,'I')
+*AlinearCeldas(k:FAC..k:FAC,'D')
+*AlinearCeldas(n:FAC..l:FAC,'I')
+SetFont(a:FAC..o:FAC,2)
+AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR'))
+
+SQL.ADD("SELECT O.Book1,P.NrPartida,O.Especie,CASE WHEN E.TasaCER='FIJ' THEN 'FIJA' ELSE TiposTasas END TipoTasa,O.FechaOp,O.FechaVto, ")
+SQL.ADD("O.Cantidad, O.Precio1, O.TipoCambio TirInicial, O.TotalNetoCli1 CantDisp, O.TotalNetoCli2 CantVta, ")
+*SQL.ADD("SUM(P.Cantidad1) ResVta, C.Cantidad3 DevAcum ")
+SQL.ADD("SUM(P.Cantidad1) ResVta, O.ContraEspecie, ")
+****Campos para contabilidad de revaluo, evento CONT4, formula CONTREVPARTID
+SQL.ADD("O.Vehiculo1, E.Tipo TipoEspecie, E.MonedaEmision, O.Vehiculo1 Cliente1, O.Cuenta1 as CuentaCustodia, '' as Concepto, E.Issuer, E.Alias1 as EspBanTotal ")
+SQL.ADD("FROM "~DBO~".OPERACIONES O ")
+SQL.ADD("       JOIN "~DBO~".PARTIDAS P ON O.NrOperacion = P.NrPartida AND P.FechaDesde <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("       JOIN "~DBO~".ESPECIES E ON O.Especie = E.Codigo ")
+*SQL.ADD("       JOIN "~DBO~".CUOTAS C ON O.NrOperacion = C.NrOperacion ")
+SQL.ADD("where O.TipoOp = 'PARTID' and O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+*SQl.ADD("AND C.NrCuota = (SELECT MAX(CU.NrCuota) FROM "~DBO~".CUOTAS CU where CU.NrOperacion = O.NrOperacion)  ")
+if NoVacio(Dialogo.Book1)
+    SQL.ADD("AND O.Book1 = '"~Dialogo.Book1~"' ")
+Endif
+if NoVacio(Dialogo.Lista1)
+    SQL.ADD("AND O.Especie IN ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+SQL.ADD("Group by P.NrPartida,O.Especie,O.FechaOp,O.FechaVto, O.Cantidad, O.Precio1, O.TipoCambio, ")
+SQl.ADD("O.TotalNetoCli1, O.TotalNetoCli2,TasaCER,TiposTasas, O.Book1, O.ContraEspecie, ")
+SQL.ADD("O.Vehiculo1,E.Tipo ,E.MonedaEmision,O.Vehiculo1,E.Issuer, E.Alias1, O.Cuenta1 ")
+SQL.ADD("Order by O.Book1,O.Especie ")
+watch(SQL.batch)
+
+
+*Cintia 240223 - Administracion de Partidas - Issue 6089
+*ACN(jj:1,0)
+*ACN(kk:1,0)
+ACN(ll:1,0)
+ACN(mm:1,0)
+ACN(nn:1,0)
+ACN(oo:1,0)
+*
+ACT(bk:1,'')
+ACT(es:1,'')
+ACT(cc:1,'')
+ACN(es:2,0)
+ACN(es:3,0)
+*Cintia 240223 - Administracion de Partidas - Issue 6089
+ACN(es:4,0)
+ACN(es:5,0)
+*
+let &filaFinal 1
+recorrer SQL
+    ACT(EM:1,fbn('ContraEspecie'))
+    ***---Tipo de Cambio
+    If EqStr(VAL(EM:1),VAL(EX:1))
+        ACN(TC:1,1)
+    Else
+        ACN(TC:1,CotizacionC(val(EM:1),,,,Val(FV:1),25,SI,VAL(EX:1)))
+    EndIf
+   
+    
+    ***---Corte Control Especie y Book
+    ****Por necesidad en la conta agregamos total por Especie y Cuenta Custodia (no hacemos corte de control, solo totalizador)
+    If Vacio(VAL(bk:1))
+       ACT(bk:1,FBN['Book1'])
+       ACT(A:fac,'Cartera: '~val(bk:1))
+       SetFont(a:FAC..o:FAC,2)
+       AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR8'))        
+       IFA
+       If Vacio(VAL(es:1))
+           ACT(es:1,FBN['Especie'])
+           ACT(A:fac,'Especie: '~val(es:1))
+           SetFont(a:FAC..o:FAC,2)
+           AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR6'))        
+           IFA
+       EndIf
+       If Vacio(VAL(cc:1))
+           ACT(cc:1,FBN['CuentaCustodia'])
+       EndIf
+       ****DATOS PARA CONTA DE REVALUO evento CONT4, Formula CONTREVPARTID
+       ****Vehiculo
+       let &vehiculo fbn('Vehiculo1')
+       ****TipoEspecie
+       let &tipoEspecie fbn('TipoEspecie')
+       ****MonedaEmision
+       let &monedaEmision fbn('MonedaEmision')
+       ****Cliente
+       let &cliente fbn('Cliente1')
+       ****CuentaCustodia
+       let &cuentaCustodia fbn('CuentaCustodia')
+       ****Concepto
+       let &concepto fbn('Concepto')
+       ****Issuer
+       let &issuer fbn('Issuer')
+       ****Especie Ban Total
+       let &espBanTotal fbn('EspBanTotal')
+    Else
+        If EqStr(VAL(bk:1),FBN['Book1']) Y (Not EqStr(VAL(es:1),FBN['Especie']) OR Not EqStr(VAL(cc:1),FBN['CuentaCustodia']))
+            ACT(a:fac,'Total de la Especie: '~val(es:1)~' y Cuenta: '~val(cc:1))
+            ***Cintia 240223 - Administracion de Partidas - Issue 6089
+            ACN(n:fac,val(es:2))
+            ACN(o:fac,val(es:3))
+            ACN(l:fac,val(es:4))
+            ACN(m:fac,val(es:5))
+            ****NO MODIFICAR ESTE BLOQUE DE CAMPOS QUE SE USAN EN LA CONTABILIDAD, EVENTO CONT4, FUNCION CONREVPART
+            If Dialogo.Check1=1 and val(m:fac)<> 0
+                ****especie
+                ACT(aa:&filaFinal,val(es:1))
+                ****importe
+                ACN(ab:&filaFinal,val(m:fac))
+                ****Vehiculo
+                ACT(ac:&filaFinal,&vehiculo)
+                ****TipoEspecie
+                ACT(ad:&filaFinal,&tipoEspecie)
+                ****MonedaEmision
+                ACT(ae:&filaFinal,&monedaEmision)
+                ****Book
+                ACT(af:&filaFinal,val(bk:1))
+                ****Cliente
+                ACT(ag:&filaFinal,&cliente)
+                ****CuentaCustodia
+                ACT(ah:&filaFinal,&cuentaCustodia)
+                ****Concepto
+                ACT(ai:&filaFinal,&concepto)
+                ****Issuer
+                ACT(aj:&filaFinal,&issuer)
+                ****Especie Ban Total
+                ACT(ak:&filaFinal,&espBanTotal)
+                
+                let &filaFinal &filaFinal+1
+            EndIf
+            SetFont(a:FAC..o:FAC,2)
+            AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR6'))
+            If Not EqStr(VAL(es:1),FBN['Especie'])
+                IFA
+                ACT(es:1,FBN['Especie'])
+                ACT(a:fac,'Especie: '~val(es:1))
+                SetFont(a:FAC..o:FAC,2)
+                AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR6')) 
+            EndIf 
+            ACT(cc:1,FBN['CuentaCustodia'])
+            ***Cintia 240223 - Administracion de Partidas - Issue 6089          
+            ACN(es:2,0)
+            ACN(es:3,0)
+            ACN(es:4,0)
+            ACN(es:5,0)
+            **
+            ifa        
+        EndIf
+        If Not EqStr(VAL(bk:1),FBN['Book1'])
+            ACT(a:fac,'Total de la Especie: '~val(es:1)~' y Cuenta: '~val(cc:1))
+            *Cintia 240223 - Administracion de Partidas - Issue 6089
+            ACN(n:fac,val(es:2))
+            ACN(o:fac,val(es:3))
+            ACN(l:fac,val(es:4))
+            ACN(m:fac,val(es:5))
+            **
+            ****Para Evento CONT4, Formula CONTREVPARTID
+            If Dialogo.Check1=1 and val(m:fac)<> 0
+                ****especie
+                ACT(aa:&filaFinal,val(es:1))
+                ****importe
+                ACN(ab:&filaFinal,val(m:fac))
+                ****Vehiculo
+                ACT(ac:&filaFinal,&vehiculo)
+                ****TipoEspecie
+                ACT(ad:&filaFinal,&tipoEspecie)
+                ****MonedaEmision
+                ACT(ae:&filaFinal,&monedaEmision)
+                ****Book
+                ACT(af:&filaFinal,val(bk:1))
+                ****Cliente
+                ACT(ag:&filaFinal,&cliente)
+                ****CuentaCustodia
+                ACT(ah:&filaFinal,&cuentaCustodia)
+                ****Concepto
+                ACT(ai:&filaFinal,&concepto)
+                ****Issuer
+                ACT(aj:&filaFinal,&issuer)
+                ****Especie Ban Total
+                ACT(ak:&filaFinal,&espBanTotal)
+                
+                let &filaFinal &filaFinal+1
+            EndIf
+            ****
+            
+            SetFont(a:FAC..o:FAC,2)
+            AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR6'))        
+            ifa
+            ACT(a:fac,'Total de la Cartera: '~val(bk:1))
+            **Cintia 240223 - Administracion de Partidas - Issue 6089
+            *ACN(j:fac,val(jj:1))
+            *ACN(k:fac,val(kk:1))
+            ACN(n:fac,val(nn:1))
+            ACN(o:fac,val(oo:1))
+            ACN(l:fac,val(ll:1))
+            ACN(m:fac,val(mm:1))
+            **
+            SetFont(a:FAC..o:FAC,2)
+            AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR8'))        
+            ACT(bk:1,FBN['Book1'])
+            IFA
+            ACT(A:fac,'Cartera: '~val(bk:1))
+            SetFont(a:FAC..o:FAC,2)
+            AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR8'))
+            *Cintia 240223 - Administracion de Partidas - Issue 6089
+            *ACN(jj:1,0)
+            *ACN(kk:1,0)
+            ACN(nn:1,0)
+            ACN(oo:1,0)
+            ACN(ll:1,0)
+            ACN(mm:1,0)
+            **
+            ifa
+            ACT(es:1,FBN['Especie'])
+            ACT(a:fac,'Especie: '~val(es:1))
+            ACT(cc:1,FBN['CuentaCustodia'])
+            SetFont(a:FAC..o:FAC,2)
+            AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR6')) 
+            ACN(es:2,0)
+            ACN(es:3,0)
+            *Cintia 240223 - Administracion de Partidas - Issue 6089
+            ACN(es:4,0)
+            ACN(es:5,0)
+            **
+            ifa            
+        EndIf
+  EndIf
+  ****DATOS PARA CONTA DE REVALUO evento CONT4, Formula CONTREVPARTID
+  ****Vehiculo
+  let &vehiculo fbn('Vehiculo1')
+  ****TipoEspecie
+  let &tipoEspecie fbn('TipoEspecie')
+  ****MonedaEmision
+  let &monedaEmision fbn('MonedaEmision')
+  ****Cliente
+  let &cliente fbn('Cliente1')
+  ****CuentaCustodia
+  let &cuentaCustodia fbn('CuentaCustodia')
+  ****Concepto
+  let &concepto fbn('Concepto')
+  ****Issuer
+  let &issuer fbn('Issuer')
+  ****Especie Ban Total
+  let &espBanTotal fbn('EspBanTotal')
+  ACT(a:fac, FBN['NrPartida'])
+  ACLO(a:fac, FBN['NrPartida'])
+  ACT(b:fac, FBN['TipoTasa'])
+  ACD(c:fac, FBN['FechaOp'])
+  ACD(d:fac, FBN['FechaVto'])
+  ACN(e:fac, FBN['Cantidad'])
+  ACN(f:fac, FBN['Precio1']*val(TC:1))
+  FormatoCeldas(f:fac,Exe('F9'))
+  ACN(g:fac, FBN['TirInicial'])
+  FormatoCeldas(g:fac,Exe('F9'))
+  ACN(h:fac, FBN['CantDisp'])
+  **Cintia 240223 - Administracion de Partidas - Issue 6089
+  *Busco la cuota de la partida a la fecha del reporte para sacar Precio Fin
+  ACN(i:fac,SQL("Select Precio2 from "~DBO~".CUOTAS Where NrOperacion=  '"~FBN['NrPartida']~"' and Fecha1 = (Select Max(Fecha1) from "~DBO~".CUOTAS Where NrOperacion=  '"~FBN['NrPartida']~"' and Fecha1<='"~IdxDate(Dialogo.Fecha1)~"')")*val(TC:1))
+  FormatoCeldas(i:fac,Exe('F9'))
+  ACN(j:fac,Val(h:fac)*Val(i:fac))
+  ACN(k:fac, FBN['CantVta'])
+  **Cintia 240624 resto a CantVenta las cantidades de las VENTAS cuya fecha sea > a la fecha del reporte ya que no corresponde tomarlas en cuenta
+  ACN(q:fac,SQL("Select Sum(Cantidad) from "~DBO~".PARTIDAS Where NrPartida= '"~FBN['NrPartida']~"' AND TipoAct = 'TIV' and FechaDesde >'"~IdxDate(Dialogo.Fecha1)~"'"))
+  ACN(k:fac, Val(k:fac)-Val(q:fac))
+  **
+  *Busco la cuota de la partida a la fecha del reporte para sacar Dev Diario
+  ACN(m:fac,SQL("Select Cantidad1 from "~DBO~".CUOTAS Where NrOperacion=  '"~FBN['NrPartida']~"' and Fecha1 = (Select Max(Fecha1) from "~DBO~".CUOTAS Where NrOperacion=  '"~FBN['NrPartida']~"' and Fecha1<='"~IdxDate(Dialogo.Fecha1)~"')")*val(TC:1))
+   *Busco en la solapa partidas de la partida a la fecha del reporte para sacar el resultado
+   ACN(l:fac,SQL("Select Sum(Cantidad1) from "~DBO~".PARTIDAS Where NrPartida= '"~FBN['NrPartida']~"' AND TipoAct = 'TIV' and FechaDesde = (Select Max(FechaDesde) from "~DBO~".PARTIDAS Where NrPartida=  '"~FBN['NrPartida']~"' and FechaDesde<='"~IdxDate(Dialogo.Fecha1)~"')")*val(TC:1))
+  ***
+  ACN(n:fac, FBN['ResVta']*val(TC:1))
+  AsignarLink(n:fac,'DETPAR',NrOperacion=FBN['NrPartida'],Fecha1=Dialogo.Fecha1,Lista1=Dialogo.Lista1,Especie1=val(EM:1),Especie2=val(EX:1))
+  *ACN(l:fac, FBN['DevAcum'])
+  ***---ACN(o:fac, SQL("SELECT Cantidad3 FROM "~DBO~".CUOTAS where NrOperacion = '"~FBN['NrPartida']~"' AND NrCuota = (SELECT MAX(NrCuota) FROM "~DBO~".CUOTAS where NrOperacion = '"~FBN['NrPartida']~"') ")*val(TC:1))
+  ACN(o:fac, SQL("SELECT Cantidad3 FROM "~DBO~".CUOTAS where NrOperacion = '"~FBN['NrPartida']~"' AND Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")*val(TC:1))
+  AsignarLink(o:fac,'DETCUO',NrOperacion=FBN['NrPartida'],Fecha1=Dialogo.Fecha1,Lista1=Dialogo.Lista1,Especie1=val(EM:1),Especie2=val(EX:1))
+  AlinearCeldas(e:fac..o:fac,'D')
+  
+  ***---SubTotal Book
+  *Cintia 240223 - Administracion de Partidas - Issue 6089
+  *ACN(jj:1,val(jj:1)+val(j:fac))
+  *ACN(kk:1,val(kk:1)+val(k:fac))
+  ACN(nn:1,val(nn:1)+val(n:fac))
+  ACN(oo:1,val(oo:1)+val(o:fac))
+  ACN(ll:1,val(ll:1)+val(l:fac))
+  ACN(mm:1,val(mm:1)+val(m:fac))
+  **
+  
+  ***---SubTotal Especie
+  *Cintia 240223 - Administracion de Partidas - Issue 6089
+  ACN(es:2,val(es:2)+val(n:fac))
+  ACN(es:3,val(es:3)+val(o:fac))
+  ACN(es:4,val(es:4)+val(l:fac))
+  ACN(es:5,val(es:5)+val(m:fac))  
+  **
+proximo
+ifa
+ACT(a:fac,'Total de la Especie: '~val(es:1)~' y Cuenta: '~val(cc:1))
+*Cintia 240223 - Administracion de Partidas - Issue 6089
+ACN(n:fac,val(es:2))
+ACN(o:fac,val(es:3))
+ACN(l:fac,val(es:4))
+ACN(m:fac,val(es:5))
+**
+****Para Evento CONT4, Formula CONTREVPARTID
+If Dialogo.Check1=1 and val(m:fac)<> 0
+    ****especie
+    ACT(aa:&filaFinal,val(es:1))
+    ****importe
+    ACN(ab:&filaFinal,val(m:fac))
+    ****Vehiculo
+    ACT(ac:&filaFinal,&vehiculo)
+    ****TipoEspecie
+    ACT(ad:&filaFinal,&tipoEspecie)
+    ****MonedaEmision
+    ACT(ae:&filaFinal,&monedaEmision)
+    ****Book
+    ACT(af:&filaFinal,val(bk:1))
+    ****Cliente
+    ACT(ag:&filaFinal,&cliente)
+    ****CuentaCustodia
+    ACT(ah:&filaFinal,&cuentaCustodia)
+    ****Concepto
+    ACT(ai:&filaFinal,&concepto)
+    ****Issuer
+    ACT(aj:&filaFinal,&issuer)
+    ****Especie Ban Total
+    ACT(ak:&filaFinal,&espBanTotal)
+           
+    let &filaFinal &filaFinal+1
+EndIf
+****
+
+SetFont(a:FAC..o:FAC,2)
+AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR6'))
+ifa
+ACT(a:fac,'Total de la Cartera: '~val(bk:1))
+*Cintia 240223 - Administracion de Partidas - Issue 6089
+*ACN(j:fac,val(jj:1))
+*ACN(k:fac,val(kk:1))
+ACN(n:fac,val(nn:1))
+ACN(o:fac,val(oo:1))
+ACN(l:fac,val(ll:1))
+ACN(m:fac,val(mm:1))
+FormatoCeldas(l:1..o:fac,Exe('F2'))
+**
+SetFont(a:FAC..o:FAC,2)
+AgregarMarco(a:FAC..o:FAC,2,0,Exe('COLOR8'))
+
+****Para Evento CONT4, Formula CONTREVPARTID
+If Dialogo.Check1=1
+    ACN(ZZ:1,1)
+    ACN(ZZ:2,&filaFinal)
+Endif 
+****
+
+ACO(1,7)
+ACO(2,6)
+ACO(3,7)
+ACO(4,8)
+ACO(5,8)
+ACO(6,10)
+ACO(7,6)
+ACO(8,10)
+ACO(9,10)
+ACO(10,10)
+ACO(11,10)
+ACO(12,12)
+ACO(13,12)
+ACO(14,12)
+ACO(15,12)
+IFA
+IFA
+
+Impresion(1,2)
+ACT(a:FAC, 'FIN DEL INFORME')
+SetFont(a:FAC,2)
+LimitesVision(p:FAC)
+RangoTitulo(a:1..o:FAC)

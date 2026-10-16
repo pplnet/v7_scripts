@@ -1,0 +1,62 @@
+﻿***---Esta funcion recibe:
+***---FE2: Fecha desde
+***---FE3: Fecha hasta
+***---PR2: TIR
+***---DA1: DiasAnio de la Especie
+***---CA1: Cantidad
+***---NC1: NrCuota anterior
+***---NU1: Nro de Partida
+***---PR1: Precio Ini
+***---CA3: Devengado Acumulado anterior
+
+
+    ***---Calculo la TED = Tasa Efectiva Diaria
+    ACN(ED:1, (1 + Val(PR:2)/100)^(1/Val(DA:1))-1)
+    Recorrer&k Val(FE:2), Val(FE:3)
+    *MessageBox(&k)
+        IF EsHabil(&k, 'ARG') O &k = Val(FE:2)
+            ***---FechaIni
+            ACD(FI:1, &k)
+            ***---FechaFin
+            ACD(FF:1, Habiles(&k, 1, 'ARG', SI))
+            ***---Plazo
+            ACN(PL:1, Val(FF:1) - Val(FI:1))
+            ***---Precio Ini
+            IF &k = Val(FE:2)
+                ACN(PI:1, Val(PR:1))
+            ELSE
+                ***---Precio Ini = PrecioFin Dia Anterior
+                ACN(PI:1, Val(PF:1))
+            ENDIF
+            ***---PrecioFin = PrecioIni + TED
+            ACN(PF:1, (Val(PI:1)) * (1 + Val(ED:1)) ^ Val(PL:1))
+            ***---Precio Devengado del día
+            ACN(PD:1, Val(PF:1) - Val(PI:1))
+            ***---Monto devengado del día
+            ACN(DV:1, Val(CA:1) * Val(PD:1))
+            SQL.ADD(" Select Max(NrCuota) NrCuota From "~DBO~".CUOTAS Where NrOperacion = '"~Val(NU:1)~"' ")
+            Recorrer SQL
+                DFA
+                ACN(NC:1, fbn('NrCuota') + 1)
+                SQL.ADD(" Select Cantidad3 From "~DBO~".CUOTAS Where NrOperacion = '"~Val(NU:1)~"' AND NrCuota = "~Fstr(fbn('NrCuota'), 0, 0)~" ")
+                Recorrer SQL
+                    DFA
+                    ACN(CA:3, fbn('Cantidad3'))
+                Proximo
+            Proximo
+            SCN(NC:1, 1)
+            SCN(CA:3, Val(DV:1))
+            SQL.ADD(" Insert Into "~DBO~".CUOTAS ")
+            SQL.ADD(" (NrOperacion, NrCuota, Fecha1, ")
+            SQL.ADD(" Fecha2, Cantidad2, Precio1, ")
+            SQL.ADD(" Precio2, Precio3, Cantidad1, ")
+            SQL.ADD(" Precio4, Cantidad3, Cantidad4) ")
+            SQL.ADD(" Values ")
+            SQL.ADD(" ('"~Val(NU:1)~"', "~Fstr(Val(NC:1), 0, 0)~", '"~IdxDate(Val(FI:1))~"', ")
+            SQL.ADD(" '"~IdxDate(Val(FF:1))~"', "~Fstr(Val(PL:1), 0, 0)~", "~Fstr(Val(PI:1), 0, 15)~", ")
+            SQL.ADD(" "~Fstr(Val(PF:1), 0, 15)~", "~Fstr(Val(PD:1), 0, 15)~", "~Fstr(Val(DV:1), 0, 2)~", ")
+            SQL.ADD(" "~Fstr(Val(PR:2), 0, 8)~", "~Fstr(Val(CA:3), 0, 2)~", "~Fstr(Val(CA:1), 0, 2)~") ")
+            SQL.NEW
+            SQL.EXEC
+        ENDIF
+    Proximo

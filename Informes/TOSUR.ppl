@@ -1,0 +1,208 @@
+﻿* Total de Suscripciones y Rescates por Dia
+********** Recordar que esta sumando Pesos con Dolares ******************
+CrearDialogo
+  Fecha1   : 'Fecha'; ; ; ; ; ; ; ; ;FSys
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+CrearFont(1,'Arial,8,B')
+CrearFont(2,'Arial,8,')
+
+*** primer dia del mes
+ACD(m1,PriDeMes(Dialogo.Fecha1,SI,'ARG')-1)
+
+*** un dia antes
+ACD(m2,Habiles(Dialogo.Fecha1,-1,'ARG',NO))
+
+*** dias transcurridos hasta hoy
+ACN(m3,(Dialogo.Fecha1-PriDeMes(Dialogo.Fecha1,SI,'ARG'))+1)
+
+
+*** dias transcurridos hasta ayer
+ACN(m4,(Val(m2)-PriDeMes(Dialogo.Fecha1,SI,'ARG'))+1)
+
+ACT(a1, 'Total de Suscripciones y Rescates')
+ACT(a2, 'Fecha : '~Dialogo.Fecha1)
+
+ACT(a5, 'Fondo')
+ACT(b5, 'Tipo Oper.')
+ACT(c5, 'Monto')
+ACT(d5, 'Saldo Diario')
+ACT(e5, 'Inicio Mes')
+ACT(f5, 'Saldo Acumulado')
+ACT(g5, 'Saldo Promedio')
+
+AgregarMarco(a5..g5,2,0,Exe('COLOR'))
+
+SetFilaActual(6)
+
+SQL.ADD(" Select Codigo, Extendido From "~DBO~".ESPECIES where Tipo = 'FON' ORDER BY Codigo")
+Recorrer SQL
+    ACT(z1, fbn('Codigo'))     
+    ** encabezado x especie
+    ACT(a:fac, fbn('Codigo')~' - '~fbn('Extendido'))     
+    * saldo diario
+    *ACN(d:fac,0)
+    * saldo inicial
+    SQL.ADD("Select E.Codigo, S.NrSaldo, S.Saldo")
+    SQL.ADD("from "~DBO~".ESPECIES E, "~DBO~".SALDOSDIA S where E.Codigo ='"~fbn('Codigo')~"' ")
+    SQL.ADD("and E.Codigo = S.Especie")
+    SQL.ADD("and S.NrSaldo =5")
+*    SQL.ADD("and S.Cliente = '"~VAR('VEHICULODE')~"'")
+    SQL.ADD("and S.Saldo <> 0")
+    SQL.ADD("and S.Fecha = (Select Max(D.Fecha) from "~DBO~".SALDOSDIA D where /*D.Cliente = '"~VAR('VEHICULODE')~"' and*/ ")
+    SQL.ADD("   D.Especie = S.Especie")
+    SQL.ADD("   and D.NrSaldo = S.NrSaldo")
+    SQL.ADD("   and D.Fecha <= '"~IdxDate(Val(m1))~"') ")
+    watch(SQL.BATCH())
+    Recorrer SQL
+      dfa
+      ACN(e:fac, fbn('Saldo') * Cotizacion(fbn('Codigo'), 'CON', , ,Val(m1), 1))
+    Proximo
+
+    * saldo Acumulado
+    SQL.ADD("Select E.Codigo, S.NrSaldo, S.Saldo")
+    SQL.ADD("from "~DBO~".ESPECIES E, "~DBO~".SALDOSDIA S where E.Codigo ='"~fbn('Codigo')~"' ")
+    SQL.ADD("and E.Codigo = S.Especie")
+    SQL.ADD("and S.NrSaldo =5")
+    *    SQL.ADD("and S.Cliente = 'RIO'")    
+    SQL.ADD("and S.Saldo <> 0")
+    SQL.ADD("and S.Fecha = (Select Max(D.Fecha) from "~DBO~".SALDOSDIA D where /*D.Cliente = 'RIO' and*/")
+    SQL.ADD("   D.Especie = S.Especie")
+    SQL.ADD("   and D.NrSaldo = S.NrSaldo")
+    SQL.ADD("   and D.Fecha <= '"~IdxDate(Val(m2))~"') ")
+    Recorrer SQL
+      dfa
+      ACN(f:fac, fbn('Saldo') * Cotizacion(fbn('Codigo'), 'CON', , ,Val(m2), 1))
+    Proximo
+
+    * Saldo Promedio hasta el dia anterior
+    ACN(m6,0)
+    Recorrer&i 0,31
+      acd(m5, Habiles(PriDeMes(Dialogo.Fecha1,SI,'ARG'),&i,'ARG',NO))
+      if Val(m5) > Val(m2)
+        break
+      else
+        *** buscar el saldo para esa fecha y acumularlo 
+        SQL.ADD("Select E.Codigo, S.NrSaldo, S.Saldo")
+        SQL.ADD("from "~DBO~".ESPECIES E, "~DBO~".SALDOSDIA S where E.Codigo ='"~fbn('Codigo')~"' ")
+        SQL.ADD("and E.Codigo = S.Especie")
+        SQL.ADD("and S.NrSaldo =5")
+        *        SQL.ADD("and S.Cliente = 'RIO'")        
+        SQL.ADD("and S.Saldo <> 0")
+        SQL.ADD("and S.Fecha = (Select Max(D.Fecha) from "~DBO~".SALDOSDIA D where /*D.Cliente = 'RIO' and*/")
+        SQL.ADD("   D.Especie = S.Especie")
+        SQL.ADD("   and D.NrSaldo = S.NrSaldo")
+        SQL.ADD("   and D.Fecha <= '"~IdxDate(Val(m5))~"') ")
+        Recorrer SQL
+          dfa
+          SCN(m6,fbn('Saldo') * Cotizacion(fbn('Codigo'), 'CON', , ,Val(m5), 1))
+        Proximo
+      endif
+    proximo
+
+    ACN(g:fac,val(m6)/Val(m4))
+    ACN(i:fac,val(m6))
+
+    if Val(e:fac)=0 y Val(f:fac)=0
+      ACN(z9,1)
+    endif
+
+    ACN(x3,fac)
+    ** Operaciones x fondo
+    BorrarCeldas(x1..x2)
+    SQL.ADD("Select TipoOp, Sum(TotalBrutoCli1) as TotB from "~DBO~".OPERACIONES where TipoOp in ('FCS','FCR') ")
+    SQL.ADD("and Vehiculo1 = '"~VAR('VEHICULODE')~"' and FechaOp='"~IdxDate(Dialogo.Fecha1)~"' and Especie='"~Val(z1)~"' group by TipoOp order by TipoOp desc ")
+    Recorrer SQL
+      if EqStr(fbn('TipoOp'),'FCS')
+        ACT(b:fac,'Suscripciones')
+        * total de suscripciones x fondo
+        SCN(x1,fbn('TotB'))
+        * total de suscripciones general
+        SCN(w1,fbn('TotB'))
+       else
+        ACT(b:fac,'Rescates')
+        * total de rescates x fondo
+        SCN(x2,fbn('TotB'))
+        * total de rescates general
+        SCN(w2,fbn('TotB'))
+      endif
+      ACN(c:fac, fbn('TotB'))
+      SetFont(a:fac..g:fac,2)
+    proximo
+
+    ifa
+    *** Total x especie
+    ACT(a:fac, 'Total')
+    * saldo diario
+    ACN(d:fac, Val(x1)-Val(x2))    
+
+    ACN(x1,0)
+    ACN(x2,0)
+    * saldo Acumulado
+    SQL.ADD("Select E.Codigo, S.NrSaldo, S.Saldo")
+    SQL.ADD("from "~DBO~".ESPECIES E, "~DBO~".SALDOSDIA S where E.Codigo ='"~fbn('Codigo')~"' ")
+    SQL.ADD("and E.Codigo = S.Especie")
+    SQL.ADD("and S.NrSaldo =5")
+    *    SQL.ADD("and S.Cliente = 'RIO'")    
+    SQL.ADD("and S.Saldo <> 0")
+    SQL.ADD("and S.Fecha = (Select Max(D.Fecha) from "~DBO~".SALDOSDIA D where /*D.Cliente = 'RIO' and*/")
+    SQL.ADD("   D.Especie = S.Especie")
+    SQL.ADD("   and D.NrSaldo = S.NrSaldo")
+    SQL.ADD("   and D.Fecha <= '"~IdxDate(Val(m2))~"') ")
+    Recorrer SQL
+      dfa
+      ACN(h:fac, fbn('Saldo') * Cotizacion(fbn('Codigo'), 'CON', , ,Val(m2), 1))
+    Proximo
+    ACN(f:fac,Val(h:fac)+Val(d:fac))
+    ACN(g:fac,(Val(m6)+val(f:fac))/Val(m3))
+    SCN(y1,Val(f:fac))
+
+
+    if Val(z9)=1 y Val(f:fac)=0
+      BorrarCeldas(a:fac..g:fac)
+      dfa
+      BorrarCeldas(a:fac..g:fac)
+      dfa
+    else
+      AgregarMarco(a:Val(x3)..g:Val(x3),2)
+      SetFont(a:Val(x3)..g:Val(x3),1)
+      AgregarMarco(a:fac..g:fac,2)
+      SetFont(a:fac..g:fac,1)
+      ifa
+    endif
+proximo
+** Totales Finales
+ACT(a:fac+2, 'Tot. Susc.: ')
+ACN(d:fac+2,Val(w1))
+ACT(a:fac+3, 'Tot. Resc.: ')
+ACN(d:fac+3,Val(w2))
+ACT(a:fac+4, 'Tot. Neto : ')
+ACN(d:fac+4,Val(w1)-Val(w2))
+ACN(f:fac+4,Val(y1))
+ACN(y2,Sum(i6..i:fac-1))    
+ACN(g:fac+4,(Val(y2)+Val(y1))/Val(m3))
+
+SetFont(a1..z5, 1)
+SetFont(a:fac+2..g:fac+4, 1)
+AgregarMarco(a:fac+2..g:fac+4,2,0,Exe('COLOR'))
+
+LimitesVision(g:fac+6)
+FormatoCeldas(d1..g:fac+4, Exe('F2'))
+AlinearCeldas(c5..f5, 'D')
+ACO(1, 10)
+ACO(2, 7)
+ACO(3, 10)
+ACO(4, 10)
+ACO(5, 10)
+ACO(6, 10)
+ACO(7, 12)
+
+CrearFont(6,"Arial,6,B")
+*RangoTitulo(a:5..g:fac, 1)
+Impresion(2, 1) 
+Impresion(3, 1) 
+Impresion(4, 1) 

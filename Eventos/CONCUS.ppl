@@ -1,0 +1,367 @@
+﻿* Modificaciones de Preliquidacion Radio2 VISIBLE y EDITABLE
+HojaVisible(NO)
+** ( . 'ABCDARIO'.)
+CrearDialogo
+   Vehiculo1    : 'Vehiculo'             ;;;;;;;;;Var('VEHICULODE');
+   String1      : 'NrOperacionRef4'      ;;;;;;;;;;;;;'!!!!!!!!' 
+   NrTrans1     : 'Voucher'              ;;;;;;;;;
+FinDialogo
+
+if Not Ok
+   Cancelar 
+endif
+
+ *--- genera numero de usuario en A1, numerador 890 ***
+ act(a1,Copy(GetNumerador(890),3,6))
+ act(cv1,'CV')
+
+ SetFilaActual(3)
+
+ *- Selecciono todos los movimientos Ejecutados que Cumplen con la condicion 
+
+   SQL.ADD("Select M.Cliente,M.Especie,M.NrTrans2,E.FechaCambioTasa,E.TasaIntAnterior,E.TasaIntVigente,                     ")
+   SQL.ADD("       E.InteresesC, C.RazonSocial, C.CategDepositante, T.TipoTr2,                                              ")
+   SQL.ADD("       T.Cantidad1,T.Cantidad4,T.Cantidad5, T.Cuenta2, T.Cuenta1,  T.Cuenta4,  T.Cuenta5,                       ")
+   SQL.ADD("       T.Cantidad11, T.Cantidad12, T.Cantidad25, T.Especie3, ")
+   SQL.ADD("       T.RB1, T.Fecha4, T.Fecha3, T.CB1, T.CB2, T.Fecha1, T.Fecha2, M.Book                                     ")
+   SQL.ADD("from "~DBO~".MOVEJECUTADOS M  with (NOLOCK Index = INDME5),"~DBO~".TRANSACCIONES2 T,                            ")
+   SQL.ADD("     "~DBO~".ESPECIES E, "~DBO~".CLIENTES C                                                                     ")
+   SQL.ADD("where M.NrTrans2   = T.NrTrans                                                                                  ")
+   if NoVacio(Dialogo.String1)
+        SQL.ADD("        AND T.NrTrans IN (SELECT TT.NrTrans from "~DBO~".TRANSACCIONES2 TT WHERE TT.NrOperacionRef4 ='"~MIRT(TRIM(Dialogo.String1))~"' )   ")
+   endif     
+   SQL.ADD("        AND M.Especie=E.Codigo ")
+   SQL.ADD("        AND M.Cliente=C.Codigo ")
+   SQL.ADD("        AND M.Concepto = 'TI'  ")
+   SQL.ADD("        AND  M.Cliente = T.Cliente1 ")
+   SQL.ADD("        AND  T.NrTrans='"~Dialogo.NrTrans1~"' ")
+
+   *- Extrabursatil 
+   SQL.ADD(" and M.NrGrupo <> '15' ")
+   SQL.ADD(" and E.Jerarquia LIKE '"~Var('JERTITULOS')~"%' ")
+   SQL.ADD(" and T.TipoTr2 in ('DEP','RET')   ")
+
+   SQL.ADD(" Union   ")
+
+   SQL.ADD("Select M.Cliente,M.Especie,M.NrTrans2,E.FechaCambioTasa,E.TasaIntAnterior,E.TasaIntVigente,                     ")
+   SQL.ADD("       E.InteresesC, C.RazonSocial, C.CategDepositante, T.TipoTr2,                                              ")
+   SQL.ADD("       T.Cantidad1,T.Cantidad4,T.Cantidad5, T.Cuenta2, T.Cuenta1,  T.Cuenta4,  T.Cuenta5,                       ")
+   SQL.ADD("       T.Cantidad11, T.Cantidad12, T.Cantidad25, T.Especie3, ")
+   SQL.ADD("       -1 RB1, T.Fecha4, T.Fecha3, T.CB1, T.CB2 , T.Fecha1 , T.Fecha2, M.Book                                      ")
+                                                                          
+   SQL.ADD("from    "~DBO~".MOVEJECUTADOS M  with (NOLOCK Index = INDME5),"~DBO~".TRANSACCIONES2 T,                            ")
+   SQL.ADD("     "~DBO~".ESPECIES E, "~DBO~".CLIENTES C                                                                     ")
+
+   SQL.ADD("where M.NrTrans2   = T.NrTrans                                                                                  ")
+   if NoVacio(Dialogo.String1)
+        SQL.ADD("        AND T.NrTrans IN (SELECT TT.NrTrans from "~DBO~".TRANSACCIONES2 TT WHERE TT.NrOperacionRef4 ='"~MIRT(TRIM(Dialogo.String1))~"' )   ")
+   endif
+   SQL.ADD("        AND M.Especie=E.Codigo ")
+   SQL.ADD("        AND M.Cliente=C.Codigo ")
+   SQL.ADD("        AND M.Concepto = 'TI'  ")
+   SQL.ADD("        AND  M.Cliente = T.Cliente1 ")
+   SQL.ADD("        AND  T.NrTrans='"~Dialogo.NrTrans1~"' ")
+
+   *- Extrabursatil 
+   SQL.ADD(" and M.NrGrupo <> '15' ")
+   SQL.ADD(" and E.Jerarquia LIKE '"~Var('JERTITULOS')~"%' ")
+
+   * Agregado por EU
+   SQL.ADD(" and M.NrOperacion<>M.Nrtrans2 ")
+   
+   SQL.ADD(" and T.TipoTr2 in ('MATCH')   ")
+
+
+   SQL.ADD(" order by M.NrTrans2, M.Cliente, M.Especie    ")
+   acn(b1,3)
+   SetFilaActual(val(b1))
+   act(tr1,'')
+   watch(SQL.BATCH())
+   if Novacio(Dialogo.String1)
+       Recorrer SQL
+         If Not Eqstr(FBN['NrTrans2'],Val(tr1))   
+            scn(b1,1)   
+            ACN(k:Val(b1), 1)
+            act(a:Val(b1) , Dialogo.Vehiculo1 )
+            ACT(l:Val(b1)  ,FBN['TipoTr2'] ) 
+            ACN(dd:Val(b1) ,FBN['Cantidad1'] ) 
+            acn(f:Val(b1) , FBN['Cantidad1'])
+
+            IF  Eqstr(Val(l:Val(b1)) ,'MATCH')   
+
+                IF Val(f:Val(b1)) < 0
+                   ACT(l:Val(b1)  ,'DEP' ) 
+                   ACN(dd:Val(b1) , FBN['Cantidad1'] * -1) 
+                   acn(f:Val(b1) , FBN['Cantidad1'] * -1)
+
+                ELSE 
+                   ACT(l:Val(b1)  ,'RET' ) 
+                ENDIF 
+
+            ENDIF
+
+               act(b:Val(b1) ,fbn['Cliente'])
+               act(cr:val(b1),fbn['RazonSocial'])
+               act(d:Val(b1) ,fbn['Especie']    )
+               act(ea:Val(b1) ,fbn['CategDepositante'] )
+               act(bk:Val(b1) ,fbn['Book']    )
+     
+    **           acd(ak:Val(b1), Dialogo.Fecha1)
+               acd(ak:Val(b1), FBN['Fecha2'])
+
+               *- Cuenta Propia para Liquidacion de Agente 
+               ACT(j:Val(b1) ,FBN['Cuenta2']) 
+               ACT(al:Val(b1),BuscarCampo('CUENTAS','Mercado','Codigo',Val(j:Val(b1))))
+
+               *- Cuenta de Cliente/Agente
+               ACT(v:Val(b1) ,FBN['Cuenta1'])
+               ACT(am:Val(b1),BuscarCampo('CUENTAS','Mercado','Codigo',Val(v:Val(b1))))
+
+            * Traigo las cuentas y cantidades de los movimientos de las transacciones DEP/RET
+    *      ACT(ca:Val(b1) ,BUSCARCAMPO('TRANSACCIONES2','Cuenta3','NrTrans',FBN['NrTrans2']) ) 
+               ACT(ca:Val(b1) ,FBN['Cuenta1']) 
+
+            * DTP/RTP Cantidad1
+    ***        ACN(dd:Val(b1) ,BUSCARCAMPO('TRANSACCIONES2','Cantidad3','NrTrans',FBN['NrTrans2']) ) 
+
+               ACT(cd:Val(b1) ,FBN['Cuenta4'])
+               ACN(ce:Val(b1) ,FBN['Cantidad4'])
+               ACT(cf:Val(b1) ,FBN['Cuenta5'])
+               ACN(cg:Val(b1) ,FBN['Cantidad5'])
+
+               *- s: Tipo de Transferencia, y: Fecha de Matching, x: Fecha de Ejecucion
+               ACN(z:val(b1),FBN['RB1'])
+
+               If val(z:val(b1))>=0 y not Eqstr(Val(b:Val(b1)), Dialogo.Vehiculo1)
+                  If val(z:val(b1))=2
+                     ACN(s:val(b1),1)
+                  Else
+                     If val(z:val(b1))=1
+                        ACN(s:val(b1),2)
+                     Else 
+                        ACN(s:val(b1),3)
+                     EndIf
+                  EndIf
+               Else 
+                  ACN(s:val(b1),0)
+               EndIf
+
+               ACD(y:val(b1),FBN['Fecha4']) 
+               ACD(x:val(b1),FBN['Fecha3'])
+
+               ACT(mc:Val(b1), BUSCARCAMPO('CUENTAS','Mercado','Codigo',FBN['Cuenta1']) )
+    *           ACN(cp:Val(b1), NrCupon2(FBN['Especie'],Dialogo.Fecha1))
+               ACN(cp:Val(b1), NrCupon2(FBN['Especie'],FBN['Fecha1']))
+
+    *           ACN(vr:Val(b1), Val(f:Val(b1))*VALORTEORICO2(fbn['Especie'], Dialogo.Fecha1))
+               ACN(vr:Val(b1), Val(f:Val(b1))*VALORTEORICO2(fbn['Especie'], FBN['Fecha1']))
+    *           ACN(ct:Val(b1), COTIZACION(FBN['Especie'],,,,Dialogo.Fecha1,1) )
+               ACN(ct:Val(b1), COTIZACION(FBN['Especie'],,,,FBN['Fecha1'],1) )
+
+               * Parametros para la funcion INTERESCLE, el interes lo devuelve en zz:fac
+               ACN(yt1, Val(b1))
+    *           ACD(yu:Val(b1), Dialogo.Fecha1)
+               ACD(yu:Val(b1), FBN['Fecha1'])
+
+
+               ACT(yv:Val(b1), FBN['Especie'])  
+               ACN(yw:Val(b1), Val(f:Val(b1)))
+               ACD(yx:Val(b1), FBN['FechaCambioTasa'])
+               ACN(yy:Val(b1), FBN['TasaIntAnterior'])
+               ACN(yz:Val(b1), FBN['TasaIntVigente'])
+               * 10/05/05 Verifico que nroperacion2 este vacio porque no deben entrar aqui si esta relacionada con tcpecem
+               ACT(tc:Val(b1), SQL("SELECT O.NrOperacion2 FROM "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M WHERE O.NrOperacion = M.NrOperacion AND M.NrTrans2 = '"~FBN['NrTrans2']~"' AND O.TipoOp='TCOPRI' AND O.Cliente1='"~Dialogo.Vehiculo1~"' "))
+     
+               * Resolucion 1585
+               ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', FBN['Especie']))
+
+               * Inicio Func INTERESCLE
+               ***********************
+               (.'INTERESCLE'.)
+               ***********************
+               * Fin Func INTERESCLE
+
+               * Intereses (INTERESCLE)
+               IF EqStr(FBN['InteresesC'],'CLE')
+                  IF Incluido(Val(al4), '1585')
+    *                 ACN(mo:Val(b1), Val(f:Val(b1)) * VALORTEORICO2(fbn['Especie'], Dialogo.Fecha1) * Val(ct:Val(b1)))
+                     ACN(mo:Val(b1), Val(f:Val(b1)) * VALORTEORICO2(fbn['Especie'], FBN['Fecha1']) * Val(ct:Val(b1)))
+
+                     ACN(mo:Val(b1), Val(mo:Val(b1)) + (Val(zz:Val(b1))*Val(ct:Val(b1))) )
+                  ELSE
+    *                 ACN(mo:Val(b1), Val(f:Val(b1)) * VALORTEORICO2(fbn['Especie'], Dialogo.Fecha1) * Val(ct:Val(b1)))
+                     ACN(mo:Val(b1), Val(f:Val(b1)) * VALORTEORICO2(fbn['Especie'], FBN['Fecha1']) * Val(ct:Val(b1)))
+                     ACN(mo:Val(b1), Val(mo:Val(b1)) + (Val(zz:Val(b1))) )
+                  ENDIF
+               ELSE
+                  ACN(mo:Val(b1), Val(f:Val(b1)) * Val(ct:Val(b1)) + Val(zz:Val(b1)) )
+               ENDIF
+            *ACN(in:Val(b1), Val(zz:Val(b1)))
+            *ACN(to:Val(b1), Val(mo:Val(b1))+Val(in:Val(b1)))
+
+             ACT(g:Val(b1)  ,FBN['NrTrans2'] ) 
+             ACN(aa:Val(b1) ,FBN['CB1'])
+             ACN(c:Val(b1)  ,FBN['CB2']) 
+
+             ACN(aw:Val(b1),FBN['Cantidad11']  )             
+             ACN(an:Val(b1),FBN['Cantidad12']  )             
+             ACN(as:Val(b1),FBN['Cantidad25']  )             
+             ACT(ao:Val(b1),FBN['Especie3']    )
+     
+             ACT(tr1,FBN['NrTrans2'])
+         endif
+
+       Proximo
+
+       ** Si tiene registros procesa
+       if Val(b1) >= 4
+          Recorrer&i 4, val(b1)
+             *---- Actualizo la Transaccion con los numeros de Comprobante correpondientes
+              If Eqstr(Val(l:&i),'RET')
+                 ACT(w:&i, 'RTP')
+              else
+                 ACT(w:&i, 'DTP')
+              endif
+
+              ACT(az:&i, '')
+              If Not DesciendeDeEspecie(Val(d:&i),'MONEDA')     
+                 * Fecha Carga
+                 ACD(ta72, FSys )               
+                 * Fecha CargaSys
+                 ACD(ta80, FSys )     
+
+    ***************************************************************************************************************************
+                 If [Not EqStr(val(am:&i),VAR('CLHODEFA')) o EqStr(val(b:&i),Dialogo.vehiculo1)] y Vacio(Val(tc:&i))
+                   If val(s:&i) <= 0
+*                     Messagebox('* Cliente con cuenta en '~Var('LABEL')~' de Mercado <> CV')
+                     * Inicio Func LIQCUSNOCV
+                     ***********************
+                     (.'LIQCUSNOCV'.)
+                     ***********************
+                     * Fin Func LIQCUSNOCV
+                   EndIf
+                 EndIf
+    ***************************************************************************************************************************
+
+                 If EqStr(val(am:&i),VAR('CLHODEFA')) y Not EqStr(val(b:&i),Dialogo.vehiculo1)
+    *               Not Incluido(val(ea:&i),VAR('NOCLIENTES'))
+    *               Se cambia la pregunta para que solo entre si son Clientes
+    *               MB 15/02/2006
+
+    *               PZ 09/06/2023 se reemplaza Categoria Clientes por la situacion que el Depositante (campo Comitente) sea el Vehiculo
+    *                    IF Incluido(val(ea:&i),'CLI')
+
+                    IF Incluido(BuscarCampo('CUENTAS','Comitente','Codigo',Val(v:&i)),Dialogo.vehiculo1)
+                       ****- Bursatil o Extrabursatil por Cliente
+*                       Messagebox('* Clientes no agentes que NO LIQUIDAN POR NETEO ')
+                       * Inicio Func LIQTRANCLI
+                       ***********************
+                       (.'LIQTRANCLI'.)
+                       ***********************
+                       * Fin Func LIQTRANCLI
+                    Else 
+*                      Messagebox('* Contrapartes')
+                      * Inicio Func LIQTRANCON
+                      ***********************
+                      (.'LIQTRANCON'.)
+                      ***********************
+                      * Fin Func LIQTRANCON
+                    Endif
+                 Endif
+
+    ***************************************************************************************************************************
+
+                 ************** AGENTES ***************   
+*                 PZ 09/06/2023 se reemplaza Categoria Clientes por la situacion que el Depositante (campo Comitente) sea el Vehiculo
+*                 IF Incluido(val(ea:&i),'ABO') y Not EqStr(val(b:&i),Dialogo.vehiculo1)
+*                    If Not EqStr(val(b:&i),Dialogo.vehiculo1)
+**                      Messagebox('* Clientes agentes ')
+*                      * Inicio Func LIQTRANAGE
+*                      ***********************
+*                      (.'LIQTRANAGE'.)
+*                      ***********************
+*                      * Fin Func LIQTRANAGE
+*                    EndIf
+*                 Endif
+                   SQL.ADD("DELETE "~DBO~".MOVEJECUTADOS ")
+                   SQL.ADD("Where NrTrans2 = '"~Val(g:&i)~"' and NrSaldo <> 1 ")
+                   SQL.NEW
+                   SQL.EXEC
+
+                   *- En la Transaccion DEP-RET asigno el Nro. de Operacion de Referencia 
+                   IF NoVacio(Val(az:&i))
+                      If Incluido(Val(l:&i),'RET|DEP')
+*                         Messagebox('Update Trans '~Val(g:&i))
+                         SQL.ADD("UPDATE "~DBO~".TRANSACCIONES2            ")
+                         SQL.ADD("SET NrOperacionRef2 = '"~Val(az:&i)~"',  ")  
+                         SQL.ADD("    NrOperacionRef4 = null               ")  
+                         SQL.ADD("Where NrTrans = '"~Val(g:&i)~"'          ")
+                         SQL.NEW
+                      endif
+                   ENDIF
+
+                   if Incluido(Val(l:&i),'COMP')
+                      *** Desfaceta los limites de credito ***
+                      *- Recupero los nros. de operacion que originaron la transaccion
+                      SQL.ADD("SELECT DISTINCT NrOperacion ")
+                      SQL.ADD("FROM   "~DBO~".MOVEJECUTADOS WITH (INDEX = INDME5 ) ")
+                      SQL.ADD("WHERE  NrTrans2 = '"~val(g:&i)~"'")
+                      SQL.ADD("       and NrOperacion  <> '"~val(g:&i)~"'")
+
+                      Recorrer SQL
+                         DFA
+                         *- Confirmo la operacion para sacar los movimientos de limites
+                         ACT(op:1,FBN['NrOperacion'])
+*                         Messagebox('Confirma opeaciones (Func CONFOPEXTR)')
+                         * Inicio Func CONFOPEXTR
+                         ***********************
+                         (.'CONFOPEXTR'.)
+                         ***********************
+                         * Fin Func CONFOPEXTR
+                      Proximo
+                  endif
+
+                 *- Pasa de Instancia az5: Instancia Nueva az6: Instancia Vieja
+                 ACT(az3,Val(g:&i))
+                 ACT(az4,'TRANSACCIONES2')
+                 If EqStr(Val(l:&i),'DEP')
+                     ACN(az5,3)
+                 ELSE
+                    If EqStr(Val(l:&i),'RET')
+                       ACN(az5,6)
+                    ELSE
+                       ACN(az5,70)
+                    ENDIF
+                 ENDIF
+                 ACN(az6,14 )
+                 * Inicio Func MODIINSTAN
+                 ***********************
+                 (.'MODIINSTAN'.)
+                 ***********************
+                 * Fin Func MODIINSTAN
+             ENDIF   
+          Proximo 
+       Else  
+          Message('No Existen Transacciones para LIQUIDAR con esas especificaciones')
+       Endif
+   else
+     *- Pasa de Instancia az5: Instancia Nueva az6: Instancia Vieja
+     ACT(az3,Dialogo.NrTrans1)
+     ACT(l:1,BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',val(az3)))
+     ACT(az4,'TRANSACCIONES2')
+     If EqStr(Val(l:1),'DEP')
+       ACN(az5,3)
+     ELSE
+       If EqStr(Val(l:1),'RET')
+         ACN(az5,6)
+       ELSE
+         ACN(az5,70)
+       ENDIF
+     ENDIF
+     ACN(az6,14 )
+     * Inicio Func MODIINSTAN
+     ***********************
+     (.'MODIINSTAN'.)
+     ***********************
+     * Fin Func MODIINSTAN
+   Endif

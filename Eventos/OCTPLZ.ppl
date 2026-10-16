@@ -1,0 +1,110 @@
+﻿*/*****************************************
+*/Evento que interpreta los Registros 2102
+*/y Completa la tabla PLAZOSOCT
+*/*****************************************
+
+*/Actualizo el Archivo OCT
+ACT(z2, Var('PATHSIOPEL'))
+
+*/Restablecer lo que esta comentado aca...
+*/AbrirASCII(Val(z2)~'\REC-2102.TXT',0)
+*/EscribirASCII(Val(A:2))
+*/CerrarASCII
+
+*/Proceso el contenido.
+AbrirASCII(Val(z2)~'\REC-2102.TXT',0)
+Repetir
+
+ACT(ln1, LeerAscii)
+if Vacio(Val(ln1))
+   CerrarASCII
+   break
+endif
+
+**********************************************************
+*/00560000000408201337543450421021ODOLAR$24 AGO 0000000009
+*/Bloque de Control
+*/0056000000040820133754345042102
+*/Codigo de Movimiento ==>  1 (1- baja 2- alta)
+*/Codigo de Negociacion ==> O
+*/Codigo de Titulo ==> DOLAR
+*/Moneda ==> $
+*/Variable ==> 24 AGO 
+*/Fecha de Liquidacion  ==> 00000000 (0 en baja - fecha en alta)
+*/Dueño de la info ==> 09
+**********************************************************
+
+if Eqstr(trim(Copy(val(ln1),33,1)),'O')
+
+   Act(s:2,'Tipo Neg')
+   Act(t:2,trim(Copy(val(ln1),33,1)))
+
+   act(s:3,'Especie')
+   act(t:3,trim(Copy(val(ln1),34,5)))
+
+  
+   ACT(t:3,SQL("Select EspecieDestino1 From "~DBO~".EQUIVALENCIA_ESPECIES Where EspecieOrigen = '"~Val(t3)~"' and TipoNegociacion = '"~Val(t2)~"' "))  
+ 
+   act(s:1,'Movimiento')
+   acn(t:1,Num(Copy(val(ln1),32,1)))
+
+   act(s:4,'Variable')
+   act(t:4,trim(Copy(val(ln1),40,7)))
+   act(s:5,'FechaLiq')
+   Acn(t5, Fecha(Copy(Val(ln1),53,2)~'/'~Copy(Val(ln1),51,2)~'/'~Copy(Val(ln1),47,4)))
+
+   acn(x1,0)
+
+   if [val(t:1)>=0 y val(t:1)<=3] y NoVacio(val(t:3)) y NoVacio(val(t:4)) y val(t:5)<>0 
+      If val(t1)=2
+
+         ACN(x1, SQL("Select Count('*') from  "~DBO~".PLAZOSOCT Where rtrim(ltrim(Especie))=rtrim(ltrim('"~val(t3)~"')) and rtrim(ltrim(TipoNegociacion))=rtrim(ltrim('"~val(t2)~"')) and rtrim(ltrim(Variable))= rtrim(ltrim('"~val(t4)~"')) "))
+         if val(x1)=0
+            */Alta de Plazo
+            SQL.ADD("Insert into "~DBO~".PLAZOSOCT ")
+            SQL.ADD("(Especie,TipoNegociacion,Fecha,Variable,NroPlazo,Habilitado)")
+            SQL.ADD(" Values ")
+            SQL.ADD(" ('"~val(t3)~"', '"~val(t2)~"', '"~IdxDate(Val(t5))~"'  , '"~val(t4)~"', 0, 'SI' )")
+            SQL.NEW
+         Else
+            */Alta de Plazo Existente
+            SQL.ADD("Update "~DBO~".PLAZOSOCT ")
+            SQL.ADD("Set Habilitado ='SI' , Fecha ='"~IdxDate(Val(t5))~"' ")
+            SQL.ADD("Where Especie='"~val(t3)~"' and TipoNegociacion='"~val(t2)~"' and Variable= '"~val(t4)~"' ")
+            SQL.NEW
+         Endif
+      Endif
+
+      If val(t1)=1
+         */Baja de Plazo
+         SQL.ADD("Update "~DBO~".PLAZOSOCT ")
+         SQL.ADD("Set Habilitado ='NO' ")
+         SQL.ADD("Where Especie='"~val(t3)~"' and TipoNegociacion='"~val(t2)~"' and Variable= '"~val(t4)~"' ")
+         SQL.NEW
+      Endif
+      If val(t1)=3
+          */Modificacion de Plazo (Solo Existen Modificaciones de Fecha de Liquidacion)
+          SQL.ADD("Update "~DBO~".PLAZOSOCT ")
+          SQL.ADD("Set Fecha ='"~IdxDate(Val(t5))~"' ")
+          SQL.ADD("Where Especie='"~val(t3)~"' and TipoNegociacion='"~val(t2)~"' and Variable= '"~val(t4)~"' ")
+          SQL.NEW
+      Endif
+      SQL.EXEC
+
+      */Llamado al Evento que asigna los plazos.  
+       EjecutarEvento('OCTNPZ',Especie1 =val(t3),String1 =Val(t2))
+
+ else
+    IF NO  
+    messagebox('*/Mensajes descartados')
+    AbrirASCII(Val(z2)~'\OCTERROR.TXT',0)
+    act(er1,'Error -PLAZOSOCT:Campos en NULL ==>'~Val(ln1))  
+    EscribirASCII(Val(er1))
+    CerrarASCII
+    ENDIF
+ endif 
+
+endif
+
+Proximo
+

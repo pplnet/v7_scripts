@@ -1,0 +1,151 @@
+﻿CrearDialogo
+    Fecha1: 'Fecha' ;1;1;;NO;;;;;FSYS
+    Lista1: 'Estado';;;;;;;;;;;'A Realizar|Vigente|Vencido|N/A|Proximo a Vencer'
+    Lista2: 'Perfil';;;;;;;;;;;'Moderado|Arriesgado|Calificado'
+FinDialogo
+
+If Not Ok
+   Cancelar
+EndIf
+
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")    
+CrearFont(3,"Arial,10,B")
+
+SetFilaActual(1)
+
+ACT(a:fac,'Test del Inversor en Clientes')
+SetFont(a:fac,3)
+
+ACT(f:fac, 'Fecha: '~Var('FECHASYS'))
+SetFont(f:fac,2)
+
+SetFilaActual(fac+2)
+
+
+ACT(a:fac, 'Estado:')
+
+*Copio el contenido de la lista1 en una celda de tipo texto.
+ACT(b:fac, Pipe2Coma(Dialogo.Lista1))
+
+*Si la lista1 esta vacia, no filtra por estado. Caso contrario si filtra por estado.
+If Elementos(Dialogo.Lista1) = 0 OR Elementos(Dialogo.Lista1) = 5
+    ACT(b:fac, 'Todos')
+Else
+    *Agrego los filtros que uso al informe, eliminando la ultima ',' de la copia de la lista1. 
+    ACT(b:fac, Copy(Val(b:fac),1,Longitud(Val(b:fac))-1))
+EndIf
+SetFont(a:fac..aa:fac,2)
+
+
+IFA
+ACT(a:fac, 'Perfil:')
+
+*Copio el contenido de la lista2 en una celda de tipo texto.
+ACT(b:fac, Pipe2Coma(Dialogo.Lista2))
+
+*Si la lista2 esta vacia, no filtra por perfil. Caso contrario si filtra por perfil.
+If Elementos(Dialogo.Lista2) = 0 OR Elementos(Dialogo.Lista2) = 3
+    ACT(b:fac, 'Todos')
+Else
+    *Agrego los filtros que uso al informe, eliminando la ultima ',' de la copia de la lista2. 
+    ACT(b:fac, Copy(Val(b:fac),1,Longitud(Val(b:fac))-1))
+EndIf
+
+SetFont(a:fac..aa:fac,2)
+SetFilaActual(fac+2)
+
+
+SQL.ADD("Select * ")
+SQL.ADD("FROM")
+    SQL.ADD("(SELECT Codigo, RazonSocial, TestInv, PerfilInv, FechaVtoTest,") 
+    
+    *Creo un nuevo campo FechaVencimiento y lo calculo.
+    SQL.ADD("CASE")
+    SQL.ADD("   WHEN FechaVtoTest IS NOT NULL THEN DATEADD(DAY, 364, FechaVtoTest)")
+    SQL.ADD("   ELSE NULL")
+    SQL.ADD("END AS FechaVencimiento,")
+
+    *Creo un nuevo campo Estado y lo calculo.
+    SQL.ADD("CASE")
+    SQL.ADD("   WHEN PerfilInv LIKE 'Calificado' THEN 'N/A'")
+    SQL.ADD("   WHEN TestInv LIKE 'NO' OR TestInv IS NULL THEN 'A Realizar'")
+    SQL.ADD("   WHEN DATEADD(DAY, 364, FechaVtoTest) >= '"~IdxDate(FSys)~"' AND DATEADD(DAY, 364, FechaVtoTest) <= '"~IdxDate(FSys+30)~"' THEN 'Proximo a Vencer'")
+    SQL.ADD("   WHEN DATEADD(DAY, 364, FechaVtoTest) >= '"~IdxDate(FSys)~"' THEN 'Vigente'")
+    SQL.ADD("   WHEN DATEADD(DAY, 364, FechaVtoTest) < '"~IdxDate(FSys)~"' THEN 'Vencido'")
+    SQL.ADD("END AS Estado")
+
+    SQL.ADD("FROM "~DBO~".Clientes") 
+    SQL.ADD("WHERE Jerarquia LIKE '003%' AND Codigo NOT LIKE 'CLIENTES')")
+    SQL.ADD("AS Cli")
+SQL.ADD("WHERE 1=1")
+
+*Filtro segun el Estado en caso de que no sean 'Todos'. 
+If Elementos(Dialogo.Lista1) <> 0
+    SQL.ADD("AND Estado IN ("~Pipe2Comillas(Dialogo.Lista1)~")")
+EndIf
+
+*Filtro segun el Perfil en caso de que no sean 'Todos'. 
+If Elementos(Dialogo.Lista2) <> 0
+    SQL.ADD("AND PerfilInv IN ("~Pipe2Comillas(Dialogo.Lista2)~")")
+EndIf
+
+
+*Ordeno los registros por Codigo
+SQL.ADD("ORDER BY Codigo")
+
+ACT(a:fac,'Codigo')
+ACT(b:fac,'Razon Social')
+ACT(c:fac,'Test Realizado')
+ACT(d:fac,'Perfil del Inversor')
+ACT(e:fac,'Fecha Test')
+ACT(f:fac,'Fecha Vencimiento')
+ACT(g:fac,'Estado')
+
+AgregarMarco(a:fac..g:fac,2,0,Exe('COLOR'))
+AlinearCeldas(a:4..g:fac,'I')
+
+SetFont(a:fac..aa:fac,2)
+ACN(op:1,fac+1)
+
+Recorrer SQL
+    ACT(a:fac,FBN('Codigo'))
+    ACT(b:fac,FBN('RazonSocial'))
+    ACT(d:fac,FBN('PerfilInv'))
+    
+    If Eqstri(FBN('Estado'),'N/A')
+        ACT(c:fac,'N/A')
+        ACT(e:fac,'N/A')
+        ACT(f:fac,'N/A')
+    Else
+        If Eqstri(FBN('Estado'),'A Realizar')
+            ACT(c:fac,'NO')
+            ACT(d:fac,'-')
+            ACT(e:fac,'-')
+            ACT(f:fac,'-')
+        Else
+            ACT(c:fac,FBN('TestInv'))
+            ACD(e:fac,FBN('FechaVtoTest'))
+            ACD(f:fac,FBN('FechaVencimiento'))
+        EndIf
+    EndIf
+    
+    ACT(g:fac,FBN('Estado'))
+    
+Proximo
+
+SetFont(a:val(op:1)..g:fac,1)
+
+ACO(2,40)
+ACO(3,9)
+ACO(4,10)
+ACO(6,11)
+ACO(7,9)
+
+IFA
+IFA
+ACT(a:fac, 'FIN DEL INFORME')
+SetFont(a:fac..a:fac,2)
+
+Limitesvision(h:fac+1)

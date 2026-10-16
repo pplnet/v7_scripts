@@ -1,0 +1,414 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1    : 'Fecha'     ; ; ; ;  ;  ;EsHabil(Dialogo.Fecha1,'ARG') y Dialogo.Fecha1 <= Fsys y EsHabil(Dialogo.Fecha1, 'ARG');'Fecha Invalida';NO;Fsys
+  Vehiculo1 : 'Vehiculo'  ;2;1; ;NO;SI;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+  Check1    : 'Porcesa'   ; ; ; ;NO;NO;;;;1
+  Check2    : 'Automatico'; ; ; ;NO;NO;;;;0
+FinDialogo
+if Not OK
+  Cancelar
+endif
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+ACT(y1, Fecha(Hoy))
+ACT(y2, Copy(Val(y1),9,2)~Copy(Val(y1),4,2)~Copy(Val(y1),1,2))
+ACT(z1, Hora(Ahora))
+ACT(z2, Copy(Val(z1),1,2)~Copy(Val(z1),4,2)~Copy(Val(z1),7,2))
+
+if SQL(" Select 1 From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' and Registro = 'CIED' ") = 1
+  if Dialogo.Check2=0
+    * Manual
+    Cancelar('El Cierre Del Dia ya ha sido procesado')
+  else
+    * Automatico
+    Message('El Cierre Del Dia ya ha sido procesado')
+    Cancelar
+  endif
+endif
+if SQL(" Select 1 From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' and Registro = 'FIND' ") <> 1
+  if Dialogo.Check2=0
+    * Manual
+    if MessageBox('No se ha recibido el Fin Del Dia desde el MAE, Desea continuar?', 3, 2) = 7
+      Cancelar('Evento Cierre OCT Cancelado')
+    endif
+  else
+    * Automatico
+    Message('No Se Ha Recibido El Fin Del Dia Desde el MAE.')
+    ** Ver si tiene que cancelar **
+    Message('Evento Cierre OCT Cancelado')
+    Cancelar
+  endif
+endif
+if SQL(" Select 1 From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' and Registro = 'CONC' ") = 0
+  if Dialogo.Check2=0
+    * Manual
+    MessageBox('No se ha realizado la Conciliacion con MAE')
+    if Dialogo.Check1=1
+      Cancelar
+    endif
+  else
+    * Automatico
+    Message('No se ha realizado la Conciliacion con MAE')
+    if Dialogo.Check1=1
+      Cancelar
+    endif
+  endif
+else
+  if Not EqStr(SQL(" Select Estado From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' and Registro = 'CONC' "),'OK')
+    if EqStr(SQL(" Select Estado From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' and Registro = 'CONC' "),'MAN')
+      if Dialogo.Check2=0
+        * Manual
+        MessageBox('La Conciliacion con MAE fue realizada Manualmente')
+      else
+        * Automatico
+        Message('La Conciliacion con MAE fue realizada Manualmente')
+      endif
+    else
+      if Dialogo.Check2=0
+        * Manual
+        MessageBox('La Conciliacion con MAE no esta OK')
+        if Dialogo.Check1=1
+          Cancelar
+        endif
+      else
+        * Automatico
+        Message('La Conciliacion con MAE no esta OK')
+        if Dialogo.Check1=1
+          Cancelar
+        endif
+      endif
+    endif
+  endif
+endif
+
+ACT(v:1, 'Max.Paso')
+ACT(v:2, 'Merc.OCT')
+ACT(v:3, 'Cuenta')
+ACT(v:4, 'MTM 1')
+ACT(v:5, 'MTM 2')
+ACT(v:6, 'Cant.LIQOCT')
+ACT(v:7, 'Lista LIQOCT')
+ACT(v:8, 'Veh.Exluido')
+ACT(v:9, 'Ult.Fila')
+ACT(v:10, 'Multil.MAE')
+ACT(v:11, 'Ut.MTM.MAE')
+ACT(v:12, 'Ut.GAR.MAE')
+ACT(v:13, 'Cobrado')
+ACT(v:14, 'Pagado')
+
+ACT(s:1, 'Nr.Trans.')
+ACT(s:2, 'Tipo Trans')
+if Dialogo.Check1=1
+  EjecutarEvento('LIQUI1', Vehiculo1=Dialogo.Vehiculo1, Fecha1=Dialogo.Fecha1, Cliente1='', Especie1='', Mercado1=Var('MERCOCT'), Check10=1, Check9=0, Check5=0, Check6=0, Check8=1, Check7=1)
+endif
+
+***---Selecciono el maximo paso del dia
+ACN(w:1, SQL(" Select Max(Paso) From "~DBO~".MTMOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' "))
+
+SetFilaActual(0)
+ACT(w:2, Var('MERCOCT'))
+ACT(w:3, CuentaCliente(Dialogo.Vehiculo1, 'ARP','',Val(w:2)))
+
+ACN(w:4, 0)
+ACN(w:5, 0)
+ACN(w:6, 0)
+
+SQL.ADD(" Select NrTrans, Cambio1 Paso, Cantidad1, Cliente1 ")
+SQL.ADD("   From "~DBO~".TRANSACCIONES2 T1 ")
+SQL.ADD("  Where T1.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("    and T1.TipoTr2 = 'LIQOCT' ")
+SQL.ADD("    and T1.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("    and T1.Cambio1 = 0 ")
+***---NO se confirman las LIQOCT con bilateral cero ya que no pueden variar y no generan vouchers de liquidacion
+SQL.ADD("    and T1.Cantidad1 <> 0 ")
+SQL.ADD(" Order By NrTrans ")
+Recorrer SQL
+  SCN(w:6, 1)
+  ACT(a:FAC, fbn('NrTrans'))
+  ACT(b:FAC, fbn('Cliente1'))
+  ACN(c:FAC, fbn('Paso'))
+  ACN(d:FAC, fbn('Cantidad1'))
+  SCN(w:4,   Val(d:FAC))
+  ***---Obtengo Bilateral del MAE
+  SQL.ADD(" Select Monto,UtilizadoMTM,UtilizadoGAR,Excluido From "~DBO~".MTMOCT ")
+  SQL.ADD("  Where Fecha   = '"~IdxDate(Dialogo.Fecha1)~"' ")
+  SQL.ADD("    and Cliente = '"~fbn('Cliente1')~"' ")
+  SQL.ADD("    and Paso    = "~Fstr(Val(w:1), 0, 0)~" ")
+  SQL.ADD("    and (Especie Is Null OR Especie = '' OR Especie = ' ') ")
+  SQL.ADD("    and (TipoNegociacion Is Null OR TipoNegociacion = '' OR TipoNegociacion = ' ') ")
+  SQL.ADD("    and (Variable Is Null OR Variable = '' OR Variable = ' ') ")
+  SQL.ADD("  ")
+  Recorrer SQL
+    DFA
+    ACN(g:FAC, fbn('Monto'))
+    ACN(h:FAC, fbn('UtilizadoMTM'))
+    ACN(i:FAC, fbn('UtilizadoGAR'))
+    if fbn('Monto')>=0
+      SCN(w:13, fbn('Monto'))
+    else
+      SCN(w:14, fbn('UtilizadoMTM'))
+    endif
+*    ACN(f:FAC, fbn('Monto')-fbn('UtilizadoMTM')-fbn('UtilizadoGAR'))
+*    SCN(w:5,   Val(f:FAC))
+    if Eqstr(Copy(fbn('Excluido'),2,1), 'S')
+      ***---Vehiculo Excluido
+      ACT(w:8, 'S')
+    endif
+  Proximo
+  ACT(w:7, Val(w:7)~'|'~fbn('NrTrans'))
+Proximo
+if SQL(" Select 1 From "~DBO~".MOVPENDIENTES Where NrOperacion IN ("~Pipe2Comillas(Val(w:7))~") and NrSaldo = 1 ") = 1
+  if Dialogo.Check2=0
+    * Manual
+    MessageBox('Hay Liquidaciones OCT Pendientes de Liquidar')
+    Cancelar('Evento Cierre OCT Cancelado')
+  else
+    * Automatico
+    Message('Hay Liquidaciones OCT Pendientes de Liquidar')
+    Message('Evento Cierre OCT Cancelado')
+    Cancelar
+  endif
+endif
+
+if Val(w:6)>0
+  recorrer&i 1,Val(w:6)
+    if Val(d:&i)>=0
+      ACN(f:&i, Val(g:&i))
+    else
+      if Val(w:1)=0
+        * Ultimo paso = 0
+        ACN(f:&i, Val(g:&i))
+      else
+        ACN(j:&i, Val(h:&i)/Val(w:14))
+        ACN(k:&i, -Val(w:13)*Val(j:&i))
+*        ACN(f:&i, Val(h:&i)+Val(i:&i)+Val(k:&i))
+        ACN(f:&i, Val(g:&i))
+      endif
+    endif
+    SCN(w:5, Val(f:&i))
+  proximo
+  ***---Obtengo Multilateral del MAE
+  SQL.ADD("Select Monto,UtilizadoMTM,UtilizadoGAR From "~DBO~".MTMOCT ")
+  SQL.ADD(" Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+  SQL.ADD("   and Paso = "~Fstr(Val(w:1), 0, 0)~" ")
+  SQL.ADD("   and (Cliente Is Null OR Cliente = '' OR Cliente = ' ') ")
+  SQL.ADD("   and (Especie Is Null OR Especie = '' OR Especie = ' ') ")
+  SQL.ADD("   and (TipoNegociacion Is Null OR TipoNegociacion = '' OR TipoNegociacion = ' ') ")
+  SQL.ADD("   and (Variable Is Null OR Variable = '' OR Variable = ' ') ")
+  Recorrer SQL
+    DFA
+    ACN(w:10, fbn('Monto'))
+    ACN(w:11, fbn('UtilizadoMTM'))
+    ACN(w:12, fbn('UtilizadoGAR'))
+  Proximo
+  if Val(w:11)-Val(w:14)>0.01 o Val(w:11)-Val(w:14)<-0.01
+    if Dialogo.Check2=0
+      * Manual
+      MessageBox('Diferencia ente Monto Pagado ('~PYC(Val(w:14),1,2)~') y UtilizadoMTM ('~PYC(Val(w:11),1,2)~')')
+    else
+      * Automatico
+      Message('Diferencia ente Monto Pagado ('~PYC(Val(w:14),1,2)~') y UtilizadoMTM ('~PYC(Val(w:11),1,2)~')')
+    endif
+  endif
+endif
+
+***---Fila Ultimo Bilateral
+ACN(w:9, FAC)
+ifa
+ACT(A:FAC, 'MULTILATERAL')
+ACT(C:FAC, '')
+ACN(D:FAC, Val(w:4))
+ACN(F:FAC, Val(w:5))
+SetFont(a:1..k:FAC, 1)
+SetFont(A:FAC, 3)
+FormatoCeldas(d:1..k:FAC, Exe('F2'))
+FormatoCeldas(j:1..j:FAC, Exe('F6'))
+
+***---Nunca se generan nuevos movptes. Si debia puedo deber menos, pero nunca mas. Se falla la diferencia.
+***---Si debo cobrar, puedo cobrar menos pero nunca mas. Se falla la diferencia.
+***---  Caso     Paso0     Paso1     Accion
+***---  ------  ------     ------    ---------
+***---   1       +100      +40       Confirmo por +40 y fallo por +60.No genero nuevos movptes.
+***---   2       +100        0       Fallo por +100 y no genero movptes.
+***---   3        -50      -30       Confirmo por -30 y fallo por -20. No genero movptes.
+***---   4        -50        0       Fallo por -50 y no genero movptes.
+repetir
+  if Val(w:6)>0
+    if Dialogo.Check2=0
+      * Manual
+      CrearListBox ; 'Arial,8,';'Cierre OCT del Dia '~Dialogo.Fecha1
+        'Transaccion'               ;A:1..A:FAC;NO;;;90 ;STRING;;RGB(450,200,250);
+        'Agente'                    ;B:1..B:FAC;NO;;;70 ;STRING;;RGB(450,200,250);
+        'Paso'                      ;C:1..C:FAC;NO;;;40 ;NUMERO;'##';RGB(450,200,250);
+        'Cantidad Liquidada'        ;D:1..D:FAC;NO;;;120;NUMERO;'###,###,###,###.##';RGB(450,200,250);
+        'Cantidad Confirmada'       ;F:1..F:FAC;  ;[[Val(D:FLB) > 0 Y Val(F:FLB) >= 0 Y Val(F:FLB) <= Val(D:FLB)] O [Val(D:FLB) < 0 Y Val(F:FLB) <= 0 Y Val(F:FLB) >= Val(D:FLB)]] O [FLB=FAC];'Cantidad Confirmada Invalida';120;NUMERO;'###,###,###,###.##';RGB(600,200,250);IIF(FLB=FAC, Sum(f:1..f:Val(w:9)), Val(F:FLB));
+      FinListBox
+      if Not OK
+        *** desarmo la liquidacion ****
+        if Dialogo.Check1=1
+          EjecutarEvento('ALIQAU', Fecha1=Dialogo.Fecha1)
+          Cancelar('Evento Cierre OCT Cancelado')
+        endif
+      endif
+    endif
+  else
+    *** Cierre sin LIQOCT generadas para el dia
+    if Dialogo.Check1=1
+      ***---Marca de cierre realizado
+      SQL.ADD(" Insert Into "~DBO~".FLAGSOCT ( ")
+      SQL.ADD(" Fecha,    Registro, Paso,      Cantidad, ")
+      SQL.ADD(" FechaMAE, HoraMAE,  Secuencia, Estado    ")
+      SQL.ADD(" ) Values ( ")
+      SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', ")
+      SQL.ADD(" 'CIED', ")
+      SQL.ADD(" 0, ")
+      SQL.ADD(" 0, ")
+      SQL.ADD(" '"~Val(y2)~"', ")
+      SQL.ADD(" '"~Val(z2)~"', ")
+      SQL.ADD(" Null, ")
+      SQL.ADD(" Null ")
+      SQL.ADD(" ) ")
+      SQL.NEW
+      SQL.EXEC
+    endif
+    if Dialogo.Check2=0
+      * Manual
+      MessageBox('No Hay Liquidaciones OCT para el dia solicitado')
+    else
+      * Automatico
+      Message('No Hay Liquidaciones OCT para el dia solicitado')
+    endif
+    Cancelar
+  endif
+
+  ACN(x1, 0)
+  if Not Eqstr(Val(w:8),'S')
+    ***---Si el Vehiculo esta Excluido => el multilateral que viene del MAE no va a coincidir con el multilateral del evento
+    ***---porque el MAE no me informa cuanto se le acredito a los agentes que les debo.
+    ***---Controlo si Multilateral del MAE coincide con Multilateral del ListBox
+    if Round(Val(f:Val(w:9)+1),2)<>Round(Val(w:10),2)
+      if Dialogo.Check2=0
+        * Manual
+        if MessageBox('El ultimo multilateral recibido desde el MAE (Paso '~Fstr(Val(w:1), 0, 0)~') es de '~PyC(Val(w:10), 0, 2)~' y el calculado por el Cierre es de '~PyC(Val(f:Val(w:9)+1), 0, 2)~', Desea Continuar?', 3, 2)=7
+          ACN(x1,1)
+*          Cancelar('Evento Cierre OCT Cancelado')
+        endif
+      else
+        * Automatico
+        Message('El ultimo multilateral recibido desde el MAE (Paso '~Fstr(Val(w:1), 0, 0)~') es de '~PyC(Val(w:10), 0, 2)~' y el calculado por el Cierre es de '~PyC(Val(f:Val(w:9)+1), 0, 2))
+      endif
+    endif
+  endif
+
+  ***---Controlo cada Bilateral del MAE con Bilateral del ListBox
+  Recorrer&k 1, Val(w:9)
+    if Val(x1)=0
+      if Round(Val(g:&k),2)<>Round(Val(f:&k),2)
+        if Not Eqstr(Val(w:8),'S') O Val(d:&k)>0
+          ***---Si el Vehiculo esta Excluido => no puedo validar mis Bilaterales Deudores porque el MAE no me informa
+          ***---cuanto se le acredito al Agente Contraparte.
+          if Dialogo.Check2=0
+            * Manual
+            if MessageBox('El bilateral del MAE con el agente '~Val(b:&k)~' es de '~PyC(Val(g:&k),0,2)~' Y el Ingresado en el Cierre es de '~PyC(Val(f:&k),0,2)~', Desea Continuar?', 3, 2)=7
+              ACN(x1,1)
+*              Cancelar('Evento Cierre OCT Cancelado')
+            endif
+          else
+            * Automatico
+            Message('El bilateral del MAE con el agente '~Val(b:&k)~' es de '~PyC(Val(g:&k),0,2)~' Y el Ingresado en el Cierre es de '~PyC(Val(f:&k),0,2))
+          endif
+        endif
+      endif
+    endif
+  Proximo
+  if Val(x1)=0 o Dialogo.Check2=1
+    * respuestas OK o Automatico
+    Break
+  endif
+proximo
+
+SetFont(a:1..k:FAC, 1)
+SetFont(A:FAC, 3)
+FormatoCeldas(d:1..k:FAC, Exe('F2'))
+FormatoCeldas(j:1..j:FAC, Exe('F6'))
+
+Recorrer&k 1, Val(w:9)
+  ***---Obtengo Nro. y Tipo de Voucher
+  SQL.ADD("Select NrTrans,TipoTr2 ")
+  SQL.ADD("  From "~DBO~".TRANSACCIONES2 ")
+  SQL.ADD(" Where TipoTr2         IN ('FXDEP','FXRET') ")
+  SQL.ADD("   and NrOperacionRef1 =  '"~Val(a:&k)~"' ")
+  Recorrer SQL
+    DFA
+    ACT(t:1, fbn('NrTrans'))
+    ACT(t:2, fbn('TipoTr2'))
+  Proximo
+  if Dialogo.Check1=1
+    if Val(d:&k)=Val(f:&k)
+      ***---Confirmacion Total
+      Message('Confirmando Voucher '~Val(t:1))
+      (.'CONFTOTOCT'.)
+    else
+      ***---Falla Parcial o Total
+      Message('Fallando Voucher '~Val(t:1))
+      if Val(d:&k)>0
+        ***---Casos 1 y 2 => Confirmo por la diferencia
+        EjecutarEvento('INGPAR', NrTrans1=Val(t:1), Radio1=0, Cantidad2=Abs(Val(f:&k)), Check1=1)
+      endif
+      if Val(d:&k)<0
+        ***---Casos 3 y 4 => Confirmo por la diferencia
+        EjecutarEvento('INGPAR', NrTrans1=Val(t:1), Radio1=0, Cantidad2=Abs(Val(f:&k)), Check1=1)
+      endif
+    endif
+    SQL.ADD("Update "~DBO~".TRANSACCIONES2 ")
+    SQL.ADD("   Set NrTransRef1 = '"~Val(t:1)~"', ")
+    SQL.ADD("       Cantidad2   = "~Fstr(Val(f:&k),0,2)~" ")
+    SQL.ADD(" Where NrTrans     = '"~Val(a:&k)~"' ")
+    SQL.NEW
+    SQL.EXEC
+  endif
+Proximo
+
+*** calculo de cashflow ****
+if Dialogo.Check1=1
+  EjecutarEvento('FALLAC', Vehiculo1=Dialogo.Vehiculo1, Fecha1=Dialogo.Fecha1)
+endif
+
+***---Marca de cierre realizado
+if Dialogo.Check1=1
+  SQL.ADD(" Insert Into "~DBO~".FLAGSOCT ( ")
+  SQL.ADD(" Fecha,    Registro, Paso,      Cantidad, ")
+  SQL.ADD(" FechaMAE, HoraMAE,  Secuencia, Estado    ")
+  SQL.ADD(" ) Values ( ")
+  SQL.ADD(" '"~IdxDate(Dialogo.Fecha1)~"', ")
+  SQL.ADD(" 'CIED', ")
+  SQL.ADD(" 0, ")
+  SQL.ADD(" 0, ")
+  SQL.ADD(" '"~Val(y2)~"', ")
+  SQL.ADD(" '"~Val(z2)~"', ")
+  SQL.ADD(" Null, ")
+  SQL.ADD(" Null ")
+  SQL.ADD(" ) ")
+  SQL.NEW
+  SQL.EXEC
+endif
+
+SetFont(s:1..z:15,1)
+FormatoCeldas(w:4..w:5, Exe('F2'))
+FormatoCeldas(w:10..w:14, Exe('F2'))
+
+ACO(4,10)
+ACO(6,10)
+ACO(7,10)
+ACO(8,10)
+ACO(9,10)
+ACO(11,10)
+ACO(20,10)
+ACO(22,10)
+ACO(23,20)

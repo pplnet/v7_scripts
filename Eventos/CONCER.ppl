@@ -1,0 +1,153 @@
+﻿HojaVisible(SI)
+CrearDialogo
+*  NrOperacion1 : 'Nro.Operacion'              ;;;;  ;  ;;;;;;;;;"TipoOp In ('MMPF','MMPFCE') and FechaVto >= '"~IdxDate(Fsys)~"' ";
+  NrOperacion1 : 'Nro.Operacion'              ;;;;  ;  ;;;;;;;;;"TipoOp In ('MMPF','MMPFCE','TIDE') ";
+  Radio4       : '|Impresion|Reimpresion'     ;;;;NO;NO;;;;;0
+
+FinDialogo
+
+if Not Ok
+  Cancelar
+endif
+
+CrearFont(1,"Arial,7,")
+CrearFont(4,"Arial,8,")
+CrearFont(2,"Arial,6,B")
+CrearFont(3,"Arial,12,B")
+CrearFont(6,"Arial,3,")
+
+SQL.ADD(" Select O.FechaOp, O.Plazo, O.Vehiculo1, O.CantImpresiones1, O.FechaVto, C.RazonSocial, ")
+SQL.ADD(" C.Direccion, C.TipoInscripcion, C.CUIT, C.CodigoPostal, C.Localidad, C.PaisDir, ")
+SQL.ADD(" O.Cantidad, O.TotalIntereses, O.TotalBrutoCli1, O.TotalGanancias, O.Precio2, O.Especie, ")
+SQL.ADD(" O.NrOperacion, O.CB5, O.TipoOp, O.Cotizacion1 ")
+SQL.ADD(" from "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B, "~DBO~".CLIENTES C ")
+SQL.ADD("  where O.NrOperacion = B.NrOperacion            ")
+SQL.ADD("  AND C.Codigo = O.Cliente1 ")
+SQL.ADD("  and   O.NrOperacion='"~Dialogo.NrOperacion1~"' ")
+**SQL.ADD("  and   O.TipoOp In ('MMPF','MMPFCE')            ")
+**SQL.ADD("  and   B.NrBit = 10 and Valor = '1'             ")
+SQL.ADD("  and   O.FechaOp <= '"~IdxDate(Fsys)~"'         ")
+SQL.ADD("  and  (O.FechaVto >= '"~IdxDate(Fsys)~"'        ")
+SQL.ADD("   or  (O.FechaVto < '"~IdxDate(Fsys)~"'         ")
+SQL.ADD("  and  O.NrOperacion Not In (Select M.NrOperacion from "~DBO~".MOVEJECUTADOS M where M.NrOperacion = '"~Dialogo.NrOperacion1~"' AND M.NrSaldo = 1 and M.FechaMov = O.FechaVto))) ")
+
+if Dialogo.Radio4 = 0
+   SQL.ADD("  and (O.CantImpresiones1 is null or O.CantImpresiones1 = 0)  ") 
+endif
+
+acn(t1,0)
+ACT(t3,Dialogo.NrOperacion1)
+***---BorrarCeldas(A:1..Z:5)
+Recorrer SQL
+  acn(t1,2)
+  if Vacio(FBN['CantImpresiones1']) o FBN['CantImpresiones1'] = 0
+     ACN(t2,1)
+  else
+     ACN(t2,FBN['CantImpresiones1']+1)
+  endif
+  ***---Setear esta fila para acomodar el certificado en la hoja
+  SetFilaActual(12)
+  Recorrer&k 1, 3
+      ifa
+      IF &k = 1
+          AFI(fac, 6)
+      ELSE
+          AFI(fac, 8)
+      ENDIF
+      ifa
+      ACT(J:fac, '          '~fbn('FechaOp'))
+      ACN(L:fac, fbn('Plazo'))
+      ACT(M:fac, '              '~fbn('FechaVto'))
+      FormatoCeldas(L:fac, Exe('F0'))
+      AlinearCeldas(L:fac, 'C')
+      SQL.ADD(" Select RazonSocial, Direccion, Localidad, CodigoPostal, PaisDir ")
+      SQL.ADD(" From "~DBO~".CLIENTES ")
+      SQL.ADD(" Where Codigo = '"~fbn('Vehiculo1')~"' ")
+      Recorrer SQL
+          DFA
+          ACT(F:fac, Copy(fbn('Direccion')~' '~fbn('Localidad'), 1, 40))
+          AFI(fac, 5)
+      Proximo
+     ifa
+     AFI(fac, 5)
+     IF Eqstr(fbn('TipoOp'), 'MMPF')
+         ACT(MS:1, 'Plazo Fijo a tasa Fija')
+     ELSE
+         ACT(MS:1, 'Plazo Fijo ajustado por CER')
+         ACT(J:fac+1, '          '~Fstr(fbn('Cotizacion1'), 0, 8))
+     ENDIF
+     IF fbn('CB5') = 1
+          ACT(E:fac, 'Transferible '~Val(MS:1)~' '~fbn('NrOperacion'))
+     ELSE
+         ACT(E:fac, 'Intransferible '~Val(MS:1)~' '~fbn('NrOperacion'))
+     ENDIF
+     ifa
+     ACT(D:fac, '            '~Copy(fbn('RazonSocial'), 1, 40))
+     ACN(L:fac, fbn('Precio2'))
+     AFI(fac, 3)
+     ***---Calculo de T.E.M.
+     ***---TEM=((((Capital+Interes)/Capital)^(30/Plazo))-1)*100
+     ACT(M:fac, '             '~Fstr(((((fbn('Cantidad')+fbn('TotalIntereses'))/fbn('Cantidad'))^(30/fbn('Plazo'))) - 1) * 100, 0, 8))
+     FormatoCeldas(H:fac..M:fac, Exe('F8'))
+     AFI(fac, 7)
+     ifa
+     ifa
+
+      ACT(E:fac, '     '~fbn('CUIT'))
+      If fbn('Precio2')=0
+         ACT(g:fac, 'Depósito especial por ingreso de fondos del exterior - Decreto 616/05')
+      Endif
+      ifa
+      AFI(fac, 5)
+      ACT(D:fac, '            '~fbn('Direccion')~' '~fbn('Localidad'))
+      ifa
+      AFI(fac, 10)
+      ifa
+      ACN(E:fac, fbn('Cantidad'))
+      ACT(G:fac, '     '~Fstr(fbn('TotalIntereses'), 0, 2))
+      ACN(J:fac, fbn('TotalGanancias'))
+      ACN(M:fac, fbn('TotalBrutoCli1'))
+      ifa
+      AFI(fac, 8)
+      ifa
+      ACT(E:fac, BuscarCampo('ESPECIES','Nombre','Codigo', fbn('Especie')))
+      ACT(E:fac, Val(E:fac)~' '~Letras(fbn('TotalBrutoCli1'), 0, 150))
+      SetFilaActual(fac+2)
+      IF Val(T:2) > 1
+          ACT(E:fac, 'REIMPRESION')
+      ENDIF
+      IF &k < 3
+          SetFilaActual(fac+4)
+          AFI(fac, 10)
+          ifa
+      ENDIF
+  Proximo
+Proximo
+
+if val(t1) = 0
+   Cancelar('No se imprime el comprobante '~val(t3)~', debe ser un Plazo Fijo, estar Confirmado, Vigente o ya se imprimio ')
+else 
+   SQL.ADD(" Update "~DBO~".OPERACIONES                     ")
+   SQL.ADD(" Set CantImpresiones1 = "~Fstr(val(t2),0,0)~"   ")
+   SQL.ADD(" where NrOperacion  = '"~val(t3)~"'             ")
+endif
+
+SQL.NEW
+SQL.EXEC
+
+ACO(1, 0)
+ACO(2, 0)
+ACO(3, 5)
+ACO(4, 5)
+ACO(5, 5)
+ACO(6, 5)
+ACO(7, 5)
+ACO(8, 5)
+ACO(9, 5)
+ACO(10, 5)
+ACO(11, 5)
+SetFont(A:1..O:fac, 1)
+SetMargins(0, 2, 2, 0)
+LimitesVision(N:fac)
+Impresion(2, 0)
+Impresion(3, 0)

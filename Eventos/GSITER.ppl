@@ -1,0 +1,753 @@
+﻿MostrarCuadroDeMensajes
+HojaVisible(SI)
+CrearDialogo
+   Vehiculo1 : 'Vehiculo'                            ;1;1;;;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar un Vehiculo';NO;VAR('VEHICULODE')
+   Entero1   : 'Periodo'                             ;2;1;;;;Dialogo.Entero1>=2004 y Dialogo.Entero1<=2050;'Debe Ingresar un anio valido';NO;Anio(Fsys)
+   Entero2   : 'Mes'                                 ;2;2;;;;Dialogo.Entero2>=1 y Dialogo.Entero2<=12;'Debe Ingresar un mes valido';NO;Mes(Fsys)
+   Cantidad1 : 'Monto Minimo '                       ;3;1;;;;;;NO;VAR('SITERMIN')
+   Cliente1  : 'Cliente'                             ;3;2;;;;;;;
+   Check1    : 'Gen.Archivo'                         ;4;1;;;;;;;1
+   String    : 'Ar.Cli.Res'                          ;5;1;;NO;;;;;;VAR('SITERANUAL')~'Cli_Siter_Res'~Fecha(Dialogo.Fecha1,'yymm')~'.txt';;;
+   String1   : 'Ar.Cli.No.Res'                       ;6;1;;NO;;;;;;VAR('SITERANUAL')~'Cli_Siter_No_Res'~Fecha(Dialogo.Fecha1,'yymm')~'.txt';;;
+   String2   : 'Arch.Oper.'                          ;7;1;;NO;;;;;;VAR('SITERANUAL')~'Operaciones_Siter'~Fecha(Dialogo.Fecha1,'yymm')~'.txt';;;
+   Check2    : 'Clientes'                            ;8;1;;  ;NO;;;;1
+   Check3    : 'Depo Bancor'                         ;9;1;;  ;NO;;;;1
+   Check4    : 'No Bancor'                           ;10;1;;  ;NO;;;;1
+   Fecha1    : 'Fecha Desde'                         ;3;2;;NO;NO;Dialogo.Fecha1<>0;'Debe Ingresar una Fecha';NO;Fecha('01/'~Fstr(Dialogo.Entero2,0,0)~'/'~Fstr(Dialogo.Entero1,0,0));Fecha('01/'~Fstr(Dialogo.Entero2,0,0)~'/'~Fstr(Dialogo.Entero1,0,0))
+   Fecha2    : 'Fecha Hasta'                         ;4;2;;NO;NO;Dialogo.Fecha2<>0;'Debe Ingresar una Fecha';NO;FinDeMes(Dialogo.Fecha1,SI,'ARG');FinDeMes(Dialogo.Fecha1,SI,'ARG')
+FinDialogo
+
+if not Ok
+  Cancelar
+endif
+
+*(.'ABCDARIO'.)
+*(.'NUMERARIO'.)
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+
+message('Generando Operaciones Trading...')
+
+
+(.'GSITENTRAD'.)
+
+ACT(ba:0, 'BA')
+ACT(ca:0, 'CA')
+ACT(da:0, 'DA')
+
+SetFilaActual(4)
+ACT(a:fac, 'Informe SITER N 160/98  ')
+SetFont(a:fac..a:fac,3)
+
+SetFilaActual(5)
+ACN(w1,fac)
+ACT(a:fac,'Titulos Informe Mensual ')
+SetFont(a:fac..a:fac,3)
+
+ACT(a:fac+2, 'Vehiculo : '~Dialogo.Vehiculo1)
+ACT(a:fac+3, 'Fecha Desde: '~Dialogo.Fecha1)
+ACT(a:fac+4, 'Fecha Hasta: '~Dialogo.Fecha2)
+
+if Dialogo.Check1=1
+  ACT(h:fac+2,'Archivo Clientes Generado: '~Dialogo.String)
+  ACT(h:fac+3,'Archivo Operaciones Generado: '~Dialogo.String1)
+endif
+SetFont(a:fac+2..h:fac+4,2)
+
+SetFilaActual(fac+4)
+ACN(w2, fac)
+
+SetFilaActual(0)
+message('Recuperando Operaciones...')
+
+if Dialogo.Check2=1
+   message('Operaciones de Clientes depositandes en Bancor...')
+   (.'GSITENSQL1'.)
+Endif
+
+if Dialogo.Check3=1
+   if Dialogo.Check2=1
+      SQL.ADD(" Union All ")
+   endif
+message('Operaciones en cabeza de Bancor de Clientes depositandes en Bancor...')
+SQL.ADD("Select 'BANCOR' as Cliente1, O.NrOperacion, 'NO' as Persona, ")
+SQL.ADD("       O.TipoOp as TipoOp, '20' as CodComitente, ")
+SQL.ADD("       O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto, ")
+SQL.ADD("       Cant    = CASE WHEN O.PaseCB='0' THEN CASE WHEN O.TipoOp = 'CTC' THEN O.TotalNetoCli1 ELSE O.TotalBrutoCli1 END ELSE CASE WHEN O.PaseCB is Null THEN CASE WHEN O.TipoOp = 'CTC' THEN O.TotalNetoCli1 ELSE O.TotalBrutoCli1 END ELSE 0 END END,  ")
+SQL.ADD("       CantD   = CASE WHEN O.PaseCB='1' THEN O.TotalCaucion ELSE 0 END,  ")
+SQL.ADD("       CantT   = 0,  ")
+SQL.ADD("       Comis   = 0,  ")
+SQL.ADD("       ComiT   = 0,  ")
+SQL.ADD("       TipoEsp = CASE WHEN E.Tipo='PUB' THEN 1 ELSE 2 END  ")
+SQL.ADD("  From "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS B, ")
+SQL.ADD("       "~DBO~".ESPECIES E,"~DBO~".CLIENTES C ")
+SQL.ADD(" Where O.Vehiculo1   = '"~Dialogo.Vehiculo1~"' ") 
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD("  and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+endif
+
+SQL.ADD("   and O.NrOperacion = B.NrOperacion ")
+SQL.ADD("   and B.NrBit = 30 ")
+SQL.ADD("   and B.Valor = '0' ")
+SQL.ADD("   and O.FechaVto >= "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   and O.FechaVto <= "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("   and O.Cliente1 = C.Codigo ")
+SQL.ADD("   and O.Especie  = E.Codigo ")
+SQL.ADD("   and C.DeposDelComitente in ('489','0489','1125') ")
+SQL.ADD("   and O.TipoOp In ('TIV','TIC','TIFV','TIFC','TCOPRI') ")
+SQL.ADD(" Union All ")
+SQL.ADD("Select 'BANCOR' as Cliente1, O.NrOperacion, 'NO' as Persona, ")
+SQL.ADD("       TipoOp = CASE WHEN O.TipoOp='VTP' THEN 'CTP' ELSE 'VTP' END, '20' as CodComitente,  ")
+SQL.ADD("       O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto, ")
+SQL.ADD("       Cant    = 0,  ")
+SQL.ADD("       CantD   = 0,  ")
+SQL.ADD("       CantT   = 0,  ")
+SQL.ADD("       Comis   = CASE WHEN O.TipoOp='VTP' THEN O.TotalNetoCli1-O.TotalAux3-O.TotalIVA ELSE CASE WHEN O.TipoOp='CTP' THEN O.TotalNetoCli1+O.TotalAux3+O.TotalIVA ELSE 0 END END,  ")
+SQL.ADD("       ComiT   = 0,  ")
+SQL.ADD("       TipoEsp = CASE WHEN E.Tipo='PUB' THEN 1 ELSE 2 END  ")
+SQL.ADD("  From "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS B, ")
+SQL.ADD("       "~DBO~".ESPECIES E,"~DBO~".CLIENTES C ")
+SQL.ADD(" Where O.Vehiculo1   = '"~Dialogo.Vehiculo1~"' ") 
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD("  and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+endif
+
+SQL.ADD("   and O.NrOperacion = B.NrOperacion ")
+SQL.ADD("   and B.NrBit = 30 ")
+SQL.ADD("   and B.Valor = '0' ")
+SQL.ADD("   and O.FechaVto >= "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   and O.FechaVto <= "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("   and O.Cliente1 = C.Codigo ")
+SQL.ADD("   and O.Especie  = E.Codigo ")
+SQL.ADD("   and C.DeposDelComitente in ('489','0489','1125') ")
+SQL.ADD("   and O.TipoOp In ('VTP','CTP') ")
+SQL.ADD(" Union All ")
+SQL.ADD("Select 'BANCOR' as Cliente1, O.NrOperacion, 'NO' as Persona, ")
+SQL.ADD("       TipoOp, '20' as CodComitente, ")
+SQL.ADD("       O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto, ")
+SQL.ADD("       Cant    = 0,  ")
+SQL.ADD("       CantD   = 0,  ")
+SQL.ADD("       CantT   = 0,  ")
+SQL.ADD("       Comis   = CASE WHEN O.TipoOp='VTP' THEN O.TotalNetoCli1-O.TotalAux3-O.TotalIVA ELSE CASE WHEN O.TipoOp='CTP' THEN O.TotalNetoCli1+O.TotalAux3+O.TotalIVA ELSE 0 END END,  ")
+SQL.ADD("       ComiT   = CASE WHEN O.TipoOp='VTP' THEN O.TotalNetoCli1-O.TotalAux3-O.TotalIVA ELSE CASE WHEN O.TipoOp='CTP' THEN O.TotalNetoCli1+O.TotalAux3+O.TotalIVA ELSE 0 END END,  ")
+SQL.ADD("       TipoEsp = CASE WHEN E.Tipo='PUB' THEN 1 ELSE 2 END  ")
+SQL.ADD("  From "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS B, ")
+SQL.ADD("       "~DBO~".ESPECIES E,"~DBO~".CLIENTES C ")
+SQL.ADD(" Where O.Vehiculo1   = '"~Dialogo.Vehiculo1~"' ") 
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD("  and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+endif
+
+SQL.ADD("   and O.NrOperacion = B.NrOperacion ")
+SQL.ADD("   and B.NrBit = 30 ")
+SQL.ADD("   and B.Valor = '0' ")
+SQL.ADD("   and O.Cliente2 <> '' ")
+SQL.ADD("   and O.FechaVto >= "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   and O.FechaVto <= "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("   and O.Cliente1 = C.Codigo ")
+SQL.ADD("   and O.Especie  = E.Codigo ")
+SQL.ADD("   and O.TipoOp In ('VTP','CTP') ")
+SQL.ADD(" Union All ")
+SQL.ADD("Select 'BANCOR' as Cliente1, O.NrOperacion, 'NO' as Persona, ")
+SQL.ADD("       TipoOp = CASE WHEN O.TipoOp='VTP' THEN 'CTP' ELSE 'VTP' END, '20' as CodComitente, ")
+SQL.ADD("       O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto, ")
+SQL.ADD("       Cant    = 0,  ")
+SQL.ADD("       Cant    = 0,  ")
+SQL.ADD("       CantD   = 0,  ")
+SQL.ADD("       CantT   = 0,  ")
+SQL.ADD("       Comis   = CASE WHEN O.TipoOp='VTP' THEN O.TotalNetoCli1-O.TotalAux3-O.TotalIVA ELSE CASE WHEN O.TipoOp='CTP' THEN O.TotalNetoCli1+O.TotalAux3+O.TotalIVA ELSE 0 END END,  ")
+SQL.ADD("       TipoEsp = CASE WHEN E.Tipo='PUB' THEN 1 ELSE 2 END  ")
+SQL.ADD("  From "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS B, ")
+SQL.ADD("       "~DBO~".ESPECIES E,"~DBO~".CLIENTES C ")
+SQL.ADD(" Where O.Vehiculo1   = '"~Dialogo.Vehiculo1~"' ") 
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD("  and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+endif
+
+SQL.ADD("   and O.NrOperacion = B.NrOperacion ")
+SQL.ADD("   and B.NrBit = 30 ")
+SQL.ADD("   and B.Valor = '0' ")
+SQL.ADD("   and O.Cliente2 <> '' ")
+SQL.ADD("   and O.FechaVto >= "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   and O.FechaVto <= "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("   and O.Cliente1 = C.Codigo ")
+SQL.ADD("   and O.Especie  = E.Codigo ")
+SQL.ADD("   and O.TipoOp In ('VTP','CTP') ")
+Endif
+
+if Dialogo.Check4=1
+   if Dialogo.Check3=1
+      SQL.ADD(" Union All ")
+   endif
+message('Operaciones en cabeza de Bancor de Clientes No depositandes en Bancor...')
+SQL.ADD("Select 'BANCOR' as Cliente1, O.NrOperacion, 'NO' as Persona, ")
+SQL.ADD("       O.TipoOp as TipoOp, '20' as CodComitente, ")
+SQL.ADD("       O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto, ")
+SQL.ADD("       Cant    = CASE WHEN O.PaseCB='0' THEN CASE WHEN O.TipoOp = 'CTC' THEN O.TotalNetoCli1 ELSE O.TotalBrutoCli1 END ELSE CASE WHEN O.PaseCB is Null THEN CASE WHEN O.TipoOp = 'CTC' THEN O.TotalNetoCli1 ELSE O.TotalBrutoCli1 END ELSE 0 END END,  ")
+SQL.ADD("       CantD   = CASE WHEN O.PaseCB='1' THEN O.TotalCaucion ELSE 0 END,  ")
+SQL.ADD("       CantT   = 0,  ")
+SQL.ADD("       Comis   = 0,  ")
+SQL.ADD("       ComiT   = 0,  ")
+SQL.ADD("       TipoEsp = CASE WHEN E.Tipo='PUB' THEN 1 ELSE 2 END  ")
+SQL.ADD("  From "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS B, ")
+SQL.ADD("       "~DBO~".ESPECIES E,"~DBO~".CLIENTES C ")
+SQL.ADD(" Where O.Vehiculo1   = '"~Dialogo.Vehiculo1~"' ") 
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD("  and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+endif
+
+SQL.ADD("   and O.NrOperacion = B.NrOperacion ")
+SQL.ADD("   and B.NrBit = 30 ")
+SQL.ADD("   and B.Valor = '0' ")
+SQL.ADD("   and O.FechaVto >= "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   and O.FechaVto <= "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("   and O.Cliente1 = C.Codigo ")
+SQL.ADD("   and O.Especie  = E.Codigo ")
+SQL.ADD("   and (C.DeposDelComitente Not in ('489','0489','1125') or C.DeposDelComitente is Null) ")
+SQL.ADD("   and O.TipoOp In ('TIV','TIC','TIFV','TIFC','TCOPRI','CTC') ")
+SQL.ADD(" Union All ")
+SQL.ADD("Select 'BANCOR' as Cliente1, O.NrOperacion, 'NO' as Persona, ")
+SQL.ADD("       TipoOp = CASE WHEN O.TipoOp='VTP' THEN 'CTP' ELSE 'VTP' END, '20' as CodComitente, ")
+SQL.ADD("       O.Especie, O.ContraEspecie, O.FechaOp, O.FechaVto, ")
+SQL.ADD("       Cant    = 0,  ")
+SQL.ADD("       CantD   = 0,  ")
+SQL.ADD("       CantT   = 0,  ")
+SQL.ADD("       Comis   = CASE WHEN O.TipoOp='VTP' THEN O.TotalNetoCli1-O.TotalAux3-O.TotalIVA ELSE CASE WHEN O.TipoOp='CTP' THEN O.TotalNetoCli1+O.TotalAux3+O.TotalIVA ELSE 0 END END,  ")
+SQL.ADD("       ComiT   = 0,  ")
+SQL.ADD("       TipoEsp = CASE WHEN E.Tipo='PUB' THEN 1 ELSE 2 END  ")
+SQL.ADD("  From "~DBO~".OPERACIONES O,"~DBO~".OPERACIONESBITS B, ")
+SQL.ADD("       "~DBO~".ESPECIES E,"~DBO~".CLIENTES C ")
+SQL.ADD(" Where O.Vehiculo1   = '"~Dialogo.Vehiculo1~"' ") 
+if NoVacio(Dialogo.Cliente1)
+   SQL.ADD("  and O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+endif
+
+SQL.ADD("   and O.NrOperacion = B.NrOperacion ")
+SQL.ADD("   and B.NrBit = 30 ")
+SQL.ADD("   and B.Valor = '0' ")
+SQL.ADD("   and O.FechaVto >= "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("   and O.FechaVto <= "~IdxDate2(Dialogo.Fecha2))
+SQL.ADD("   and O.Cliente1 = C.Codigo ")
+SQL.ADD("   and O.Especie  = E.Codigo ")
+SQL.ADD("   and (C.DeposDelComitente Not in ('489','0489','1125') or C.DeposDelComitente is Null) ")
+SQL.ADD("   and O.TipoOp In ('VTP','CTP') ")
+Endif
+
+if Dialogo.Check2=1 o Dialogo.Check3=1 o Dialogo.Check4=1
+SQL.ADD("Order by Cliente1, TipoEsp, O.FechaVto, TipoOp, O.ContraEspecie, O.NrOperacion ")
+else
+Cancelar
+endif
+watch(SQL.Batch)
+
+Recorrer SQL
+
+  if Not Eqstr(TRIM(Val(v:1)),TRIM(fbn['Cliente1']))
+     if fac > 1
+      ACN(bo:fac-1, Round(Val(y1),2))
+      if Not EqStr(TRIM(Val(by:fac-1)),'NO')
+         *Messagebox('Persona con integrantes')
+         ACN(bp:fac-1, SQL("Select Count(*) from "~DBO~".INTEGRANTESCLI where Codigo='"~Val(v:1)~"' "))
+      else
+         ACN(bp:fac-1, 0)
+      endif
+      if Val(bp:fac-1)=0
+        ACN(bq:fac-1, 1)
+      else
+        ACN(bq:fac-1, Val(bp:fac-1))
+      endif
+      ACN(br:fac-1, Val(bo:fac-1))
+      if Val(br:fac-1)>=Dialogo.Cantidad1
+        ACT(bt:fac-1, 'OK')
+      endif
+      ACN(bu:fac-1, Val(x1))
+      ACN(bv:fac-1, fac-1)
+    endif
+
+    ACT(v:1, fbn['Cliente1'])
+    ACN(x1, fac)
+    ACN(y1, 0)
+  endif
+
+  ACT(ba:fac, fbn('Cliente1'))
+  ACT(bb:fac, fbn('NrOperacion'))
+  ACT(bc:fac, fbn('TipoOp'))
+  ACT(bd:fac, fbn('Especie'))
+  ACT(be:fac, fbn('ContraEspecie'))
+  ACD(bf:fac, fbn('FechaOp'))
+  ACD(bg:fac, fbn('FechaVto'))
+  ACN(bh:fac, fbn('TipoEsp'))
+  ACT(bx:fac, TRIM(fbn('CodComitente')))
+  ACT(by:fac, fbn('Persona'))
+
+*  ACN(bk:fac, iif(Eqstr(fbn['ContraEspecie'],'ARP'),1,Cotizacion(fbn['ContraEspecie']~'BNA','CON',,,fbn['FechaVto'],1)))
+  ACN(bk:fac, iif(Eqstr(fbn['ContraEspecie'],'ARP'),1,Cotizacion(fbn['ContraEspecie'],'CON',,,fbn['FechaVto'],1)))
+
+* AA 01-08-2012 no se informan los decimales Round2(Importe,0)  
+  * para C/V Dif.Precios
+
+  ACN(bi:fac, Round2((fbn('Cant')+fbn('CantD'))*Val(bk:fac),0))
+
+  * para C/V Dif.Precios Trading
+  ACN(bs:fac, Round2(fbn('CantT')*Val(bk:fac),0))
+
+  * para C/V Deriv.Financieros
+  ACN(bm:fac, Round2(fbn('CantD')*Val(bk:fac),0))
+  
+  * para C/V Comision
+  ACN(bj:fac, Round2(fbn('Comis')*Val(bk:fac),0))
+
+  * para C/V Comision Trading
+  ACN(bn:fac, Round2(fbn('ComiT')*Val(bk:fac),0))
+
+  * para C/V totales
+*  ACN(bl:fac, (fbn('Cant')+fbn('CantD')+fbn('Comis'))*Val(bk:fac))
+   ACN(bl:fac, Val(bi:fac)+Val(bj:fac))
+
+  SCN(y1, Val(bl:fac))
+
+Proximo
+
+If fac > 0
+  ACN(bo:fac, Round(Val(y1),2))
+  if Not EqStr(TRIM(Val(by:fac-1)),'NO')
+     ACN(bp:fac, SQL("Select Count(*) from "~DBO~".INTEGRANTESCLI where Codigo='"~Val(v:1)~"' "))
+     *messagebox('con integrantes')
+  else
+    ACN(bq:fac, 1)
+  endif
+  if Val(bp:fac)=0
+    ACN(bq:fac, 1)
+  else
+    ACN(bq:fac, Val(bp:fac))
+  endif
+  ACN(br:fac, Val(bo:fac)/Val(bq:fac))
+  if Val(br:fac)>=Dialogo.Cantidad1
+    ACT(bt:fac, 'OK')
+  endif
+  ACN(bu:fac, Val(x1))
+  ACN(bv:fac, fac)
+Endif
+
+ACN(x2,fac)
+
+SetFilaActual(0)
+Recorrer&i 1,Val(x2)
+  If EqStr(Val(bt:&i),'OK')
+     If Val(bp:&i)>0 y Not EqStr(TRIM(Val(by:&i)),'NO')    
+     *MessageBox('Con Integrantes')
+      SQL.ADD("Select E.TipoDocumento+E.NrDocumento as Docum, P.CUIT, P.CUIL, P.Provincia, P.Pais, E.TipoDocumento, E.NrDocumento ")
+      SQL.ADD("  from "~DBO~".ESTADOOPERATIVOINTEGRANTESCLI E, "~DBO~".PERSONAS P where E.NrOperacion= '"~Val(bb:&i)~"' ")
+      SQL.ADD("   and E.TipoDocumento+E.NrDocumento=P.TipoDocumento+P.NrDocumento ")
+      Recorrer SQL
+        ACT(ca:fac, Val(ba:&i))
+        ACT(cb:fac, fbn('Docum'))
+        ACN(cc:fac, &i)
+        ACN(cd:fac, Val(bu:&i))
+        ACN(ce:fac, Val(bv:&i))
+        ACN(cf:fac, 2)
+        ACT(cg:fac, Val(bx:&i))
+        ACT(ch:fac, Val(bh:&i))
+
+        SQL.ADD("Select TipoDocumento+NrDocumento as Codigo,* ")
+        SQL.ADD("  from "~DBO~".PERSONAS ")
+        SQL.ADD(" where TipoDocumento+NrDocumento='"~Val(cb:fac)~"' ")
+        Recorrer SQL
+          dfa
+          ACT(cs:fac, fbn['Codigo'])
+          if NoVacio(fbn('CUIT'))
+            ACT(ct:FAC, 'CIT')
+          else
+            if NoVacio(fbn('CUIL'))
+              ACT(ct:FAC, 'CIL')
+            endif
+          endif
+          if NoVacio(Val(ct:fac)) 
+            ACT(cu:fac, IIF(Eqstr(Val(ct:FAC),'CIT'),'CUIT','CUIL') )
+          else
+            ACT(cu:fac, fbn['TipoDocumento'])
+            if EqStr(fbn['TipoDocumento'],'CUIT'))
+              ACT(ct:FAC, 'CIT')
+            endif
+            if EqStr(fbn['TipoDocumento'],'CUIL'))
+              ACT(ct:FAC, 'CIL')
+            endif
+          endif
+          ACT(cv:fac, BuscarCampo('PROVINCIAS','Alias1','Codigo',fbn['Provincia']))
+          ACT(cw:fac, fbn['Pais'])
+          if NoVacio(Val(ct:fac)) 
+            if Eqstr(Val(ct:fac),'CIT') 
+              ACT(cy:fac, '80')
+              ACT(cz:fac, Pad0(Copy(fbn['CUIT'],1,11),11))
+            else      
+              ACT(cy:fac, '86')
+              ACT(cz:fac, Pad0(Copy(fbn['CUIL'],1,11),11))
+            endif
+          else
+            *-- Pregunto por Tipo de Documento ---- 
+            if Eqstr(Val(cu:fac),'DNI') 
+              ACT(cy:fac, '96')
+              ACT(cz:fac, Pad0(fbn['NrDocumento'],11))
+            else
+              if Eqstr(Val(cu:fac),'LE') 
+                ACT(cy:fac, '90')
+                ACT(cz:fac, Pad0(fbn['NrDocumento'],11))
+              else
+                if Eqstr(Val(cu:fac),'LC')         
+                  ACT(cy:fac, '89')
+                  ACT(cz:fac, Pad0(fbn['NrDocumento'],11))
+                else
+                  if Eqstr(Val(cu:fac),'CI')
+                    If NoVacio(Val(cv:fac)) y NoVacio(fbn['NrDocumento'])
+                      ACT(cy:fac, Pad0(fstr(Num(Val(cv:fac)),0),2))
+                      ACT(cz:fac, Pad0(Pad0(fbn['NrDocumento'],11))
+                    Else
+                      ACT(cy:fac, '99')
+                      ACT(cz:fac, '99999999999')
+                    Endif  
+                  else
+                    if Eqstr(Val(cu:fac),'PAS')
+                      ACT(cy:fac, '94')
+                      ACT(cz:fac, Pad0(fbn['NrDocumento'],11))
+                    else
+                      If NoVacio(Val(cw:fac)) y Not Eqstr(Val(cw:fac),'ARG')
+                        ACT(cx:fac, Trim(Copy(BuscarCampo('PAISES','CodPersonaFisica','Codigo',Val(cw:fac)) ,1,11)) )
+                        ACT(cy:fac, '80')
+                        ACT(cz:fac, Pad0(val(pi1),11))
+                      Else  
+                        ACT(cy:fac, '99')
+                        ACT(cz:fac, '99999999999')
+                      Endif  
+                    Endif
+                  endif 
+                endif    
+              endif
+            endif    
+          endif
+        Proximo
+            
+      Proximo
+    Else
+    *MessageBox('SIN Integrantes')
+      ifa
+      ACT(ca:fac, Val(ba:&i))
+      ACT(cb:fac, Val(ba:&i))
+      ACN(cc:fac, &i)
+      ACN(cd:fac, Val(bu:&i))
+      ACN(ce:fac, Val(bv:&i))
+      ACN(cf:fac, 1)
+      ACT(cg:fac, Val(bx:&i))
+      ACT(ch:fac, Val(bh:&i))
+
+      SQL.ADD("Select * ")
+      SQL.ADD("  from "~DBO~".CLIENTES ")
+      SQL.ADD(" where Codigo='"~Val(cb:fac)~"' ")
+      Recorrer SQL
+        dfa
+        ACT(cs:fac, fbn['Codigo'])
+        ACT(ct:fac, fbn['TipoInscripcion'])
+        if NoVacio(Val(ct:fac)) 
+          ACT(cu:fac, IIF(Eqstr(fbn['TipoInscripcion'],'CIT'),'CUIT','CUIL') )
+        endif
+        ACT(cv:fac, BuscarCampo('PROVINCIAS','Alias1','Codigo',fbn['Provincia']))
+        ACT(cw:fac, fbn['PaisDir'])
+        if NoVacio(Val(ct:fac)) 
+          if Eqstr(Val(ct:fac),'CIT') 
+            ACT(cy:fac, '80')
+          else      
+            ACT(cy:fac, '86')
+          endif
+          ACT(cz:fac, Pad0(Copy(fbn['CUIT'],1,11),11))
+        else
+          *-- Pregunto por Tipo de Documento ---- 
+          if Eqstr(Val(cu:fac),'DNI') 
+            ACT(cy:fac, '96')
+            ACT(cz:fac, Pad0(fbn['NrDocum'],11))
+          else
+            if Eqstr(Val(cu:fac),'LE') 
+              ACT(cy:fac, '90')
+              ACT(cz:fac, Pad0(fbn['NrDocum'],11))
+            else
+              if Eqstr(Val(cu:fac),'LC')         
+                ACT(cy:fac, '89')
+                ACT(cz:fac, Pad0(fbn['NrDocum'],11))
+              else
+                if Eqstr(Val(cu:fac),'CI')
+                  If NoVacio(Val(cv:fac)) y NoVacio(fbn['NrDocum'])
+                    ACT(cy:fac, Pad0(fstr(Num(Val(cv:fac)),0),2))
+                    ACT(cz:fac, Pad0(Pad0(fbn['NrDocum'],11))
+                  Else
+                    ACT(cy:fac, '99')
+                    ACT(cz:fac, '99999999999')
+                  Endif  
+                else
+                  if Eqstr(Val(cu:fac),'PAS')
+                    ACT(cy:fac, '94')
+                    ACT(cz:fac, Pad0(fbn['NrDocum'],11))
+                  else
+                    If NoVacio(Val(cw:fac)) y [Not Eqstr(Val(cw:fac),'ARG')]
+                      ACT(cx:fac, Trim(Copy(BuscarCampo('PAISES',iif(Eqstr(TRIM(fbn['Persona']),'SI'),'CodPersonaFisica','CodPersonaJuridica'),'CODIGO',Val(cw:fac)) ,1,11)) )
+                      ACT(cy:fac, '80')
+                      ACT(cz:fac, Pad0(val(pi1),11))
+                    Else  
+                      ACT(cy:fac, '99')
+                      ACT(cz:fac, '99999999999')
+                    Endif  
+                  Endif
+                endif 
+              endif    
+            endif
+          endif    
+        endif
+      Proximo
+    endif
+  endif
+Proximo
+ACN(x3, fac)
+
+SetFilaActual(0)
+Recorrer&i 1,Val(x3)
+  ACT(v:2, 'a')
+  ACN(v:3, 0)
+  ACN(v:4, 0)
+  Recorrer&j Val(cd:&i),Val(ce:&i)
+    * desde CH hasta CR
+
+    ACN(u:Mes(Val(bg:&j)), 1)
+
+*   cb:Nro.Documento, bh:TipoEspecie, bg: Mes fecha Vto
+*   ca:Cliente, bh:TipoEspecie, bg: Mes fecha Vto
+
+    If Not EqStr(Val(cb:&i),Val(v:2)) o Val(bh:&j)<>Val(v:3) o Mes(Val(bg:&j))<>Val(v:4)
+*    If Not EqStr(Val(ca:&i),Val(v:2)) o Val(bh:&j)<>Val(v:3) o Mes(Val(bg:&j))<>Val(v:4)
+      ifa
+      ACT(da:fac, Val(cb:&i))
+*      ACT(da:fac, Val(ca:&i))
+      ACN(db:fac, Val(bh:&j))
+      ACN(dc:fac, Mes(Val(bg:&j)))
+      ACT(v:2, Val(cb:&i))
+*      ACT(v:2, Val(ca:&i))
+      ACN(v:3, Val(bh:&j))
+      ACN(v:4, Mes(Val(bg:&j)))
+    Endif
+*    ACN(xy55,Val(bp:Val(ce:&i)))
+    ACN(xy55,1)
+
+    If Incluido(Val(bc:&j),'TIC|TIFC|CTP|TCOPRI|CTC')
+      * Compras
+      SCN(dd:fac, Val(bl:&j)/Val(xy55))
+
+      * Compras Dif.Precios
+      SCN(de:fac, Val(bi:&j)/Val(xy55))
+
+      * Compras Dif.Precios Trading
+      SCN(ga:fac, Val(bs:&j)/Val(xy55))
+
+      * Compras Deriv.Financieros
+      SCN(dp:fac, Val(bm:&j)/Val(xy55))
+
+      * Compras Comision
+      SCN(df:fac, Val(bj:&j)/Val(xy55))
+
+      * Compras Comision Trading
+      SCN(dn:fac, Val(bn:&j)/Val(xy55))
+    Else
+      * Ventas
+      SCN(dg:fac, Val(bl:&j)/Val(xy55))
+
+      * Ventas Dif.Precios
+      SCN(dh:fac, Val(bi:&j)/Val(xy55))
+
+      * Ventas Dif.Precios Trading
+      SCN(gb:fac, Val(bs:&j)/Val(xy55))
+
+      * Ventas Deriv.Financieros
+      SCN(dq:fac, Val(bm:&j)/Val(xy55))
+
+      * Ventas Comision
+      SCN(di:fac, Val(bj:&j)/Val(xy55))
+
+      * Ventas Comision Trading
+      SCN(do:fac, Val(bn:&j)/Val(xy55))
+    Endif
+    ACT(dk:fac, Val(cy:&i))
+    ACT(dl:fac, Val(cz:&i))
+    ACT(dm:fac, Val(cg:&i))
+  Proximo
+Proximo
+ACN(x4, fac)
+
+* Informe de Clientes - todos los integrantes de la cuenta
+
+SetFilaActual(Val(w2))
+SetFilaActual(fac+2)
+
+ACT(a:fac,'Registros de Clientes')
+SetFont(a:fac..p:fac,2)
+
+SetFilaActual(fac+2)
+
+ACT(a:fac, 'Cliente')
+ACT(b:fac, 'Integrante')
+ACT(c:fac, 'Razon Social')
+ACT(e:fac, 'Domicilio')
+ACT(g:fac, 'Localidad')
+ACT(h:fac, 'Provincia')
+ACT(i:fac, 'C.P.')
+ACT(j:fac, 'TDoc')
+ACT(k:fac, 'NrDoc')
+ACT(l:fac, 'Periodo')
+ACT(m:fac, 'Comitente')
+ACT(n:fac, 'Residente')
+
+AlinearCeldas(a:fac..n:fac,'I')
+SetFont(a:fac..n:fac,2)
+AgregarMarco(a:fac..n:fac,2,0,Exe('COLOR6'))
+
+Recorrer&i 1,Val(x3)
+  if Val(cf:&i)=1
+    SQL.ADD("Select E.RazonSocial as Apellido,'' as Nombre,E.Direccion as Calle, '' as numero,E.Localidad,E.CodigoPostal, C.CondicionGan as NoResi from "~DBO~".CLIENTES C, "~DBO~".ESTADOOPERATIVOCLIENTE E  where C.Codigo = E.Cliente  ")
+    SQL.ADD(" and  E.NrOperacion = '"~Val(bb:&i)~"' ")
+  else
+    SQL.ADD("Select Apellido, Nombre, Direccion as Calle,Numero, Localidad, CodigoPostal, Ganancias as NoResi from "~DBO~".ESTADOOPERATIVOINTEGRANTESCLI where NrOperacion = '"~Val(bb:&i)~"' ")
+
+  endif
+  Recorrer SQL
+        ACT(a:fac, Val(ca:&i))
+        If Not EqStr(Val(ca:&i),Val(cb:&i))
+          ACT(b:fac, Val(cb:&i))
+        Endif
+        ACT(c:fac, Pad(Trim(Mirt(fbn['Apellido']))~' '~Trim(Mirt(fbn['Nombre'])),30))
+        ACT(e:fac, Pad(Trim(Mirt(fbn['Calle']))~' '~Trim(Mirt(fbn['Numero'])),30))
+        ACT(g:fac, Pad(fbn['Localidad'],15))
+        ACT(h:fac, IIf(Vacio(Val(cv:&i)),'99',Pad0(fstr(Num(Val(cv:&i)),0),2)) )
+        ACT(i:fac, fbn['CodigoPostal'])
+        ACT(j:fac, Val(cy:&i))
+        ACT(k:fac, Val(cz:&i))
+        ACT(l:fac, Pad0(FStr(Val(v4),0,0),2))
+        ACT(m:fac, Val(cg:&i))
+        ACT(cj:&i, fbn['NoResi'])
+        ACT(n:fac, iif(EqStr(Val(cj:&i),'NOR'),'NO','SI'))
+        SetFont(a:fac..n:fac,1)
+  Proximo
+Proximo
+
+* Informe de Operaciones - todos los integrantes de la cuenta
+* AA 01-08-2012 Solo el primer integrante de la cuenta para no tener que rearmar si vuelve la apertura.
+
+SetFilaActual(fac+2)
+
+ACT(a:fac,'Registros de Operaciones')
+SetFont(a:fac..a:fac,2)
+
+SetFilaActual(fac+2)
+
+ACT(b:fac, 'Cliente')
+ACT(c:fac, 'Tipo')
+ACT(d:fac, 'Compras')
+ACT(e:fac, 'C.Comision')
+ACT(f:fac, 'C.Comi.Trad.')
+ACT(g:fac, 'C.Dif.Precios')
+ACT(h:fac, 'C.Deriv.Fin.')
+ACT(i:fac, 'C.Dif.Prec.Trad.')
+ACT(j:fac, 'Ventas')
+ACT(k:fac, 'V.Comision')
+ACT(l:fac, 'V.Comi.Trad.')
+ACT(m:fac, 'V.Dif.Precios')
+ACT(n:fac, 'V.Deriv.Fin.')
+ACT(o:fac, 'V.Dif.Prec.Trad.')
+ACT(p:fac, 'T.Doc')
+ACT(q:fac, 'Nro.Doc')
+ACT(r:fac, 'Periodo')
+
+AlinearCeldas(d:fac..n:fac,'D')
+SetFont(a:fac..r:fac,2)
+AgregarMarco(a:fac..r:fac,2,0,Exe('COLOR6'))
+
+ACT(xy66,'SITER2012')
+ACN(xy69,0)
+Recorrer&i 1,Val(x4)
+
+    if not EqStr(Val(xy65),Val(dm:&i))
+       ACT(xy65,Val(dm:&i))
+       ACN(xy69,Val(db:&i))
+    Endif
+
+  if not EqStr(Val(xy66),Val(db:&i)~Val(dm:&i)) y Val(xy69) <> 99
+     ACT(xy66,Val(db:&i)~Val(dm:&i))
+     ifa        
+     ACT(b:fac, Val(dm:&i))
+     if Val(db:&i)=1
+       ACT(c:fac, 'Titulos Publicos')
+     else
+       ACT(c:fac, 'Titulos Privados')
+     endif
+     ACN(d:fac, Val(dd:&i))
+     ACN(e:fac, Val(df:&i))
+     ACN(f:fac, Val(dn:&i))
+     ACN(g:fac, Val(de:&i))
+     ACN(h:fac, Val(dp:&i))
+     ACN(i:fac, Val(ga:&i))
+     ACN(j:fac, Val(dg:&i))
+     ACN(k:fac, Val(di:&i))
+     ACN(l:fac, Val(do:&i))
+     ACN(m:fac, Val(dh:&i))
+     ACN(n:fac, Val(dq:&i))
+     ACN(o:fac, Val(gb:&i))
+     ACT(p:fac, Pad0(Val(dk:&i),2))
+     ACT(q:fac, Val(da:&i))
+     ACT(r:fac, Pad0(FStr(Val(dc:&i),0,0),2))
+     SetFont(a:fac..r:fac,1)
+     FormatoCeldas(d:fac..o:fac,Exe('F2'))
+       if Val(db:&i) = 2
+          ACN(xy69,99)
+       Endif
+  Endif
+Proximo
+
+ACO(1,8)
+ACO(2,8)
+ACO(3,12)
+ACO(4,12)
+ACO(5,12)
+ACO(6,12)
+ACO(7,12)
+ACO(8,12)
+ACO(9,12)
+ACO(10,12)
+ACO(11,12)
+ACO(12,12)
+ACO(13,12)
+ACO(14,12)
+ACO(15,12)
+ACO(16,5)
+ACO(17,8)
+
+SetFilaActual(fac+2)
+ACT(a:fac, 'Fin del Informe')
+SetFont(a:fac,2)
+ACN(w3, fac)
+
+If Dialogo.Check1=1
+  Message("Borrando Archivo Original "~Dialogo.String)
+  BorrarArchivo(Dialogo.String)
+
+  Message("Borrando Archivo Original "~Dialogo.String1)
+  BorrarArchivo(Dialogo.String1)
+
+  Message("Borrando Archivo Original "~Dialogo.String1)
+  BorrarArchivo(Dialogo.String2)
+
+
+* Interfaces
+
+  (.'SITERTXT'.) 
+
+Endif
+
+Impresion(1,2)
+setprintfit(3,80)
+RangoTitulo(a:1..n:Val(w3),Val(w2))
+LimitesVision(r:Val(w3))

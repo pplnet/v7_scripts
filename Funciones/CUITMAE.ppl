@@ -1,0 +1,90 @@
+﻿*-----------------------------------------------------------------------------------------------------
+* Formato CUIT MAE
+* *C (Literal)          Pict X(02)
+* Cuit                  Pict X(11)
+* Clasificacion Cliente Pict X(02)
+*               02     FCI                           (Ver)
+*               03     Agente de Otro Mercado        (Ver)
+*               04     Otros Institucionales Locales (Ver)
+*               05     Persona Fisica Local           Persona=SI y Paisdir=Argentina 
+*               06     Persona Fisica Extranjera      Persona=SI y Paisdir<>Argentina
+*               07     Persona Juridica local         Persona=NO y Paisdir=Argentina
+*               08     Persona JuridicaExtranjera     Persona=NO y Paisdir<>Argentina
+*
+*-----------------------------------------------------------------------------------------------------
+* Cargar el NrDocumento en yy:1 y el Codigo de Cliente en yy:2 Devuelve el formato en yy:10
+*-----------------------------------------------------------------------------------------------------
+* FJL 30/10/20
+* Se agrega la opcion para FCI y Cia Seguros (o cualquier otro tipo especial) que tenga algo en Alias10 
+* Confirmar si se crea un campo nuevo en Clientes (Cod CNV)
+* 
+
+if EqStr(VAR('MCNOCUIT'),'SI')
+
+   Message('Armar CUIT-MAE para Cliente '~ Val(yy:2) ~'...')
+   ACT(yy:1,Copy(PAD(val(yy:1),11,' '),1,11))
+   ACT(yy:3,VAR('MCPAIS'))
+   ACT(yy:10,'')
+
+   SQL.ADD("SELECT Codigo Cliente, Persona, PaisDir, TipoInscripcion, CUIT, RazonSocial, CategDepositante, Alias10, CodigoCNV ")
+   SQL.ADD("  FROM   "~DBO~".CLIENTES ")
+   SQL.ADD(" WHERE Codigo='"~Val(yy:2)~"' ")
+   Recorrer SQL  
+     DFA
+     * FJL 23/08/21 - Issue 5092 - Cambio criterio FCI
+*     If Novacio(fbn('Alias10')) y [[EqStr(fbn['CategDepositante'],'FON') y EqStr(Copy(fbn('Alias10'),1,1),'F')] o [EqStr(fbn['CategDepositante'],'CSE') y EqStr(Copy(fbn('Alias10'),1,1),'S')] ]
+*       ACT(yy:10, '*'~fbn('Alias10'))
+     If fbn('CodigoCNV')>0 y [EqStr(fbn['CategDepositante'],'FON') o EqStr(fbn['CategDepositante'],'CSE')]
+       If EqStr(fbn['CategDepositante'],'FON')
+         ACT(yy:10, '*F'~FStr(fbn('CodigoCNV'),1,0) )
+       else
+         ACT(yy:10, '*S'~FStr(fbn('CodigoCNV'),1,0) )
+       endif
+     else
+       if Vacio(TRIM(val(yy:1)))
+         act(yy:1,FBN['CUIT'])
+       endif
+       act(yy:1,PAD(val(yy:1),11))
+       *-- Codigo 02 - FCI
+       If Eqstr(fbn['CategDepositante'],'FON')
+         ACT(yy:10,'*C'~Val(yy:1)~'02')
+       Else
+         *-- Codigo 03 - Agente de Otro Mercado
+         If Eqstr(fbn['CategDepositante'],'ABO')
+            ACT(yy:10,'*C'~Val(yy:1)~'03')
+         Else
+           *-- Codigo 04 - Otros Institucionales Locales
+           If Incluido(fbn['CategDepositante'],'CFI|CSE|')
+             ACT(yy:10,'*C'~Val(yy:1)~'04')
+           Else
+             *-- Codigo 05 - Persona Fisica Local
+             If EqStr(Trim(fbn['Persona']),'SI') y EqStr(Trim(fbn['PaisDir']),Val(yy:3))
+               ACT(yy:10,'*C'~Val(yy:1)~'05')
+             Else
+               *-- Codigo 06 - Persona Fisica Extranjera
+               If EqStr(Trim(fbn['Persona']),'SI') y Not EqStr(Trim(fbn['PaisDir']),Val(yy:3))
+                 ACT(yy:10,'*C'~Val(yy:1)~'06')
+               Else
+                 *-- Codigo 07 - Persona Juridica local
+                 If EqStr(Trim(fbn['Persona']),'NO') y EqStr(Trim(fbn['PaisDir']),Val(yy:3))
+                   ACT(yy:10, '*C'~Val(yy:1)~'07')
+                 Else
+                   *-- Codigo 08 - Persona JuridicaExtranjera
+                   If EqStr(Trim(fbn['Persona']),'NO') y Not EqStr(Trim(fbn['PaisDir']),Val(yy:3))
+                     ACT(yy:10,'*C'~Val(yy:1)~'08' )
+                   Else
+                     Message('Error en Tipo de Cuit')
+                     ACT(yy:10,'*C'~Val(yy:1)~'00' )
+                   Endif
+                 Endif
+               Endif
+             Endif
+           Endif
+         Endif
+       Endif
+     Endif
+     Break
+   Proximo
+Else
+   ACT(yy:10,'')
+Endif

@@ -1,0 +1,613 @@
+﻿
+* Saldos  --------------------------------------------------------------------------------- *
+* Alias5 de Especies muestra la cantidad de Decimales
+
+*1- transferencias comunes pendientes (CLIENTE 1)--------------------------------------------------------
+SQL.ADD("Select DISTINCT E.CodNumCajaValores, MP.Especie, MP.Cupon, T.Cliente1 as Cliente, 'PEND' Estado, ")
+SQL.ADD("       T.TipoTr2, MP.Cuenta, MP.Cantidad, 'DIR' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, T.Fecha2, T.Fecha3, T.CB2, T.RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, MP.FechaMov, MP.FechaEje, '1' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T JOIN "~DBO~".MOVPENDIENTES MP WITH (NOLOCK) ON T.NrTrans = MP.NrOperacion ")
+SQL.ADD(" JOIN "~DBO~".CUENTAS CT ON MP.Cuenta = CT.Codigo ")
+SQL.ADD(" JOIN "~DBO~".ESPECIES E ON MP.Especie=E.Codigo  ")
+SQL.ADD(" where  MP.FechaMov Between "~IdxDate2(Dialogo.Fecha2)~" and "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2 In ('DTP','RTP','DRT') ")
+*- No internas
+SQL.ADD("  and  T.CB2 <> '1' ")
+SQL.ADD("  and  MP.NrMov < 3 ")
+if NoVacio(Dialogo.Mercado1)
+  SQL.ADD("  and  T.Mercado1  = '"~Dialogo.Mercado1~"' ")
+endif
+SQL.ADD("  and T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and T.Cliente1 = MP.Cliente ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND MP.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND MP.Especie IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND MP.Especie Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+*2- transferencias comunes ejecutadas (CLIENTE 1)--------------------------------------------------------
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("Select  DISTINCT E.CodNumCajaValores, ME.Especie, ME.Cupon, T.Cliente1 as Cliente, 'EJEC' Estado, ")
+SQL.ADD("       T.TipoTr2, ME.Cuenta, ME.Cantidad, 'DIR' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, T.Fecha2, T.Fecha3, T.CB2, T.RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, ME.FechaMov, ME.FechaEje, '2' NrSel")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T JOIN "~DBO~".MOVEJECUTADOS ME WITH (NOLOCK) ON T.NrTrans = ME.NrOperacion ")
+SQL.ADD(" JOIN "~DBO~".CUENTAS CT ON ME.Cuenta = CT.Codigo ")
+SQL.ADD(" JOIN "~DBO~".ESPECIES E ON ME.Especie=E.Codigo  ")
+*-SQL.ADD(" where  ME.FechaEje = "~IdxDate2(Dialogo.Fecha1)~" ")
+
+*- matcheadas hoy
+SQL.ADD(" where    ((ME.FechaEje = "~IdxDate2(Dialogo.Fecha1)~" AND T.RB2=1) ")
+*- CONFORMADAS
+**SQL.ADD(" or (ME.FechaEje = "~IdxDate2(Dialogo.Fecha1)~" AND T.RB2=0 AND T.RB1=0 and ME.FechaMov = ME.FechaEje)  ")
+*- CONFORMADAS O COMUNES
+SQL.ADD(" or (ME.FechaEje = "~IdxDate2(Dialogo.Fecha1)~" AND T.RB2=0 AND T.RB1<=0 and ME.FechaMov = ME.FechaEje)  ")
+
+*- las fecha valor
+SQL.ADD(" or (ME.FechaMov = "~IdxDate2(Dialogo.Fecha1)~" AND ME.FechaMov < ME.FechaEje AND T.RB2=0))  ")
+
+*- No internas
+SQL.ADD("  and  T.CB2 <> '1' ")
+SQL.ADD("  and  ME.NrMov < 3 ")
+SQL.ADD("  and  T.TipoTr2 In ('DTP','RTP','DRT') ")
+if NoVacio(Dialogo.Mercado1)
+ SQL.ADD("  and  T.Mercado1  = '"~Dialogo.Mercado1~"' ")
+endif
+SQL.ADD("  and T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and T.Cliente1 = ME.Cliente ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND ME.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND ME.Especie IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND ME.Especie Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+*3 Transferencias Internas pendientes (CLIENTE 2)----------------------------------------------------------------------------------- *
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("Select  DISTINCT E.CodNumCajaValores, MP.Especie, MP.Cupon, MP.Cliente, 'PEND' Estado, ")
+SQL.ADD("       T.TipoTr2, MP.Cuenta, MP.Cantidad, 'INV' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, T.Fecha2, T.Fecha3, T.CB2, T.RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+** FJL 22/02/24 - Issue EXTBIND-5957
+*SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, MP.FechaMov, MP.FechaEje, '3' NrSel ")
+SQL.ADD("       T.CB1, T.Cliente4, ")
+SQL.ADD("       CASE WHEN T.TipoTr2='DRT' THEN CASE WHEN MP.Cuenta=T.Cuenta1 THEN T.Cuenta2 ELSE T.Cuenta1 END ELSE T.Cuenta2 END Cuenta2, ")
+SQL.ADD("       T.ComitenteExt, MP.FechaMov, MP.FechaEje, '3' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T JOIN "~DBO~".MOVPENDIENTES MP WITH (NOLOCK) ON T.NrTrans = MP.NrOperacion ")
+SQL.ADD(" JOIN "~DBO~".CUENTAS CT ON MP.Cuenta = CT.Codigo ")
+SQL.ADD(" JOIN "~DBO~".ESPECIES E ON MP.Especie=E.Codigo  ")
+SQL.ADD(" where MP.NrSaldo = 101 ")
+SQL.ADD("  and  MP.NrMov < 3 ")
+SQL.ADD("  and  MP.FechaMov between "~IdxDate2(Dialogo.Fecha2)~" and "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2 In ('DTP','RTP','DRT') ")
+SQL.ADD("  and  T.CB1 ='1' ")
+SQL.ADD("  and  T.CB2 ='1' ")
+if NoVacio(Dialogo.Mercado1)
+*  SQL.ADD("  and  T.Mercado2 = '"~Dialogo.Mercado1~"' ")
+  SQL.ADD("  and  MP.Mercado = '"~Dialogo.Mercado1~"' ")
+endif
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND MP.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND MP.Especie IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND MP.Especie Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+*4 Transferencias Internas ejecutadas  (CLIENTE 2)----------------------------------------------------------------------------------- *
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("select  DISTINCT E.CodNumCajaValores, ME.Especie, ME.Cupon, ME.Cliente, 'EJEC' Estado, ")
+SQL.ADD("       T.TipoTr2, ME.Cuenta, ME.Cantidad, 'INV' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, T.Fecha2,T.Fecha3, T.CB2, T.RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+** FJL 22/02/24 - Issue EXTBIND-5957
+*SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, ME.FechaMov, ME.FechaMov, '4' NrSel ")
+SQL.ADD("       T.CB1, T.Cliente4, ")
+SQL.ADD("       CASE WHEN T.TipoTr2='DRT' THEN CASE WHEN ME.Cuenta=T.Cuenta1 THEN T.Cuenta2 ELSE T.Cuenta1 END ELSE T.Cuenta2 END Cuenta2, ")
+SQL.ADD("       T.ComitenteExt, ME.FechaMov, ME.FechaEje, '4' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T JOIN "~DBO~".MOVEJECUTADOS ME WITH (NOLOCK) ON T.NrTrans = ME.NrOperacion ")
+SQL.ADD(" JOIN "~DBO~".CUENTAS CT ON ME.Cuenta = CT.Codigo ")
+SQL.ADD(" JOIN "~DBO~".ESPECIES E ON ME.Especie=E.Codigo  ")
+************************************
+**SQL.ADD("  where  ME.FechaEje = "~IdxDate2(Dialogo.Fecha1))
+
+*SQL.ADD("  and  ((ME.FechaEje > ME.FechaMov and ME.FechaMov = "~IdxDate2(Dialogo.Fecha1)~") ")
+*SQL.ADD("        or (ME.FechaEje = "~IdxDate2(Dialogo.Fecha1)~" )) ")
+************************************
+*-SQL.ADD(" where  ME.FechaEje = "~IdxDate2(Dialogo.Fecha1)~" ")
+
+*- matcheadas hoy
+SQL.ADD(" where    ((ME.FechaEje = "~IdxDate2(Dialogo.Fecha1)~" AND T.RB2=1) ")
+*- CONFORMADAS
+**SQL.ADD(" or (ME.FechaEje = "~IdxDate2(Dialogo.Fecha1)~" AND T.RB2=0 AND T.RB1=0 and ME.FechaMov = ME.FechaEje)  ")
+*- CONFORMADAS O COMUNES
+SQL.ADD(" or (ME.FechaEje = "~IdxDate2(Dialogo.Fecha1)~" AND T.RB2=0 AND T.RB1<=0 and ME.FechaMov = ME.FechaEje)  ")
+
+*- las fecha valor
+SQL.ADD(" or (ME.FechaMov = "~IdxDate2(Dialogo.Fecha1)~" AND ME.FechaMov < ME.FechaEje AND T.RB2=0))  ")
+************************************
+SQL.ADD("  and ME.NrSaldo = 101 ")
+SQL.ADD("  and  ME.NrMov < 3 ")
+
+SQL.ADD("  and  T.TipoTr2 In ('DTP','RTP','DRT') ")
+SQL.ADD("  and  T.CB1 ='1' ")
+SQL.ADD("  and  T.CB2 ='1' ")
+if NoVacio(Dialogo.Mercado1)
+*  SQL.ADD("  and  T.Mercado2 = '"~Dialogo.Mercado1~"' ")
+  SQL.ADD("  and  ME.Mercado = '"~Dialogo.Mercado1~"' ")
+endif
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND ME.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND ME.Especie IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND ME.Especie Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+*5 LCUPON Pendientes ---------------------------------------------------------------------------------------------------- *
+** FJL 23/02/24 - Issue EXTBIND-5957 - Comentario del 22/02/24 - En el Excel se pide sacar los cupones
+IF NO
+SQL.ADD("UNION ALL ")
+
+*SQL.ADD("select  DISTINCT E.CodNumCajaValores, E.Codigo as Especie, M.Cupon, M.Cliente, 'PEND' Estado, ")
+SQL.ADD("select  DISTINCT E.CodNumCajaValores, M.Especie as Especie, M.Cupon, M.Cliente, 'PEND' Estado, ")
+*SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad*A.PorAmCapital/100 as Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad as Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '5' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD(" JOIN "~DBO~".MOVPENDIENTES M WITH (NOLOCK) ON T.NrTrans = M.NrOperacion ")
+SQL.ADD(" JOIN "~DBO~".CUENTAS CT ON M.Cuenta = CT.Codigo ")
+SQL.ADD(" JOIN "~DBO~".AGENDACUPONES A  ON  T.Cupon1 = A.NrCupon ")
+SQL.ADD(" JOIN "~DBO~".ESPECIES E  ON  E.Codigo = A.Especie ")
+SQL.ADD(" where M.Especie   = E.Alias9 ")
+SQL.ADD("  and  T.Especie   = M.Especie")
+SQL.ADD("  and  M.FechaMov between "~IdxDate2(Dialogo.Fecha2)~" and "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2   = 'LCUPON' ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and  M.Mercado   = 'CV' ")
+SQL.ADD("  and  M.Cantidad*A.PorAmCapital/100 <> 0 ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND E.Codigo Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+*6 LCUPON Ejecutados ---------------------------------------------------------------------------------------------------- *
+SQL.ADD("UNION ALL ")
+
+*SQL.ADD("select  DISTINCT E.CodNumCajaValores, E.Codigo as Especie, M.Cupon, M.Cliente, 'EJEC' Estado, ")
+SQL.ADD("select  DISTINCT E.CodNumCajaValores, M.Especie as Especie, M.Cupon, M.Cliente, 'EJEC' Estado, ")
+*SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad*A.PorAmCapital/100 as Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad as Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '6' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD(" JOIN "~DBO~".MOVEJECUTADOS M WITH (NOLOCK) ON  T.NrTrans   = M.NrOperacion ")
+SQL.ADD(" JOIN  "~DBO~".CUENTAS CT  ON  M.Cuenta    = CT.Codigo ")
+SQL.ADD(" JOIN  "~DBO~".AGENDACUPONES A  ON  T.Cupon1    = A.NrCupon ")
+SQL.ADD(" JOIN  "~DBO~".ESPECIES E  ON  E.Codigo    = A.Especie ")
+SQL.ADD(" where M.Especie   = E.Alias9 ")
+SQL.ADD("  and  T.Especie   = M.Especie ")
+SQL.ADD("  and  M.FechaEje = "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2   = 'LCUPON' ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and  M.Mercado   = 'CV' ")
+*SQL.ADD("  and  M.Cantidad*A.PorAmCapital/100 <> 0 ")
+SQL.ADD("  and  M.Cantidad*A.PorAmCapital/100 <> 0 ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND E.Codigo Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+ENDIF
+*** -----------------------------------------------------------------
+
+*7 CUPON Pendientes - Cupones ----------------------------------------------------------------------------------------- *
+** FJL 23/02/24 - Issue EXTBIND-5957 - Comentario del 22/02/24 - En el Excel se pide sacar los cupones
+IF NO
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("select  DISTINCT E2.CodNumCajaValores, E.Codigo as Especie, M.Cupon, M.Cliente, 'PEND' Estado, ")
+SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E2.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '7' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVPENDIENTES M, "~DBO~".CUENTAS CT,  ")
+SQL.ADD(" "~DBO~".AGENDACUPONES A, "~DBO~".ESPECIES E, "~DBO~".ESPECIES E2  ")
+SQL.ADD(" where M.Especie   = E.Codigo      ")
+SQL.ADD("  AND  T.NrTrans   = M.NrOperacion ")
+SQL.ADD("  AND  M.Cuenta    = CT.Codigo ")
+SQL.ADD("  AND  T.Cupon1    = A.NrCupon ") 
+SQL.ADD("  AND  E2.Codigo   = A.Especie ")
+SQL.ADD("  AND  E2.Alias9   = E.Codigo  ")
+* El Movimiento es de la especie Cupon
+SQL.ADD("  and  T.Especie2  = M.Especie ")
+SQL.ADD("  and  M.FechaMov between "~IdxDate2(Dialogo.Fecha2)~" and "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2   = 'CUPON' ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and  M.Mercado   = 'CV' ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND E.Codigo Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+ENDIF
+*** -----------------------------------------------------------------
+
+*7.1 CUPON Pendientes - Bonos
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("select  DISTINCT E2.CodNumCajaValores, E.Codigo as Especie, M.Cupon, M.Cliente, 'PEND' Estado, ")
+SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E2.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '7.1' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVPENDIENTES M, "~DBO~".CUENTAS CT,  ")
+SQL.ADD(" "~DBO~".AGENDACUPONES A, "~DBO~".ESPECIES E, "~DBO~".ESPECIES E2  ")
+SQL.ADD(" where M.Especie   = E.Codigo      ")
+SQL.ADD("  AND  T.NrTrans   = M.NrOperacion ")
+SQL.ADD("  AND  M.Cuenta    = CT.Codigo ")
+SQL.ADD("  AND  T.Cupon1    = A.NrCupon ") 
+SQL.ADD("  and  E2.Codigo   = E.Codigo  ")
+SQL.ADD("  and  E2.Codigo   = A.Especie ")
+* El Movimiento es del bono
+SQL.ADD("  and  T.Especie   = M.Especie ")
+** FJL 21/02/24 - Issue EXTBIND-5957 - Solo si es el ultimo Cupon
+SQL.ADD("  and  T.Cupon2    = 0 ")
+SQL.ADD("  and  M.FechaMov between "~IdxDate2(Dialogo.Fecha2)~" and "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2   = 'CUPON' ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and  M.Mercado   = 'CV' ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND E.Codigo Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+*8 CUPON Ejecutados - Cupònes ------------------------------------------------------------------------------------ *
+** FJL 23/02/24 - Issue EXTBIND-5957 - Comentario del 22/02/24 - En el Excel se pide sacar los cupones
+IF NO
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("select  DISTINCT E2.CodNumCajaValores, E.Codigo as Especie, M.Cupon, M.Cliente, 'EJEC' Estado, ")
+SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E2.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '8' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVEJECUTADOS M, "~DBO~".CUENTAS CT, ")
+SQL.ADD(" "~DBO~".AGENDACUPONES A, "~DBO~".ESPECIES E, "~DBO~".ESPECIES E2 ")
+SQL.ADD(" where M.Especie   = E.Codigo      ")
+SQL.ADD("  and  T.NrTrans   = M.NrOperacion ")
+SQL.ADD("  and  M.Cuenta    = CT.Codigo ")
+SQL.ADD("  and  T.Cupon1    = A.NrCupon ")
+SQL.ADD("  and  E2.Alias9   = E.Codigo  ")
+SQL.ADD("  and  E2.Codigo   = A.Especie ")
+* El Movimiento es de la especie Cupon
+SQL.ADD("  and  T.Especie2  = M.Especie ")
+SQL.ADD("  and  M.FechaEje  = "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2   = 'CUPON' ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and  M.Mercado   = 'CV' ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD(" AND E.Codigo Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+ENDIF
+*** -----------------------------------------------------------------
+
+*8.1 CUPON Ejecutados - Bonos
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("select  DISTINCT E2.CodNumCajaValores, E.Codigo as Especie, M.Cupon, M.Cliente, 'EJEC' Estado, ")
+SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E2.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '8.1' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVEJECUTADOS M, "~DBO~".CUENTAS CT, ")
+SQL.ADD(" "~DBO~".AGENDACUPONES A, "~DBO~".ESPECIES E, "~DBO~".ESPECIES E2 ")
+SQL.ADD(" where M.Especie   = E.Codigo      ")
+SQL.ADD("  and  T.NrTrans   = M.NrOperacion ")
+SQL.ADD("  and  M.Cuenta    = CT.Codigo ")
+SQL.ADD("  and  T.Cupon1    = A.NrCupon ")
+SQL.ADD("  and  E2.Codigo   = E.Codigo  ")
+SQL.ADD("  and  E2.Codigo   = A.Especie ")
+* El Movimiento es del bono
+SQL.ADD("  and  T.Especie   = M.Especie ")
+** FJL 21/02/24 - Issue EXTBIND-5957 - Solo si es el ultimo Cupon
+SQL.ADD("  and  T.Cupon2    = 0 ")
+SQL.ADD("  and  M.FechaEje  = "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2   = 'CUPON' ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and  M.Mercado   = 'CV' ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD(" AND E.Codigo Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+*9 PDIVID Dividendos solo en Acciones
+SQL.ADD(" UNION ALL ")
+
+SQL.ADD("select  DISTINCT E.CodNumCajaValores, E.Codigo as Especie, M.Cupon, M.Cliente, 'PEND' Estado, ")
+SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '9' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD(" JOIN "~DBO~".MOVPENDIENTES M WITH (NOLOCK) ON T.NrTrans = M.NrOperacion ")
+SQL.ADD(" JOIN "~DBO~".CUENTAS CT ON M.Cuenta = CT.Codigo ")
+*SQL.ADD(" JOIN "~DBO~".ESPECIES E  ON  E.Codigo = T.Especie ")
+SQL.ADD(" JOIN "~DBO~".ESPECIES E  ON  E.Codigo = M.Especie ")
+SQL.ADD(" where M.FechaMov between "~IdxDate2(Dialogo.Fecha2)~" and "~IdxDate2(Dialogo.Fecha1))
+*SQL.ADD("  and  T.TipoTr2   = 'PDIVID' ")
+SQL.ADD("  and  T.TipoTr2   in ('PDIVID','CANJE','STOCK') ")
+* No toma de saldos Parking
+SQL.ADD("  AND  T.Cambio5   Not in ("~Pipe2Comillas(Val(sl:4))~") ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and  M.Mercado   = 'CV' ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND E.Codigo Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+
+**10 FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("select  DISTINCT E.CodNumCajaValores, E.Codigo as Especie, M.Cupon, M.Cliente, 'EJEC' Estado, ")
+SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '10' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD(" JOIN  "~DBO~".MOVEJECUTADOS M WITH (NOLOCK) ON  T.NrTrans   = M.NrOperacion ")
+SQL.ADD(" JOIN  "~DBO~".CUENTAS CT  ON  M.Cuenta    = CT.Codigo ")
+*SQL.ADD(" JOIN "~DBO~".ESPECIES E  ON  E.Codigo = T.Especie ")
+SQL.ADD(" JOIN "~DBO~".ESPECIES E  ON  E.Codigo = M.Especie ")
+SQL.ADD(" where M.FechaEje = "~IdxDate2(Dialogo.Fecha1))
+*SQL.ADD("  and  T.TipoTr2   = 'PDIVID' ")
+SQL.ADD("  and  T.TipoTr2   in ('PDIVID','CANJE','STOCK') ")
+* No toma de saldos Parking
+SQL.ADD("  AND  T.Cambio5   Not in ("~Pipe2Comillas(Val(sl:4))~") ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  and  M.Mercado   = 'CV' ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND M.Especie IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND M.Especie Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+** FJL 16/11/22 - Solo Cuentas con Depositante el Vehiculo
+SQL.ADD("  and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+
+**11 FJL 16/09/22 - Para que tome tambien los movimientos de la monedas
+** FJL 21/02/24 - Se sacan las monedas por issue EXTBIND-5957 - Informe Difer completo
+IF NO
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("select  DISTINCT E.CodNumCajaValores, E.Codigo as Especie, M.Cupon, M.Cliente, 'EJEC' Estado, ")
+*SQL.ADD("       T.TipoTr2, M.Cuenta, M.Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.TipoTr2, T.Cuenta1, M.Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '11' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD(" JOIN  "~DBO~".MOVEJECUTADOS M WITH (NOLOCK) ON  T.NrTrans   = M.NrOperacion ")
+SQL.ADD(" JOIN  "~DBO~".CUENTAS CT  ON  T.Cuenta1   = CT.Codigo ")
+SQL.ADD(" JOIN  "~DBO~".ESPECIES E  ON  E.Codigo    = M.Especie ")
+SQL.ADD(" where M.FechaEje = "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2   in ('PDIVID','CANJE','STOCK') ")
+* No toma de saldos Parking
+SQL.ADD("  AND  T.Cambio5   Not in ("~Pipe2Comillas(Val(sl:4))~") ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  AND  M.NrSaldo = 1 ")
+SQL.ADD("  AND  M.NrGrupo in (1,2) ")
+if NoVacio(Dialogo.Mercado1)
+  SQL.ADD("  and  T.Mercado1 = '"~Dialogo.Mercado1~"' ")
+endif
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND M.Especie IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND M.Especie Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+
+ENDIF
+*** FIN IF NO ***
+
+*12 LCUPON Ejecutados ---------------------------------------------------------------------------------------------------- *
+** FJL 21/02/24 - Se sacan las monedas por issue EXTBIND-5957 - Informe Difer completo
+IF NO
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("select E.CodNumCajaValores, M.Especie as Especie, M.Cupon, M.Cliente, 'EJEC' Estado, ")
+SQL.ADD("       T.TipoTr2, M.Cuenta, Sum(M.Cantidad) as Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '12' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD(" JOIN "~DBO~".MOVEJECUTADOS M WITH (NOLOCK) ON  T.NrTrans   = M.NrOperacion ")
+SQL.ADD(" JOIN  "~DBO~".CUENTAS CT  ON  M.Book    = CT.Codigo ")
+SQL.ADD(" JOIN  "~DBO~".ESPECIES E  ON  E.Codigo  = M.Especie ")
+SQL.ADD(" where T.Especie1   = M.Especie ")
+SQL.ADD("  and  M.FechaEje = "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2   = 'LCUPON' ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  AND  M.NrSaldo = 1 ")
+SQL.ADD("  AND  M.NrGrupo in (1,2) ")
+if NoVacio(Dialogo.Mercado1)
+  SQL.ADD("  and  CT.Mercado = '"~Dialogo.Mercado1~"' ")
+endif
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND E.Codigo Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+
+SQL.ADD("Group by E.CodNumCajaValores, M.Especie, M.Cupon, M.Cliente, ")  
+SQL.ADD("         T.Fecha1, T.FechaCargaSys, CONVERT(int,CT.NrDepositante), E.Alias5, E.Nombre,  ")
+SQL.ADD("         T.TipoTr2, M.Cuenta, T.NrTrans, T.Cliente2,  ")
+SQL.ADD("         T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje ")
+
+ENDIF
+*** FIN IF NO ***
+
+*13 FJL 21/12/22 - Por pedido en Issue 5957
+* DENOP-RENOP-TRNOP Sobre la cuenta Vista --------------------------------------------------------------------------- *
+** FJL 12/03/24 - Se sacan las monedas por issue EXTBIND-5957 - Informe Difer completo - Comentario del 4/3/24
+IF NO
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("select E.CodNumCajaValores, M.Especie as Especie, M.Cupon, M.Cliente, 'EJEC' Estado, ")
+SQL.ADD("       T.TipoTr2, M.Cuenta, Sum(M.Cantidad) as Cantidad, '' Tipo, T.NrTrans, T.Cliente2 Cliente2, ")
+SQL.ADD("       T.Fecha1, T.FechaCargaSys, 0 Fecha2, 0 Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre, ")
+SQL.ADD("       T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje, '13' NrSel ")
+SQL.ADD(" from  "~DBO~".TRANSACCIONES2 T ")
+SQL.ADD(" JOIN  "~DBO~".MOVEJECUTADOS M WITH (NOLOCK) ON  T.NrTrans   = M.NrOperacion ")
+SQL.ADD(" JOIN  "~DBO~".CUENTAS CT  ON  M.Cuenta    = CT.Codigo ")
+SQL.ADD(" JOIN  "~DBO~".ESPECIES E  ON  E.Codigo    = M.Especie ")
+SQL.ADD(" where T.Especie   = M.Especie ")
+SQL.ADD("  and  M.FechaEje = "~IdxDate2(Dialogo.Fecha1))
+SQL.ADD("  and  T.TipoTr2   in ('DENOP','RENOP','TRNOP') ")
+SQL.ADD("  and  T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("  AND  M.NrSaldo = 1 ")
+SQL.ADD("  AND  M.NrGrupo in (26) ")
+SQL.ADD("  and  CT.Mercado = '"~VAR('MERAUXLIQ')~"' ")
+IF NoVacio(Dialogo.ListaTabla1)
+   SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND E.Codigo Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+
+SQL.ADD("Group by E.CodNumCajaValores, M.Especie, M.Cupon, M.Cliente, ")  
+SQL.ADD("         T.Fecha1, T.FechaCargaSys, CONVERT(int,CT.NrDepositante), E.Alias5, E.Nombre,  ")
+SQL.ADD("         T.TipoTr2, M.Cuenta, T.NrTrans, T.Cliente2,  ")
+SQL.ADD("         T.CB1, T.Cliente4, T.Cuenta2, T.ComitenteExt, M.FechaMov, M.FechaEje ")
+
+ENDIF
+*** FIN IF NO ***
+
+*14 MAC 15/02/23 - Por pedido en Issue 5957
+* saldos Vigentes que no fueron impactados por mov --------------------------------------------------------------------------- *
+
+sql.add("union all")
+sql.add("select e.CodNumCajaValores,sld.Especie,sld.Cupon,sld.cliente,'SALD' Estado,                                                                                                                      ")
+sql.add(" 'SALD' TipoTr2,sld.Cuenta,sld.Saldo cantidad,'' Tipo,'' NrTrans, '' Cliente2,                                                                                                                   ")
+sql.add(" sld.fecha fechamov, sld.fecha fechamov, null Fecha2, null Fecha3, '0' CB2, '0' RB1, CONVERT(int,CT.NrDepositante) Comitente, E.Alias5, E.Nombre,                                                ")
+sql.add(" '0' CB1, '' Cliente4, '' Cuenta2, '' ComitenteExt, sld.fecha FechaMov, sld.fecha FechaEje, '14' NrSel ")
+sql.add(" --sld.*                                                                                                                                                                                         ")
+sql.add(" from dbo.saldosdia sld join dbo.clientes cli on sld.cliente = cli.codigo                                                                                                                        ")
+sql.add(" join dbo.especies e on sld.Especie = e.codigo                                                                                                                                                   ")
+sql.add(" join dbo.cuentas ct on sld.Cuenta = ct.Codigo                                                                                                                                                   ")
+sql.add(" where                                                                                                                                                                                           ")
+sql.add(" sld.nrsaldo in (101)  ")
+if NoVacio(Dialogo.Mercado1)
+  SQL.ADD("  and  CT.Mercado = '"~Dialogo.Mercado1~"' ")
+endif
+IF NoVacio(Dialogo.ListaTabla1)
+   *MAC cambio cliente
+   *SQL.ADD("  AND M.Cliente IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+   SQL.ADD("  AND cli.codigo IN ("~Pipe2Comillas(Dialogo.ListaTabla1)~") ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("  AND E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~")  ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("  AND E.Codigo Not IN ("~Pipe2Comillas(Dialogo.Lista2)~")  ")
+ENDIF
+sql.add(" and sld.Saldo <> 0 ")
+SQL.ADD(" and CT.Comitente = '"~Dialogo.Vehiculo1~"' ")
+*SQL.ADD(" and sld.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+*MAC Se retira exclusion de movpendientes y movejecutados porque cuando se liquida desaparece el saldo
+if dialogo.check1 = 1
+    sql.add(" and exists (select 1 from dbo.movejecutados me where me.nrsaldo=sld.nrsaldo and me.Especie=sld.especie and me.cliente = sld.cliente and me.Cuenta = sld.cuenta and me.fechamov ="~IdxDate2(Dialogo.Fecha1)~")")
+    *sql.add(" and exists (select 1 from dbo.movpendientes mp where mp.nrsaldo=sld.nrsaldo and mp.Especie=sld.especie and mp.cliente = sld.cliente and mp.Cuenta = sld.cuenta and mp.fechamov ="~IdxDate2(Dialogo.Fecha1)~")")
+endif
+sql.add(" and sld.fecha in (select max(fecha)              ")
+sql.add(" from dbo.saldosdia sld2                          ")
+sql.add(" where sld2.especie = sld.especie                 ")
+sql.add(" and sld2.cliente=sld.cliente                     ")
+sql.add(" and sld2.nrsaldo = sld.nrsaldo                   ")
+sql.add(" and sld.cuenta = sld2.cuenta                     ")
+*sql.add(" and sld2.fecha < "~IdxDate2(Dialogo.Fecha1)~")")
+*MAC es el saldo de la fecha inical menos 1
+sql.add(" and sld2.fecha < "~IdxDate2(Dialogo.Fecha1-1)~")")
+
+SQL.ADD(" Order By 1,2,18,10 ")
+

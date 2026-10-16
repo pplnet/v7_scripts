@@ -1,0 +1,129 @@
+﻿CrearDialogo
+  Fecha1       : 'Fecha Desde'       ;1;1;;;;Dialogo.Fecha1 <> 0;'Fecha Desde Invalida';NO;Fsys;
+  Fecha2       : 'Fecha Hasta'       ;1;2;;;;Dialogo.Fecha2 <> 0;'Fecha Hasta Invalida';NO;Fsys;
+  NrOperacion1 : 'Nro. CONU'         ;2;1;;;;Vacio(Dialogo.NrOperacion1) o Incluido(Dialogo.NrOperacion1, SQLSet(" Select NrOperacion From "~DBO~".OPERACIONES Where NrOperacion = '"~Dialogo.NrOperacion1~"' AND TipoOp='CONU'  "));'Debe ingresar una Operacion Valida';NO;;;;;;"TipoOp  = 'CONU'"
+FinDialogo
+
+if Not OK
+  Cancelar  
+endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+
+SetFilaActual(4)
+ACT(d:fac,'ICL - Detalle afectacion CONU')
+SetFont(d:fac,3)
+
+acn(w1,fac)
+if NoVacio(Dialogo.NrOperacion1)
+   act(a:fac+1,'CONU : '~Dialogo.NrOperacion1)
+Endif
+
+act(a:fac+2,'Fecha : '~Dialogo.Fecha1~' - '~Fecha(Dialogo.Fecha2))
+
+SetFont(a:Val(w1)..a:Val(w1)+2,2)
+
+SetFilaActual(fac+4)
+acn(w2,fac)
+ACT(a:fac,'Nro. Op.')
+ACT(b:fac,'Tipo Op.')
+ACT(c:fac,'CONU')
+* FJL 15/01/20 - Se agrega Termsheet ID
+ACT(d:FAC, 'TermSheet ID')
+ACT(e:fac,'Fecha Op.')
+ACT(f:fac,'Fecha Vto.')
+ACT(g:fac,'Cliente')
+ACT(h:fac,'Especie')
+ACT(i:fac,'Cantidad')
+
+AgregarMarco(a:Val(w2)..i:Val(w2),2,0,EXE('COLOR'))
+SetFont(a:Val(w2)..i:Val(w2),2)
+
+SQL.ADD("Select O.NrOperacion, O.Cliente1, O.Especie, TipoOp, Case When TipoOp = 'PICD' then Cantidad*-1 else Cantidad end Cantidad, ")
+SQL.ADD("       FechaVto, OperacionRef, Book1, FechaOp, ")
+SQL.ADD("       Precio1 as Tasa, TipoTasa as CodTasa, Spread, Especie1 as CodSpread ")
+SQL.ADD("  from "~DBO~".OPERACIONES O ")
+SQL.ADD(" where TipoOp in ('PICO','PICD')")
+if NoVacio(Dialogo.NrOperacion1)
+  SQL.ADD(" and OperacionRef = '"~Dialogo.NrOperacion1~"' ")  
+Endif
+SQL.ADD("   and FechaOp Between "~IdxDate2(Dialogo.Fecha1)~" and  "~IdxDate2(Dialogo.Fecha2)~" ")
+SQL.ADD(" UNION ")
+SQL.ADD("Select O.NrOperacion, O.Cliente1, Especie, 'PRECAN', C.Cantidad1*-1  Cantidad, ")
+SQL.ADD("       null FechaVto, C.NrOperacion1 OperacionRef, Book1, C.Fecha1, ")
+SQL.ADD("       O.Precio1 as Tasa, TipoTasa as CodTasa, Spread, O.Especie1 as CodSpread ")
+SQL.ADD("  from "~DBO~".OPERACIONES O , "~DBO~".CUOTAS C ")
+SQL.ADD(" where TipoOp in ('CONU') ")
+SQL.ADD("   and O.NrOperacion = C.NrOperacion ")
+SQL.ADD("   and C.Radio1 = 4 ")
+SQL.ADD("   and C.Fecha1 <= "~IdxDate2(Dialogo.Fecha2)~" ")
+if NoVacio(Dialogo.NrOperacion1)
+  SQL.ADD(" and O.NrOperacion = '"~Dialogo.NrOperacion1~"' ")  
+Endif
+SQL.ADD("   and FechaOp Between "~IdxDate2(Dialogo.Fecha1)~" and  "~IdxDate2(Dialogo.Fecha2)~" ")
+SQL.ADD(" Order by O.OperacionRef,O.NrOperacion, FechaOp ")
+watch(SQL.Batch)
+Recorrer SQL
+    ACT(a:fac,fbn('NrOperacion'))
+    ACLO(a:FAC, FBN('NrOperacion'))
+    ACT(b:fac,fbn('TipoOp'))
+    ACT(c:fac,fbn('OperacionRef'))
+    ACLO(c:FAC, FBN('OperacionRef'))    
+* FJL 15/01/20 - Se agrega Termsheet ID (CONU)
+    IF EqStr(fbn('TipoOp'),'PRECAN')
+* FJL 07/11/20 - Por Issue 4523 se cambia el campo del TS
+*      ACT(d:fac, BuscarCampo('OPERACIONES','ObservacDoc','NrOperacion',fbn('NrOperacion')))
+      ACT(d:fac, BuscarCampo('OPERACIONES','Termsheet','NrOperacion',fbn('NrOperacion')))
+    else    
+* FJL 07/11/20 - Por Issue 4523 se cambia el campo del TS
+*      ACT(d:fac, BuscarCampo('OPERACIONES','ObservacDoc','NrOperacion',fbn('OperacionRef')))
+      ACT(d:fac, BuscarCampo('OPERACIONES','Termsheet','NrOperacion',fbn('OperacionRef')))
+    endif
+    ACT(e:fac,fbn('FechaOp'))
+    *IF Not EqStr(fbn('TipoOp'),'PRECAN')
+      ACT(f:fac,fbn('FechaVto'))
+    *Endif
+    ACT(g:fac,fbn('Cliente1'))
+    ACT(h:fac,fbn('Especie'))
+    ACN(i:fac,fbn('Cantidad'))
+    IF Not EqStr(fbn('TipoOp'),'PRECAN')
+       SCN(to:1,fbn('Cantidad'))
+    Endif
+    FormatoCeldas(i:FAC..i:FAC,Exe('F2'))
+
+Proximo
+if NoVacio(Dialogo.NrOperacion1)
+   ACN(to:2,SQL("Select "~DBO~".SaldoCONU('"~Dialogo.NrOperacion1~"','"~IdxDate(Dialogo.Fecha2)~"',1)"))
+   ACT(g:fac+1,'Total Consumido -->')
+   ACN(i:fac+1,Val(to:1))
+   ACT(g:fac+2,'Total Disponible -->')
+   ACN(i:fac+2,Val(to:2))
+   FormatoCeldas(i:FAC+1..i:FAC+2,Exe('F2'))
+   SetFont(g:fac+1..i:fac+2,2)
+Endif
+
+SetFilaActual(fac+3)
+
+ACT(a:fac, 'FIN DEL LISTADO')
+SetFont(a:fac,2)
+
+ACO(1,7)
+ACO(2,6)
+ACO(3,8)
+ACO(4,10)
+ACO(5,7)
+ACO(65,9)
+ACO(7,9)
+ACO(8,10)
+ACO(9,10)
+ACO(10,10)
+ACO(11,12)
+
+LimitesVision(i:fac)
+Rangotitulo(a:1..i:fac,Val(w2)+1)
+SetPrintFit(3, 100)
+
+

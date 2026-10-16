@@ -1,0 +1,71 @@
+﻿CrearDialogo
+  NrOperacion1: 'Nr.Operacion';1;1;;;;;;;;;;;;"TipoOp in ('PMU','PME') and (CB6 is Null or CB6='0') "
+  Fecha1      : 'Fecha'       ;2;1;;NO;;;;;;FSys
+  Cantidad1   : 'Prev.Actual' ;3;1;;NO;;;;;;BuscarCampo('OPERACIONES','TotalRetenciones','NrOperacion',Dialogo.NrOperacion1);
+  Cantidad2   : 'Prev.Nueva'  ;3;2;;NoVacio(Dialogo.NrOperacion1) y Dialogo.Check1=1;NoVacio(Dialogo.NrOperacion1) y Dialogo.Check1=1;
+  Check1      : 'Procesa'     ;5;1;;NO;SI;;;;1
+FinDialogo
+
+if not ok
+  Cancelar
+endif
+
+if Dialogo.Check1=1
+  if Eqstr(BuscarCampo('OPERACIONES','CB6','NrOperacion',Dialogo.NrOperacion1),'1')
+     Cancelar('El prestamo esta cancelado')
+  endif
+
+  if Messagebox('Confirma Cambio de Prevision Préstamo '~Dialogo.NrOperacion1~' ?',3,1) = 1
+     ACN(ck1,1)
+  endif
+endif
+
+if [Dialogo.Check1=0] o [Dialogo.Check1=1 y val(ck1)=1]
+
+ SQL.ADD("Select FechaOp,Cliente1,Especie,Operador ")
+ SQL.ADD("from "~DBO~".OPERACIONES ")
+ SQL.ADD("where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+ Recorrer SQL
+  ACT(aa2,FBN['Cliente1'])
+  ACT(aa3,FBN['Especie'])
+  ACT(aa4,FBN['Operador'])
+ Proximo
+
+ if SQL("Select count(*) from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrSaldo=20 and FechaMov ='"~IdxDate(Dialogo.Fecha1)~"' ")>0
+   ACN(aa6,SQL("Select Cantidad from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Dialogo.NrOperacion1~"' and NrSaldo=20 and FechaMov ='"~IdxDate(Dialogo.Fecha1)~"' "))
+   if Dialogo.Check1=1
+    ACN(aa5,Dialogo.Cantidad2-Dialogo.Cantidad1+val(aa6))
+   else
+    ACN(aa5,Dialogo.Cantidad1)
+   endif
+
+   SQL.ADD("Update "~DBO~".MOVEJECUTADOS ")
+   SQL.ADD("set Cantidad = "~val(aa5)~" ")
+   SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   SQL.ADD("and   NrSaldo = 20 ")
+   SQL.ADD("and   FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' ")
+   SQL.NEW
+ else
+   if Dialogo.Check1=1
+     ACN(aa5,Dialogo.Cantidad2-Dialogo.Cantidad1)
+   else
+     ACN(aa5,Dialogo.Cantidad1)
+   endif
+
+   SQL.ADD("Insert into "~DBO~".MOVEJECUTADOS ")
+   SQL.ADD("(NrOperacion,FechaMov,Cliente,Especie, ")
+   SQL.ADD("Cantidad,Leyenda,NrSaldo,FechaEje,UsuarioEje,Bits) ")
+   SQL.ADD("values ")
+   SQL.ADD("('"~Dialogo.NrOperacion1~"','"~IdxDate(Dialogo.Fecha1)~"', '"~val(aa2)~"', '"~val(aa3)~"', ") 
+   SQL.ADD(" "~val(aa5)~" ,'Prevision',20,'"~IdxDate(Fsys)~"','"~val(aa4)~"','AV') ")
+   SQL.NEW
+ endif
+   SQL.EXEC
+
+ if Dialogo.Check1=1
+   SQL.ADD("Update "~DBO~".OPERACIONES set TotalRetenciones= "~Dialogo.Cantidad2~" ")
+   SQL.ADD("where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+   SQL.NEW
+   SQL.EXEC
+ endif
+endif

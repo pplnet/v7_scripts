@@ -1,0 +1,332 @@
+﻿**HojaVisible(SI)
+MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1:       'Fecha'       ; 1;;;;;;;;fsys
+  Vehiculo1:   'Vehiculo'     ;2;;;NO;;;;;Var('VEHICON')
+FinDialogo
+
+If Not Ok
+   Raise('Evento Cancelado')
+Endif
+
+ACT(ML:1, Var('MONELOCA'))
+ACN(NA:1, Var('ASINUM'))
+ACT(VC:1, Dialogo.Vehiculo1)
+ACD(FE:1, Habiles(Dialogo.Fecha1,-Var('FVALORCONT'),'ARG'))
+ACN(X:1, SQL("Select 1 from "~DBO~".VARIABLES where Codigo = 'DIASCONT' "))
+IF Val(X:1) = 1
+   ACN(X:1, Trunc(Var('DIASCONT'),0))
+ENDIF
+IF Val(X:1) < 1
+   ACN(X:1, 1)
+ENDIF
+***---Saldos en Garantia
+***---Falta definir manejo contable de garantias, teniendo en cuenta variable BLOQGARA (211|212|213|250)
+ACT(SG:1, Var('BLOQGARA'))
+***---Saldo Contable Libre disponibilidad(122). 
+ACT(SL:2, Var('SALDOPOCON'))
+ACD(X:2, Habiles(PriDeMes(Dialogo.Fecha1,SI)-1,Val(X:1),'ARG'))
+ACD(FV:1, PriDeMes(Dialogo.Fecha1, SI)-1)
+ACD(FV:2, PriDeMes(Val(FV:1), SI)-1)
+***---Habil Anterior
+ACD(FE:2, Habiles(Dialogo.Fecha1, -1, 'ARG', SI))
+***---Habil Siguiente
+ACD(FE:3, Habiles(Dialogo.Fecha1, 1, 'ARG', SI))
+***---PriDeMes
+ACD(PM:1, PriDeMes(Dialogo.Fecha1, SI))
+***---FinDeMes
+ACD(FM:1, FinDeMes(Dialogo.Fecha1, SI))
+
+ACD(FE:99, Dialogo.Fecha1)
+
+***---Elimino registros de corridas anteriores
+Recorrer&i val(FE:99), Habiles(val(FE:99),1,'ARG',SI)-1
+    SQL.ADD(" Delete "~DBO~".DETITOFIN WHERE Fecha = '"~Idxdate(&i)~"' ")
+    SQL.NEW
+    SQL.EXEC 
+Proximo
+
+*
+SQL.ADD(" Select Vehiculo Vehiculo1,Especie, Book, Estrategia CuentaCustodia,Tipoposicion Concepto, Sum(Cantidad) Cantidad from ( ")
+*SQL.ADD(" Select Vehiculo Vehiculo1,Especie, Sum(Cantidad) Cantidad from ( ")
+SQL.ADD(" Select NrSaldo,Vehiculo,Especie, Book, Estrategia, Tipoposicion, P.CantidadFin Cantidad ")
+SQL.ADD(" From "~DBO~".POSICIONES P ")
+SQL.ADD(" Where P.Vehiculo = P.Cliente ")
+* SQL.ADD("   AND P.Especie = 'AA19D' ")
+* SQL.ADD("   AND P.BOOK = 'BOOKPPL'  ")
+* SQL.ADD("   AND P.Estrategia = 'PROCRYL' ")
+SQL.ADD("   AND P.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   AND P.Fecha <= '"~IdxDate(Val(FE:99))~"' ")
+SQL.ADD("   AND P.NrSaldo = "~Fstr(Val(SL:2), 0, 0)~" ")
+SQL.ADD(" AND P.Fecha IN (Select Max(Fecha) From "~DBO~".POSICIONES P1 ")
+SQL.ADD("      Where P1.Especie = P.Especie ")
+SQL.ADD("      AND P1.Vehiculo = P.Vehiculo ")
+SQL.ADD("      AND P1.Cliente = P.Cliente ")
+SQL.ADD("      AND P1.NrSaldo = P.NrSaldo ")
+SQL.ADD("      AND P1.Book = P.Book ")
+SQL.ADD("      AND (P1.Cupon = P.Cupon OR ((P1.Cupon Is Null OR P1.Cupon = '' OR P1.Cupon = ' ') AND (P.Cupon Is Null OR P.Cupon = '' OR P.Cupon = ' ' ))) ")
+SQL.ADD("      AND (P1.Sector = P.Sector OR ((P1.Sector Is Null OR P1.Sector = '' OR P1.Sector =' ') AND (P.Sector Is Null OR P.Sector = '' OR P.Sector = ' ' ))) ")
+SQL.ADD("      AND (P1.CallPut = P.CallPut OR ((P1.CallPut Is Null OR P1.CallPut = '' OR P1.CallPut = ' ') AND (P.CallPut Is Null OR P.CallPut = '' OR P.CallPut = ' ' ))) ")
+SQL.ADD("      AND (P1.FechaEj = P.FechaEj OR ((P1.FechaEj  Is Null OR P1.FechaEj = '' OR P1.FechaEj = ' ') AND (P.FechaEj IS Null OR P.FechaEj = '' OR P.FechaEj = ' ' ))) ")
+SQL.ADD("      AND (P1.PrecioEj = P.PrecioEj OR ((P1.PrecioEj Is Null OR P1.PrecioEj = '' OR P1.PrecioEj =' ') AND (P.PrecioEj Is Null OR P.PrecioEj = '' OR P.PrecioEj = ' ' ))) ")
+SQL.ADD("      AND (P1.Estrategia = P.Estrategia OR ((P1.Estrategia Is Null OR P1.Estrategia = '' OR P1.Estrategia = ' ') AND (P.Estrategia Is Null OR P.Estrategia = '' OR P.Estrategia = ' ' ))) ")
+SQL.ADD("      AND P1.Fecha <= '"~IdxDate(Val(FE:99))~"') ")
+SQL.ADD("  ) as Aux ")
+SQL.ADD(" where Cantidad <> 0 ")
+SQL.ADD(" Group by Vehiculo,Especie,Book,Estrategia,Tipoposicion")
+**SQL.ADD(" Group by Vehiculo,Especie")
+
+*watch(sql.batch)
+Recorrer SQL
+
+     ACT(CC:1, fbn('CuentaCustodia'))
+     ACT(BK:1, fbn('Book'))
+     ACT(VH:1, fbn('Vehiculo1'))
+     ACT(CO:1, fbn('Concepto'))
+     ACN(CA:1, fbn('Cantidad'))
+      
+      SQL.ADD(" Select  Codigo,MonedaEmision, Tipo TipoEspecie, Issuer, Alias1 as EspBanTotal, VTeorico as VTeorico, Cotiza ")
+      SQL.ADD(" From "~DBO~".ESPECIES ")
+      SQL.ADD(" Where Codigo = '"~fbn('Especie')~"' ")
+      *watch(sql.batch)
+      Recorrer SQL 
+            ACT(MS:1,fbn('MonedaEmision'))
+            ACT(TS:1,fbn('TipoEspecie'))
+            ACT(IS:1,fbn('Issuer'))    
+            ACT(EB:1,fbn('EspBanTotal')) 
+            ACT(ES:1,fbn('Codigo'))      
+            ACT(EC:1,fbn('Cotiza')) 
+            ACN(VT:1,fbn('VTeorico'))
+     
+        ***---Busco Revalúos del dia
+*      *SQL.ADD(" Select sum(day) day from ( ")
+*      SQL.ADD(" Select R.Especie, R.Vehiculo Vehiculo1, R.Book, R.Cupon, R.NrSaldo, R.Day,  R.Vehiculo Cliente, ")
+*      SQL.ADD(" R.Estrategia as CuentaCustodia , R.TipoPosicion as Concepto   ")
+*      SQL.ADD(" From "~DBO~".RESULTADOS R ")
+*      SQL.ADD(" Where Especie = '"~val(ES:1)~"' ")
+*      SQL.ADD(" AND R.Book = '"~val(BK:1)~"' ")
+*      SQL.ADD(" AND R.NrSaldo   =  "~Fstr(Val(SL:2), 0, 0)~" ")
+*      SQL.ADD(" AND R.Fecha = '"~IdxDate(Val(FE:99))~"' ")
+*      SQL.ADD(" AND (R.Estrategia = '"~val(CC:1)~"' OR R.Estrategia Is Null OR R.Estrategia = '' OR R.Estrategia = ' ') ")
+*      SQL.ADD(" AND R.TipoResultado IN ('REVCON') ")
+*      SQL.ADD(" AND Round(R.Day, 0, 2) <> 0 ")
+*      *SQL.ADD("  ) as Aux ")
+*      *SQL.ADD(" Group by Especie ")
+*        
+*      *watch(sql.batch)
+*       Recorrer SQL
+*           ACN(RT:1, fbn('Day'))
+*       Proximo 
+       
+        Proximo
+        
+       **//Elimino datos de DETITOFIN para la fecha de corrida y la especie
+*       If Not EqStr(&especieAnterior, val(ES:1))
+*          let &especieAnterior val(ES:1)
+*          SQL.ADD("Delete "~DBO~".DETITOFIN WHERE Fecha = '"~Idxdate(val(FE:99))~"' and Especie ='"~val(ES:1)~"' ")
+*          SQL.NEW
+*          SQL.EXEC 
+*       EndIf
+
+       **//Inserto datos en DETITOFIN
+       let &valorResidual 0
+       let &valorContable 0
+       let &valorContadoValuado 0
+       
+       let &cotiza Val(EC:1)
+       let &especie Val(ES:1)
+       let &fechaRevaluo val(FE:99)
+       let &book val(BK:1)
+
+       let &nrCupon NrCupon2(&especie,val(FV:1))
+       let &tipoCupon SQL("Select TipoCupon from "~DBO~".AGENDACUPONES where NrCupon = '"~Fstr(&nrCupon, 0, 0)~"' AND Especie = '"~&especie~"' ") 
+       **TipoCupon
+       **1=Amort, 2 = Renta, 3 = Amort e renta, 0= Otros
+       If EqStr(&tipoCupon,'AMO')
+          let &tipoCupon 1
+       Else
+          If EqStr(&tipoCupon,'REN')
+             let &tipoCupon 2
+          Else
+              If EqStr(&tipoCupon,'RYA')
+                 let &tipoCupon 3
+              Else
+                 let &tipoCupon 0
+              EndIf  
+          EndIf
+       EndIf
+       let &cuentaContable RelacionCuenta('','','','','TIC','','','','TITULO','',val(MS:1),'','','',val(TS:1),'',val(BK:1),#VEHICULO,,,,,,#CTACUSTODIA,#CONCEPTO)           
+       let &valorContable val(CA:1)            
+       let &valorResidual iif(Val(VT:1) <> 0, Val(VT:1),1) *&valorContable
+
+       let &cotiNiif CotizacionNIIF(&especie, val(FE:99), &book)
+
+       IF Vacio(&cotiNiif)
+          let &precioNiif 1
+       ELSE
+          let &precioNiif &cotiNiif.PrecioCotizacionDeterminada
+       ENDIF
+
+       IF Not Eqstr(&cotiza, val(ML:1))
+          let &monedaAConvertir &cotiza
+          let &monedaExpresion val(ML:1)
+          let &valorContadoValuado  &valorContable * &precioNiif * #TCCONTABREVAL
+       ELSE
+          let &valorContadoValuado &valorContable * &precioNiif
+       ENDIF
+       **No sumamos mas los revaluos
+       **let &valorContadoValuado &valorContadoValuado + Val(RT:1)
+       let &valorContadoValuado &valorContadoValuado
+       
+       let &especieDeCorte val(ES:1)
+       
+       **-inserto datos en DETITOFIN-**
+       (.'INSTITOFIN'.)           
+Proximo
+*
+**-ENVIAMOS DATOS DE TIPA QUE NO TIENE POSICIONES-**
+
+**-inicializo variables de corte de control-**
+let &vehiculoDeCorte ''
+let &especieDeCorte  ''
+let &bookDeCorte     ''
+let &estrategiaDeCorte ''
+let &ctaContDeCorte ''
+let &valorContadoValuado 0
+let &valorContable 0
+ACT(MD:1,'')
+SQL.ADD("Select Codigo from MODELOSASIENTO where (TipoAsiento IN ("~Pipe2Comillas(Var('TIPASIC'))~") OR TipoAsiento IN ("~Pipe2Comillas(Var('TIPASRETID'))~")) AND TipoOp = 'TIPA' AND Vehiculo like '%|"~VAR('VEHICON')~"|%' ")
+recorrer SQL
+    If NoVacio(val(MD:1))
+        ACT(MD:1,val(MD:1)~'|')
+    EndIf
+    ACT(MD:1,val(MD:1)~fbn('Codigo'))
+proximo
+ACT(MD:1,val(MD:1)~'|')
+
+SQL.ADD("Select O.NrOperacion,O.Cantidad CantidadOperacion,O.Vehiculo1,O.Especie,O.Book1,O.Plaza1 as Estrategia, A1.Cuenta, A1.Cantidad1 ImporteAsiento")
+SQL.ADD("from "~DBO~".OPERACIONES O, "~DBO~".ASIENTOSCON A, "~DBO~".ASIENTOSCON1 A1 where ")
+SQL.ADD("O.NrOperacion = A.NrOperacion and A.NrUnicoAsiento = A1.NrUnicoAsiento and ")
+SQL.ADD("O.TipoOp = 'TIPA' and ")
+SQL.ADD("A1.TablaRC = 'TITCONREC' and ")
+SQL.ADD("A.Modelo IN ("~Pipe2Comillas(val(MD:1))~") and ")
+**-operaciones vigentes-**
+SQL.ADD("O.FechaVto > '"~IdxDate(Val(FE:99))~"' AND ")
+SQL.ADD("O.FechaOp <= '"~IdxDate(Val(FE:99))~"' ")
+SQL.ADD("Order by Vehiculo,Especie,Book1,Plaza1,Cuenta, NrOperacion ")
+watch(sql.batch)
+Recorrer SQL
+    let &vehiculoAProcesar   fbn('Vehiculo1')
+    let &especieAProcesar    fbn('Especie')
+    let &bookAProcesar       fbn('Book1')
+    let &estrategiaAProcesar fbn('Estrategia')
+    let &ctaContAProcesar    fbn('Cuenta')
+    let &cantidadDeOperacion fbn('CantidadOperacion')
+    let &operacion           fbn('NrOperacion')
+    let &importeDeAsiento   fbn('ImporteAsiento')
+    
+    **-Corte de control por Vehiculo,Especie,Book, Estrategia (Plaza1) y Cuenta-**
+    If Vacio(&vehiculoDeCorte) AND Vacio(&especieDeCorte) AND Vacio(&bookDeCorte) AND Vacio(&estrategiaDeCorte) AND Vacio(&ctaContDeCorte)
+        let &vehiculoDeCorte   fbn('Vehiculo1')
+        let &especieDeCorte    fbn('Especie')  
+        let &bookDeCorte       fbn('Book1')
+        let &estrategiaDeCorte fbn('Estrategia') 
+        let &ctaContDeCorte    fbn('Cuenta')
+    EndIf
+
+    If EqStr(&vehiculoAProcesar,&vehiculoDeCorte) AND EqStr(&especieAProcesar,&especieDeCorte) AND EqStr(&bookAProcesar,&bookDeCorte) AND EqStr(&estrategiaAProcesar,&estrategiaDeCorte) AND EqStr(&ctaContAProcesar,&ctaContDeCorte)
+        **-sumo cantidad de operaciones por corte de control-**
+        **-valor contable-**
+        **-Controlo si ya no sume el importe de la operacion, para no sumarlo 2 veces si existe mas de 1 asiento por operacion-**
+        if Not EqStr(&nrOperacionProc, fbn('NrOperacion')) OR Vacio(&nrOperacionProc)
+            let &valorContable &valorContable + &cantidadDeOperacion
+            let &nrOperacionProc    fbn('NrOperacion')
+        EndIf
+        let &valorContadoValuado &valorContadoValuado + &importeDeAsiento
+    Else
+        **-cambiaron los valores del corte de control-**
+        
+        **-antes de reiniciar los valores inserto en DETITOFIN-**
+        SQL.ADD(" Select  Codigo,MonedaEmision, Tipo TipoEspecie, Issuer, Alias1 as EspBanTotal, VTeorico as VTeorico, Cotiza ")
+        SQL.ADD(" From "~DBO~".ESPECIES ")
+        SQL.ADD(" Where Codigo = '"~&especieDeCorte~"' ")
+        Recorrer SQL
+            **-valor residual-**
+            ACN(VT:1,fbn('VTeorico'))
+        proximo
+        let &valorResidual iif(Val(VT:1) <> 0, Val(VT:1),1) * &valorContable
+        **-cuenta contable-**   
+        let &cuentaContable &ctaContDeCorte
+        **-tipo cupon-**
+        let &nrCupon NrCupon2(&especieDeCorte,val(FV:1))
+        let &tipoCupon SQL("Select TipoCupon from "~DBO~".AGENDACUPONES where NrCupon = '"~Fstr(&nrCupon, 0, 0)~"' AND Especie = '"~&especieDeCorte~"' ") 
+        **1=Amort, 2 = Renta, 3 = Amort e renta, 0= Otros
+        If EqStr(&tipoCupon,'AMO')
+           let &tipoCupon 1
+        Else
+           If EqStr(&tipoCupon,'REN')
+              let &tipoCupon 2
+           Else
+               If EqStr(&tipoCupon,'RYA')
+                  let &tipoCupon 3
+               Else
+                  let &tipoCupon 0
+               EndIf                
+           EndIf
+        EndIf
+        
+        **-inserto datos en DETITOFIN-**
+        (.'INSTITOFIN'.) 
+        
+        **-reinicio los valores de corte-**
+        let &vehiculoDeCorte   fbn('Vehiculo1')
+        let &especieDeCorte    fbn('Especie')  
+        let &bookDeCorte       fbn('Book1')
+        let &estrategiaDeCorte fbn('Estrategia') 
+        let &ctaContDeCorte    fbn('Cuenta')
+        **-reinicio totales-**
+        let &valorContadoValuado 0
+        let &valorContable 0
+        **-sumo cantidad de operaciones por corte de control-**
+        **-valor contable-**
+        let &nrOperacionProc    fbn('NrOperacion')
+        let &valorContable &valorContable + &cantidadDeOperacion
+        let &valorContadoValuado &valorContadoValuado + &importeDeAsiento
+        
+    EndIf
+
+Proximo
+
+IF NoVacio(&especieDeCorte)
+    **-Proceso ultimo registro de corte-**
+    SQL.ADD(" Select  Codigo,MonedaEmision, Tipo TipoEspecie, Issuer, Alias1 as EspBanTotal, VTeorico as VTeorico, Cotiza ")
+    SQL.ADD(" From "~DBO~".ESPECIES ")
+    SQL.ADD(" Where Codigo = '"~&especieDeCorte~"' ")
+    Recorrer SQL
+        **-valor residual-**
+        ACN(VT:1,fbn('VTeorico'))
+    proximo
+    let &valorResidual iif(Val(VT:1) <> 0, Val(VT:1),1) * &valorContable
+    **-cuenta contable-**   
+    let &cuentaContable &ctaContDeCorte
+    **-tipo cupon-**
+    let &nrCupon NrCupon2(&especieDeCorte,val(FV:1))
+    let &tipoCupon SQL("Select TipoCupon from "~DBO~".AGENDACUPONES where NrCupon = '"~Fstr(&nrCupon, 0, 0)~"' AND Especie = '"~&especieDeCorte~"' ") 
+    **1=Amort, 2 = Renta, 3 = Amort e renta, 0= Otros
+    If EqStr(&tipoCupon,'AMO')
+       let &tipoCupon 1
+    Else
+       If EqStr(&tipoCupon,'REN')
+          let &tipoCupon 2
+       Else
+           If EqStr(&tipoCupon,'RYA')
+              let &tipoCupon 3
+           Else
+              let &tipoCupon 0
+           EndIf                
+       EndIf
+    EndIf
+
+    **-inserto datos en DETITOFIN-**
+    (.'INSTITOFIN'.)
+ENDIF

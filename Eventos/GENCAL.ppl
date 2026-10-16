@@ -1,0 +1,420 @@
+﻿*** Lee de la tabla OPSIOPEL todo lo que esta sin procesar
+CrearDialogo
+  Check1: 'Procesa';1;2; ;SI;SI;;;;0;
+FinDialogo
+if Not OK
+  Cancelar
+endif
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+ACT(v5, VAR('AGESIOP'))
+
+ACT(s:1,  'Secuencia2')
+ACT(s:2,  'TipoOp')
+ACT(s:3,  'Especie')
+ACT(s:4,  'Cliente')
+ACT(s:5,  'Op.Contra')
+ACT(s:6,  'Mercado')
+ACT(s:7,  'Feriados')
+ACT(s:8,  'FechaOp')
+ACT(s:9,  'Plazo')
+ACT(s:10, 'FechaVto')
+ACT(s:11, 'Base')
+ACT(s:12, 'Cantidad')
+ACT(s:13, 'Tasa')
+ACT(s:14, 'Intrereses')
+ACT(s:15, 'TBC1')
+ACT(s:16, 'Ints. MAE')
+ACT(s:17, 'Monto MAE')
+ACT(s:18, 'Vehiculo')
+ACT(s:19, 'Book')
+ACT(s:20, 'Nr.Oper')
+ACT(s:21, 'Operador')
+ACT(s:22, 'TBC2')
+ACT(s:23, 'Cuenta1')
+ACT(s:24, 'Cuenta2')
+ACT(s:25, 'FormaCobro')
+ACT(s:26, 'FormaPago')
+ACT(s:27, 'VCan1')
+ACT(s:45, 'Observ')
+ACT(s:50, 'Rueda')
+
+SQL.ADD(" Select * from "~DBO~".OPSIOPEL ")
+SQL.ADD("  where CodigoNego in ("~Pipe2Comillas(Var('TIPONEGCAL'))~") ")
+SQL.ADD("    and Fecha      = '"~IdxDate(Fsys)~"'                     ")
+SQL.ADD("    and Carga       is null                                    ")
+SQL.ADD("    and IsNull(Procesado,'0') = '0'                          ")
+Recorrer SQL
+  ACN(z1,0)
+  ACT(a:FAC, fbn('Secuencia2'))
+  BorrarCeldas(t:1..t:60)
+  if SI
+    ***** Secuencia2
+    ACT(t:1, fbn('Secuencia2'))
+    ***** Tipo Op
+    if EqStr(fbn('Agente'),Val(v5))
+      ACT(t:2,'MMCO')
+      ACT(w2, fbn('AgenteContra'))
+      ***** Operador Contra
+      ACT(t:5, fbn('OperadorContra'))
+      ***** Operador
+      ACT(t:20, fbn('Operador'))
+    else
+      if EqStr(fbn('AgenteContra'),Val(v5))
+        ACT(t:2,'MMCT')
+        ACT(w2, fbn('Agente'))
+        ***** Operador Contra
+        ACT(t:5, fbn('Operador'))
+        ***** Operador
+        ACT(t:20, fbn('OperadorContra'))
+      else
+        SCN(z1,1)
+        ACN(26+FAC:2, 1)
+      endif
+    endif
+    ***** Especie
+    if EqStr(fbn('Moneda'),'D')
+      ACT(t:3, 'USD')
+    else
+      if EqStr(fbn('Moneda'),'$')
+        ACT(t:3, 'ARP')
+      else
+        SCN(z1,1)
+        ACN(26+FAC:3, 1)
+      endif
+    endif
+    ***** Cliente
+    ACN(w4, Num(Val(w2)))
+*    if Val(w4)=0 o Val(w4)=Num(Val(v5))
+*    endif
+    if EqStr(Val(w2),'000') o EqStr(Val(w2),Val(v5))
+      SCN(z1,1)
+      ACN(26+FAC:4, 1)
+    else
+      ***** Codigo Cliente
+*      ACT(t:4, SQL("Select Codigo From "~DBO~".CLIENTES Where NrMAE = "~FStr(Val(w4), 3, 0)))
+      ACT(t:4, SQL("Select Codigo From "~DBO~".CLIENTES Where NrMAE = '"~Val(w2)~"' "))
+    endif
+    ***** Mercado
+    if NoVacio(Val(t:3))
+      ACT(t:6, SQL("Select MercadoDef from "~DBO~".ESPECIES where Codigo='"~Val(t:3)~"'"))
+    else
+      SCN(z1,1)
+      ACN(26+FAC:6, 1)
+    endif
+    ***** Tabla Feriados
+*    if Incluido(fbn('Moneda'),'T')
+*      ACT(t:7, 'USA')
+*    else
+*      if Incluido(fbn('Moneda'),'M')
+*        ACT(t:7, 'ARG')
+*      else
+*        SCN(z1,1)
+*        ACN(26+FAC:7, 1)
+*      endif
+*    endif
+    if Incluido(fbn('Moneda'),'D')
+      ACT(t:7, 'USA')
+    else
+       if Incluido(fbn('Moneda'),'$')
+        ACT(t:7, 'ARG')
+      else
+        SCN(z1,1)
+        ACN(26+FAC:7, 1)
+      endif
+    endif
+    ***** Fecha Op
+    if EqStr(Copy(fbn('CodigoRegistro'),3,2),'05')
+      ACD(t:8, Fecha(fbn('Fecha_dd')~'/'~fbn('Fecha_mm')~'/'~fbn('Fecha_aa')))
+    else
+      SCN(z1,1)
+      ACN(26+FAC:8, 1)
+    endif
+    ***** Plazo
+    ACN(t:9, Num(fbn('Plazo')))
+    ***** Fecha Vto
+    ACD(t:10, Val(t:8)+Val(t:9))
+    ***** DiasAnio
+    ACN(t:11, 1)
+    ***** Cantidad
+    ACN(t:12, fbn('Cantidad'))
+    if Val(t:12)=0
+      SCN(z1,1)
+      ACN(26+FAC:12, 1)
+    endif
+    ***** Precio1
+    ACN(t:13, fbn('Tasa'))
+    if Val(t:13)=0
+      SCN(z1,1)
+      ACN(26+FAC:13, 1)
+    endif
+    ***** TotalIntereses
+    ACN(t:14, Val(t:12)*Val(t:13)*Val(t:9)/iif(Val(t:11)=0,36000,36500))
+    ***** TotalBrutoCli1
+    ACN(t:15, Val(t:12)+Val(t:14))
+    ***** Monto MAE
+    ACN(t:17, fbn('Valorizacion'))
+    ***** Intereses MAE
+    ACN(t:16, Val(t:17)-Val(t:12))
+    ***** Control Intereses
+    if Val(t:14)-Val(t:16)>0.01 o Val(t:14)-Val(t:16)<-0.01
+*      message('Diferencia de Intereses con Siopel')
+*      message(Val(t:2))
+*      message(Val(t:3))
+*      message(Val(t:4))
+*      message(Val(t:12))
+*      message(Val(t:16))
+*      messageBox('error intereses')
+    endif
+    ***** Vehiculo1
+    ACT(t:18, Var('VEHICULODE'))
+    ***** Book1
+    ACT(t:19, iif(EqStr(Val(t:18),'INGBA'),'BA',iif(EqStr(Val(t:18),'INGCURA'),'CU','SB'))~'FD')
+    ***** Operador
+    ACT(t:21, BuscarCampo('USUARIOS', 'Codigo', 'NroSIOPEL', Val(t:20)))
+    if Vacio(Val(t:21))
+      ACT(t:21, UsuarioActivo)
+      ACN(26+FAC:21, 1)
+    endif
+    ***** TotalBrutoCli2
+    if EqStr(Val(t:3),'USD')
+      ACN(t:22, Val(t:12))
+    else
+      ACN(t:22, Val(t:12)*CotizacionC(Val(t:3),,,,Val(t:8),1,SI,'USD'))
+    endif
+    ***** Cuenta1
+    ACT(t:23, CuentaCliente(Val(t:18),Val(t:3),,Val(t:6),Val(t:2)))
+    ***** Cuenta2
+    ACT(t:24, CuentaCliente(Val(t:4),Val(t:3),,Val(t:6),Val(t:2)))
+    ***** CuentaContable1
+    ACT(t:25, FormaPago(Val(t:3),Val(t:6),'COB',Val(t:2)))
+    ***** Cuenta2
+    ACT(t:26, FormaPago(Val(t:3),Val(t:6),'PAG',Val(t:2)))
+    ***** Observaciones
+    if Vacio(Val(t:3))
+      ACT(t:45, 'Cliente no existente en FPA. Nr MAE : '~Val(w2))
+    endif
+    ***** VCAN1
+    if EqStr(Val(t:2),'MMCO')
+      ACN(t:27, Val(t:22))
+    endif
+    ***** UDN2 (Rueda)
+    ACT(t:50, fbn('CodigoRueda'))
+          
+    ACN(z2, SQL("Select Count(*) from "~DBO~".OPERACIONES where NroAltaMAE='"~fbn('Secuencia')~"' and TipoOp='"~Val(t:2)~"' and FechaOp='"~IdxDate(Val(t:8))~"' and Especie='"~Val(t:3)~"' and Cliente1='"~Val(t:4)~"' and CB5='1' "))
+    if Val(z2)>0
+      SCN(z1,1)
+      ACN(26+FAC:15, 1)
+      ACT(26+FAC:16, SQL("Select NrOperacion from "~DBO~".OPERACIONES where NroAltaMAE='"~fbn('Secuencia')~"' and TipoOp='"~Val(t:2)~"' and FechaOp='"~IdxDate(Val(t:8))~"' and Especie='"~Val(t:3)~"' and Cliente1='"~Val(t:4)~"' and CB5='1' "))
+      if Dialogo.Check1=1
+        SQL.ADD("Update "~DBO~".OPSIOPEL ")
+        SQL.ADD("   Set Procesado   = '1',")
+        SQL.ADD("       Carga       = '1', ")
+        SQL.ADD("       NrOperacion = 'DUPLIC' ")
+        SQL.ADD(" where Secuencia2  = '"~Val(a:FAC)~"' ")
+        SQL.NEW
+        SQL.EXEC
+      endif
+    endif
+
+    if Val(z1)=0
+      ACT(b:FAC, 'OK')
+      if Dialogo.Check1=1
+        if EqStr(Val(t:18),'BKB')
+          ACT(w6,GetNumerador(1))
+        else
+          if EqStr(Val(t:18),'BS')
+            ACT(w6,GetNumerador(101))
+          else
+            ACT(w6,GetNumerador(201))
+          endif
+        endif
+        ACT(c:FAC, Val(w6))
+        Message('--- Nr: '~Val(w6)~' Tipo : '~Val(t:2)~' Especie : '~Val(t:3)~' Cliente : '~Val(t:4))
+        SQL.ADD("Insert into "~DBO~".OPERACIONES (")
+          
+        SQL.ADD("TipoOp, ")
+        SQL.ADD("FechaOp, ")
+        SQL.ADD("Especie, ")
+        SQL.ADD("Cliente1, ")
+          
+        SQL.ADD("Cantidad, ")
+        SQL.ADD("Precio1, ")
+        SQL.ADD("Plazo, ")
+        SQL.ADD("FechaVto, ")
+          
+        SQL.ADD("MB1, ")
+        SQL.ADD("TotalIntereses, ")
+        SQL.ADD("TotalBrutoCli1, ")
+        SQL.ADD("DiasAnio, ")
+          
+        SQL.ADD("Mercado, ")
+        SQL.ADD("Mercado2, ")
+        SQL.ADD("Corredor, ")
+        SQL.ADD("MB2, ")
+          
+        SQL.ADD("Vehiculo1, ")
+        SQL.ADD("Book1, ")
+        SQL.ADD("Operador, ")
+        SQL.ADD("TotalBrutoCli2, ")
+          
+        SQL.ADD("Precio3, ")
+        SQL.ADD("PorComision, ")
+        SQL.ADD("TotalComisiones, ")
+        if EqStr(Val(t:1),'MMCO')
+          SQL.ADD("TotalBrutoCli3, ")
+        endif
+          
+        SQL.ADD("Corporate, ")
+        SQL.ADD("RB6, ")
+        SQL.ADD("OperacionRef, ")
+        SQL.ADD("Cartera, ")
+          
+        SQL.ADD("Cuenta1, ")
+        SQL.ADD("Cuenta2, ")
+        SQL.ADD("Cuenta3,")
+        SQL.ADD("Cuenta4, ")
+          
+        SQL.ADD("TablaFeriados1, ")
+        SQL.ADD("MB6, ")
+        SQL.ADD("ObservacDoc, ")
+        SQL.ADD("CuentaContable1, ")
+          
+        SQL.ADD("CuentaContable2, ")
+        SQL.ADD("RB7, ")
+        SQL.ADD("DeltaTasa, ")
+        SQL.ADD("Spread, ")
+          
+        SQL.ADD("Cliente3, ")
+        SQL.ADD("Observaciones, ")
+        SQL.ADD("Numerador, ")
+        SQL.ADD("NrOperacion, ")
+          
+        SQL.ADD("CB5, ")
+        SQL.ADD("OpSIOPEL, ")
+        SQL.ADD("AceptaMAE, ")
+        SQL.ADD("FechaEnvioMAE, ")
+          
+        SQL.ADD("FechaAltaMAE, ")
+        SQL.ADD("NroAltaMAE, ")
+        SQL.ADD("UDN2, ")
+          
+        SQL.ADD("FechaCarga, ")
+        SQL.ADD("FechaCargaSys, ")
+        SQL.ADD("UsrInput ")
+
+        SQL.ADD(") values (")
+          
+        * TipoOp
+        SQL.ADD(" '"~Val(t:2)~"', ")
+        SQL.ADD(" '"~IdxDate(Val(t:8))~"', ")
+        SQL.ADD(" '"~Val(t:3)~"', ")
+        SQL.ADD(" '"~Val(t:4)~"', ")
+          
+        * Cantidad
+        SQL.ADD(" "~FStr(Val(t:12),0,2)~" , ")
+        SQL.ADD(" "~FStr(Val(t:13),0,8)~", ")
+        SQL.ADD(" "~FStr(Val(t:9),0,0)~" , ")
+        SQL.ADD(" '"~IdxDate(Val(t:10))~"', ")
+          
+        * MB1
+        SQL.ADD(" '0', ")
+        SQL.ADD(" "~FStr(Val(t:14),0,2)~", ")
+        SQL.ADD(" "~FStr(Val(t:15),0,2)~", ")
+        SQL.ADD(" '"~FStr(Val(t:11),0,0)~"', ")
+          
+        * Mercado
+        SQL.ADD(" '"~Val(t:6)~"', ")
+        SQL.ADD(" '"~Val(t:6)~"', ")
+        SQL.ADD(" '', ")
+        SQL.ADD(" '1', ")
+          
+        * Vehiculo1
+        SQL.ADD(" '"~Val(t:18)~"', ")
+        SQL.ADD(" '"~Val(t:19)~"', ")
+        SQL.ADD(" '"~Val(t:21)~"', ")
+        SQL.ADD(" "~FStr(Val(t:22),0,2)~", ")
+          
+        * Precio3
+        SQL.ADD(" 0, ")
+        SQL.ADD(" 0, ")
+        SQL.ADD(" 0, ")
+        if EqStr(Val(t:1),'MMCO')
+          SQL.ADD(" 0, ")
+        endif
+          
+        * Corporate
+        SQL.ADD(" '0', ")
+        SQL.ADD(" '0', ")
+        SQL.ADD(" '', ")
+        SQL.ADD(" '0', ")
+          
+        * Cuenta1
+        SQL.ADD(" '"~Val(t:23)~"', ")
+        SQL.ADD(" '"~Val(t:23)~"', ")
+        SQL.ADD(" '"~Val(t:24)~"', ")
+        SQL.ADD(" '"~Val(t:24)~"', ")
+          
+        * TablaFeriados1
+        SQL.ADD(" '"~Val(t:7)~"', ")
+        SQL.ADD(" '0', ")
+        SQL.ADD(" 'OK', ")
+        SQL.ADD(" '"~Val(t:25)~"', ")
+          
+        * CuentaContable2
+        SQL.ADD(" '"~Val(t:26)~"', ")
+        SQL.ADD(" '0', ")
+        SQL.ADD(" 0, ")
+        SQL.ADD(" 0, ")
+          
+        * Cliente3
+        SQL.ADD(" '"~Val(t:4)~"', ")
+        SQL.ADD(" '"~Val(t:45)~"', ")
+        SQL.ADD(" 10, ")
+        SQL.ADD(" '"~Val(w6)~"', ")
+          
+        * CB5
+        SQL.ADD(" '1', ")
+        SQL.ADD(" '"~Val(t:5)~"', ")
+        SQL.ADD(" 'SI', ")
+        SQL.ADD(" '"~IdxDate(Val(t:8))~"', ")
+           
+        * FechaAltaMAE
+        SQL.ADD(" '"~IdxDate(Val(t:8))~"', ")
+        SQL.ADD(" '"~fbn('Secuencia')~"', ")
+        SQL.ADD(" '"~Val(t:50)~"', ")
+          
+        * FechaCarga
+        SQL.ADD(" "~SQLAhora~", ")
+        SQL.ADD(" "~IdxDate2(FSys)~", ")
+        SQL.ADD(" '"~UsuarioActivo~"' ")
+          
+        SQL.ADD(")")
+        SQL.NEW
+
+        SQL.ADD("Update "~DBO~".OPSIOPEL ")
+        SQL.ADD("   Set Procesado   = '1',")
+        SQL.ADD("       Carga       = '1', ")
+        SQL.ADD("       NrOperacion = '"~Val(w6)~"' ")
+        SQL.ADD(" where Secuencia2  = '"~Val(a:FAC)~"' ")
+        SQL.NEW
+        SQL.EXEC
+
+        Message('Modificar Operacion '~Val(w6))
+        ModificarOperacion(Val(w6),0,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,SI,NO,0,NO)
+        Message('Fin Modificar Opracion')
+          
+      endif
+    endif
+  else
+    if Dialogo.Check1=1
+      SQL.ADD("Update "~DBO~".OPSIOPEL ")
+      SQL.ADD("   Set Procesado  = '1',")
+      SQL.ADD("       Carga      = '2' ")
+      SQL.ADD(" where Secuencia2 = '"~Val(a:FAC)~"' ")
+      SQL.NEW
+      SQL.EXEC
+    endif
+  endif
+proximo

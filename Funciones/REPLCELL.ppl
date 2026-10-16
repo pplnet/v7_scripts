@@ -1,0 +1,92 @@
+﻿def ReemplazarPorCeldaV (str,Celdas,ValoresCeldas)
+    
+    *El primer parámetro es un string y los siguientes dos son arrays() de strings
+    
+    *Es obligatorio que el formato de las celdas incluídas en el texto a reemplazar sea: '~Val(A:1)~' (los dos puntos pueden excluirse)
+    *La palabra 'Val' debe estar capitalizada (primera letra mayúscula y el resto en minúscula)
+    
+    *El segundo y tercer parámetro deben mantener sus posiciones relativas: array("A1","A2") , array(Val(A1),Val(A2)).
+    *Es decir, la celda "A1" debe coincidir en índice con el Val(A1) del segundo array.
+    
+    *La función toma un string (texto) y busca dentro del mismo cadenas del estilo: '~Val(A:1)~' (con las comillas simples incluídas)
+    *Luego reemplaza las coincidencias de celdas por sus respectivos valores (por esto es que deben coincidir el segundo y tercer parámetro, como si fueran clave->valor)
+    
+    *Retorna el texto con sus respectivos valores de celda reemplazados.
+
+    let &Txt str
+    let &TxtFinal ""
+    let &CeldaAReemplazar ""
+    let &ArrCeldas Celdas
+    let &ArrValCeldas ValoresCeldas
+    
+    *Los sigueintes valores nos cuentan las cantidades de elementos de los array (ambos deben coincidir en cantidad de elementos)
+    *Si no coinciden en cantidad, se arroja un error.
+    &LargoArray1 0
+    &LargoArray2 0
+    
+    for &i in &ArrCeldas
+        let(&LargoArray1, &LargoArray1 + 1)
+    end
+    
+    for &i in &ArrValCeldas
+        let(&LargoArray2, &LargoArray2 + 1)
+    end
+
+    if &LargoArray1 <> &LargoArray2
+        throw("El largo de los arreglos no coincide.")
+    endif
+
+    ************************************************************
+    *RECORRE EL STRING PARÁNDOSE EN LOS VALORES PARA REEMPLAZAR
+    ************************************************************
+
+    while
+
+        let(&Pos1, Posicion("'~Val(", &Txt, 1))
+        let(&Pos2, Posicion(")~'", &Txt, 1))
+        
+        *Si no hay mas posiciones para reemplazar, termina la función.
+        if (&Pos1 = 0 || &Pos2 = 0)
+            break
+        endif
+        
+        *Extraemos el valor a reemplazar y particionamos los strings
+        let(&TxtFinal, &TxtFinal ~ Copy(&Txt, 1, &Pos1 - 1))
+        let(&CeldaAReemplazar, Copy(&Txt, &Pos1, &Pos2 - &Pos1 + 3))
+        let(&Txt, Copy(&Txt, &Pos2 + 3, Longitud(&Txt)))
+        
+        *Limpiamos el valor a reemplazar de caracteres especiales '~Val(:)~' y convertimos a mayusculas
+        let(&CeldaAReemplazar, Copy(&CeldaAReemplazar, 7, Posicion(")",&CeldaAReemplazar,7) - 7))
+        let(&CeldaAReemplazar, Reemplazar(&CeldaAReemplazar, ":",""))
+        let(&CeldaAReemplazar, Mayusculas2(&CeldaAReemplazar))
+        
+        *Una variable tipo FLAG nos indica si efectivamente se efectuó el reemplazo. (0 = FALSO, 1 = VERDADERO)
+        *Si no se vuelve verdadera, lo más probable es que haya un error en el pasaje de parámetros de la función.
+        let &Bandera 0
+        
+        *Se busca en el arreglo de celdas pasado, el valor de la celda correspondiente:
+            
+        Recorrer &i 0, &LargoArray1 - 1
+        if EqStri(&CeldaAReemplazar, itemAt(&ArrCeldas,&i))
+                let &Bandera 1
+                let(&CeldaAReemplazar, itemAt(&ArrValCeldas,&i))
+            endif
+        Proximo
+        
+        *Si la bandera se activó, el reemplazo se efectuó correctamente, de lo contrario se lanza un error:
+        if &Bandera = 1
+            let(&TxtFinal, &TxtFinal ~ &CeldaAReemplazar)
+        else
+        throw("Valor de celda no encontrada: " ~ &CeldaAReemplazar ~". Asegúrese de haber pasado correctamente los parámetros por ej.: 'string, array(c1,c2), array(val(c1),val(c2)'")
+        endif
+        
+    next
+
+    *Si ya no hubieron más coincidencias para reemplazar, se concatena lo que quedó del string original
+    if(Longitud(&Txt) > 0)
+        let(&TxtFinal, &TxtFinal ~ &Txt)
+    endif
+
+    return &TxtFinal
+    
+end

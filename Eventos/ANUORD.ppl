@@ -1,0 +1,112 @@
+﻿Repetir
+CrearDialogo
+  NrOrden1    : 'Orden'    ;;;;;;NoVacio(Dialogo.NrOrden1);'Debe Ingresar una Orden';NO;;;;;;" FechaOrden >= "~IdxDate2(Habiles(Fsys,-Var('FVALORORD')))~" and TipoOrden Like 'OTI%' and NrOrden in (Select NrOperacion from OPERACIONESBITS where NrOperacion = NrOrden and Valor = '1'  and NrBit in (9,11)) "
+  Check1      : 'Procesa'  ;;;;;;;;;0;    
+FinDialogo
+if Not OK
+  Cancelar
+endif
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+ SQL.ADD("Select OB.Nrbit, O.* from "~DBO~".ORDENES O, "~DBO~".OPERACIONESBITS OB ")
+ SQL.ADD(" where NrOrden     = '"~Dialogo.NrOrden1~"' ")
+ SQL.ADD("   and NrOrden     = OB.NrOperacion ")
+ SQL.ADD("   and Valor       = '1' ")
+ SQL.ADD("   and FechaOrden >= "~IdxDate2(Habiles(Fsys,-Var('FVALORORD')))~" ")
+ SQL.ADD("   and TipoOrden Like 'OTI%' ")
+ SQL.ADD("   and NrOrden in (Select NrOperacion from OPERACIONESBITS where NrOperacion = NrOrden and Valor = '1'  and NrBit in (9,11)) ")
+ watch(sql.batch())
+ ACN(xy1,0)
+ recorrer SQL
+
+    ACT(c:1, fbn('NrOperacion2'))
+    ** Verifica si Operacion Val(C1) esta liquidada
+    ACN(xy2,SQL("select top 1 1 from "~DBO~".MOVEJECUTADOS where NrOperacion = '"~Val(c:1)~"' "))
+    If Val(xy2) = 1
+       Cancelar('La orden no puede anularse porque la operación '~Val(c:1)~' asociada a la orden seleccionada se encuentra liquidada')
+    Endif
+    ACT(c:2, fbn('NrOrden'))
+    ACT(c:3, fbn('TipoOrden'))
+    ACD(c:4, fbn('FechaOrden'))
+    ACD(c:5, fbn('FechaVto'))
+    ACT(c:6, fbn('CantidadToTalOrden'))
+    ACT(c:7, fbn('Cantidad1'))
+    ACT(c:8, fbn('Especie'))
+    ACT(c:9, fbn('Mercado2'))
+    ACT(c:10, fbn('Leyenda3'))
+    ACN(c:11, fbn('MB2'))
+    ACT(c:12, fbn('AfectaLs'))        
+    ACT(c:13, fbn('Cuenta4'))
+    ACN(c:14, fbn('TotalAux1'))
+    ACN(in1, fbn('NrBit'))
+    ACN(in2, SQL("select NrBit from "~DBO~".OPERACIONESBITS where NrOperacion = '"~Val(c:1)~"' and Valor = '1' "))
+    ACT(c:20, 'OK')
+    SCN(xy1,1)
+  proximo
+
+IF Val(xy1)=0
+   Cancelar('La Orden no se encuentra en instancia válida para anulación: Ejecutada o Anulada con Ejecuciones. o Fecha valor máxima superada.')
+Endif
+
+if EqStr(Val(c:20),'OK')
+  Message('Anulacion de Orden, Operacion y Ejecuciones')
+  if Dialogo.Check1=1
+  
+  * desbloquea Saldos Moneda
+    if EqStr(Val(c:3),'OTIC') y EqStr(Val(c:9),VAR('MERCADOBT')) y EqStr(Val(c:12),'Saldos') y Val(c:11)=1
+    #ifdef BIND
+      ** Desbloqueo en sistema interno 
+      BorrarCeldas(rr:1..rr:50)
+      ACT(rr:10, Val(c:10))
+      ACT(rr:12, Copy(Val(c:13),1,7))
+      ACT(rr:13, Copy(Val(c:13),9,2))
+      * Desbloqueo de Saldo
+      ACN(rr:15,Val(c:14))
+      
+     (.'DESBSALCTA'.)
+      ACT(b:22, val(rr:1))
+      If Eqstr(Val(b:22),'NOK')
+         ACN(b:17, Query(" Select 1 From "~DBO~".EXCEPCIONES Where NrOperacion = '"~Val(c:2)~"' And Tipo = 'ERRDESBLOQ' "))
+         if Val(b:17)=0
+            SQL.ADD("Insert into "~DBO~".EXCEPCIONES ( ")
+            SQL.ADD(" NrOperacion, Fecha, Tipo, Descripcion ")
+            SQL.ADD(" ) Values ( ")
+            SQL.ADD(" '"~Val(c:2)~"', ")
+            SQL.ADD(" "~SQLAhora~", ")
+            SQL.ADD(" 'ERRDESBLOQ', ")
+            SQL.ADD(" '"~'Error al desbloquear cuenta '~Val(c:13)~"' ")
+            SQL.ADD(" ) ")
+            SQL.NEW
+            SQL.EXEC
+         endif
+      Endif
+    #endif
+    endif
+  * Borrar los movimientos de la Orden y Operacion
+    EjecutarEvento('ANUMOV',NrOperacion1=Val(c:2))
+    EjecutarEvento('ANUMOV',NrOperacion1=Val(c:1))
+
+    ** Dejo la Orden y la Operacion en Instancia Anulacion (De acuerdo al workflow)
+    ** Borro Ejecuciones, Orden y Operacion    
+
+    EjecutarEvento('CBOINS', String1=Val(c:2), Radio1=2, Radio2=1, Entero1=Val(in1), Entero2=30)
+    
+    SQL.ADD(" DELETE "~DBO~".EJECUCIONES Where NrOrden = '"~Val(c:2)~"'  ")
+    SQL.NEW
+    
+    SQL.ADD(" DELETE "~DBO~".ORDENES Where NrOrden = '"~Val(c:2)~"' ")
+    SQL.NEW
+    
+    If NoVacio(Val(c:1))
+       EjecutarEvento('CBOINS', String1=Val(c:1), Radio1=2, Radio2=1, Entero1=Val(in2), Entero2=30)
+       SQL.ADD(" DELETE "~DBO~".OPERACIONES Where NrOperacion = '"~Val(c:1)~"'  ")
+       SQL.NEW
+    
+    endif
+    
+    SQL.EXEC
+  endif
+endif
+Proximo

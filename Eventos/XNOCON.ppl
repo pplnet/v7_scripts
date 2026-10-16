@@ -1,0 +1,97 @@
+﻿CrearDialogo
+  NrTrans1: 'Nro.Voucher';;;;;;Incluido(BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Dialogo.NrTrans1),'FXDEP|FXRET|FXCOMP');'Tipo de Comprobante incorrecto';NO;;;;;;" TipoTr2 IN ('FXDEP','FXRET','FXCOMP') AND Fecha3 = '"~IdxDate(Fsys)~"' and CB9 = '1' ";
+FinDialogo
+if Not OK
+  Cancelar
+endif
+
+SQL.ADD("Select * from "~DBO~".TRANSACCIONES2 ")
+SQL.ADD(" where NrTrans = '"~Dialogo.NrTrans1~"' ")
+SQL.ADD(" order by NrTrans")
+
+recorrer SQL
+  if [Not Incluido(FBN['TipoTr2'],'FXDEP|FXRET|FXCOMP')] y [Not EqStr(fbn('CB10'),'1')] 
+     Cancelar('Tipo de Transaccion incorrecto.')
+  endif
+
+  ACT(x1,SQL("Select Valor from "~DBO~".OPERACIONESBITS where NrOperacion = '"~Dialogo.NrTrans1~"' and NrBit = 2 "))
+  if CeldaVacia(x1) o not EqStr(val(x1),'1')
+     Cancelar('El Voucher No '~Copy(FBN['NrTrans'],2,7)~' no esta confirmado.')
+  endif
+  if FBN['CB9']=0
+     Cancelar('El Voucher '~Copy(FBN['NrTrans'],2,7)~' esta Transportado.')
+  endif
+
+  if [fbn('Cantidad3') <> 0] y [NoVacio(fbn('NrTransRef1'))]
+     *** anulo el voucher fallado ***
+     SQL.ADD("Delete from "~DBO~".MOVPENDIENTES ")
+     SQL.ADD(" where NrOperacion = '"~fbn('NrTransRef1')~"' ")
+     SQL.NEW
+
+     SQL.ADD("Delete from "~DBO~".MOVEJECUTADOS ")
+     SQL.ADD(" where NrOperacion = '"~fbn('NrTransRef1')~"' ")
+     SQL.NEW
+
+     SQL.ADD("Delete from "~DBO~".MOVCASHFLOW ")
+     SQL.ADD(" where NrOperacion = '"~fbn('NrTransRef1')~"' ")
+     SQL.NEW
+
+     SQL.ADD("Delete from "~DBO~".MOVLIMITES ")
+     SQL.ADD(" where NrOperacion = '"~fbn('NrTransRef1')~"' ")
+     SQL.NEW
+
+     SQL.ADD("Delete from "~DBO~".OPERACIONESBITS ")
+     SQL.ADD(" where NrOperacion = '"~fbn('NrTransRef1')~"' ")
+     SQL.NEW
+
+     SQL.ADD("Delete from "~DBO~".TRANSACCIONES2 ")
+     SQL.ADD(" where NrTrans = '"~fbn('NrTransRef1')~"' ")
+     SQL.NEW
+  endif
+
+
+  SQL.ADD(" UPDATE "~DBO~".TRANSACCIONES2 ")
+  SQL.ADD(" Set CB9     = '0', ")
+  SQL.ADD(" Fecha3      = Null, ")
+  SQL.ADD(" Cantidad3   = 0, ")
+  SQL.ADD(" Cantidad4   = 0,  ")
+  SQL.ADD(" NrTransRef1 = Null ")
+  SQL.ADD(" where NrTrans='"~Dialogo.NrTrans1~"' ")
+  SQL.NEW
+
+  if Incluido(FBN['TipoTr2'],'FXRET|')
+     SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS Set Valor='1' where NrOperacion='"~Dialogo.NrTrans1~"' and NrBit = 6 ")
+    ELSE
+     SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS Set Valor='1' where NrOperacion='"~Dialogo.NrTrans1~"' and NrBit = 7 ")
+  ENDIF
+  SQL.NEW
+
+  SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS Set Valor = '0' where NrOperacion='"~Dialogo.NrTrans1~"' and NrBit = 5 ")
+  SQL.NEW
+  SQL.ADD(" UPDATE "~DBO~".OPERACIONESBITS Set Valor = '0' where NrOperacion='"~Dialogo.NrTrans1~"' and NrBit = 2 ")
+  SQL.NEW
+  SQL.EXEC
+
+  if Not EqStr(fbn('Mercado1'),'OCT')
+     *** ANULO LA CONFIRMACION DE FALLA ASOCIADA ***
+     SQL.ADD("Select NrOperacion from "~DBO~".MOVEJECUTADOS ")
+     SQL.ADD(" where NrTrans2 = '"~Dialogo.NrTrans1~"' ")
+     SQL.ADD("   and NrTrans2 <> NrOperacion ")       
+
+     Recorrer SQL
+       dfa
+       act(a:fac, fbn('NrOperacion'))
+     Proximo
+
+     SQL.ADD("UPDATE "~DBO~".TRANSACCIONES2 ")
+     SQL.ADD("   Set CB2     = '0', ")
+     SQL.ADD("       Fecha3  = Null ")
+     SQL.ADD(" Where NrTrans = '"~Val(a:fac)~"' ")
+     SQL.NEW
+     SQL.EXEC
+
+     *** genera los mov de cashflow y limites que desafectan la falla ****
+     ModificarOperacion(Val(a:fac),0,NO,NO,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,SI,NO,NO,NO,1)
+  endif
+proximo
+

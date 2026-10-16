@@ -1,0 +1,105 @@
+﻿def GetTipoValuacionAnterior(especie, fecha, book)
+    *** Param nominal siempre cero
+    *** TipoValuacion del dia habil anterior
+    let &valuacion ValuacionNIIF(especie, Dat(Habiles(fecha, -1)), book, 0)
+    if(Vacio(&valuacion))
+        return ''
+    endif
+    return &valuacion.get_TipoValuacionNIIF
+end
+
+CrearDialogo
+  Fecha1  : 'Fecha'   ;;;;;;Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;FSys
+  Lista1  : 'Especies';;;;;;NoVacio(Dialogo.Lista1);'Debe especificar al menos una especie.';NO;;;SQLSET("Select Codigo from "~DBO~".ESPECIES Where Jerarquia like '"~VAR('JERTITULOS')~"%' ")
+  Lista2  : 'Books'   ;;;;;;NoVacio(Dialogo.Lista2);'Debe especificar al menos un book';NO;;;SQLSET("Select Codigo from "~DBO~".BOOKS")
+FinDialogo
+
+IF NOT OK
+   Cancelar
+Endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+CrearFont(4, 'Arial,10,BU')
+
+ACT(A:2,'Cotizaciones NIIF')
+ACT(A:4,'Fecha: '~Dialogo.Fecha1)
+
+SetFont(A:2, 4)
+SetFont(A:4..A:6, 2)
+
+SetFilaActual(6)
+
+ACT(A:fac,'Especie')
+ACT(B:fac,'Nombre')
+ACT(C:fac,'Mon. Cotiza')
+ACT(D:fac,'Tipo Val. Ant.')
+ACT(E:fac,'Fec.Ult.Cot.')
+ACT(F:fac,'Precio')
+ACT(G:fac,'Tipo Val. Act.')
+ACT(H:fac,'Cartera')
+ACT(I:fac,'Mercado')
+ACT(J:fac,'Plazo')
+**ACT(I:fac,'Modelo Neg.')
+
+AgregarMarco(A:FAC..J:FAC,2,0,EXE('COLOR6'))
+SetFont(A:FAC..J:FAC, 2)
+AlinearCeldas(A:FAC..J:FAC, 'C')
+
+SQL.ADD(" Select E.Codigo, E.Nombre, E.Cotiza ")
+SQL.ADD(" From "~DBO~".ESPECIES E ")
+SQL.ADD(" Where E.Codigo in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+SQL.ADD(" Order by E.Codigo")
+
+SetFilaActual(FAC)
+
+ACN(Z:1,FAC+1)
+Recorrer SQL
+   Recorrer&k 1, Elementos(Dialogo.Lista2)
+      IF &k > 1
+         IFA
+      ENDIF
+      let &book ItemLista(Dialogo.Lista2, &k)
+      ACT(A:FAC,FBN['Codigo'])
+      ACT(B:FAC,FBN['Nombre'])
+      ACT(C:FAC,FBN['Cotiza'])
+      ** TipoValAnt (TipoValAct Habil -1)
+      ACT(D:FAC, GetTipoValuacionAnterior(FBN['Codigo'], Dialogo.Fecha1, &book))
+      ACD(E:FAC, Dialogo.Fecha1)
+  
+      let &valuacion ValuacionNIIF(FBN['Codigo'], Dat(Dialogo.Fecha1), &book, 0)
+      if(NoVacio(&valuacion))
+         let &tipoVal &valuacion.get_TipoValuacionNIIF
+         if(not Eqstr(&tipoVal, 'PARTIDAS'))
+            ACN(F:FAC, &valuacion.get_CotizacionUtilizadaNIIF)
+         else
+            ACN(F:FAC, 0)
+         endif
+         ACT(G:FAC, &tipoVal)
+         ACD(E:FAC, &valuacion.get_FechaCotizacion) 
+         ACT(I:FAC, &valuacion.get_Mercado)     
+         ACT(J:FAC, &valuacion.get_PlazoLiquidacion)     
+      endif
+      ACT(H:FAC, &book)
+      ** Esto habria que obtenerlo matcheando la tabla MODELOSNEGOCIO
+      **ACT(I:FAC,FBN['ModeloNegocio'])
+   Proximo
+Proximo
+
+FormatoCeldas(F:Val(Z:1)..F:FAC, EXE('F8'))
+SetFont(A:Val(Z:1)..I:FAC, 1)
+
+IFA
+IFA
+ACT(A:FAC,'FIN DEL LISTADO')
+SetFont(A:FAC, 2)
+
+ACO(2,15)
+ACO(3,8)
+ACO(4,8)
+ACO(6,10)
+ACO(7,8)
+ACO(9,8)
+
+LimitesVision(L:FAC+1)

@@ -1,0 +1,181 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+   Fecha1:    'FechaLiq'    ;;;;;;;;;fsys
+   Check1:    'Incluye Ant' ;;;;;;;;;1
+   Especie1:  'Moneda'      ;;;;;;;;;;;;;;"Jerarquia LIKE '"~Jerarquia('ESPECIES','MONEDA')~"%' "
+   Cliente1:  'Cliente'
+   Vehiculo1: 'Vehiculo'
+FinDialogo
+
+IF NOT OK
+   Cancelar
+Endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+
+ACT(a:4, 'FX - Movimientos Pendientes de Liquidacion')
+If Dialogo.Check1=0
+   ACT(a:4, Val(a:4)~' del '~Dialogo.Fecha1)
+Else
+   ACT(a:4, Val(a:4)~' al '~Dialogo.Fecha1)
+Endif
+If NoVacio(Dialogo.Especie1)
+   ACT(a:6, 'Moneda: '~Dialogo.Especie1)
+Else
+   ACT(a:6, 'Moneda: Todas')
+Endif
+If NoVacio(Dialogo.Cliente1)
+   ACT(a:7, 'Cliente: '~Dialogo.Cliente1)
+Else
+   ACT(a:7, 'Cliente: Todos')
+Endif
+If NoVacio(Dialogo.Vehiculo1)
+   ACT(a:8, 'Vehiculo: '~Dialogo.Vehiculo1)
+Else
+   ACT(a:8, 'Vehiculo: Todos')
+Endif
+SetFont(A:4, 3)
+SetFont(A:5..A:8, 2)
+
+SetFilaActual(10)
+
+ACT(a:fac, 'FechaMov')
+ACT(b:fac, 'Cliente')
+ACT(c:fac, 'Cantidad')
+ACT(d:fac, 'Cuenta')
+ACT(e:fac, 'TipoOp')
+ACT(f:fac, 'Operacion')
+ACT(g:fac, 'FechaOp')
+ACT(h:fac, 'FechaVto')
+ACT(i:fac, 'Especie')
+ACT(j:fac, 'ContraEsp.')
+ACT(k:fac, 'Precio')
+ACT(l:fac, 'Instancia')
+
+SetFont(A:fac..z:fac, 2)
+Agregarmarco(A:fac..l:fac,1,0,EXE('COLOR6'))
+AlinearCeldas(A:fac..z:fac, 'C')
+
+SQL.ADD(" SELECT M.FechaMov, M.Especie Moneda, M.Cantidad, M.Cuenta, O.TipoOp, M.NrOperacion, ")
+SQL.ADD(" O.Cliente1, O.FechaOp, O.FechaVto, I.Nombre, O.Especie, O.ContraEspecie, O.Precio1   ")
+SQL.ADD(" FROM "~DBO~".OPERACIONES O, "~DBO~".MOVPENDIENTES M, "~DBO~".INSTANCIAS I, "~DBO~".OPERACIONESBITS B")
+SQL.ADD(" WHERE O.NrOperacion = M.NrOperacion ")
+SQL.ADD(" AND   O.NrOperacion = B.NrOperacion ")
+SQL.ADD(" AND   B.Valor       = 1             ")
+SQL.ADD(" AND   B.NrBit = I.NrInstancia       ")
+SQL.ADD(" AND   I.Tabla = 'OPERACIONES'       ")
+*SQL.ADD(" AND   M.Concepto = 'FX' ")
+SQL.ADD(" AND   M.Concepto in ('FX','FM') ")
+If dialogo.Check1 = 0
+   SQL.ADD(" AND  M.FechaMov = "~idxdate2(Dialogo.Fecha1)~" ")
+Else
+   SQL.ADD(" AND  M.FechaMov <= "~idxdate2(Dialogo.Fecha1)~" ")
+Endif
+If Novacio(Dialogo.Especie1)
+   SQL.ADD(" AND  M.Especie = '"~Dialogo.Especie1~"' ")
+Endif
+If Novacio(Dialogo.Cliente1)
+   SQL.ADD(" AND  O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+Endif
+If Novacio(Dialogo.Vehiculo1)
+   SQL.ADD(" AND  O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+Endif
+SQL.ADD(" UNION ")
+SQL.ADD(" SELECT M.FechaMov, M.Especie Moneda, M.Cantidad, M.Cuenta, O.TipoTr2 TipoOp, M.NrOperacion, ")
+SQL.ADD(" O.Cliente1, O.Fecha1 FechaOp, O.Fecha1 FechaVto, I.Nombre, O.Especie, ' ' ContraEspecie, 0 Precio1 ")
+SQL.ADD(" FROM "~DBO~".TRANSACCIONES2 O, "~DBO~".MOVPENDIENTES M, "~DBO~".INSTANCIAS I, "~DBO~".OPERACIONESBITS B")
+SQL.ADD(" WHERE O.NrTrans = M.NrOperacion ")
+SQL.ADD(" AND   O.NrTrans = B.NrOperacion ")
+SQL.ADD(" AND   B.Valor       = 1             ")
+SQL.ADD(" AND   B.NrBit = I.NrInstancia       ")
+SQL.ADD(" AND   I.Tabla = 'TRANSACCIONES2'    ")
+SQL.ADD(" AND   O.TipoTr2 = 'TRANSP' ")
+If dialogo.Check1 = 0
+   SQL.ADD(" AND  M.FechaMov = "~idxdate2(Dialogo.Fecha1)~" ")
+Else
+   SQL.ADD(" AND  M.FechaMov <= "~idxdate2(Dialogo.Fecha1)~" ")
+Endif
+If Novacio(Dialogo.Especie1)
+   SQL.ADD(" AND  M.Especie = '"~Dialogo.Especie1~"' ")
+Endif
+If Novacio(Dialogo.Cliente1)
+   SQL.ADD(" AND  O.Cliente1 = '"~Dialogo.Cliente1~"' ")
+Endif
+If Novacio(Dialogo.Vehiculo1)
+   SQL.ADD(" AND  O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+Endif
+
+SQL.ADD(" ORDER BY M.Especie, M.FechaMov      ")
+
+ACT(ea:1, '')
+
+Recorrer SQL
+   If Not Eqstr(Val(ea:1), fbn('Moneda'))
+      If Not Eqstr(Val(ea:1), '')
+         ACT(a:fac, 'Total pendiente '~Val(ea:1)~' --> ')
+         ACN(c:fac, SUM(c:Val(fi:1)..c:fac))
+         Agregarmarco(a:fac..l:fac,1,0)
+         SetFont(A:fac..z:fac, 2)
+         Formatoceldas(c:fac, EXE('F2'))
+         ifa
+         ifa
+      Endif
+      ACT(a:fac, 'Movimientos pendientes de '~fbn('Moneda'))
+      Agregarmarco(a:fac..l:fac,1,0,EXE('COLOR8'))
+      SetFont(A:fac..z:fac, 2)
+      ifa
+      ACN(fi:1, fac)
+   Endif
+
+   ACD(a:fac, fbn('FechaMov'))
+   ACT(b:fac, fbn('Cliente1'))
+   ACN(c:fac, -fbn('Cantidad'))
+   ACT(d:fac, fbn('Cuenta'))
+   ACT(e:fac, fbn('TipoOp'))
+   ACT(f:fac, fbn('NrOperacion'))
+   ACLO(f:fac, fbn('NrOperacion'))
+   ACD(g:fac, fbn('FechaOp'))
+   ACD(h:fac, fbn('FechaVto'))
+   ACT(i:fac, fbn('Especie'))
+   ACT(j:fac, fbn('ContraEspecie'))
+   ACN(k:fac, fbn('Precio1'))
+   ACT(l:fac, fbn('Nombre'))
+
+   ACT(ea:1, fbn('Moneda'))
+   SetFont(A:fac..z:fac, 1)
+   Formatoceldas(c:fac, EXE('F2'))
+   Formatoceldas(k:fac, EXE('F9'))
+Proximo
+
+ifa
+ACT(a:fac, 'Total pendiente '~vAL(ea:1)~' --> ')
+ACN(c:fac, SUM(c:Val(fi:1)..c:fac))
+Agregarmarco(a:fac..l:fac,1,0)
+SetFont(A:fac..z:fac, 2)
+Formatoceldas(c:fac, EXE('F2'))
+
+IFA
+IFA
+IFA
+ACT(a:fac, 'Fin del Informe.')
+IFA
+ACT(a:fac, USUARIOACTIVO)
+SetFont(A:fac-1..a:fac, 2)
+
+
+Recorrer&i 1,12
+  ACO(&i, 8)
+Proximo
+ACO(12,10)
+
+iMPRESION(1,2)
+iMPRESION(4,1)
+LimitesVision(l:fac+2)
+SetMargins(0,0,0,2)
+
+
+
+

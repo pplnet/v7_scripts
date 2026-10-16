@@ -1,0 +1,161 @@
+﻿CrearDialogo
+  NrOrden1    : 'Orden'         ;;;;;;;;;;;;;;" FechaOrden >= "~IdxDate2(Habiles(Fsys,-Var('FVALORORD')))~" and TipoOrden Like 'OTI%' and NrOrden in (Select NrOperacion from OPERACIONESBITS where NrOperacion = NrOrden and Valor = '1'  and NrBit in (33)) "
+  Entero1     : 'Monto desde'   ;2;1;;;;;;;;;;;'#############.##'
+  Entero2     : 'Monto hasta'   ;;1;;;;[Dialogo.Entero1 = 0 y Dialogo.Entero2=0] o Dialogo.Entero2 > 0;'hasta Invalido';NO;;;;;'#############.##'
+  Entero3     : 'Nr Secuencia'  ; ;1;;;;;;;;;;;'#####'  
+  Check1      : 'Procesa'       ; ; ;;NO;NO;;;;1;    
+FinDialogo
+if Not OK
+  Cancelar
+endif
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+ SQL.ADD("Select OB.Nrbit, O.* from "~DBO~".ORDENES O, "~DBO~".OPERACIONESBITS OB ")
+ SQL.ADD(" where NrOrden     = OB.NrOperacion ")
+ if NoVacio(Dialogo.NrOrden1)
+    SQL.ADD("   and  NrOrden     = '"~Dialogo.NrOrden1~"' ")
+ Endif
+ SQL.ADD("   and Valor       = '1' ")
+ SQL.ADD("   and NrBit       = 33 ")
+ SQL.ADD("   and TipoOrden Like 'OTI%' ")
+ 
+ watch(sql.batch())
+ ACN(xy1,0)
+ recorrer SQL
+
+    ACT(t:1, fbn('NrOperacion2'))
+    dfa
+    SQL.ADD("Select * from "~DBO~".EJECUCIONES E")
+    SQL.ADD(" where NrOrden     = '"~fbn('NrOrden')~"' ")
+    SQL.ADD("   and fecha2 is not null")
+    if Dialogo.Entero3 <> 0
+       SQL.ADD("   and NrSecuencia = "~Dialogo.Entero3~" ")
+    Else
+       If Dialogo.Entero2 > 0
+          SQL.ADD("   and Cantidad Between "~Dialogo.Entero1~" and "~Dialogo.Entero2~" ")
+       Endif
+    Endif
+    SQL.ADD(" Order By NrEjecucion ")
+    watch(sql.batch())
+    recorrer SQL
+       ACN(x:fac,0)
+       ACT(a:fac, fbn('NrOrden'))
+       ACT(b:fac, fbn('NrEjecucion'))
+       ACT(c:fac, fecha(fbn('Fecha')))
+       ACT(d:fac, Hora(fbn('Fecha')))
+       ACT(e:fac, fbn('NrSecuencia'))
+       ACN(f:fac, fbn('Cantidad'))
+       ACN(g:fac, fbn('Precio'))
+       ACN(h:fac, fbn('Cantidad2'))
+       ACN(a:0,fac)
+    proximo
+    ACT(t:2, fbn('NrOrden'))
+    ACT(t:3, fbn('TipoOrden'))
+    ACD(t:4, fbn('FechaOrden'))
+    ACD(t:5, fbn('FechaVto'))
+    ACN(t:6, fbn('CantidadToTalOrden'))
+    ACN(t:7, fbn('Cantidad1'))
+    ACT(t:8, fbn('Especie'))
+    ACT(t:9, fbn('Mercado2'))
+    ACT(t:10, fbn('Leyenda3'))
+    ACN(t:11, fbn('MB2'))
+    ACT(t:12, fbn('AfectaLs'))        
+    ACT(t:13, fbn('Cuenta4'))
+    ACN(t:14, fbn('TotalAux1'))
+    ACN(t:15, fbn('LInstancia'))
+    ACN(t:16, SQL("select LInstancia from "~DBO~".OPERACIONES where NrOperacion = '"~Val(t:1)~"' "))
+    ACT(t:20, 'OK')
+    SCN(xy1,1)
+  proximo
+
+IF Val(xy1)=0
+   Cancelar('La Orden no se encuentra en instancia válida para anulación: Ejecutada o Anulada con Ejecuciones. o Fecha valor máxima superada.')
+Endif
+
+if EqStr(Val(t:20),'OK')
+     Message('Supervision Anulacion de Ejecuciones')
+     CrearListBox;'Arial,8,';'Supervision Anulacion de Ejecuciones '
+          'Accion ?'      ;x:1..x:Fac   ;SI;;;50;COMBO;'Autoriza|Rechaza'           
+          'NrOrden'       ;a:1..a:Val(a:0);NO;;; 60;STRING;
+          'Nr Ejec'       ;b:1..b:Val(a:0);NO;;; 60;STRING;
+          'Fecha'         ;c:1..c:Val(a:0);NO;;;100;STRING;
+          'Hora'          ;d:1..d:Val(a:0);NO;;;100;STRING;
+          'NrSecuencia'   ;e:1..e:Val(a:0);NO;;;100;STRING;
+          'Cantidad'      ;f:1..f:Val(a:0);NO;;; 80;NUMERO;'###,###,###,###.##';
+          'Precio'        ;g:1..g:Val(a:0);NO;;; 80;NUMERO;'###,###,###,###.##';
+          'Monto'         ;h:1..h:Val(a:0);NO;;; 80;NUMERO;'###,###,###,###.##';
+     FinListBox
+  
+     If Not Ok
+       Cancelar
+     Endif
+   
+  if Dialogo.Check1=1
+  
+    Recorrer&i 1,Val(a:0)
+            ** Autoriza
+         If Val(x:&i)=0
+            ACN(ca:1, SQL("Select SUM(Cantidad)   From "~DBO~".EJECUCIONES Where NrOrden='"~Val(a:&i)~"' "))
+            ACN(ca:2, SQL("Select SUM(Cantidad2) From "~DBO~".EJECUCIONES Where NrOrden='"~Val(a:&i)~"' "))
+            ACN(pr:1,((Val(ca:2)-Val(h:&i))/(Val(ca:1)-Val(f:&i))))
+            ACN(ca:10,Val(f:&i))
+            *ACN(ca:11,val(t:6)-Val(ca:10))
+            ACN(ca:12,val(t:7)-Val(ca:10))
+            
+            SQL.ADD(" Update "~DBO~".EJECUCIONES Set ")
+            SQL.ADD("  Cantidad3    = "~FStr(Val(ca:10),0,2)~", ")
+            SQL.ADD("  Cantidad     = "~FStr(0,0,2)~", ")
+            SQL.ADD("  Cantidad2    = "~FStr(0,0,2)~" ")
+            SQL.ADD(" Where NrOrden = '"~Val(a:&i)~"' ")
+            SQL.ADD("   and NrEjecucion = '"~Val(b:&i)~"' ")
+            SQL.NEW  
+            
+            SQL.ADD(" Update "~DBO~".ORDENES Set ")
+            *SQL.ADD("  CantidadTotalOrden   = "~FStr(val(ca:11),0,0)~", ")
+            SQL.ADD("  Cantidad1            = "~FStr(val(ca:12),0,2)~", ")
+            SQL.ADD("  Cantidad4            = "~FStr(Val(pr:1),0,8)~" ") 
+            SQL.ADD(" Where NrOrden = '"~Val(t:2)~"' ")
+            SQL.NEW
+            
+            SQL.ADD(" Update "~DBO~".OPERACIONES Set ")
+            SQL.ADD("  Cantidad    = "~FStr(Val(ca:12),0,2)~", ")
+            SQL.ADD("  Precio1     = "~FStr(Val(pr:1),0,8)~" ")
+            SQL.ADD(" Where NrOperacion = '"~Val(T:1)~"' ")
+            SQL.NEW           
+            SQL.EXEC 
+                 
+            ModificarOperacion(Val(t:1),0,NO,SI,SI,NO,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO,SI,NO,SI,NO,0,NO,NO)
+                    
+            *Recalcula campos y Movimientos instancia 0 por recalculo comisiones
+            ModificarOrden(Val(a:&i),0,NO,SI,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO)         
+
+            * Si La orden queda sin ejecuciones , la operacion va a Anulacion Manual
+            If Val(ca:12)=0
+               EjecutarEvento('CBOINS', String1=Val(t:1), Radio1=1, Radio2=0, Entero1=33, Entero2=30)
+            else
+               EjecutarEvento('CBOINS', String1=Val(t:1), Radio1=1, Radio2=0, Entero1=33, Entero2=Val(t:16))
+            Endif
+            EjecutarEvento('CBOINS', String1=Val(t:2), Radio1=1, Radio2=0, Entero1=33, Entero2=Val(t:15))
+         Else   
+            ** Rechaza
+            SQL.ADD(" Update "~DBO~".EJECUCIONES Set ")
+            SQL.ADD("  Cantidad3    = "~FStr(0,0,2)~", ")
+            SQL.ADD("  Fecha2    = Null ")
+            SQL.ADD(" Where NrOrden = '"~Val(a:&i)~"' ")
+            SQL.ADD("   and NrEjecucion = '"~Val(b:&i)~"' ")
+            SQL.NEW  
+            SQL.EXEC 
+
+            EjecutarEvento('CBOINS', String1=Val(t:2), Radio1=1, Radio2=0, Entero1=33, Entero2=Val(t:15))
+            EjecutarEvento('CBOINS', String1=Val(t:1), Radio1=1, Radio2=0, Entero1=33, Entero2=Val(t:16))
+
+         Endif
+
+         EjecutarEvento('CBOINS', String1=Val(t:2), Radio1=1, Radio2=0, Entero1=33, Entero2=Val(t:15))
+         EjecutarEvento('CBOINS', String1=Val(t:1), Radio1=1, Radio2=0, Entero1=33, Entero2=Val(t:16))
+
+    Proximo
+  endif  
+endif

@@ -1,0 +1,184 @@
+﻿CrearDialogo
+  Vehiculo1:'Vehiculo'  ;;;;NO;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar un Vehiculo';NO;Var('VEHICULODE');
+  Fecha1   :'Fecha'     ;;;;;;;;;FSys
+  Book1    :'Cartera'   ;;;;;;;;;;
+FinDialogo
+If not Ok
+  Cancelar
+Endif
+
+acn(x1,0)
+ACT(cr1, '0|1|2|')
+
+SQL.ADD(" Select M.NrSaldo, O.FechaOp, O.Vehiculo1, O.Especie, M.Cantidad, M.Precio, ")
+SQL.ADD("        O.FechaVto, O.TipoOp, O.NrOperacion, M.Book, M.Cupon, M.FechaMov ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".MOVPOSEJE M ")
+SQL.ADD(" Where O.NrOperacion = M.NrOperacion ")
+SQL.ADD("   and M.FechaMov   <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   and M.Cantidad    < 0 ")
+SQL.ADD("   and M.NrSaldo     = '101' ")
+SQL.ADD("   and M.Vehiculo    = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and M.Cliente     = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and M.TipoNegocio = 'T' ")
+If NoVacio(Dialogo.Book1)
+   SQL.ADD("   and M.Book     = '"~Dialogo.Book1~"' ")
+EndIf
+SQL.ADD(" Union All ")
+SQL.ADD(" Select M.NrSaldo, T.Fecha1 as FechaOp, T.Vehiculo1, T.Especie, M.Cantidad, ")
+SQL.ADD("        M.Precio, T.Fecha1 FechaVto, T.TipoTr2 TipoOp,T.NrTrans NrOperacion, ")
+SQL.ADD("        M.Book, M.Cupon, M.FechaMov ")
+SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVPOSEJE M ")
+SQL.ADD(" Where T.NrTrans     = M.NrOperacion ")
+SQL.ADD("   and M.FechaMov   <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("   and M.Cantidad    < 0 ")
+SQL.ADD("   and M.NrSaldo     = '101' ")
+SQL.ADD("   and M.Vehiculo    = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and M.Cliente     = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and M.TipoNegocio = 'T' ")
+If NoVacio(Dialogo.Book1)
+   SQL.ADD("   and M.Book     = '"~Dialogo.Book1~"' ")
+EndIf
+SQL.ADD(" Order By 7, 3, 4, 10, 12, 1, 11")
+
+ACN(z1,0)
+
+Recorrer SQL
+   *- f: Disponible de la Venta 
+   acn(f:fac, Abs(fbn('Cantidad')))   
+   
+   *- Verifico que no esten asociadas en su totalidad 
+    SQL.ADD(" SELECT SUM(Cantidad) as Cantidad ")
+    SQL.ADD(" FROM "~DBO~".PARTIDAS P ")
+    SQL.ADD(" WHERE  NrOperacion = '"~FBN['NrOperacion']~"' ")
+    SQL.ADD(" Having SUM(Cantidad)>0 ")
+
+   Recorrer SQL
+      dfa
+      acn(f:fac, val(f:fac)-fbn('Cantidad'))   
+   Proximo
+
+   *- No Se asigno en su totalidad
+   act(a:fac, fbn('NrOperacion'))
+   acd(b:fac, fbn('FechaOp'))
+   acd(c:fac, fbn('FechaVto'))
+   act(d:fac, fbn('Especie'))
+   acn(e:fac, Abs(fbn('Cantidad')))
+   act(g:fac, fbn('TipoOp'))
+   acn(h:fac, val(aa:fac))
+   acn(i:fac, fbn('Precio'))
+   act(s:fac, fbn('Book'))
+   acn(u:fac, fbn('Cupon'))
+   acn(x1,1)
+Proximo
+
+If Val(x1) > 0
+   CrearListBox ; 'Arial,8,'
+     'Marca'         ;l1..l:fac;SI;SI;  ;30  ;CHECK  ;Exe('COLOR9')
+     'Operacion'     ;a1..a:FAC;NO;;;70;STRING;;Exe('COLOR14')
+     'Book   '       ;s1..s:FAC;NO;;;70;STRING;;Exe('COLOR14')
+     'TipoOp.'       ;g1..g:FAC;NO;;;70;STRING;;Exe('COLOR14')
+     'Especie'       ;d1..d:FAC;NO;;;50;TABLA;'Especies';'Codigo';'Codigo;Nombre';;Exe('COLOR14')
+     ***...'Cupon'         ;u1..u:FAC;NO;;;70;NUMERO;'###';Exe('COLOR14')
+     'Cantidad'      ;e1..e:FAC;NO;;;90;NUMERO;'##,###,###.##';Exe('COLOR14')
+     'Precio '       ;i1..i:FAC;NO;;;80;NUMERO;'##,###.#######';Exe('COLOR14')
+     'Cant.Disp.'    ;f1..f:FAC;NO;;;90;NUMERO;'##,###,###.##';Exe('COLOR14')
+     'Fecha Op'      ;b1..b:FAC;NO;;;70;FECHA;Exe('COLOR14')
+     'Fecha Vto'     ;c1..c:FAC;NO;;;70;FECHA;Exe('COLOR14')
+   FinListBox
+
+   If Ok 
+      */Recorro las que querian modificar.
+      Recorrer&i 1,fac
+         If Val(l:&i)=1
+            Message('Busacando componentes para asociarle a '~Val(a:&i))    
+
+            */Entro por la relacion, fijandome todo lo que tengo para esa partida
+            */teniendo en cuenta la cartera (guardada en aa:&i)
+            SQL.ADD(" SELECT * ")
+            SQL.ADD(" FROM "~DBO~".PARTIDAS P ")
+            SQL.ADD(" WHERE  NrOperacion = '"~Val(a:&i)~"' ")
+            
+            SCN(x11, 0)
+            acn(cl1,fac)
+            Scn(cl1,1)
+
+            Recorrer SQL 
+               SCN(x11, 1)
+               act(a:fac, fbn('NrPartida'))
+               acd(b:fac, fbn('FechaDesde'))
+               acd(c:fac, fbn('FechaHasta'))
+               acn(e:fac, fbn('Cantidad') )
+               acn(l:fac,1)
+               acn(p:fac,0)
+            Proximo
+
+            if Val(x11) > 0
+               CrearDialogo
+                   TipoOp1       :'Tipo.Op.'            ;1;1; ;NO;;;;;Val(g:&i) 
+                   NrOperacion1  :'Nro.Op.'             ;1;2; ;NO;;;;;Val(a:&i)
+
+                   Especie1      :'Especie'             ;3;1; ;NO;;;;;Val(d:&i)
+                   Entero1       :'Cupon'               ; ;1; ;NO;NO;;;;Val(u:&i)
+                   Fecha1        :'Fecha Op.'           ;3;2; ;NO;;;;;Val(b:&i)
+                   Fecha2        :'Fecha Vto.'          ; ;2; ;NO;;;;;Val(c:&i)
+
+                   Book1         :'Book'                ;6;1; ;NO;;;;;Val(s:&i)
+
+                   Cantidad3     :'Cant.Disp.'          ;8;2; ;NO;;;;;Val(f:&i)
+                   Cantidad1     :'Cantidad'            ;8;1; ;NO;;;;;Val(e:&i)
+
+                   ListBox; 'Arial,8,N'; 500;250
+                         'Accion '       ;l:Val(cl1)..l:FAC;SI;;;;70;COMBO;'Desasigna|Nada'
+                         'Partida'       ;a:Val(cl1)..a:FAC;NO;;;;70;STRING
+                         'Cant.Asig'     ;e:Val(cl1)..e:FAC;NO;;;;80;NUMERO;'##,###,###.##'
+                         'Fecha D.'      ;b:Val(cl1)..b:FAC;NO;;;;70;FECHA
+                         'Fecha H.'      ;c:Val(cl1)..c:FAC;NO;;;;70;FECHA
+                   FinListBox
+               FinDialogo
+               If Not Ok 
+                  Cancelar
+               Endif
+
+               acn(su1,0)
+
+               Recorrer&k Val(cl1),FAC
+                  if Val(l:&k)=0  
+                     Scn(su1,Val(e:&k))
+                  endif
+               Proximo
+
+               Message('Desasociando las operaciones..')   
+
+               acn(av1,0)
+
+               Recorrer&k Val(cl1),fac 
+                  If Val(l:&k)=0 y Val(e:&k)<>0 Y Val(Su1)<>0
+                     acn(av1,1)
+                     Message('Desasociando las operaciones..')   
+                     SQL.ADD("Update "~DBO~".OPERACIONES                       ")
+                     *- El disponible tiene en cta. solamente las ventas
+                     SQL.ADD("Set TotalNetoCli1 =TotalNetoCli1 + "~Val(e:&k)~",")
+                     SQL.ADD("    TotalNetoCli2 =TotalNetoCli2 - "~Val(e:&k)~" ") 
+                     SQL.ADD("Where NrOperacion =  '"~Val(a:&k)~"'            ")
+                     SQL.NEW
+
+                     Message('Registrando desasociacion '~Val(a:&k)~'/'~Dialogo.NrOperacion1 )
+                     SQL.ADD(" Delete  "~DBO~".PARTIDAS                                   ")
+                     SQL.ADD("  Where  NrOperacion = '"~Dialogo.NrOperacion1~"'           ")
+                     SQL.ADD("    and  NrPartida   = '"~Val(a:&k)~"' ")
+                     SQL.ADD("    and  FechaDesde  = '"~IdxDate(Val(b:&k))~"'  ")
+                     SQL.ADD("    and  FechaHasta  = '"~IdxDate(Val(c:&k))~"'  ")
+                     SQL.ADD("    and  Cantidad    = "~FStr(Val(e:&k),0,0) )
+                     SQL.NEW  
+                     SQL.EXEC
+                  Endif
+               Proximo 
+            Else
+               MessageBox('No hay partidas para el dia '~Dialogo.Fecha1)
+            Endif
+         Endif
+      Proximo 
+   Endif
+Else
+   MessageBox('No hay ventas para el dia '~Dialogo.Fecha1)
+Endif

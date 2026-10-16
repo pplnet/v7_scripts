@@ -1,0 +1,129 @@
+﻿*-- Ventas
+ifa
+ACT(a:FAC, 'Ventas realizadas en el periodo')
+SetFont(a:FAC..a:FAC +3,3)
+ifa
+
+SQL.ADD(" Select O.Cartera,O.FechaOp,O.Vehiculo1,O.Especie,O.Cantidad,O.Precio1,O.FechaVto,O.TipoOp,O.NrOperacion ")
+SQL.ADD(" From "~DBO~".OPERACIONES O,"~DBO~".CLIENTES C  Where O.Cliente1=C.Codigo ")
+SQL.ADD(" and O.FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and O.TipoOp  In ('TIV','TIPP','VTP','VTC','PABC') ")
+SQL.ADD(" and ((O.TipoOp In ('VTP','VTC') and C.Alias1='CP') or O.TipoOp Not In ('VTP','VTC')) ") 
+SQL.ADD(" and O.Cartera In (1,2)")
+SQL.ADD(" Union All ")
+SQL.ADD(" Select T.RB4 as Cartera,T.Fecha1 as FechaOp,T.Vehiculo1,T.Especie,T.Cantidad1 as Cantidad,T.Precio1, CASE T.Fecha3 When Null Then T.Fecha1 Else T.Fecha3 End FechaVto,T.TipoTr2 as TipoOp,T.NrTrans NrOperacion ")
+SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C Where T.Cliente1=C.Codigo ")
+SQL.ADD(" and T.Fecha1 <='"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" and T.TipoTr2 In ('RTP') and C.Alias1='CP' ")
+SQL.ADD(" and T.RB4 In (1,2) ")
+SQL.ADD(" Order By 4,9 ")
+
+ACN(z2,0) 
+
+Recorrer SQL
+
+  SCN(z2,1)
+
+  *- do1: Disponible de la Venta 
+  acn(do1, fbn('Cantidad'))   
+
+  *- Verifico que no esten asociadas en su totalidad 
+  SQL.ADD(" Select SUM(Cantidad) as Cantidad FROM "~DBO~".PARTIDAS P WHERE P.NrOperacion='"~FBN['NrOperacion']~"' Having SUM(Cantidad)<>0 ") 
+
+  Recorrer SQL
+     dfa
+     acn(do1, val(do1)-fbn('Cantidad'))   
+  Proximo
+
+*  If val(do1)<>0 
+     If val(z2)=1
+        *- Titulos 
+        ifa
+        ACT(a:FAC, 'Partida')
+        ACT(b:FAC, 'F.Ingreso')
+        ACT(c:FAC, 'Nom. Part.')
+        ACT(d:FAC, 'Afectados')
+        ACT(e:FAC, 'Precio Inv.')
+        ACT(f:FAC, 'Precio Vta.')
+        ACT(g:FAC, 'Resultado')
+        SetFont(a:fac..n:FAC,2)
+        AgregarMarco(a:FAC..g:FAC,2,0,Exe('COLOR'))
+     EndIf
+
+     *- Corte de control por Operacion
+     ifa
+     ACT(a:FAC, 'NrOperacion ')
+     ACT(b:FAC, fbn('NrOperacion'))
+     ACLO(b:FAC, fbn('NrOperacion'))
+     ACT(d:FAC, 'Especie: '~fbn('Especie')~'   Nominales '~fbn('Cantidad'))
+
+     SetFont(a:fac..n:FAC,2)
+     AgregarMarco(a:FAC..g:FAC,2,0)
+
+     acn(pr1,fbn('Precio1'))
+
+     *- Por Cada Operacion Recupero las partidas 
+     SQL.ADD("Select *                                        ")
+     SQL.ADD(" from "~DBO~".PARTIDAS where                    ")
+     SQL.ADD(" NrOperacion ='"~fbn('NrOperacion')~"'          ")
+     SQL.ADD("order by NrPartida                              ")
+  
+     Recorrer SQL
+        ACT(a:FAC, FBN['NrPartida'])
+        ACD(b:FAC, FBN['FechaDesde'])
+        ACN(d:FAC, FBN['Cantidad'])
+ 
+        SQL.ADD("Select *                                        ")
+        SQL.ADD(" from "~DBO~".OPERACIONES where                 ")
+        SQL.ADD(" NrOperacion ='"~fbn('NrPartida')~"'            ")
+        Recorrer SQL
+           ACN(cx1, FBN['Cantidad'])
+           ACN(ex2, FBN['Precio1'] )
+           dfa
+        Proximo
+        ACN(c:FAC, Val(cx1))
+        ACN(e:FAC, Val(ex2))
+        ACN(f:FAC, Val(pr1))
+        ACN(g:FAC, (Val(f:fac)-Val(e:fac))*Val(d:fac))
+ 
+        *- Acumuladores
+        scn(gg3,Val(g:fac))
+        scn(gg4,Val(g:fac))
+        SetFont(a:fac..n:FAC,1)
+        FormatoCeldas(h:fac..I:fac,Exe('F7'))
+        FormatoCeldas(e:fac..f:fac,Exe('F7'))
+        AlinearCeldas(c:FAC..d:FAC,'D')
+        SetFont(a:fac..n:FAC,1)
+     Proximo   
+
+     *- Imprimo totales 
+     Ifa
+     act(a:fac, 'Resultado Venta')
+     acn(g:fac, Val(gg3))
+     acn(gg3,0)
+     SetFont(a:fac..n:FAC,2)
+     AgregarMarco(a:FAC..g:FAC,2,0)
+     ifa  
+*  Else
+*     dfa 
+*  EndIf
+Proximo
+
+Ifa
+
+If Val(cc1)>0
+   */Imprimo totales 
+   act(a:fac, 'Resultados por Ventas')
+   acn(g:fac, Val(gg4))
+   SetFont(a:fac..n:FAC,2)
+   AgregarMarco(a:FAC..g:FAC,2,0)
+   ifa  
+   ifa
+
+   */Imprimo totales 
+   act(a:fac, 'Resultados Total')
+   acn(g:fac, Val(gg4) + Val(jj2))
+   SetFont(a:fac..n:FAC,2)
+   AgregarMarco(a:FAC..g:FAC,2,0)
+   ifa  
+Endif

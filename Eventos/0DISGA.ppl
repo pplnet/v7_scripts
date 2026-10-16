@@ -1,0 +1,264 @@
+﻿CrearDialogo
+    TipoTr1 : 'Tipo Evento'    ;1;1;;  ;  ;[NoVacio(Dialogo.TipoTr1)] Y [Incluido(Dialogo.TipoTr1, 'CANJE|PDIVID|RESCAT|TENDER|SPINOF|STOCK|CCUPON|PCUPON')];'Tipo de Transaccion Invalida';NO;;;;;;" Codigo IN ('CANJE','PDIVID','RESCAT','TENDER','SPINOF','STOCK', 'CCUPON', 'PCUPON') ";;;;;;;
+    Especie1  :'Especie'       ;1;2;;  ;  ;[NoVacio(Dialogo.Especie1)] Y [[[Not DesciendeDeEspecie(Dialogo.Especie1,'MONEDA')] Y [Eqstr(Dialogo.TipoTr1, 'CANJE') O Eqstr(Dialogo.TipoTr1, 'SPINOF') O Eqstr(Dialogo.TipoTr1, 'STOCK')]] O [[DesciendeDeEspecie(Dialogo.Especie1,'TITULO')] Y [Incluido(Dialogo.TipoTr1, 'RESCAT|CCUPON|PCUPON')] Y [EsTerminal(Dialogo.Especie1, Especie)]] O [[EqStr(BuscarCampo('ESPECIES','Tipo','Codigo',Dialogo.Especie1),'PRI')] Y [Eqstr(Dialogo.TipoTr1, 'PDIVID')]]];'Especie Invalida';NO;;;;;;" Jerarquia LIKE '"~Jerarquia('ESPECIES','TITULO')~"%' ";
+    Especie2  :'Esp. Cupon'    ;2;2;;NO;Incluido(Dialogo.TipoTr1, 'CCUPON|PCUPON');;;;;IIF(Incluido(Dialogo.TipoTr1, 'CCUPON|PCUPON'), BuscarCampo('ESPECIES','Alias3','Codigo', Dialogo.Especie1));
+    Entero1   :'Cupon'         ;3;2;;NO;Incluido(Dialogo.TipoTr1, 'CCUPON|PCUPON');;;;;IIF(Incluido(Dialogo.TipoTr1, 'CCUPON|PCUPON'), BuscarCampo('ESPECIES','Cupon','Codigo', Dialogo.Especie2));;;;;;;
+    Fecha1    :'Record Date'   ;2;1;;Not Incluido(Dialogo.TipoTr1, 'CCUPON|PCUPON');Not Incluido(Dialogo.TipoTr1, 'CCUPON|PCUPON');[Dialogo.Fecha1<>0] O [Incluido(Dialogo.TipoTr1, 'CCUPON|PCUPON')];'Debe ingresar un Record Date valido';NO;FSys
+    Fecha2    :'Fecha Pago'    ;3;1;;  ;  ;Dialogo.Fecha2<>0;'Debe ingresar una Fecha valida'     ;NO;FSys
+    Especie3  :'Moneda Gastos' ;5;1;;  ;  ;NoVacio(Dialogo.Especie3);;;Var('MONELOCA');;Var('MONELOCA')~'|'~Var('MONEEXTR')~'|'
+    Cantidad3 :'W.H.T.'        ;6;1;;  ;  ;Dialogo.Cantidad3>=0;'With Holding Tax Debe Ser Mayor que Cero ';NO
+    Cantidad4 :'GASTOS'        ;7;1;;  ;  ;Dialogo.Cantidad4>=0;'Los Gastos Debe Ser Mayor que Cero';NO
+    Cantidad5 :'IVA Gastos'    ;6;2;;  ;  ;Dialogo.Cantidad5>=0;'El IVA Debe Ser Mayor que Cero'    ;NO;;Dialogo.Cantidad4 * Dialogo.Precio2/100
+    Cantidad6 :'Tot.Gastos'    ;7;2;;NO;  ;Dialogo.Cantidad6>=0;'El Tot. de Gastos debe ser positivo';NO;;Dialogo.Cantidad4 + Dialogo.Cantidad5
+    Precio2   :'%IVA BOSEC'    ; ; ;;NO;NO;;;;21
+    Vehiculo1 :'Vehiculo'      ;9;1;;  ;  ;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar el vehiculo';NO;VAR('VEHICULODE')
+FinDialogo
+
+IF NOT OK
+   Cancelar
+ENDIF
+
+***---Paso los gastos a moneda local
+ACN(co:2, CotizacionC(Dialogo.Especie3,,,,Dialogo.Fecha2,1,SI,VAR('MONELOCA')))
+
+ACN(CA:3,Dialogo.Cantidad3*Val(co:2))
+ACN(CA:4,Dialogo.Cantidad4*Val(co:2))
+ACN(CA:5,Dialogo.Cantidad5*Val(co:2))
+ACN(CA:6,Dialogo.Cantidad6*Val(co:2))
+ACN(SA:1, 0)
+ACN(CN:1, 1)
+ACT(LE:1, '')
+ACT(LE:2, '')
+ACN(BR:1, 0)
+
+IF Eqstr(Dialogo.TipoTr1, 'CANJE')
+    ACT(LY:2, 'Canje')
+ENDIF
+IF Eqstr(Dialogo.TipoTr1, 'RESCAT')
+    ACT(LY:2, 'Rescate/Tender')
+ENDIF
+IF Eqstr(Dialogo.TipoTr1, 'PDIVID')
+    ACT(LY:2, 'Pago de Dividendos')
+ENDIF
+IF Eqstr(Dialogo.TipoTr1, 'SPINOF')
+    ACT(LY:2, 'Spin Off')
+ENDIF
+IF Eqstr(Dialogo.TipoTr1, 'STOCK')
+    ACT(LY:2, 'Stock Split')
+ENDIF
+IF Eqstr(Dialogo.TipoTr1, 'CCUPON')
+    ACT(LY:2, 'Cobro de Cupon')
+ENDIF
+IF Eqstr(Dialogo.TipoTr1, 'PCUPON')
+    ACT(LY:2, 'Pago de Cupon')
+ENDIF
+IF Eqstr(Dialogo.Especie3, Var('MONELOCA'))
+    ACT(ES:1, 'Peso')
+ELSE
+    ACT(ES:1, 'Dolar')
+ENDIF
+
+
+***---Select para Transacciones ya condirmadas
+SQL.ADD(" Select Distinct T.Cantidad1, T.NrTrans, T.Cliente1, T.Especie, T.Mercado1, T.Vehiculo1, ")
+SQL.ADD(" T.Cuenta2, T.Cuenta3, T.Cuenta4, T.Cantidad6, T.Cantidad8, T.Especie1, T.Cantidad4, T.Cantidad2, ")
+SQL.ADD(" 1 as BM ")
+SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD(" Where T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND T.Cliente1 = C.Codigo ")
+SQL.ADD(" AND T.NrTrans = M.NrOperacion ")
+SQL.ADD(" AND C.CategDepositante = 'CLI' ")
+SQL.ADD(" AND C.Status = 'HAB' ")
+SQL.ADD(" AND T.TipoTr2 = '"~Dialogo.TipoTr1~"' ")
+IF Incluido(Dialogo.TipoTr1, 'SPINOF')
+   SQL.ADD(" AND T.Especie2 = '"~Dialogo.Especie1~"' ")
+ELSE
+   SQL.ADD(" AND T.Especie = '"~Dialogo.Especie1~"' ")
+ENDIF
+IF Incluido(Dialogo.TipoTr1, 'CANJE|RESCAT')
+    SQL.ADD(" AND T.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND T.Fecha2 = '"~IdxDate(Dialogo.Fecha2)~"' ")
+ELSE
+    IF Incluido(Dialogo.TipoTr1, 'CCUPON|PCUPON')
+        SQL.ADD(" AND T.Fecha1 = '"~IdxDate(Dialogo.Fecha2)~"' ")
+        SQL.ADD(" AND T.Cupon1 = '"~Fstr(Dialogo.Entero1, 0, 0)~"' ")
+        SQL.ADD(" AND (T.CB2 = '0' OR T.CB2 Is NULL) ")
+    ELSE
+        SQL.ADD(" AND T.Fecha2 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD(" AND T.Fecha1 = '"~IdxDate(Dialogo.Fecha2)~"' ")
+    ENDIF
+ENDIF
+
+SQL.ADD(" UNION ")
+
+***---Select para Transacciones Pendientes
+SQL.ADD(" Select Distinct T.Cantidad1, T.NrTrans, T.Cliente1, T.Especie, T.Mercado1, T.Vehiculo1, ")
+SQL.ADD(" T.Cuenta2, T.Cuenta3, T.Cuenta4, T.Cantidad6, T.Cantidad8, T.Especie1, T.Cantidad4, T.Cantidad2, ")
+SQL.ADD(" 0 as BM ")
+SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".CLIENTES C, "~DBO~".MOVPENDIENTES M ")
+SQL.ADD(" Where T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND T.Cliente1 = C.Codigo ")
+SQL.ADD(" AND T.NrTrans = M.NrOperacion ")
+SQL.ADD(" AND C.CategDepositante = 'CLI' ")
+SQL.ADD(" AND C.Status = 'HAB' ")
+SQL.ADD(" AND T.TipoTr2 = '"~Dialogo.TipoTr1~"' ")
+IF Incluido(Dialogo.TipoTr1, 'SPINOF')
+   SQL.ADD(" AND T.Especie2 = '"~Dialogo.Especie1~"' ")
+ELSE
+   SQL.ADD(" AND T.Especie = '"~Dialogo.Especie1~"' ")
+ENDIF
+IF Incluido(Dialogo.TipoTr1, 'CANJE|RESCAT')
+    SQL.ADD(" AND T.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+    SQL.ADD(" AND T.Fecha2 = '"~IdxDate(Dialogo.Fecha2)~"' ")
+ELSE
+    IF Incluido(Dialogo.TipoTr1, 'CCUPON|PCUPON')
+        SQL.ADD(" AND T.Fecha1 = '"~IdxDate(Dialogo.Fecha2)~"' ")
+        SQL.ADD(" AND T.Cupon1 = '"~Fstr(Dialogo.Entero1, 0, 0)~"' ")
+        SQL.ADD(" AND (T.CB2 = '0' OR T.CB2 Is NULL) ")
+    ELSE
+        SQL.ADD(" AND T.Fecha2 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+        SQL.ADD(" AND T.Fecha1 = '"~IdxDate(Dialogo.Fecha2)~"' ")
+    ENDIF
+ENDIF
+
+SQL.ADD(" Order By T.NrTrans ")
+
+SetFilaActual(1)
+Recorrer SQL
+    ACN(BR:1, 1)
+    SCN(CN:1, 1)
+    IF fbn('BM') = 0
+        ACN(BM:fac, 0)
+    ELSE
+        ACN(BM:fac, 1)
+    ENDIF
+    ACN(QY:2, SQL(" Select Count (*) from "~DBO~".MOVEJECUTADOS Where NrOperacion = '"~fbn('NrTrans')~"' AND NrGrupo2 = 99 "))
+    ACN(QY:1, SQL(" Select Count (*) from "~DBO~".MOVPENDIENTES Where NrOperacion = '"~fbn('NrTrans')~"' AND NrGrupo2 = 99 "))
+    ACT(C:fac, fbn('NrTrans'))
+    IF Val(QY:2) = 0  Y Val(QY:1) = 0
+        ***---No tiene Gastos Asignados
+        ACN(F:fac, 1)
+        ACT(J:fac, 'Sin Gastos Asignados')
+    ENDIF
+    IF Val(QY:2) > 0 O Val(QY:1) > 0
+        ***---Tiene Gastos Liquidados
+        ACN(BD:fac, 1)
+        ACT(J:fac, 'Con Gastos Asignados')
+        ACN(F:fac, 1)
+    ENDIF
+    ACT(D:fac, fbn('Cliente1'))
+    ACT(E:fac, fbn('Especie'))
+    IF Eqstr(Dialogo.TipoTr1, 'SPINOF')
+        ACN(G:fac, fbn('Cantidad2'))
+    ELSE
+        IF Incluido(Dialogo.TipoTr1, 'CCUPON|PCUPON')
+            ACN(G:fac, fbn('Cantidad4'))
+        ELSE
+            ACN(G:fac, fbn('Cantidad1'))
+        ENDIF
+    ENDIF
+    ACT(H:fac, fbn('Mercado1'))
+    ACT(I:fac, fbn('Vehiculo1'))
+    IF Eqstr(Dialogo.TipoTr1, 'CANJE')
+        ACT(LE:fac, 'Gastos por '~Val(LY:2)~' de '~fbn('Especie')~' -> '~fbn('Especie1'))
+    ELSE
+        ACT(LE:fac, 'Gastos por '~Val(LY:2)~' de '~fbn('Especie'))
+    ENDIF
+    ACT(CU:fac, fbn('Cuenta4'))
+    ACT(VH:fac, fbn('Vehiculo1'))
+Proximo
+
+IF Val(BR:1) = 0
+   Cancelar('No Hay Transacciones Liquidadas que Coincidan con los Datos Ingresados')
+ENDIF
+
+CrearListBox ; 'Arial,8,';'Distribucion de Gastos. WHT: '~Dialogo.Cantidad3~'. Gastos: '~Dialogo.Cantidad4~'. IVA: '~Dialogo.Cantidad5~'. Moneda: '~Val(ES:1)
+   'Ok'                      ;F:2..F:FAC;SI;;;30;CHECK;RGB(255,255,193);;
+   'Transaccion'             ;C:2..C:FAC;NO;;;90;STRING;;RGB(220,220,193);
+   'Cuenta'                  ;CU:2..CU:fac;SI;[Val(F:FLB)=0] O [[NoVacio(Val(CU:FLB))] Y [Incluido(Val(CU:FLB), SQLSet(" Select Codigo From "~DBO~".CUENTAS Where Cliente='"~Val(D:flb)~"' and Comitente='"~Dialogo.Vehiculo1~"' and (Especies LIKE '%MONEDA%' or Especies LIKE '"~Var('MONELOCA')~"%') and Estado='HAB' and TipoCuenta='VIS' "))]];'Cuenta Invalida';100;TABLA;'CUENTAS' ;'Codigo';'Codigo;Nombre';" Cliente='"~Val(D:flb+1)~"' and Comitente='"~Dialogo.Vehiculo1~"' and (Especies LIKE '%MONEDA%' or Especies LIKE '"~Var('MONELOCA')~"%') and Estado='HAB' and TipoCuenta='VIS' ";RGB(255,255,193);
+   'Cliente'                 ;D:2..D:FAC;NO;;;70;STRING;;RGB(220,220,193);
+   'Especie'                 ;E:2..E:FAC;NO;;;70;STRING;;RGB(220,220,193);
+   'Cantidad'                ;G:2..G:FAC;NO;;;80;NUMERO;'##,###,###.##';RGB(220,220,193);
+   'Mercado'                 ;H:2..H:FAC;NO;;;60;STRING;;RGB(220,220,193);
+   'Observaciones'           ;J:2..J:FAC;NO;;;120;STRING;;RGB(220,220,193);
+FinListBox
+
+IF NOT OK
+   Cancelar('Evento Cancelado.')
+ENDIF
+
+***---Sumo los saldos seleccionados
+Recorrer&K 2, fac
+    IF Val(F:&k) = 1
+       SCN(SA:1, Val(G:&k))
+    ENDIF
+Proximo
+
+IF Val(SA:1) = 0
+   Cancelar('No se seleccionaron Transacciones para distribuir los gastos')
+ENDIF
+
+***---Distribuyo los Gastos
+***---PP: WHT
+***---QQ: Total Gastos
+***---V: Gastos
+***---W: Iva Gastos
+
+Recorrer&K 2, fac
+    ACN(PP:&K, Val(G:&K) * Val(CA:3)/Val(SA:1))
+    ACN(QQ:&K, Val(G:&K) * Val(CA:6)/Val(SA:1))
+    ACN(V:&K, Val(G:&K) * Val(CA:4)/Val(SA:1))
+    ACN(W:&K, Val(G:&K) * Val(CA:5)/Val(SA:1))
+Proximo
+
+Recorrer&j 2, fac
+    IF Val(F:&j) = 1
+        IF Not CeldaVacia(C:&j)
+            ***---Borro el movimiento anterior
+            SQL.ADD(" DELETE From ")
+            IF Val(BM:&j) = 0
+                SQL.ADD(" "~DBO~".MOVPENDIENTES ")
+            ELSE
+                SQL.ADD(" "~DBO~".MOVEJECUTADOS ")
+            ENDIF
+            SQL.ADD(" Where NrOperacion = '"~Val(C:&j)~"' ")
+            SQL.ADD(" AND NrGrupo2 = 99 ")
+            SQL.NEW
+        ENDIF
+        ***---Inserto nuevo movimiento por el TotalGastos + WHT
+        SQL.ADD(" INSERT INTO ")
+        IF Val(BM:&j) = 0
+            SQL.ADD(" "~DBO~".MOVPENDIENTES ")
+        ELSE
+            SQL.ADD(" "~DBO~".MOVEJECUTADOS ")
+        ENDIF
+        SQL.ADD(" (NrOperacion, FechaMov, Cliente, Especie, ")
+        SQL.ADD(" Mercado, EnteCustodia, Cantidad, Leyenda, ")
+        SQL.ADD(" Bits, NrSaldo, NrGrupo, Cuenta, NrGrupo2) ")
+        SQL.ADD(" Values ")
+        IF Not CeldaVacia(C:&j)
+           SQL.ADD(" ('"~Val(C:&j)~"', ")
+        ELSE
+           SQL.ADD(" ('"~Val(A:&j)~"', ")
+        ENDIF
+        SQL.ADD(" '"~IdxDate(Fsys)~"', '"~Val(D:&j)~"', '"~Var('MONELOCA')~"', ")
+        SQL.ADD(" '"~Val(ME:&j)~"', '"~Val(VH:&j)~"', "~FSTR( -Val(QQ:&j)-Val(PP:&j),1,2)~", '"~Val(LE:&j)~"', ")
+        SQL.ADD(" 'MV', 1, 88, '"~Val(CU:&j)~"', 99) ")
+        SQL.NEW
+        SQL.ADD(" UPDATE "~DBO~".TRANSACCIONES2 ")
+        SQL.ADD(" Set Cantidad4 = "~Val(V:&j)~", ")
+        SQL.ADD(" Cantidad6 = "~Val(PP:&j)~", ")
+        SQL.ADD(" Cantidad8 = "~Val(QQ:&j)~", ")
+        SQL.ADD(" Cambio1 = "~Val(W:&j)~" ")
+        IF Not CeldaVacia(C:&j)
+           SQL.ADD(" Where NrTrans = '"~Val(C:&j)~"' ")
+        ELSE
+           SQL.ADD(" Where NrTrans = '"~Val(A:&j)~"' ")
+        ENDIF
+        SQL.ADD("  ")
+        SQL.NEW
+        SQL.EXEC
+    ENDIF
+Proximo
+***---NrGrupo = 88 => El gasto fue ingresado por este evento.
+***---NrGrupo2 = 99 => Es un Mov. de gastos.

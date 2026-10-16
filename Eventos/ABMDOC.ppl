@@ -1,0 +1,102 @@
+﻿**Hojavisible(SI)
+CrearDialogo
+  Cliente1:  'Cliente';;;;;;NoVacio(Dialogo.Cliente1);'Ingrese un Cliente';;;
+  Radio1  :  'Accion|Alta|Modif.';;;;;;;;;0
+FinDialogo
+
+if not ok
+  Cancelar
+endif
+
+if Dialogo.Radio1 = 0
+  ACT(l1,Dialogo.Cliente1)
+  ACD(b1,FSYS)
+  CrearListBox ; 'Arial,8,'
+  'Cliente'      ;l1..l1;NO;;;60;STRING;
+  'Documento'    ;a1..a1;SI;;;90;STRING;
+  'Fecha'        ;b1..b1;SI;;;80;FECHA;
+  'Recibido'     ;c1..c1;SI;;;30;COMBO;'  |SI|NO'       
+  'COPERS'       ;d1..d1;SI;;;80;STRING;
+  FinListBox
+
+  if not OK
+    Cancelar
+  endif
+  
+  Recorrer&i 1,1
+    if SQL("Select 1 from "~DBO~".CLIENTESDOCUMENTACION where Codigo = '"~Dialogo.Cliente1~"' and Documento = '"~val(a:&i)~"'") = 0
+    
+       SQL.ADD("INSERT INTO "~DBO~".CLIENTESDOCUMENTACION (Codigo,Documento,Fecha,Recibido,NrCOPERS) Values ")
+       SQL.ADD("('"~val(l:&i)~"', ")
+       SQL.ADD(" '"~val(a:&i)~"', ")
+       SQL.ADD(" '"~IdxDate(val(b:&i))~"', ")
+       SQL.ADD(" '"~iif(val(c:&i)=0,'',iif(val(c:&i)=1,'SI','NO'))~"', ")
+       SQL.ADD(" '"~val(d:&i)~"') ")
+       SQL.NEW
+       SQL.EXEC
+   else    
+      Messagebox('El Cliente ya tiene Documentacion '~Val(a:&i)~' cargada - ingrese por Modificacion')      
+   endif
+  proximo
+
+
+else
+   ** Modificacion o Eliminacion
+   SQL.ADD("Select * from "~dbo~".CLIENTESDOCUMENTACION ")
+   SQL.ADD("Where ")
+   SQL.ADD(" Codigo = '"~Dialogo.Cliente1~"' ")
+   SQL.ADD("Order by Documento ")
+   watch(SQL.BATCH())
+   SetFilaActual(0)
+   
+   Recorrer SQL
+     ACN(x:fac,0)
+     ACT(a:fac,fbn('Documento'))
+     ACD(b:fac,fbn('Fecha'))
+     ACT(c:fac,fbn('Recibido')) 
+     ACT(d:fac,fbn('NrCOPERS'))
+     SCN(xy:1,1)  
+   proximo
+
+   if val(xy:1)>0
+    
+      CrearListBox ; 'Arial,8,';'Actualizacion Documentacion Cliente'~Dialogo.Cliente1
+        'Accion ?'     ;x1..x:Fac;SI;;;40;COMBO;'Modifica|Elimina'       
+        'Documento'    ;a1..a:fac;NO;;;60;STRING;
+        'Fecha'        ;b1..b:fac;SI;;;80;FECHA;
+        'Recibido'     ;c1..c:fac;SI;;;80;COMBO;'  |SI|NO'
+        'COPERS'       ;d1..d:fac;SI;;;80;STRING;
+      FinListBox
+
+      if not OK
+         Cancelar
+      endif
+  
+      Recorrer&i 1,val(xy:1)
+       
+         if val(x:&i) = 0 
+            *Es una modificacion
+            SQL.ADD("UPDATE "~dbo~".CLIENTESDOCUMENTACION SET ")
+            SQL.ADD("  Recibido = '"~iif(val(c:&i)=0,'',iif(val(c:&i)=1,'SI','NO'))~"',")
+            SQL.ADD("  NrCOPERS = '"~val(d:&i)~"',")
+            SQL.ADD("  Fecha   = '"~IdxDate(val(b:&i))~"'")
+            SQL.ADD("Where ")
+            SQL.ADD("  Codigo  = '"~Dialogo.Cliente1~"' and ")
+            SQL.ADD("  Documento = '"~val(a:&i)~"'  ")
+         Else
+            * Se elimina registro
+            SQL.ADD("DELETE "~dbo~".CLIENTESDOCUMENTACION  ")
+            SQL.ADD("Where ")
+            SQL.ADD("  Codigo  = '"~Dialogo.Cliente1~"' and ")
+            SQL.ADD("  Documento = '"~val(a:&i)~"'  ")
+         Endif
+         SQL.NEW
+         SQL.EXEC
+
+      Proximo
+      
+   else
+      Messagebox('El Cliente - '~Dialogo.Cliente1~' - no tiene Documentacion cargada ')
+   Endif
+Endif
+

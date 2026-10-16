@@ -1,0 +1,304 @@
+﻿**********************************************************************************
+* Dado un select arma la grilla con los datos
+* Parametros:
+*     zp1:      fila del header
+*     zp2:      columnas fecha 
+*     zp3:      columnas texto alineacion izq
+*     zp4:      columnas texto alineacion derecha
+*     zp5:      columnas texto centradas
+*     zp6:      columnas numero sin decimales
+*     zp7:      columnas numero con 2 decimales
+*     zp8:      columnas numero con 6 decimales
+*     zp9:      columnas ACLO
+*     zp16:     encabezado hecho por el usuario (si es 1 el usuario debe hacer el encabezado)
+*     zp17:     columnas a colorear
+*     zp18:     leyenda si no hay registros
+*     zp19:     setear en 1 para que solamente dibuje la tabla, no el resto del informe
+*     zp20:     columnas de totales
+*     zp21:     columnas a borrar en totales
+*     zp22:     columnas a no mostrar en el informe
+*     zp50..60: notas a mostrar
+*     zp61:     columnas a pintar con color val(zp610)
+*     zp610:    color
+*     zp62:     columnas a pintar con color val(zp620)
+*     zp620:    color
+*     zp63:     columnas a pintar con color val(zp630)
+*     zp630:    color
+*     zp64:     columnas a pintar con color val(zp640)
+*     zp640:    color
+*     zp65:     columnas a pintar con color val(zp650)
+*     zp650:    color
+* 
+* Nombres Reservados:
+*     Color:    debe ser la ultima columna, y define el valor de la fuente.
+*               Valores validos: Black, Blue, Red, Green, Yellow
+*     CabDet:   debe ser la ultima columna, y define si el registro es cabecera o detalle.
+*               Valores validos: 0 Cabecera, resto detalle
+* Las columnas se indican separadas por | ej: Especie|Cliente
+* Si una columna es de total, cuando tiene null se mostrará como total
+* y ocultará las columnas a totalizar.
+*
+* Las columnas no especificadas se imprimiaran como texto alineado a izquierda
+*
+* Utiliza las siguientes variables: 
+*     zv1: cantidad de campos
+*     zv2: flag para colorear filas
+*     zv3: indica si es un total
+*     zv4: decimales del numero
+*     zv5: marco a utilizar
+*     zv6: es la ultima fila
+*     zv7: indica que el registro es cabecera
+*     zl:x: es el largo de la columna x
+*
+***********************************************************************************
+
+if VACIO(val(zp19)) o val(zp19) <> 1
+  CrearFont(1,'Arial,10,BU')
+  CrearFont(2,'Arial,8,B')
+  CrearFont(3,'Arial,8,')
+  CrearFont(4,'Arial,7,B')
+  SetFont(a1,1)
+  SetFont(a:2..a:val(zp1)-1,2)
+endif
+
+if NOVACIO(val(zp61)) O NOVACIO(val(zp62)) O NOVACIO(val(zp63)) O NOVACIO(val(zp64)) O NOVACIO(val(zp65))
+   ACN(zv5,3)
+else
+   ACN(zv5,0)
+endif
+
+SetFilaActual(val(zp1)-1)
+ACN(zv1,0)
+ACN(zv2,0)
+ACN(zv7, 0)
+
+Recorrer SQL
+    *Armo los encabezados
+    if fac=val(zp1) Y val(zp16)<>1
+      ACN(zv1, FieldCount)
+      recorrer&i 1, FieldCount
+        if Incluido(FieldNames[&i-1],'Color|CabDet|')
+          *Decremento el contador de columnas
+          ACN(zv1, val(zv1)-1)
+        else
+          ACT(&i:fac, FieldNames[&i-1])
+          ACN(zl:&i, longitud(val(&i:fac)) * 0.7)
+        endif
+      proximo
+      SetFont      (a:fac..val(zv1):fac,2)
+      AgregarMarco (a:fac..val(zv1):fac,0,val(zv5),RGB(255,255,192))
+      AlinearCeldas(a:fac..val(zv1):fac,'C')
+      ifa
+    else
+       if fac=val(zp1)
+          ACN(zv1, FieldCount)
+       endif
+    endif
+
+    ACN(zv3,0)
+
+    recorrer&i 1, FieldCount
+      * Es Campo Especial
+      if Incluido(FieldNames[&i-1],'Color|CabDet|')
+         if Incluido(FieldNames[&i-1],'Color|')
+           recorrer&i 1, FieldCount
+             if Incluido(FieldNames[&i-1],val(zp17))
+                if EqStr(fbn('Color'),'RED')
+                   ColorCeldas(&i:fac..&i:fac, clRed)
+                else
+                   if EqStr(fbn('Color'),'BLUE')
+                      ColorCeldas(&i:fac..&i:fac, clBlue)
+                   else
+                      if EqStr(fbn('Color'),'YELLOW')
+                         ColorCeldas(&i:fac..&i:fac, clYellow)
+                      else
+                         if EqStr(fbn('Color'),'GREEN')
+                            ColorCeldas(&i:fac..&i:fac, clGreen)
+                         else
+                            ColorCeldas(&i:fac..&i:fac, clBlack)
+                         endif
+                      endif
+                   endif
+                endif
+              endif
+           proximo
+         else
+           if fbn('CabDet')=0
+              ACN(zv7,1)
+           else
+              ACN(zv7,0)
+           endif
+         endif
+      else
+         * #Es un campo de los que debo borrar?
+         if Not Incluido(FieldNames[&i-1],val(zp22))
+             * Es Fecha?
+             if NoVacio(Fields[&i-1])
+                if Incluido(FieldNames[&i-1],val(zp2))
+                   ACD(&i:fac, Fields[&i-1])
+                   ACN(zl:&i,7)
+                else
+                   if Incluido(FieldNames[&i-1],val(zp6)~'|'~val(zp7)~'|'~val(zp8))
+        
+                      ACN(&i:fac, Fields[&i-1])
+     
+                      * Sin decimales?
+                      if Incluido(FieldNames[&i-1],val(zp6))
+                         ACN(zv4,0)
+                         FormatoCeldas(&i:fac,EXE('F0R'))
+                      else
+                         * 2 decimales?
+                         if Incluido(FieldNames[&i-1],val(zp7))
+                            ACN(zv4,2)
+                            FormatoCeldas(&i:fac,EXE('F2'))
+                         else
+                            * 6 decimales
+                            ACN(zv4, 6)
+                            FormatoCeldas(&i:fac,EXE('F6'))
+                         endif
+                      endif
+
+                      if abs(val(&i:fac)) > 0
+                         if val(zl:&i) < ((trunc(logn(abs(val(&i:fac))) / logn(10))) + 2 + val(zv4)) * 0.8
+                            ACN(zl:&i, ((trunc(logn(abs(val(&i:fac))) / logn(10))) + 2 + val(zv4)) * 0.8)
+                         endif
+                      endif
+                   else
+      
+                      * Es Texto
+                      ACT(&i:fac, Fields[&i-1])
+                      if val(zl:&i) < longitud(val(&i:fac)) * 0.7
+                         ACN(zl:&i, longitud(val(&i:fac)) * 0.7)
+                      endif
+      
+                      * ACLO
+                      if Incluido(FieldNames[&i-1],val(zp9))
+                         ACLO(&i:fac, Fields[&i-1])
+                      Endif
+
+
+                      * Centrado?
+                      if Incluido(FieldNames[&i-1],val(zp5))
+                         AlinearCeldas(&i:fac,'C')
+                      else
+                         * Alineado Derecha?
+                         if Incluido(FieldNames[&i-1],val(zp4))
+                            AlinearCeldas(&i:fac,'D')
+                         endif
+                     endif
+                   endif
+      
+                endif
+             else
+               *Es Vacio veo si es total
+               if Incluido(FieldNames[&i-1],val(zp20))
+                  if val(zv3) = 0
+                     if &i=1
+                        ACT(a:fac,'Total')
+                        AgregarMarco(1:fac..val(zv1):fac,0,val(zv5),RGB(192,192,255))
+                     else
+                        ACT(&i-1:fac,'Total '~Fields[&i-2])
+                        AgregarMarco(1:fac..val(zv1):fac,0,val(zv5),RGB(192+31*(1-1/&i),192+31*(1-1/&i),235))
+                        if &i >  2
+                           BorrarCeldas(1:fac..&i-2:fac)
+                        endif
+                     endif
+                  endif
+                  ACN(zv3,1)
+                  ACN(zv2,0)
+               endif
+             endif
+         endif   
+       endif
+    proximo        
+
+    * Si no hay toatales pinto una de cada 2 celdas gris claro
+    if val(zv3) = 0
+      * #Es un registro de cabezera, lo pinto de otro color
+      if val(zv7) = 1
+        AgregarMarco(a:fac..val(zv1):fac,0,val(zv5),RGB(205,205,205))
+      else
+        if VACIO(val(zp61)) Y VACIO(val(zp62)) Y VACIO(val(zp63)) Y VACIO(val(zp64)) Y VACIO(val(zp65))
+           *No hay colores especiales, pinto una fila de cada color
+           if val(zv2) = 1
+              AgregarMarco(a:fac..val(zv1):fac,0,val(zv5),RGB(235,235,235))
+           else
+              AgregarMarco(a:fac..val(zv1):fac,0,val(zv5))
+           endif
+        else
+           *Hay colores especiales, entonces pinto de los colores indicados
+           AgregarMarco(a:fac..val(zv1):fac,0,val(zv5))
+           recorrer&i 1, FieldCount
+             *Pinto del color de zp*10
+             if Incluido(FieldNames[&i-1],val(zp61)) 
+                AgregarMarco(&i:fac..&i:fac,0,val(zv5),val(zp610))
+             endif
+             if Incluido(FieldNames[&i-1],val(zp62)) 
+                AgregarMarco(&i:fac..&i:fac,0,val(zv5),val(zp620))
+             endif
+             if Incluido(FieldNames[&i-1],val(zp63)) 
+                AgregarMarco(&i:fac..&i:fac,0,val(zv5),val(zp630))
+             endif
+             if Incluido(FieldNames[&i-1],val(zp64)) 
+                AgregarMarco(&i:fac..&i:fac,0,val(zv5),val(zp640))
+             endif
+             if Incluido(FieldNames[&i-1],val(zp65)) 
+                AgregarMarco(&i:fac..&i:fac,0,val(zv5),val(zp650))
+             endif
+           proximo
+        endif
+      endif
+      ACN(zv2,(val(zv2) + 1) mod 2)
+      SetFont(a:fac..val(zv1):fac,3)
+    else
+      recorrer&i 1, FieldCount
+       if Incluido(FieldNames[&i-1],val(zp21))
+           BorrarCeldas(&i:fac..&i:fac)
+        endif
+      proximo
+      SetFont(a:fac..val(zv1):fac,2)
+    endif
+proximo
+
+ACN(zv6, fac)
+
+if val(zv1) = 0
+   *No hubo ningun registro
+   ifa
+   ACT(a:fac,'   '~val(zp18))
+   SetFont(a:fac, 2)
+   ifa
+else
+   ifa
+   recorrer&i 50, 60
+     if NOVACIO(val(zp:&i))
+        ACT(a:fac,val(zp:&i))
+        SetFont(a:fac, 4)
+        ifa
+     endif
+   proximo
+endif
+
+
+if VACIO(val(zp19)) o val(zp19) <> 1
+  recorrer&i 1, val(zv1)
+    ACO(&i, val(zl:&i))
+  proximo
+endif
+
+* #Hago de ancho cero las columnas eliminadas y borro su encabezado 
+Recorrer&i 1, val(zv1)
+  if Incluido(val(&i:val(zp1)),val(zp22))
+     BorrarCeldas(&i:val(zp1)..&i:val(zp1))
+     ACO(&i, 0)
+  endif
+proximo
+
+
+if VACIO(val(zp19)) o val(zp19) <> 1
+  ifa
+  ACT(a:fac, 'End of report')
+  SetFont(a:fac,2)
+
+  LimitesVision(val(zv1)+1:fac+1)
+endif

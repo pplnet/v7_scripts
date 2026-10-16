@@ -1,0 +1,521 @@
+﻿HojaVisible(NO) 
+MostrarCuadroDeMensajes
+
+CrearDialogo
+  Vehiculo1: 'Vehiculo'      ; 1;1;;;;NoVacio(Dialogo.Vehiculo1);'Debe ingresar un Vehiculo';NO;Var('VEHICULODE');
+  Fecha1   : 'Fecha Liq.'    ; 2;1;;;;Dialogo.Fecha1<>0 ;'Fecha Incorrecta';NO;FSys;
+  Check11  : 'Incluye Pend'  ; 2;2;;;;;;;0;
+  Mercado1 : 'Mercado'       ; 3;1;;;;[NoVacio(Dialogo.Mercado1) y Not Incluido(Dialogo.Mercado1, VAR('MERCTITULO'))] o Dialogo.Check6=0;'Debe ingresar un Mercado';NO;;;;;;" (Netea='NO' or Netea is Null) and Observaciones like ('T|') "
+  Cliente1 : 'Cliente'       ; 4;1;;;;NoVacio(Dialogo.Cliente1) o Dialogo.Check6=0;'Si desea Seleccionar debe ingresar un Cliente';NO;
+  Especie1 : 'Especie'       ; 5;1;;;;NoVacio(Dialogo.Especie1) o Dialogo.Check6=0;'Si desea Seleccionar debe ingresar una Especie';NO;
+  Mercado2 : 'Merc. Neg.'    ; 6;1;;;;[NoVacio(Dialogo.Mercado2) y Not Incluido(Dialogo.Mercado2, VAR('MERCTITULO'))] o Dialogo.Check6=0;'Si desea Seleccionar debe ingresar Mercado Negociacion';NO;VAR('MERCANEG');;;;;" Codigo not in ('AC') "
+  Check14  : 'SENEBI'        ; 6;2;;                ;EQSTR(Dialogo.Mercado2,VAR('MERSENEBI'));;;;IIF(EQSTR(Dialogo.Mercado2,VAR('MERSENEBI')),1,0);IIF(EQSTR(Dialogo.Mercado2,VAR('MERSENEBI')),1,0);
+  Check1   : 'Titulos'       ; 7;1;;                ;Dialogo.Check12=0  ;Dialogo.Check1+Dialogo.Check2+Dialogo.Check3+Dialogo.Check4+Dialogo.Check10+Dialogo.Check12>0;'Debe seleccionar un grupo de operaciones';NO;1;IIF(Dialogo.Check12=1,0,Dialogo.Check1)
+  Check13  : 'COM. MAE1'     ; 8;1;;Dialogo.Check1=1;Dialogo.Check1=1;Dialogo.Check5+Dialogo.Check13=2 o Dialogo.Check13=0;'Liquidando Comision MAE1 se debera COMPENSAR';NO;IIF(Dialogo.Check12=1,0,Dialogo.Check13);IIF(Dialogo.Check12=1,0,Dialogo.Check13)
+  Check2   : 'F.Exchange'    ; 9;1;;;Dialogo.Check12=0 y Dialogo.Check13=0;;;;1;IIF(Dialogo.Check12=1 o Dialogo.Check13=1,0,Dialogo.Check2)
+  Check3   : 'M.Market'      ;10;1;;;Dialogo.Check12=0 y Dialogo.Check13=0;;;;1;IIF(Dialogo.Check12=1 o Dialogo.Check13=1 ,0,Dialogo.Check3)
+  Check12  : 'Rofex'         ; 7;2;;                ;Dialogo.Check13=0;Dialogo.Check5+Dialogo.Check12=2 o Dialogo.Check12=0;'Liquidando ROFEX se debera COMPENSAR';NO;IIF(Dialogo.Check13=1,0,Dialogo.Check12);IIF(Dialogo.Check13=1,0,Dialogo.Check12)
+  Check4   : 'Prestamos'     ; 8;2;;;Dialogo.Check12=0 y Dialogo.Check13=0;;;;0;IIF(Dialogo.Check12=1 o Dialogo.Check13=1,0,Dialogo.Check4)
+  Check10  : 'Falla OCT'     ; 9;2;;;Dialogo.Check12=0 y Dialogo.Check13=0;;;;0;IIF(Dialogo.Check12=1 o Dialogo.Check13=1,0,Dialogo.Check10)
+  Check9   : 'Netea Mon.'    ; 3;2;;Dialogo.Check6=1;Dialogo.Check6=1;;;;0;
+  Check5   : 'Compensar Op.' ; 4;2;;;;Dialogo.Check5+Dialogo.Check6<2;'No se puede Compensar y Seleccionar al mismo tiempo';NO;IIF(Dialogo.Check12=1 o Dialogo.Check13=1,1,0);IIF(Dialogo.Check12=1 o Dialogo.Check13=1,1,0)
+  Check6   : 'Seleccionar'   ; 5;2;;  ;  ;;;;0;
+  Check8   : 'Procesa'       ;11;1;;NO;NO;;;;1;
+  Check7   : 'Liq.Automatica';11;2;;NO;NO;;;;0;
+FinDialogo
+
+if Not Ok
+   Cancelar
+endif
+
+if Dialogo.Check8=0
+   HojaVisible(SI)
+endif
+
+if NoVacio(Dialogo.Mercado1)
+   if Incluido(Dialogo.Mercado1,Var('MERCAACMC'))
+   Cancelar('No es posible liquidar un mercado neteado, se cancela')
+   endif
+endif
+
+
+SQL.ADD("Select M.FechaMov,      M.Cliente,       M.Especie,  CASE WHEN  M.Cupon Is Null THEN '0' WHEN M.Cupon='' THEN '0' WHEN M.Cupon=' ' THEN '0' ELSE M.Cupon END Cupon,    ")
+SQL.ADD("       M.Cantidad,      M.NrOperacion,   M.Status,   M.NrMov,    ")
+SQL.ADD("       M.Mercado MercM, M.Cuenta,        M.Concepto, M.NrGrupo2, ")
+SQL.ADD("       O.TipoOp Tipo,   O.Mercado MercO, 'OP' Voucher , O.NrOperacion OperOrig, O.RB10, O.Cuenta2, C.CategDepositante, M.NrGrupo ")
+SQL.ADD("from "~DBO~".MOVPENDIENTES M, "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B,"~DBO~".CLIENTES C ")
+SQL.ADD("where M.NrOperacion = O.NrOperacion")
+SQL.ADD("and M.NrOperacion = B.NrOperacion")
+SQL.ADD("and M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("and M.Cliente = O.Cliente1 ")
+SQL.ADD("and M.Cliente = C.Codigo ")
+SQL.ADD("and M.NrSaldo = 1   ")
+ 
+if Dialogo.Check1=0
+  SQL.ADD("and M.Concepto <> 'TI' ")
+else
+  SQL.ADD("and O.TipoOp in ('TIC','TIV') and O.Mercado4 = '"~Dialogo.Mercado2~"' ")
+  if Dialogo.Check14=1
+    SQL.ADD("and O.CB3 = '1' ")
+  else
+    SQL.ADD("and O.CB3 = '0' ")
+  endif
+endif
+if Dialogo.Check2=0
+  SQL.ADD("and M.Concepto <> 'FX' ")
+endif
+if Dialogo.Check3=0
+  SQL.ADD("and M.Concepto <> 'MM' ")
+endif
+if Dialogo.Check4=0
+  SQL.ADD("and M.Concepto <> 'PM' ")
+endif
+if Dialogo.Check12=0
+  SQL.ADD("and M.Concepto <> 'RF' ")
+endif
+if Dialogo.Check13=1
+   SQL.ADD("and M.NrGrupo = 15   ") 
+else
+   SQL.ADD("and (M.NrGrupo <> 15 or M.NrGrupo is Null)  ") 
+endif
+if Dialogo.Check11=0
+   SQL.ADD("and M.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' ")
+else
+   SQL.ADD("and M.FechaMov <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+endif
+SQL.ADD("and M.Bits in ('MV','MI') ")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD("and M.Cliente = '"~Dialogo.Cliente1~"' ")
+endif
+if NoVacio(Dialogo.Especie1)
+  SQL.ADD("and M.Especie = '"~Dialogo.Especie1~"' ")
+endif
+if NoVacio(Dialogo.Mercado1)
+  SQL.ADD("and M.Mercado = '"~Dialogo.Mercado1~"' ")
+endif
+  SQL.ADD("and M.Mercado not in("~Pipe2Comillas(VAR('MERCAACMC'))~") ")
+SQL.ADD("and O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("and ((M.Status <> 'MATCH' or M.Status = '' or M.Status is NULL) or (M.Status = 'MATCH' and M.Especie = O.Especie)) ")
+SQL.ADD("and B.NrBit in ('10','70') and B.Valor = '1'  ")
+
+SQL.ADD("union ")                
+SQL.ADD("Select M.FechaMov,      M.Cliente,       M.Especie,  CASE WHEN  M.Cupon Is Null THEN '0' WHEN M.Cupon='' THEN '0' WHEN M.Cupon=' ' THEN '0' ELSE M.Cupon END Cupon,    ")
+SQL.ADD("       M.Cantidad,      M.NrOperacion,   M.Status,   M.NrMov,    ")
+SQL.ADD("       M.Mercado MercM, M.Cuenta,        M.Concepto, M.NrGrupo2, ")
+SQL.ADD("       T.TipoTr2 Tipo,  T.Mercado1 MercO , 'TR' Voucher , T.NrOperacionRef1 OperOrig, 0 RB10, '' Cuenta2 , C.CategDepositante, M.NrGrupo ")
+SQL.ADD("from "~DBO~".MOVPENDIENTES M, "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS B,"~DBO~".CLIENTES C ")
+SQL.ADD("where M.NrOperacion = T.NrTrans")
+SQL.ADD("and M.NrOperacion = B.NrOperacion")
+SQL.ADD("and M.EnteCustodia = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("and M.Cliente = T.Cliente1 ")
+SQL.ADD("and M.Cliente = C.Codigo ")
+SQL.ADD("and M.NrSaldo = 1 ")
+if Dialogo.Check1=0
+  SQL.ADD("and M.Concepto <> 'TI' ")
+endif
+if Dialogo.Check2=0
+  SQL.ADD("and M.Concepto <> 'FX' ")
+endif
+if Dialogo.Check3=0
+  SQL.ADD("and M.Concepto <> 'MM' ")
+endif
+if Dialogo.Check4=0
+  SQL.ADD("and M.Concepto <> 'PM' ")
+endif
+if Dialogo.Check12=0
+  SQL.ADD("and M.Concepto <> 'RF' ")
+endif
+if Dialogo.Check10=0
+  SQL.ADD("and M.Concepto <> 'OCT' ")
+ENDIF
+if Dialogo.Check11=0
+   SQL.ADD("and M.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' ")
+else
+   SQL.ADD("and M.FechaMov <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+endif
+if Dialogo.Check13=1
+   SQL.ADD("and M.NrGrupo = 15   ") 
+else
+   SQL.ADD("and (M.NrGrupo <> 15 or M.NrGrupo is Null)  ") 
+endif
+SQL.ADD("and M.Bits in ('MV','MI') ")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD("and M.Cliente = '"~Dialogo.Cliente1~"' ")
+endif
+if NoVacio(Dialogo.Especie1)
+  SQL.ADD("and M.Especie = '"~Dialogo.Especie1~"' ")
+endif
+if NoVacio(Dialogo.Mercado1)
+  SQL.ADD("and M.Mercado = '"~Dialogo.Mercado1~"' ")
+endif
+SQL.ADD("and M.Mercado not in("~Pipe2Comillas(VAR('MERCAACMC'))~") ")
+SQL.ADD("and T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+***---Las OCT estan en Terminal
+*SQL.ADD(" AND ((B.NrBit = 5 AND M.Concepto <> 'OCT') OR (B.NrBit = 4 AND M.Concepto = 'OCT')) ")
+SQL.ADD(" AND ((B.NrBit = 5 AND T.TipoTr2 <> 'LIQOCT') OR (B.NrBit = 4 AND T.TipoTr2 = 'LIQOCT')) ")
+SQL.ADD("and B.Valor = '1' ")
+SQL.ADD("Order By 2, 9, 10, 3, 4, 11, 1, 6 ")
+
+ACT(aa:0, 'aa DVP')
+ACT(ab:0, 'ab RVP')
+ACT(ac:0, 'ac Conf')
+ACT(ad:0, 'ad MATCH')
+ACT(ae:0, 'ae Vacio')
+ACT(af:0, 'af (aa..ae)')
+ACT(ag:0, 'ag DVP')
+ACT(ah:0, 'ah RVP')
+ACT(ai:0, 'ai Conf')
+ACT(aj:0, 'aj MATCH')
+ACT(ak:0, 'ak Vacio')
+ACT(al:0, 'al (ag..ak)')
+ACT(am:0, 'am DVP')
+ACT(an:0, 'an RVP')
+ACT(ao:0, 'ao Conf')
+ACT(ap:0, 'ap MATCH')
+ACT(aq:0, 'aq Vacio')
+ACT(ar:0, 'ar (am..aq)')
+ACT(as:0, 'as (al+ar)')
+ACT(at:0, 'at')
+ACT(au:0, 'au DVP')
+ACT(av:0, 'av RVP')
+ACT(aw:0, 'aw Conf')
+ACT(ax:0, 'ax MATCH')
+ACT(ay:0, 'ay Vacio')
+ACT(az:0, 'az (au..ay)')
+ACT(ba:0, 'ba DVP')
+ACT(bb:0, 'bb RVP')
+ACT(bc:0, 'bc Conf')
+ACT(bd:0, 'bd MATCH')
+ACT(be:0, 'be Vacio')
+ACT(bf:0, 'bf (ba..be)')
+ACT(bg:0, 'bg DVP')
+ACT(bh:0, 'bh RVP')
+ACT(bi:0, 'bi Conf')
+ACT(bj:0, 'bj MATCH')
+ACT(bk:0, 'bk Vacio')
+ACT(bl:0, 'bl (bg..bk)')
+
+ACT(a:0,'Cliente'  )
+ACT(b:0,'Mercado'  )
+ACT(c:0,'Concepto' )
+ACT(d:0,'Accion'   )
+ACT(e:0,'Especie'  )
+
+*ACT(f:0,  )
+*ACT(g:0,  )
+*ACT(h:0,  )
+
+ACT(i:0,'Operacion '  )
+
+*ACT(j:0,  )
+*ACT(k:0,  )
+
+ACT(r:0,'Cta Cliente'  )
+ACT(s:0,'Cta propia '  )
+
+ACT(bp:0,'Tipo Transf' )
+ACT(bq:0,'Matching ' )
+ACT(br:0,'Ejecucion ' )
+ACT(bs:0,'Color Fila ' )
+
+recorrer SQL;;SI
+  SCN(bz:1,1)
+  ACT(ca:Val(bz:1), FBN['NrOperacion'])
+  ACT(cb:Val(bz:1), FBN['Tipo'])
+  ACT(cc:Val(bz:1), FBN['MercM'])
+  ACT(cd:Val(bz:1), FBN['Especie'])
+  ACN(ce:Val(bz:1), FBN['Cantidad'])
+  ACT(cf:Val(bz:1), FBN['Cliente'])
+  ACD(cg:Val(bz:1), FBN['FechaMov'])
+  ACT(ch:Val(bz:1), FBN['Status'])
+  ACT(ci:Val(bz:1), FBN['Cuenta'])
+  ACT(cj:Val(bz:1), FBN['Concepto'])
+  ACN(ck:Val(bz:1), FBN['NrGrupo2'])
+  ACT(cm:Val(bz:1), FBN['OperOrig'])
+  ACN(cn:Val(bz:1), IIF(EqStr(fbn('CategDepositante'),'CLI'),1,0) )
+
+  ACN(kl:Val(bz:1), Val(bz:1) )
+
+  SCN(x4,1)
+
+
+*MessageBox(' Clie '~FBN['Cliente']~'  v1 '~Val(v1)  )
+*MessageBox(' Concepto '~FBN['Concepto']~'  v2 '~Val(v2)  )
+*messageBox(' MercM  '~FBN['MercM']~'  v3 '~Val(v3)  )
+*MessageBox(' Cuenta '~FBN['Cuenta']~'  v4 '~Val(v4)  )
+*MessageBox(' Especie  '~FBN['Especie']~'  v5 '~Val(v5)  )
+*MessageBox(' Cupon '~FBN['Cupon']~'  v6 '~Val(v6)  )
+
+
+  if Not EqStr(FBN['Cliente'],Val(v1)) o  Not [EqStr(FBN['Concepto'],Val(v2)) o Dialogo.Check9=1] o Not EqStr(FBN['MercM'],Val(v3)) o Not EqStr(FBN['Cuenta'],Val(v4)) o Not EqStr(FBN['Especie'],Val(v5)) o Not EqStr(FBN['Cupon'],Val(v6)) o Incluido(FBN['MercM'], VAR('MERCTITULO')) o Dialogo.Check5 = 0
+    if FAC>1
+      DFA
+      (.'LIQUIDADBO'.)
+      IFA
+    endif
+
+    BorrarCeldas(v1..v6)
+    ACT(v1, FBN['Cliente'])
+    ACT(v2, FBN['Concepto'])
+    ACT(v3, FBN['MercM'])
+    ACT(v4, FBN['Cuenta'])
+    ACT(v5, FBN['Especie'])
+    ACT(v6, FBN['Cupon'])
+
+    ACN(q:FAC,1) 
+    ACT(a:FAC, FBN['Cliente'])
+    ACT(b:FAC, FBN['MercM'])
+    ACT(c:FAC, FBN['Concepto'])
+    ACT(e:FAC, FBN['Especie'])
+    ACT(ea:FAC, FBN['Especie'])
+    ACT(eb:FAC, FBN['Especie'])
+
+    ACT(TR:fac, fbn('Tipo'))
+         
+    if Eqstr(Val(c:Fac),'MM')
+       ACN(q:FAC,0) 
+    endif
+
+    if Dialogo.Check5=0
+      * NO Compensa
+      ACT(i:FAC, FBN['NrOperacion'])
+      if Incluido(FBN['Tipo'],'PME')
+        ACT(i:FAC, Val(i:FAC)~' Cta.'~FStr(fbn('NrGrupo2'),0,0))
+      endif
+    endif
+
+    ACT(j:FAC, FBN['Especie'])
+    ACT(m:FAC, FBN['MercO'])
+    ACT(r:FAC, FBN['Cuenta'])
+    ACT(t:FAC, FBN['Cupon'])
+
+    if Incluido(Val(b:FAC), VAR('MERCTITULO'))
+       ACT(u:FAC, FBN['NrOperacion'])
+    endif
+    ACN(w:FAC, FBN['NrGrupo2'])
+    ACT(y:FAC, FBN['NrMov'])
+  else
+    DFA
+    if Not EqStr(FBN['Concepto'],Val(v2))
+       ACT(c:FAC, 'Net')
+    endif
+  endif
+  ACN(cl:Val(bz:1), FAC)
+  SCN(k:FAC, FBN['Cantidad'])
+
+  SCN(l:FAC, 1)
+
+  if DesciendeDeEspecie(Val(e:FAC),'TITULO') o DesciendeDeEspecie(Val(e:FAC),'CUPON')    
+     act(me:Fac,'TITULO') 
+     if Incluido(FBN['Voucher'],'TR')
+        ACT(s:FAC, BuscarCampo('TRANSACCIONES2','Cuenta2','NrTrans',FBN['NrOperacion']))
+     else
+         ACT(s:FAC, BuscarCampo('OPERACIONES','Cuenta2','NrOperacion',FBN['NrOperacion']))
+     endif
+
+     act(bw:fac,BuscarCampo('CUENTAS','Comitente','Codigo',Val(r:Fac)) )
+
+     if Eqstr(val(b:fac),VAR('CLHODEFA')) y Not EqStr(Val(bw:Fac),VAR('VEHICULODE'))
+        ACN(bt:FAC,1) 
+     else
+        ACN(bt:FAC,0)
+     Endif
+
+     SCN(f:FAC, -FBN['Cantidad'])
+
+     if EqStr(FBN['Status'],'MATCH')
+        ACN(bo:FAC, 1)
+        ACT(bp:FAC, BuscarCampo('OPERACIONES','ContraEspecie','NrOperacion',FBN['NrOperacion']))
+        ACT(eb:FAC, Val(bp:fac) )
+
+        if Incluido(FBN['Tipo'],'TIC|TIV|TIFC|TIFV') y BuscarCampo('OPERACIONES','TotalCaucion','NrOperacion',FBN['NrOperacion'])>0
+           if Incluido(FBN['Tipo'],'TIC|TIFC|TIADJ')
+              ACN(bq:FAC, BuscarCampo('OPERACIONES','TotalCaucion','NrOperacion',FBN['NrOperacion']))
+           else
+              ACN(bq:FAC, -BuscarCampo('OPERACIONES','TotalCaucion','NrOperacion',FBN['NrOperacion']))
+           endif
+        else
+           if Incluido(FBN['Tipo'],'TIC|TIFC|TIADJ')
+              ACN(bq:FAC, BuscarCampo('OPERACIONES','TotalNetoCli1','NrOperacion',FBN['NrOperacion']))
+           else
+              ACN(bq:FAC, -BuscarCampo('OPERACIONES','TotalNetoCli1','NrOperacion',FBN['NrOperacion']))
+           endif
+        endif
+
+        ACT(br:FAC, BuscarCampo('OPERACIONES','Cuenta4','NrOperacion',FBN['NrOperacion']))
+        ACT(bs:FAC, BuscarCampo('OPERACIONES','Cuenta2','NrOperacion',FBN['NrOperacion']))
+
+        ACT(e:FAC, Val(e:FAC)~'/'~Val(bp:FAC))
+        ACN(g:FAC, -Val(bq:FAC))
+    else
+        ACN(g:FAC, 0)
+    endif
+  else
+     act(me:Fac,'MONEDA')
+     ACN(f:FAC, 0)
+     SCN(g:FAC, -FBN['Cantidad'])
+     If Incluido(FBN['Voucher'],'TR')
+        ACT(s:FAC, BuscarCampo('TRANSACCIONES2','Cuenta2','NrTrans',FBN['NrOperacion']))
+     Else
+       If Incluido(FBN['Tipo'],'TIC|TIV|TIFC|TIFV|TICO|TICT|TIDE|TIPO|TCOPRI|OCC|OCP|OVC|OVP|EQC|EQV')
+          ACT(s:FAC, BuscarCampo('OPERACIONES','Cuenta3','NrOperacion',FBN['NrOperacion']))
+          If fbn('NrGrupo')=15
+             * NrGrupo = 15 -> Mov de Comision MAE1
+* FO 24/10/2006 Agrego HAB a la funcion
+             ACT(s:FAC, CUENTACLIENTE(Dialogo.Vehiculo1,Val(e:fac),,fbn('MercM'),fbn('Tipo'),'HAB') )
+          Endif
+       Else
+          IF Incluido(fbn('Tipo'), 'FXCT|FXVT') Y fbn('RB10') = 1
+             ***---NDF
+             ACT(S:fac, fbn('Cuenta2'))
+          ELSE
+             If EqStr(Val(e:FAC),BuscarCampo('OPERACIONES','Especie','NrOperacion',FBN['NrOperacion']))
+                ACT(s:FAC, BuscarCampo('OPERACIONES','Cuenta1','NrOperacion',FBN['NrOperacion']))
+             Else
+                ACT(s:FAC, BuscarCampo('OPERACIONES','Cuenta2','NrOperacion',FBN['NrOperacion']))
+             Endif
+          ENDIF
+       Endif
+     Endif
+  endif
+
+  if FBN['Cantidad']<0
+    ACN(x2,0)
+  else
+    ACN(x2,6)
+  endif
+  if EqStr(FBN['Status'],'DVP')
+    ACN(aa:FAC ,1)
+    SCN(33+Val(x2):FAC ,FBN['Cantidad'])
+    ACN(47+Val(x2):FAC ,1)
+  endif
+  if EqStr(FBN['Status'],'RVP')
+     ACN(ab:FAC, 1)
+     SCN(34+Val(x2):FAC, FBN['Cantidad'])
+     ACN(48+Val(x2):FAC, 1)
+  endif
+  if EqStr(FBN['Status'],'CONF')
+    ACN(ac:FAC, 1)
+    SCN(35+Val(x2):FAC, FBN['Cantidad'])
+    ACN(49+Val(x2):FAC, 1)
+  endif
+  if EqStr(FBN['Status'],'MATCH')
+    ACN(ad:FAC, 1)
+    SCN(36+Val(x2):FAC, FBN['Cantidad'])
+    ACN(50+Val(x2):FAC, 1)
+  endif
+  if Vacio(FBN['Status'])
+    ACN(ae:FAC, 1)
+    SCN(37+Val(x2):FAC, FBN['Cantidad'])
+    ACN(51+Val(x2):FAC, 1)
+  endif
+proximo
+
+
+if Val(x4)>0
+  (.'LIQUIDADBO'.)
+else
+  if NoVacio(Dialogo.Cliente1)
+    if NoVacio(Dialogo.Especie1)
+      Cancelar('El Cliente '~Dialogo.Cliente1~' no tiene movimientos pendientes en la especie '~Dialogo.Especie1~'.')
+    else
+      Cancelar('El Cliente '~Dialogo.Cliente1~' no tiene movimientos pendientes.')
+    endif
+  else
+    if NoVacio(Dialogo.Especie1)
+      Cancelar('No existen movimientos pendientes en la especie '~Dialogo.Especie1~'.')
+    else
+      Cancelar('No existen movimientos pendientes.')
+    endif
+  endif
+endif
+
+*** Cantidad Total de Operaciones ?
+ACN(x10,FAC)
+
+ACO(1,9)
+ACO(2,4)
+ACO(3,3)
+ACO(4,7)
+ACO(5,9)
+ACO(6,11)
+ACO(7,12)
+ACO(8,4)
+ACO(9,11)
+
+FormatoCeldas(f:1..g:FAC,Exe('F2'))
+FormatoCeldas(k:1..k:FAC,Exe('F2'))
+
+if Dialogo.Check6=0
+   * NO Selecciona
+     act(di:1,'Seleccione las operaciones a liquidar' )
+else
+   * Selecciona
+     act(di:1,'Seleccione las operaciones a netear' )  
+endif
+
+
+IF Dialogo.Check7=0
+   acn(bm:1,1)
+Else
+   acn(bm:1,0)
+Endif
+
+CrearListBox ; 'Arial,8,';Val(di:1)
+   'OK'                ;q:1..q:Fac   ;Val(bm:1)=1;;;40;CHECK
+   'Cliente'           ;a:1..a:Fac   ;NO;;;70 ;STRING;;
+   'Mercado'           ;b:1..b:Fac   ;NO;;;70 ;STRING;;
+   'Tipo   '           ;TR:1..TR:Fac   ;NO;;;30 ;STRING;;
+   'Concepto'          ;c:1..c:Fac   ;NO;;;30 ;STRING;;
+   '        '          ;d:1..d:Fac   ;NO;;;60 ;STRING;;
+   'Especie '          ;e:1..e:Fac   ;NO;;;60 ;STRING;;
+   'Titulos'           ;f:1..f:Fac   ;NO;;;100;NUMERO;'###,###,###,###.##'
+   'Moneda '           ;g:1..g:Fac   ;NO;;;100;NUMERO;'###,###,###,###.##'
+**//Arreglo separadores en condicion de validez para que funcione bien en V6
+**// SI o SI y NO = NO (En V3)
+**// En V6 = SI, por lo que agrego: (SI O SI) Y NO
+**//   'Cta.Cliente'       ;r:1..r:Fac   ;SI;[[val(cn:flb)=0 y [ClienteCuenta(Val(a:flb),Val(r:flb),Val(ea:flb)) o ClienteCuenta(Val(a:flb),Val(r:flb),Val(eb:flb))] o Eqstr(Val(r:FLB),VAR('CTAMOD23'))] o [val(cn:flb)=1 y [ClienteCuenta(Val(a:flb),Val(r:flb),Val(ea:flb)) o ClienteCuenta(Val(a:flb),Val(r:flb),Val(ea:flb))] o Eqstr(Val(r:FLB),VAR('CTAMOD23')) o Vacio(BuscarCampo('CUENTAS','Cliente','Codigo',Val(a:flb)))]  y Eqstr(BuscarCampo('CUENTAS','Mercado','Codigo',val(r:flb)),Val(b:FLB)) y NoVacio(Val(r:FLB))]  o Val(q:FLB)=0;'La Cta '~Val(r:FLB)~' del Cliente '~Val(a:FLB)~' es incorrecta.';70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';" (Cliente='"~Val(a:FLB)~"' and  (Especies like '%"~Val(me:flb)~"%'  OR Especies LIKE '%"~Val(e:flb)~"%') and Estado='HAB' and "~IIF(NoVacio(Val(b:FLB)),"Mercado = '"~Val(b:FLB)~"' and ","")~" TipoCuenta In ('CUS','CCO','CA','CC')) or Codigo='"~VAR('CTAMOD23')~"'";RGB(180,180,193);;NO;NO;;NO;NO;NO;SI
+   'Cta.Cliente'       ;r:1..r:Fac   ;SI;[[[val(cn:flb)=0 y [ClienteCuenta(Val(a:flb),Val(r:flb),Val(ea:flb)) o ClienteCuenta(Val(a:flb),Val(r:flb),Val(eb:flb))] o Eqstr(Val(r:FLB),VAR('CTAMOD23'))] o [val(cn:flb)=1 y [ClienteCuenta(Val(a:flb),Val(r:flb),Val(ea:flb)) o ClienteCuenta(Val(a:flb),Val(r:flb),Val(ea:flb))] o Eqstr(Val(r:FLB),VAR('CTAMOD23')) o Vacio(BuscarCampo('CUENTAS','Cliente','Codigo',Val(a:flb)))]]  y Eqstr(BuscarCampo('CUENTAS','Mercado','Codigo',val(r:flb)),Val(b:FLB)) y NoVacio(Val(r:FLB))]  o Val(q:FLB)=0;'La Cta '~Val(r:FLB)~' del Cliente '~Val(a:FLB)~' es incorrecta.';70 ;TABLA ;'Cuentas';'Codigo';'Codigo;Nombre';" (Cliente='"~Val(a:FLB)~"' and  (Especies like '%"~Val(me:flb)~"%'  OR Especies LIKE '%"~Val(e:flb)~"%') and Estado='HAB' and "~IIF(NoVacio(Val(b:FLB)),"Mercado = '"~Val(b:FLB)~"' and ","")~" TipoCuenta In ('CUS','CCO','CA','CC')) or Codigo='"~VAR('CTAMOD23')~"'";RGB(180,180,193);;NO;NO;;NO;NO;NO;SI
+   'Nro.Op.'           ;i:1..i:Fac   ;NO;;;60 ;STRING;;
+   'Cta.Propia'        ;s:1..s:Fac   ;SI;[[ClienteCuenta(Dialogo.Vehiculo1,Val(s:flb),Val(ea:flb)) o ClienteCuenta(Dialogo.Vehiculo1,Val(s:flb),Val(ea:flb))] y NoVacio(Val(s:FLB)) y Eqstr(BuscarCampo('CUENTAS','Mercado','Codigo',val(s:flb)),Val(b:FLB)) ] o Val(q:FLB)=0;'La Cta '~Val(s:FLB)~' de Liquidacion para el vehiculo es incorrecta.'; 60;TABLA  ; 'Cuentas';'Codigo';'Codigo;Nombre';"Cliente='"~Dialogo.Vehiculo1~"' and Estado='HAB'  and  "~IIF(NoVacio(Val(b:FLB)),"Mercado = '"~Val(b:FLB)~"' and ","")~"   (Especies like '%"~Val(me:flb)~"%'  OR Especies LIKE '%"~Val(e:flb)~"%')    "                      ;RGB(180,180,193);;NO;NO;;NO;NO;NO;SI
+   'Transferencia'     ;bt:1..bt:Fac ;DesciendeDeEspecie(Val(e:FLB),'TITULO') y Not EqStr(BuscarCampo('CUENTAS','Comitente','Codigo',Val(r:Fac)),VAR('VEHICULODE')) y Eqstr(val(b:fac),VAR('CLHODEFA')) ;[DesciendeDeEspecie(Val(e:FLB),'TITULO') y Not EqStr(BuscarCampo('CUENTAS','Comitente','Codigo',Val(r:Fac)),VAR('VEHICULODE'))  y Val(bt:FLB)<>0 ] o [[ Not DesciendeDeEspecie(Val(e:FLB),'TITULO') y Not EqStr(BuscarCampo('CUENTAS','Comitente','Codigo',Val(r:Fac)),VAR('VEHICULODE'))] y Val(bt:FLB)=0]; 'Tipo Transferencia Incorrecta '~val(a:FLB)~' '~val(e:FLB);90 ;COMBO;'|Inmediata|Diferida|Conformada|';RGB(180,180,193)
+   'Matching'          ;bu:1..bu:Fac ;val(bt:flb)=1  o val(bt:flb)=2;[[val(bt:flb)=1 o val(bt:flb)=2] y val(bu:flb)>0 y val(bu:flb)>=val(ak:flb) y val(bu:flb)<=Dialogo.Fecha1+Var('MAXFECMATC') y EsHabil(val(bu:flb),'ARG')] o val(bu:flb)=0;'Fecha Matching Erronea '; 70; FECHA;RGB(180,180,193);
+   'Ejecucion'         ;bv:1..bv:Fac ;val(bt:flb)=2 ;[val(bt:flb)=2 y NoVacio(val(bv:flb)) y val(bv:flb)>=val(bu:flb) y val(bv:flb)<=val(bu:flb)+Var('MAXFECEJEC') y EsHabil(val(bv:flb),'ARG')] o val(bv:flb)=0  ;'Fecha Ejecucion Erronea '; 70; FECHA;RGB(180,180,193);
+FinListBox
+
+**** 
+IF NOT OK 
+   Cancelar
+ENDIF
+
+ACT(nu1,GetNumerador(8000))
+
+if OK o Dialogo.Check7=1
+   if Dialogo.Check6=1
+      * Selecciona
+      (.'GENNETDBO'.)
+   else
+      recorrer&i 1,Fac
+        if Val(q:&i) = 1
+           if Val(bo:&i)=1
+              * Voucher MATCH
+              (.'GENMATDBO'.)
+           else
+              * Vouchers DEP,RET,COMP
+              (.'GENVOUDBO'.)
+           endif
+           SQL.EXEC
+
+           if Val(k:&i)=0 
+               EjecutarEvento('DESPRF',NrTrans1=Val(n:&i),Fecha1=Habiles(Dialogo.Fecha1,1,'ARG'),Fecha2=Dialogo.Fecha1)
+           endif
+        endif
+        Message('Pasando Operaciones a Terminal ...')
+        EjecutarEvento('PPASE',NrOperacion=val(i:&i), Mercado1='')
+      proximo
+   endif
+   
+   message('Generando Transaccion de Custodia ...')
+   EjecutarEvento('CONCUS',Vehiculo1=Dialogo.Vehiculo1, String1=Val(nu1)) 
+  
+endif

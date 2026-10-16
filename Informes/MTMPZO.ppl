@@ -1,0 +1,174 @@
+﻿CrearDialogo
+  Fecha1:   'Fecha Desde'    ;1;1;;;;Dialogo.Fecha1>0;'Fecha Desde invalida';NO;FSys;
+  Fecha2:   'Fecha Hasta'    ;2;1;;;;Dialogo.Fecha2>=Dialogo.Fecha1;'Fecha Hasta invalida';NO;FSys;
+  Cliente1: 'Cliente'  ;3;1;;;;
+  Mercado1: 'Mercado'  ;4;1;;;;
+  Especie1: 'Especie'  ;5;1;;SI;;
+FinDialogo
+
+If Not OK
+  Cancelar
+EndIf
+
+CrearFont(1,'Arial,11,BU')
+CrearFont(2,'Arial,8,B')
+CrearFont(3,'Arial,8,')
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+
+ACT(F:3,'MTM Clientes por Periodo')
+SetFont(F:3,1)
+
+SetFilaActual(4)
+
+ACT(A:FAC,'Desde el '~Dialogo.Fecha1~' al '~Dialogo.Fecha2)
+If NoVacio(Dialogo.Cliente1)
+   ACT(A:FAC+1,'Cliente: '~Dialogo.Cliente1)
+Else
+   ACT(A:FAC+1,'Cliente: Todos')
+EndIf
+If NoVacio(Dialogo.Mercado1)
+   ACT(A:FAC+2,'Origen: '~Dialogo.Mercado1)
+Else
+   ACT(A:FAC+2,'Origen: Todos')
+EndIf
+If NoVacio(Dialogo.Especie1)
+   ACT(A:FAC+3,'Especie: '~Dialogo.Especie1)
+Else
+   ACT(A:FAC+3,'Especie: Todas')
+EndIf
+
+SetFont(A:FAC..A:FAC+3,2)
+
+SetFilaActual(FAC+5)
+
+ACT(A:FAC,'Tipo Operacion')
+ACT(B:FAC,'NrOperacion')
+ACT(C:FAC,'Especie')
+ACT(D:FAC,'F. Concertacion')
+ACT(E:FAC,'F. Vencimiento')
+ACT(F:FAC,'F. Fixing')
+ACT(G:FAC,'F. PreCancelacion')
+ACT(H:FAC,'Importe Contrato')
+ACT(I:FAC,'Precio')
+ACT(J:FAC,'Precio MTM Ini')
+ACT(K:FAC,'Precio MTM Fin')
+ACT(L:FAC,'Valor MTM')
+ACT(M:FAC,'Acumulado MTM')
+
+AlinearCeldas(A:FAC..M:FAC,'C')
+AgregarMarco(A:FAC..M:FAC,2,0,Exe('COLOR'))
+SetFont(A:FAC..M:FAC,2)
+
+SQL.ADD(" Select O.TipoOp, O.NrOperacion, O.Cliente1, O.Especie, O.FechaOp, O.FechaVto, O.FechaPrecan, O.Cantidad, O.Precio1, O.Mercado4, FechaVto2, ")
+SQL.ADD(" (Select PrecioHoy From "~DBO~".MTMDIARIO M1 where M1.NrOperacion = O.NrOperacion ")
+SQL.ADD("     and M1.Fecha = (Select min(M2.Fecha) from MTMDIARIO M2 where  M2.NrOperacion = M1.NrOperacion and M2.Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' and M2.Fecha < '"~IdxDate(Dialogo.Fecha2)~"')) PrecioAyer, ")
+SQL.ADD(" (Select PrecioHoy From "~DBO~".MTMDIARIO M1 where M1.NrOperacion = O.NrOperacion ")
+SQL.ADD("     and M1.Fecha = (Select max(M2.Fecha) from MTMDIARIO M2 where  M2.NrOperacion = M1.NrOperacion and M2.Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' and M2.Fecha < '"~IdxDate(Dialogo.Fecha2)~"')) PrecioHoy, ")
+SQL.ADD(" (Select SUM(M1.MTM) From "~DBO~".MTMDIARIO M1 where M1.NrOperacion = O.NrOperacion")
+SQL.ADD("     and M1.Fecha = (Select max(M2.Fecha) from MTMDIARIO M2 where  M2.NrOperacion = M1.NrOperacion and M2.Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' and M2.Fecha <= '"~IdxDate(Dialogo.Fecha2)~"')) ValorMTM, ")
+SQL.ADD(" (Select SUM(M1.MTM) From "~DBO~".MTMDIARIO M1 ")
+SQL.ADD("   where O.NrOperacion = M1.NrOperacion  and M1.Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' and M1.Fecha <= '"~IdxDate(Dialogo.Fecha2)~"') AcumuladoMTM ")
+SQL.ADD("   From "~DBO~".OPERACIONES O ")
+SQL.ADD("  Where O.TipoOp in ('TICF','TIVF','FXCF','FXVF') ")
+SQL.ADD("    And O.FechaOp <= '"~IdxDate(Dialogo.Fecha2)~"'       ")
+*SQL.ADD("    And O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' And O.FechaVto <= '"~IdxDate(Dialogo.Fecha2)~"'      ")
+* fecha mayor al inicio del plazo para aquellas que venzan post Fecha2 concertadas antes de Fecha2
+SQL.ADD("    And O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"'   ")
+If NoVacio(Dialogo.Cliente1)
+   SQL.ADD(" And O.Cliente1= '"~Dialogo.Cliente1~"' ")
+EndIf
+If NoVacio(Dialogo.Mercado1)
+   SQL.ADD(" And O.Mercado4= '"~Dialogo.Mercado1~"' ")
+EndIf
+If NoVacio(Dialogo.Especie1)
+   SQL.ADD(" And O.Especie= '"~Dialogo.Especie1~"' ")
+EndIf
+SQL.ADD(" Order by O.TipoOp,O.NrOperacion ")
+
+watch(sql.batch())
+ACN(Z:1,FAC+1)
+ACT(OP:1,'')
+
+Recorrer SQL
+  If Eqstr(Val(OP:1),'')
+     ACT(A:FAC,FBN['TipoOp'])
+  EndIf
+  If Not Eqstr(Fbn['TipoOp'],Val(OP:1)) Y Not Eqstr(Val(OP:1),'')
+     ACT(H:FAC,'Total '~IIF(Incluido(Val(OP:1),'TICF|FXCF'),'Compras','Ventas')~' Cliente '~Dialogo.Cliente1~':')
+     ACN(L:FAC,Val(TO:1))
+     ACN(M:FAC,Val(TO:2))
+
+     SCN(TO:3,Val(L:FAC))     
+     SCN(TO:4,Val(M:FAC))
+
+     ACN(TO:1,0)
+     ACN(TO:2,0)
+     
+     AgregarMarco(H:FAC..m:FAC,0,0)
+     SetFont(H:FAC..m:FAC,2)
+     IFA
+     IFA
+     ACT(A:FAC,FBN['TipoOp'])
+  EndIf
+  
+  ACT(B:FAC,FBN['NrOperacion'])
+  **ACLO(B:FAC,FBN['NrOperacion'])
+  ACL(B:FAC,'MTMDOP', NrOperacion1=FBN['NrOperacion'], Fecha1=Dialogo.Fecha2)  
+  ACT(C:FAC,FBN['Especie'])
+  ACD(D:FAC,FBN['FechaOp'])
+  ACD(E:FAC,FBN['FechaVto'])
+  ACD(F:FAC,FBN['FechaVto2'])
+  ACN(H:FAC,FBN['Cantidad'])
+  ACN(I:FAC,FBN['Precio1'])
+  ACN(J:FAC,FBN['PrecioAyer'])
+  ACN(K:FAC,FBN['PrecioHoy'])
+  ACN(L:FAC,FBN['ValorMTM'])
+  ACN(M:FAC,FBN['AcumuladoMTM'])
+  SCN(TO:1,FBN['ValorMTM'])
+  SCN(TO:2,FBN['AcumuladoMTM'])
+  SetFont(A:FAC..M:FAC,3)
+  ACT(OP:1,FBN['TipoOp'])
+Proximo
+
+IFA
+ACT(H:FAC,'Total '~IIF(Incluido(Val(OP:1),'TICF|FXCF'),'Compras','Ventas')~' Cliente '~Dialogo.Cliente1~':')
+ACN(L:FAC,Val(TO:1))
+ACN(M:FAC,Val(TO:2))
+SCN(TO:3,Val(L:FAC))
+SCN(TO:4,Val(M:FAC))
+AgregarMarco(H:FAC..M:FAC,0,0)
+SetFont(H:FAC..M:FAC,2)
+
+IFA
+***Total MTM
+ACT(A:FAC,'TOTAL VALOR MTM:')
+ACN(L:FAC,Val(TO:3))
+ACN(M:FAC,Val(TO:4))
+
+AgregarMarco(A:FAC..M:FAC,2,0)
+SetFont(A:FAC..M:FAC,2)
+
+FormatoCeldas(L:Val(Z:1)..M:FAC, Exe('F2'))
+FormatoCeldas(I:Val(Z:1)..K:FAC, Exe('F8'))
+
+ACT(A:FAC+2,'FIN DEL INFORME')
+SetFont(A:FAC+1..F:FAC+2,2)
+
+ACO(1,9)
+ACO(2,8)
+ACO(3,8)
+ACO(4,9)
+ACO(5,9)
+ACO(6,9)
+ACO(7,10)
+ACO(8,10)
+ACO(9,8)
+ACO(10,8)
+ACO(11,8)
+ACO(12,12)
+ACO(13,12)
+
+Impresion(1,2)
+SetPrintFit(3,90)
+LimitesVision(n:FAC+3)
+RangoTitulo(a:1..n:FAC, 9)

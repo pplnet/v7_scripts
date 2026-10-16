@@ -1,0 +1,713 @@
+﻿CrearDialogo
+   Fecha1   : 'Fecha'           ;1;1;;;;Dialogo.Fecha1>=FSys;'Debe ingresar fecha correcta';NO;FSys
+   Vehiculo1: 'Vehiculo'        ;;;;;;NoVacio(Dialogo.VEHICULO1);'Debe ingresar un vehiculo';NO;VAR('VEHICULODE');;
+   Lista1   : 'Especies'        ;;;;;;;;;;;SQLSet("SELECT Codigo FROM "~DBO~".ESPECIES WHERE Status='HAB' AND Jerarquia LIKE '"~Var('JERTITULOS')~"%' ORDER BY Codigo ");
+   Lista2   : 'Casas Custodia'      ;-3;2;;;;;;;;;SQLSet("SELECT Codigo FROM "~DBO~".MERCADOS WHERE Observaciones LIKE '%T|%' ORDER BY Codigo ");
+   Radio2   : 'Expresado|Mon.Local|Mon.Extranjera|';-2;1;;;;;;;0
+FinDialogo
+
+IF Not Ok
+  Cancelar
+ENDIF
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+
+IF Dialogo.Radio2 = 0
+   ACT(mn1, VAR('MONELOCA'))
+ELSE
+   ACT(mn1, VAR('MONEEXTR'))
+ENDIF
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+CrearFont(3, 'Arial,10,B')
+
+ACT(i1, 'Tenencia de Cartera Propia')
+SetFont(i1, 3)
+
+ACT(a5, 'Fecha : '~Dialogo.Fecha1)
+IF NoVacio(Dialogo.Lista2)
+   ACT(b5, 'Ente Liq.: '~Dialogo.Lista2)
+ELSE
+   ACT(b5, 'Ente Liq.: Todos')
+ENDIF
+ACT(d5, 'Moneda: '~IIF(Dialogo.Radio2=0,'Local','Extranjera'))
+
+ACT(a6, 'Especie')
+ACT(b6, 'Saldo Inicial')
+ACT(c6, 'Ing. a Liq.')
+         ACD(c7, HABILES(Dialogo.Fecha1,0,'ARG'))
+ACT(d6, 'Egr. a Liq.')
+         ACD(d7, HABILES(Dialogo.Fecha1,0,'ARG'))
+ACT(e6, 'Saldo')
+         ACD(e7, HABILES(Dialogo.Fecha1,0,'ARG'))
+ACT(f6, 'Ing. a Liq.')
+         ACD(f7, HABILES(Dialogo.Fecha1,1,'ARG'))
+ACT(g6, 'Egr. a Liq.')
+         ACD(g7, HABILES(Dialogo.Fecha1,1,'ARG'))
+ACT(h6, 'Saldo')
+         ACD(h7, HABILES(Dialogo.Fecha1,1,'ARG'))
+ACT(i6, 'Ing. a Liq.')
+         ACD(i7, HABILES(Dialogo.Fecha1,2,'ARG'))
+ACT(j6, 'Egr. a Liq.')
+         ACD(j7, HABILES(Dialogo.Fecha1,2,'ARG'))
+ACT(k6, 'Saldo')
+         ACD(k7, HABILES(Dialogo.Fecha1,2,'ARG'))
+ACT(l6, 'Ing. a Liq.')
+         ACD(l7, HABILES(Dialogo.Fecha1,3,'ARG'))
+ACT(m6, 'Egr. a Liq.')
+         ACD(m7, HABILES(Dialogo.Fecha1,3,'ARG'))
+ACT(n6, 'Saldo')
+         ACD(n7, HABILES(Dialogo.Fecha1,3,'ARG'))
+ACT(o6, 'Ingresos >')
+         ACD(o7, HABILES(Dialogo.Fecha1,3,'ARG'))
+ACT(p6, 'Egresos >')
+         ACD(p7, HABILES(Dialogo.Fecha1,3,'ARG'))
+ACT(q6, 'Saldo Final')
+
+SetFont(a2..q7, 1)
+
+AlinearCeldas(a6..q7, 'C')
+AgregarMarco(a6..q7, 2, 0, Exe('COLOR'))
+
+*SQL.ADD("      CASE T.Fecha3 WHEN NULL THEN T.Fecha1 ELSE T.Fecha3 END >= '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+*SQL.ADD("      O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+*SQL.ADD("      O.FechaVto >= '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+
+
+* El select e/TRANSACCIONES2 y MOVPENDIENTES es para que no duplique montos entre saldo y trans.
+* confirmadas
+SQL.ADD("SELECT S1.Especie, E.Nombre, S1.Cupon, S1.Mercado, S1.Cuenta, 'ASALDOPOSIC' TipoOp, SUM(S1.Saldo) Cantidad, '' FechaVto, 0 PaseCB, ")
+SQL.ADD("       E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, E.Alias5, E.InteresesC, '' Inv, '' as FechaOp,'' NrOperacion ")
+SQL.ADD("FROM "~DBO~".SALDOSDIA S1, "~DBO~".ESPECIES E ")
+SQL.ADD("WHERE E.Codigo = S1.Especie AND ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("      E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND ")
+ELSE
+   SQL.ADD("      E.Status='HAB' AND ")
+   SQL.ADD("      E.Jerarquia LIKE '"~Var('JERTITULOS')~"%' AND ")
+ENDIF
+SQL.ADD("      S1.Cliente = '"~Dialogo.Vehiculo1~"' AND ")
+SQL.ADD("      S1.EnteCustodia = '"~Dialogo.Vehiculo1~"' AND ")
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("   S1.Mercado IN ("~Pipe2Comillas(Dialogo.Lista2)~") AND ")
+ENDIF
+SQL.ADD("      (S1.NrSaldo>201 OR S1.NrSaldo=101) AND ")
+SQL.ADD("      S1.Saldo <> 0 AND ")
+SQL.ADD("      S1.Cuenta <> '"~VAR('CTALIQBUR')~"' AND ")
+SQL.ADD("      S1.Cuenta <> '' AND ")
+SQL.ADD("      S1.Cuenta IS NOT NULL AND ")
+SQL.ADD("      S1.Fecha = (SELECT MAX(S2.Fecha) ")
+SQL.ADD("                  FROM "~DBO~".SALDOSDIA S2 ")
+SQL.ADD("                  WHERE S2.Cliente = S1.Cliente AND ")
+SQL.ADD("                        S2.Especie = S1.Especie AND ")
+SQL.ADD("                        S2.Cupon = S1.Cupon AND ")
+SQL.ADD("                        S2.EnteCustodia = S1.EnteCustodia AND ")
+SQL.ADD("                        S2.Mercado = S1.Mercado AND ")
+SQL.ADD("                        S2.NrSaldo = S1.NrSaldo AND ")
+SQL.ADD("                        S2.Cuenta = S1.Cuenta AND ")
+SQL.ADD("                        S2.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"' ) ")
+SQL.ADD("GROUP BY S1.Especie, E.Nombre,S1.Cupon, S1.Mercado, S1.Cuenta, S1.Cliente, E.FechaCambioTasa, E.TasaIntAnterior, ")
+SQL.ADD("         E.TasaIntVigente, E.Alias5, E.InteresesC ")
+
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("SELECT M.Especie, E.Nombre, T.Cupon1 Cupon, T.Mercado1 Mercado, M.Cuenta, T.TipoTr2 TipoOp, T.Cantidad1 Cantidad, CASE T.Fecha3 WHEN NULL THEN T.Fecha1 ELSE T.Fecha3 END FechaVto, 0 PaseCB, ")
+SQL.ADD("       E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, E.Alias5, E.InteresesC, '' Inv,'' as FechaOp,'' NrOperacion ")
+SQL.ADD("FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".ESPECIES E, "~DBO~".OPERACIONESBITS B, "~DBO~".MOVPENDIENTES M ")
+SQL.ADD("WHERE T.NrTrans=B.NrOperacion AND ")
+SQL.ADD("      B.Valor=0 AND B.NrBit In ('30') AND ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("      E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND ")
+ELSE
+   SQL.ADD("      E.Status='HAB' AND ")
+   SQL.ADD("      E.Jerarquia LIKE '"~Var('JERTITULOS')~"%' AND ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("      T.Mercado1 IN ("~Pipe2Comillas(Dialogo.Lista2)~") AND ")
+ENDIF
+SQL.ADD("      T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' AND ")
+SQL.ADD("      T.RB4 >= 0 AND ") 
+SQL.ADD("      T.Fecha1 <= '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+SQL.ADD("      T.Cliente1 = '"~Dialogo.Vehiculo1~"' AND ")
+SQL.ADD("      M.NrOperacion = T.NrTrans AND ")
+SQL.ADD("      M.Especie = E.Codigo AND ")
+SQL.ADD("      M.NrSaldo = 101 AND ")
+SQL.ADD("      M.Cliente = T.Cliente1 AND ")
+SQL.ADD("      T.TipoTr2 IN ('DTP','RTP')  ")
+SQL.ADD(" AND ((T.CB6 IS NULL OR CB6='0') OR T.NrOperacionRef1 NOT in (SELECT MM.NrTrans2 FROM "~DBO~".MOVEJECUTADOS MM, "~DBO~".OPERACIONES O WHERE MM.NrOperacion=O.NrOperacion AND MM.NrTrans2=T.NrOperacionRef1 ) ) ")
+
+**SQL.ADD("    AND  T.CB6 <> 1 ")
+
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("SELECT M.Especie, E.Nombre, T.Cupon1 Cupon, T.Mercado1 Mercado, M.Cuenta, T.TipoTr2 TipoOp, T.Cantidad1 Cantidad, CASE T.Fecha3 WHEN NULL THEN T.Fecha1 ELSE T.Fecha3 END FechaVto, 0 PaseCB, ")
+SQL.ADD("       E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, E.Alias5, E.InteresesC, 'INV' Inv, '' as FechaOp,'' NrOperacion ")
+SQL.ADD("FROM "~DBO~".TRANSACCIONES2 T, "~DBO~".ESPECIES E, "~DBO~".OPERACIONESBITS B, "~DBO~".MOVPENDIENTES M ")
+SQL.ADD("WHERE T.NrTrans=B.NrOperacion AND ")
+SQL.ADD("      B.Valor=0 AND B.NrBit In ('30') AND ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("      E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND ")
+ELSE
+   SQL.ADD("      E.Status='HAB' AND ")
+   SQL.ADD("      E.Jerarquia LIKE '"~Var('JERTITULOS')~"%' AND ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("      T.Mercado1 IN ("~Pipe2Comillas(Dialogo.Lista2)~") AND ")
+ENDIF
+SQL.ADD("      T.Vehiculo1 = '"~Dialogo.Vehiculo1~"' AND ")
+SQL.ADD("      T.RB4 >= 0 AND ") 
+SQL.ADD("      T.Fecha1 <= '"~IdxDate(Dialogo.Fecha1)~"' AND ")
+SQL.ADD("      T.Cliente2 = '"~Dialogo.Vehiculo1~"' AND ")
+SQL.ADD("      M.NrOperacion = T.NrTrans AND ")
+SQL.ADD("      M.Especie = E.Codigo AND ")
+SQL.ADD("      M.NrSaldo = 101 AND ")
+SQL.ADD("      M.Cliente = T.Cliente2 AND ")
+SQL.ADD("      T.TipoTr2 IN ('DTP','RTP')  ")
+SQL.ADD(" AND ((T.CB6 IS NULL OR CB6='0') OR T.NrOperacionRef1 NOT in (SELECT MM.NrTrans2 FROM "~DBO~".MOVEJECUTADOS MM, "~DBO~".OPERACIONES O WHERE MM.NrOperacion=O.NrOperacion AND MM.NrTrans2=T.NrOperacionRef1 ) ) ")
+**SQL.ADD("      AND T.CB6 <> 1 ")
+
+SQL.ADD("UNION ALL ")
+
+SQL.ADD("SELECT O.Especie, E.Nombre, O.Cupon1 Cupon, O.Mercado, O.Cuenta1 Cuenta, O.TipoOp, O.Cantidad, O.FechaVto, ISNULL(O.PaseCB,0) PaseCB, ")
+SQL.ADD("       E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, E.Alias5, E.InteresesC, '' Inv, O.FechaOp as FechaOp, O.NrOperacion ")
+SQL.ADD("FROM "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B, "~DBO~".ESPECIES E ")
+SQL.ADD("WHERE O.NrOperacion=B.NrOperacion and ")
+SQL.ADD("      B.Valor=0 and B.NrBit In ('30') and ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("      E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND ")
+ELSE
+   SQL.ADD("      E.Status='HAB' AND ")
+   SQL.ADD("      E.Jerarquia LIKE '"~Var('JERTITULOS')~"%' AND ")
+ENDIF
+SQL.ADD("      O.Especie = E.Codigo AND ")
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("      O.Mercado IN ("~Pipe2Comillas(Dialogo.Lista2)~") AND ")
+ENDIF
+SQL.ADD("      O.Cartera >= 0  ") 
+SQL.ADD(" AND  O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'  ")
+SQL.ADD(" AND  O.FechaOp  <= '"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD(" AND  O.NrOperacion IN (SELECT DISTINCT M.NrOperacion FROM "~DBO~".MOVPENDIENTES M ")
+SQL.ADD("                        WHERE M.NrOperacion = O.NrOperacion  ")
+SQL.ADD("                        AND   M.Especie     = O.Especie  ")
+SQL.ADD("                        AND   M.Cliente     = O.Cliente1 ")
+SQL.ADD("                        UNION ")
+SQL.ADD("                        SELECT DISTINCT M.NrOperacion FROM "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD("                        WHERE M.NrOperacion = O.NrOperacion  ")
+SQL.ADD("                        AND   M.Especie = O.Especie  ")
+SQL.ADD("                        AND   M.Cliente = O.Cliente1  ")
+SQL.ADD("                        AND   EXISTS (SELECT 1 FROM "~DBO~".TRANSACCIONES2 T,"~DBO~".TRANSACCIONES2 T1,"~DBO~".MOVPENDIENTES MP1 ")
+SQL.ADD("                                      WHERE T.NrTrans  = M.NrTrans2        ")
+SQL.ADD("                                      AND   T1.NrTrans = T.NrOperacionRef2 ")
+SQL.ADD("                                      AND   T1.NrTrans = MP1.NrOperacion   ")
+SQL.ADD("                                      AND   O.Especie  = MP1.Especie       ")
+SQL.ADD("                                      AND   MP1.NrSaldo = 101)             ")
+SQL.ADD("                        ) AND ") 
+SQL.ADD("      O.TipoOp IN ('CTC','VTC','CTP','VTP') AND ")
+SQL.ADD("      (O.PaseCB = '0' OR O.PaseCB IS NULL) ")
+
+SQL.ADD("UNION ALL ")
+
+*FO 09/02/2007 SQL.ADD("SELECT O.Especie, E.Nombre, E.Cupon Cupon, O.Mercado, O.TipoOp, O.Cantidad, O.FechaVto, ISNULL(O.PaseCB,0) PaseCB, ")
+SQL.ADD("SELECT O.Especie, E.Nombre, O.Cupon1 Cupon, O.Mercado, O.Cuenta1 Cuenta, O.TipoOp, O.Cantidad, O.FechaVto, ISNULL(O.PaseCB,0) PaseCB, ")
+SQL.ADD("       E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, E.Alias5, E.InteresesC, '' Inv,O.FechaOp, O.NrOperacion ")
+SQL.ADD("FROM "~DBO~".OPERACIONES O, "~DBO~".OPERACIONESBITS B, "~DBO~".ESPECIES E ")
+SQL.ADD("WHERE O.NrOperacion=B.NrOperacion and ")
+SQL.ADD("      B.Valor=0 and B.NrBit In ('30') and ")
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("      E.Codigo IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND ")
+ELSE
+   SQL.ADD("      E.Status='HAB' AND ")
+   SQL.ADD("      E.Jerarquia LIKE '"~Var('JERTITULOS')~"%' AND ")
+ENDIF
+SQL.ADD("      O.Especie = E.Codigo AND ")
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("      O.Mercado IN ("~Pipe2Comillas(Dialogo.Lista2)~") AND ")
+ENDIF
+SQL.ADD("      O.Cartera >= 0  ") 
+SQL.ADD(" AND  O.Vehiculo1 = '"~Dialogo.Vehiculo1~"'       ")
+SQL.ADD(" AND  O.FechaOp <= '"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD(" AND  O.NrOperacion IN (SELECT DISTINCT M.NrOperacion FROM "~DBO~".MOVPENDIENTES M ")
+SQL.ADD("                        WHERE M.NrOperacion = O.NrOperacion  ")
+SQL.ADD("                        AND   M.Especie     = O.Especie      ")
+SQL.ADD("                        UNION ")
+SQL.ADD("                        SELECT DISTINCT M.NrOperacion FROM "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD("                        WHERE M.NrOperacion = O.NrOperacion  ")
+SQL.ADD("                        AND   M.Especie     = O.Especie      ")
+SQL.ADD("                        AND   EXISTS (SELECT 1 FROM "~DBO~".TRANSACCIONES2 T,"~DBO~".TRANSACCIONES2 T1,"~DBO~".MOVPENDIENTES MP1 ")
+SQL.ADD("                                        WHERE T.NrTrans  = M.NrTrans2        ")
+SQL.ADD("                                        AND   T1.NrTrans = T.NrOperacionRef2 ")
+SQL.ADD("                                        AND   T1.NrTrans = MP1.NrOperacion   ")
+SQL.ADD("                                        AND   O.Especie  = MP1.Especie       ")
+SQL.ADD("                                        AND   MP1.NrSaldo = 101)             ")
+SQL.ADD("                        ) AND ")
+*** FJL 08-06-18 - Se incorporan TCOPRi de Cartera Propia
+*SQL.ADD("      O.TipoOp IN ('TIC','TIV','TIFC','TIFV','TIBCRA','TIDE','TIPO','TICO','TICT') ")
+SQL.ADD("      (O.TipoOp IN ('TIC','TIV','TIFC','TIFV','TIBCRA','TIDE','TIPO','TICO','TICT') or (O.TipoOp IN ('TCOPRI') and O.Corporate=1)) ")
+SQL.ADD(" ORDER BY 1, 3, 4, 5  ")
+OutputWrite(SQL.Batch)
+
+* Fila donde comienzan los datos
+ACN(fe1, 8)
+* Fila actual
+ACN(fi1, Val(fe1))
+* Fila de valor nominal
+ACN(aa1, 0)
+* Fila de valor residual
+ACN(aa2, 0)
+* Fila de valuacion
+ACN(aa3, 0)
+
+* Primer pasada
+ACT(aa4, 'SI')
+
+* Especie
+ACT(z1, '')
+* Cupon
+ACT(z2, 'XX')
+* Mercado
+ACT(z3, '')
+ACT(z4, '')
+
+Recorrer SQL
+   Message('Especie: '~FBN['Especie']~FBN['Cupon'])
+   IF Not EqStr(FBN['Especie'],Val(z1)) o Not EqStr(FBN['Cupon'], Val(z2))
+      IF EqStr(Val(aa4),'NO')
+         * Saldo HOY
+         ACN(e:Val(aa1), Val(b:Val(aa1))+Val(c:Val(aa1))-Val(d:Val(aa1)))
+         ACN(e:Val(aa2), Val(b:Val(aa2))+Val(c:Val(aa2))-Val(d:Val(aa2)))
+
+         * Saldo 24 Hs.
+         ACN(h:Val(aa1), Val(e:Val(aa1))+Val(f:Val(aa1))-Val(g:Val(aa1)))
+         ACN(h:Val(aa2), Val(e:Val(aa2))+Val(f:Val(aa2))-Val(g:Val(aa2)))
+
+         * Saldo 48 Hs.
+         ACN(k:Val(aa1), Val(h:Val(aa1))+Val(i:Val(aa1))-Val(j:Val(aa1)))
+         ACN(k:Val(aa2), Val(h:Val(aa2))+Val(i:Val(aa2))-Val(j:Val(aa2)))
+
+         * Saldo 72 Hs.
+         ACN(n:Val(aa1), Val(k:Val(aa1))+Val(l:Val(aa1))-Val(m:Val(aa1)))
+         ACN(n:Val(aa2), Val(k:Val(aa2))+Val(l:Val(aa2))-Val(m:Val(aa2)))
+
+         * Saldo Final
+         ACN(q:Val(aa1), Val(n:Val(aa1))+Val(o:Val(aa1))-Val(p:Val(aa1)))
+         ACN(q:Val(aa2), Val(n:Val(aa2))+Val(o:Val(aa2))-Val(p:Val(aa2)))
+
+         Recorrer&i 3, 16
+            If Val(&i:Val(aa1))<>0
+               IF &i <> 5 y &i <> 8 y &i <> 11 y &i <> 14
+                  ACL(&i:Val(aa1), 'DTECPB', Fecha1=Dialogo.Fecha1, Vehiculo1=Dialogo.Vehiculo1, Mercado1=Val(z3), Cantidad1=&i, Especie1=Val(z1), Radio2=Dialogo.Radio2, String1=Val(z2),Cuenta1=Val(z4))
+               ENDIF
+            Endif
+         Proximo
+
+         SCN(fi1, 1)
+      ELSE
+         ACT(aa4, 'NO')
+      ENDIF
+      * Corte por Especie
+      ACT(z1, FBN['Especie'])
+      ACT(z2, FBN['Cupon'])
+      ACT(z4, FBN['Cuenta'])
+      ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', FBN['Especie']))
+      ACT(a:Val(fi1), Val(z1)~' - '~FBN['Nombre']~' - Cup '~Val(z2))
+      ACN(es1, Val(fi1))
+      SetFont(a:Val(fi1), 1)
+      AgregarMarco(a:Val(fi1)..q:Val(fi1),2,0,Exe('COLOR'))
+      SCN(fi1, 1)
+      
+      * Corte por Cuenta
+      ACT(z4, FBN['Cuenta'])
+      ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', FBN['Especie']))
+      ACT(a:Val(fi1),'Cuenta '~Val(z4))
+      ACN(es1, Val(fi1))
+      SetFont(a:Val(fi1), 1)
+      AgregarMarco(a:Val(fi1)..a:Val(fi1),2,0,Exe('COLOR'))
+      SCN(fi1, 1)
+
+      * Corte por Mercado
+      ACT(z3, FBN['Mercado'])
+      ACT(a:Val(fi1), BUSCARCAMPO('MERCADOS','Descripcion','Codigo',Val(z3)))
+      SetFont(a:Val(fi1), 1)
+      SCN(fi1, 1)
+      
+      ACN(aa1, Val(fi1))
+      ACT(a:Val(fi1), 'Valor Nominal')
+      SCN(fi1, 1)
+      ACN(aa2, Val(fi1))
+      ACT(a:Val(fi1), 'Valor Residual')
+      SCN(fi1, 1)
+
+      ACN(b:Val(aa1), 0)
+      ACN(b:Val(aa2), 0)
+
+      * yt..yz -> parametros para la funcion INTERESCLE 
+      ACN(yt1, 1)
+      ACD(yu:1, Dialogo.Fecha1)
+      ACT(yv:1, Val(z1))
+      ACD(yx:1, FBN['FechaCambioTasa'])
+      ACN(yy:1, FBN['TasaIntAnterior'])
+      ACN(yz:1, FBN['TasaIntVigente'])
+
+      ACN(vr2, FBN['Alias5'])
+      ACT(in1, FBN['InteresesC'])
+      ACN(vr1, VALORTEORICO2(FBN['Especie'],Dialogo.Fecha1))
+      ACN(cc1, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,Val(mn1))) 
+   ENDIF
+
+   IF Not EqStr(FBN['Cuenta'],Val(z4))
+      IF EqStr(Val(aa4),'NO')
+         * Saldo HOY
+         ACN(e:Val(aa1), Val(b:Val(aa1))+Val(c:Val(aa1))-Val(d:Val(aa1)))
+         ACN(e:Val(aa2), Val(b:Val(aa2))+Val(c:Val(aa2))-Val(d:Val(aa2)))
+
+         * Saldo 24 Hs.
+         ACN(h:Val(aa1), Val(e:Val(aa1))+Val(f:Val(aa1))-Val(g:Val(aa1)))
+         ACN(h:Val(aa2), Val(e:Val(aa2))+Val(f:Val(aa2))-Val(g:Val(aa2)))
+
+         * Saldo 48 Hs.
+         ACN(k:Val(aa1), Val(h:Val(aa1))+Val(i:Val(aa1))-Val(j:Val(aa1)))
+         ACN(k:Val(aa2), Val(h:Val(aa2))+Val(i:Val(aa2))-Val(j:Val(aa2)))
+
+         * Saldo 72 Hs.
+         ACN(n:Val(aa1), Val(k:Val(aa1))+Val(l:Val(aa1))-Val(m:Val(aa1)))
+         ACN(n:Val(aa2), Val(k:Val(aa2))+Val(l:Val(aa2))-Val(m:Val(aa2)))
+
+         * Saldo Final
+         ACN(q:Val(aa1), Val(n:Val(aa1))+Val(o:Val(aa1))-Val(p:Val(aa1)))
+         ACN(q:Val(aa2), Val(n:Val(aa2))+Val(o:Val(aa2))-Val(p:Val(aa2)))
+
+         Recorrer&i 3, 16
+            If Val(&i:Val(aa1))<>0
+               IF &i <> 5 y &i <> 8 y &i <> 11 y &i <> 14
+                  ACL(&i:Val(aa1), 'DTECPB', Fecha1=Dialogo.Fecha1, Vehiculo1=Dialogo.Vehiculo1, Mercado1=Val(z3), Cantidad1=&i, Especie1=Val(z1), Radio2=Dialogo.Radio2, String1=Val(z2),Cuenta1=Val(z4))
+               ENDIF
+            Endif
+         Proximo
+
+         SCN(fi1, 1)
+      ELSE
+         ACT(aa4, 'NO')
+      ENDIF
+      * Corte por Cuenta
+      ACT(z1, FBN['Especie'])
+      ACT(z2, FBN['Cupon'])
+      ACT(z4, FBN['Cuenta'])
+      ACT(a:Val(fi1),'Cuenta '~Val(z4))
+      ACN(es1, Val(fi1))
+      SetFont(a:Val(fi1), 1)
+      AgregarMarco(a:Val(fi1)..a:Val(fi1),2,0,Exe('COLOR'))
+      SCN(fi1, 1)
+      
+      * Corte por Mercado
+      ACT(z3, FBN['Mercado'])
+      ACT(a:Val(fi1), BUSCARCAMPO('MERCADOS','Descripcion','Codigo',Val(z3)))
+      SetFont(a:Val(fi1), 1)
+      SCN(fi1, 1)
+      
+      ACN(aa1, Val(fi1))
+      ACT(a:Val(fi1), 'Valor Nominal')
+      SCN(fi1, 1)
+      ACN(aa2, Val(fi1))
+      ACT(a:Val(fi1), 'Valor Residual')
+      SCN(fi1, 1)
+
+      ACN(b:Val(aa1), 0)
+      ACN(b:Val(aa2), 0)
+
+      * yt..yz -> parametros para la funcion INTERESCLE 
+      ACN(yt1, 1)
+      ACD(yu:1, Dialogo.Fecha1)
+      ACT(yv:1, Val(z1))
+      ACD(yx:1, FBN['FechaCambioTasa'])
+      ACN(yy:1, FBN['TasaIntAnterior'])
+      ACN(yz:1, FBN['TasaIntVigente'])
+
+      ACN(vr2, FBN['Alias5'])
+      ACT(in1, FBN['InteresesC'])
+      ACN(vr1, VALORTEORICO2(FBN['Especie'],Dialogo.Fecha1))
+      ACN(cc1, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,Val(mn1))) 
+   ENDIF
+   
+   
+   IF Not EqStr(FBN['Mercado'],Val(z3))
+      IF EqStr(Val(aa4),'NO')
+         * Saldo HOY
+         ACN(e:Val(aa1), Val(b:Val(aa1))+Val(c:Val(aa1))-Val(d:Val(aa1)))
+         ACN(e:Val(aa2), Val(b:Val(aa2))+Val(c:Val(aa2))-Val(d:Val(aa2)))
+
+         * Saldo 24 Hs.
+         ACN(h:Val(aa1), Val(e:Val(aa1))+Val(f:Val(aa1))-Val(g:Val(aa1)))
+         ACN(h:Val(aa2), Val(e:Val(aa2))+Val(f:Val(aa2))-Val(g:Val(aa2)))
+
+         * Saldo 48 Hs.
+         ACN(k:Val(aa1), Val(h:Val(aa1))+Val(i:Val(aa1))-Val(j:Val(aa1)))
+         ACN(k:Val(aa2), Val(h:Val(aa2))+Val(i:Val(aa2))-Val(j:Val(aa2)))
+
+         * Saldo 72 Hs.
+         ACN(n:Val(aa1), Val(k:Val(aa1))+Val(l:Val(aa1))-Val(m:Val(aa1)))
+         ACN(n:Val(aa2), Val(k:Val(aa2))+Val(l:Val(aa2))-Val(m:Val(aa2)))
+
+         * Saldo Final
+         ACN(q:Val(aa1), Val(n:Val(aa1))+Val(o:Val(aa1))-Val(p:Val(aa1)))
+         ACN(q:Val(aa2), Val(n:Val(aa2))+Val(o:Val(aa2))-Val(p:Val(aa2)))
+
+         Recorrer&i 3, 16
+            If Val(&i:Val(aa1))<>0
+               IF &i <> 5 y &i <> 8 y &i <> 11 y &i <> 14
+                  ACL(&i:Val(aa1), 'DTECPB', Fecha1=Dialogo.Fecha1, Vehiculo1=Dialogo.Vehiculo1, Mercado1=Val(z3), Cantidad1=&i, Especie1=Val(z1), Radio2=Dialogo.Radio2, String1=Val(z2),Cuenta1=Val(z4))
+               ENDIF
+            Endif
+         Proximo
+      ELSE
+         ACT(aa4, 'NO')
+      ENDIF
+      * Corte por Mercado
+      ACT(z3, FBN['Mercado'])
+      ACT(a:Val(fi1), BUSCARCAMPO('MERCADOS','Descripcion','Codigo',Val(z3)))
+      SetFont(a:Val(fi1), 1)
+      SCN(fi1, 1)
+      
+      ACN(aa1, Val(fi1))
+      ACT(a:Val(fi1), 'Valor Nominal')
+      SCN(fi1, 1)
+      ACN(aa2, Val(fi1))
+      ACT(a:Val(fi1), 'Valor Residual')
+      SCN(fi1, 1)
+
+      ACN(b:Val(aa1), 0)
+      ACN(b:Val(aa2), 0)
+   ENDIF
+
+
+   * Si el registro es un saldo
+   IF EqStr(FBN['TipoOp'], 'ASALDOPOSIC')
+      * ca1 V.N. / ca2 V.R.
+      ACN(ca1, FBN['Cantidad'])
+      ACN(ca2,Round(val(ca1)*val(vr1),val(vr2)))
+
+      ACN(b:Val(aa1), val(ca1))
+      ACN(b:Val(aa2), Val(ca2))
+   ENDIF
+
+
+   * Si el registro no es un saldo
+   IF NOT EqStr(FBN['TipoOp'], 'ASALDOPOSIC')
+      *- ca1: Cantidad VN  ca2: VR ca3: Valuacion
+      ACN(ca1,FBN['Cantidad'])
+      ACN(ca2,Round(val(ca1)*val(vr1),val(vr2)))
+
+      * Compras a Liq.
+      IF [Incluido(FBN['TipoOp'], 'CTC|CTP|TIC|TCOPRI|DTP|TIFC|') y Not EqStr(FBN['Inv'],'INV')] o [Incluido(FBN['TipoOp'], 'RTP|') y EqStr(FBN['Inv'],'INV')]
+         * HOY
+         IF FBN['FechaVto'] <= HABILES(Dialogo.Fecha1,0,'ARG')
+
+          SCN(c:Val(aa1), val(ca1))
+           SCN(c:Val(aa2), val(ca2))
+         ENDIF
+         * 24 HS.
+         IF FBN['FechaVto'] = HABILES(Dialogo.Fecha1,1,'ARG')
+            SCN(f:Val(aa1), val(ca1))
+            SCN(f:Val(aa2), val(ca2))
+         ENDIF
+         * 48 HS.
+         IF FBN['FechaVto'] = HABILES(Dialogo.Fecha1,2,'ARG')
+            SCN(i:Val(aa1), val(ca1))
+            SCN(i:Val(aa2), val(ca2))
+         ENDIF
+         * 72 HS.
+         IF FBN['FechaVto'] = HABILES(Dialogo.Fecha1,3,'ARG')
+            SCN(l:Val(aa1), val(ca1))
+            SCN(l:Val(aa2), val(ca2))
+         ENDIF
+         * > 72 HS.
+         IF FBN['FechaVto'] > HABILES(Dialogo.Fecha1,3,'ARG')
+            SCN(o:Val(aa1), val(ca1))
+            SCN(o:Val(aa2), val(ca2))
+         ENDIF
+      ENDIF
+      *- mc1: Movimiento ejecutado concertacion mv1: Movimiento Ejecutado Vto
+      ACN(mc1,0)
+      ACN(mv1,0)
+
+      IF [Incluido(FBN['TipoOp'], 'TIDE|TICT|TIPO|TICO') y Not EqStr(FBN['Inv'],'INV')]
+         *- Chequeo si tiene algun movimiento ejecutado a la concertacion
+         SQL.ADD("SELECT DISTINCT M.NrOperacion ")
+         SQL.ADD("FROM "~DBO~".MOVEJECUTADOS M ")
+         SQL.ADD("WHERE M.NrOperacion = '"~FBN['NrOperacion']~"' AND ")
+         SQL.ADD("M.Especie='"~FBN['Especie']~"' AND M.FechaMov='"~IdxDate(FBN['FechaOp'])~"' AND EXISTS ")
+         SQL.ADD("(SELECT 1 FROM "~DBO~".TRANSACCIONES2 T,"~DBO~".TRANSACCIONES2 T1 ")
+         SQL.ADD(" WHERE T.NrTrans=M.NrTrans2 and T1.NrTrans=T.NrOperacionRef2 AND T1.RB2=1) ")
+         Recorrer SQL
+             dfa
+             ACN(mc1,1)
+         Proximo
+
+         *- Chequeo si tiene algun movimiento ejecutado  al concertacion      
+         SQL.ADD("SELECT DISTINCT M.NrOperacion ")
+         SQL.ADD("FROM "~DBO~".MOVEJECUTADOS M ")
+         SQL.ADD("WHERE M.NrOperacion = '"~FBN['NrOperacion']~"' AND ")
+         SQL.ADD("M.Especie='"~FBN['Especie']~"' AND M.FechaMov='"~IdxDate(FBN['FechaVto'])~"' AND EXISTS ")
+         SQL.ADD("(SELECT 1 FROM "~DBO~".TRANSACCIONES2 T,"~DBO~".TRANSACCIONES2 T1 ")
+         SQL.ADD(" WHERE T.NrTrans=M.NrTrans2 and T1.NrTrans=T.NrOperacionRef2 AND T1.RB2=1)  ")
+         Recorrer SQL
+             dfa
+             ACN(mv1,1)
+         Proximo      
+      EndIf
+
+      IF [Incluido(FBN['TipoOp'], 'TIDE|TICT|TIPO|TICO') y Not EqStr(FBN['Inv'],'INV')]
+         * HOY
+         IF [val(mc1)=0 y FBN['FechaOp']<=HABILES(Dialogo.Fecha1,0,'ARG') y Incluido(FBN['TipoOp'],'TIDE|TICT|')] o [val(mv1)=0 y FBN['FechaVto']<=HABILES(Dialogo.Fecha1,0,'ARG') y Incluido(FBN['TipoOp'], 'TIPO|TICO|')] 
+            SCN(c:Val(aa1), val(ca1))
+            SCN(c:Val(aa2), val(ca2))
+         ENDIF
+         * 24 HS.
+         IF [val(mc1)=0 y FBN['FechaOp'] = HABILES(Dialogo.Fecha1,1,'ARG') y Incluido(FBN['TipoOp'],'TIDE|TICT|')] o [val(mv1)=0 y FBN['FechaVto']=HABILES(Dialogo.Fecha1,1,'ARG') y Incluido(FBN['TipoOp'], 'TIPO|TICO|')] 
+            SCN(f:Val(aa1), val(ca1))
+            SCN(f:Val(aa2), val(ca2))
+         ENDIF
+         * 48 HS.
+         IF [val(mc1)=0 y FBN['FechaOp'] = HABILES(Dialogo.Fecha1,2,'ARG') y Incluido(FBN['TipoOp'],'TIDE|TICT|')] o [val(mv1)=0 y FBN['FechaVto']=HABILES(Dialogo.Fecha1,2,'ARG') y Incluido(FBN['TipoOp'], 'TIPO|TICO|')] 
+            SCN(i:Val(aa1), val(ca1))
+            SCN(i:Val(aa2), val(ca2))
+         ENDIF
+         * 72 HS.
+         IF [val(mc1)=0 y FBN['FechaOp'] = HABILES(Dialogo.Fecha1,3,'ARG') y Incluido(FBN['TipoOp'],'TIDE|TICT|')] o [val(mv1)=0 y FBN['FechaVto'] =HABILES(Dialogo.Fecha1,3,'ARG') y Incluido(FBN['TipoOp'], 'TIPO|TICO|')] 
+            SCN(l:Val(aa1), val(ca1))
+            SCN(l:Val(aa2), val(ca2))
+         ENDIF
+         * > 72 HS.
+         IF [val(mc1)=0 y FBN['FechaOp'] > HABILES(Dialogo.Fecha1,3,'ARG') y Incluido(FBN['TipoOp'],'TIDE|TICT|')] o [val(mv1)=0 y FBN['FechaVto'] >HABILES(Dialogo.Fecha1,3,'ARG') y Incluido(FBN['TipoOp'], 'TIPO|TICO|')] 
+            SCN(o:Val(aa1), val(ca1))
+            SCN(o:Val(aa2), val(ca2))
+         ENDIF
+      ENDIF
+
+      * Ventas a Liq.
+      IF [Incluido(FBN['TipoOp'], 'VTC|VTP|TIV|RTP|TIFV|') y Not EqStr(FBN['Inv'],'INV')] o [Incluido(FBN['TipoOp'], 'DTP|') y EqStr(FBN['Inv'],'INV')]
+         * HOY
+         IF FBN['FechaVto'] <= HABILES(Dialogo.Fecha1,0,'ARG')
+            SCN(d:Val(aa1), val(ca1))
+            SCN(d:Val(aa2), val(ca2))
+         ENDIF
+         * 24 HS.
+         IF FBN['FechaVto'] = HABILES(Dialogo.Fecha1,1,'ARG')
+            SCN(g:Val(aa1), val(ca1))
+            SCN(g:Val(aa2), val(ca2))
+         ENDIF
+         * 48 HS.
+         IF FBN['FechaVto'] = HABILES(Dialogo.Fecha1,2,'ARG')
+            SCN(j:Val(aa1), val(ca1))
+            SCN(j:Val(aa2), val(ca2))
+         ENDIF
+         * 72 HS.
+         IF FBN['FechaVto'] = HABILES(Dialogo.Fecha1,3,'ARG')
+            SCN(m:Val(aa1), val(ca1))
+            SCN(m:Val(aa2), val(ca2))
+         ENDIF
+         * > 72 HS.
+         IF FBN['FechaVto'] > HABILES(Dialogo.Fecha1,3,'ARG')
+            SCN(p:Val(aa1), val(ca1))
+            SCN(p:Val(aa2), val(ca2))
+         ENDIF
+      ENDIF
+      IF [Incluido(FBN['TipoOp'], 'TIDE|TICT|TIPO|TICO') y Not EqStr(FBN['Inv'],'INV')]
+         * HOY
+         IF [val(mv1)=0 y FBN['FechaVto']<=HABILES(Dialogo.Fecha1,0,'ARG') y Incluido(FBN['TipoOp'],'TIDE|TICT|')] o [val(mc1)=0 y FBN['FechaOp']<=HABILES(Dialogo.Fecha1,0,'ARG') y Incluido(FBN['TipoOp'], 'TIPO|TICO|')] 
+            SCN(d:Val(aa1), val(ca1))
+            SCN(d:Val(aa2), val(ca2))
+         ENDIF
+         * 24 HS.
+         IF [val(mv1)=0 y FBN['FechaVto'] = HABILES(Dialogo.Fecha1,1,'ARG') y Incluido(FBN['TipoOp'],'TIDE|TICT|')] o [val(mc1)=0 y FBN['FechaOp']=HABILES(Dialogo.Fecha1,1,'ARG') y Incluido(FBN['TipoOp'], 'TIPO|TICO|')] 
+            SCN(g:Val(aa1), val(ca1))
+            SCN(g:Val(aa2), val(ca2))
+         ENDIF
+         * 48 HS.
+         IF [val(mv1)=0 y FBN['FechaVto'] = HABILES(Dialogo.Fecha1,2,'ARG') y Incluido(FBN['TipoOp'],'TIDE|TICT|')] o [val(mc1)=0 y FBN['FechaOp']=HABILES(Dialogo.Fecha1,2,'ARG') y Incluido(FBN['TipoOp'], 'TIPO|TICO|')] 
+            SCN(j:Val(aa1), val(ca1))
+            SCN(j:Val(aa2), val(ca2))
+         ENDIF
+         * 72 HS.
+         IF [val(mv1)=0 y FBN['FechaVto'] = HABILES(Dialogo.Fecha1,3,'ARG') y Incluido(FBN['TipoOp'],'TIDE|TICT|')] o [val(mc1)=0 y FBN['FechaOp'] =HABILES(Dialogo.Fecha1,3,'ARG') y Incluido(FBN['TipoOp'], 'TIPO|TICO|')] 
+            SCN(m:Val(aa1), val(ca1))
+            SCN(m:Val(aa2), val(ca2))
+         ENDIF
+         * > 72 HS.
+         IF [val(mv1)=0 y FBN['FechaVto'] > HABILES(Dialogo.Fecha1,3,'ARG') y Incluido(FBN['TipoOp'],'TIDE|TICT|')] o [val(mc1)=0 y FBN['FechaOp'] >HABILES(Dialogo.Fecha1,3,'ARG') y Incluido(FBN['TipoOp'], 'TIPO|TICO|')] 
+            SCN(p:Val(aa1), val(ca1))
+            SCN(p:Val(aa2), val(ca2))
+         ENDIF
+      ENDIF
+   ENDIF
+Proximo
+IF EqStr(Val(aa4),'NO')
+   * Saldo HOY
+   ACN(e:Val(aa1), Val(b:Val(aa1))+Val(c:Val(aa1))-Val(d:Val(aa1)))
+   ACN(e:Val(aa2), Val(b:Val(aa2))+Val(c:Val(aa2))-Val(d:Val(aa2)))
+
+   * Saldo 24 Hs.
+   ACN(h:Val(aa1), Val(e:Val(aa1))+Val(f:Val(aa1))-Val(g:Val(aa1)))
+   ACN(h:Val(aa2), Val(e:Val(aa2))+Val(f:Val(aa2))-Val(g:Val(aa2)))
+
+   * Saldo 48 Hs.
+   ACN(k:Val(aa1), Val(h:Val(aa1))+Val(i:Val(aa1))-Val(j:Val(aa1)))
+   ACN(k:Val(aa2), Val(h:Val(aa2))+Val(i:Val(aa2))-Val(j:Val(aa2)))
+
+   * Saldo 72 Hs.
+   ACN(n:Val(aa1), Val(k:Val(aa1))+Val(l:Val(aa1))-Val(m:Val(aa1)))
+   ACN(n:Val(aa2), Val(k:Val(aa2))+Val(l:Val(aa2))-Val(m:Val(aa2)))
+
+   * Saldo Final
+   ACN(q:Val(aa1), Val(n:Val(aa1))+Val(o:Val(aa1))-Val(p:Val(aa1)))
+   ACN(q:Val(aa2), Val(n:Val(aa2))+Val(o:Val(aa2))-Val(p:Val(aa2)))
+
+   Recorrer&i 3, 16
+      If Val(&i:Val(aa1))<>0
+         IF &i <> 5 y &i <> 8 y &i <> 11 y &i <> 14
+            ACL(&i:Val(aa1), 'DTECPB', Fecha1=Dialogo.Fecha1, Vehiculo1=Dialogo.Vehiculo1, Mercado1=Val(z3), Cantidad1=&i, Especie1=Val(z1), Radio2=Dialogo.Radio2, String1=Val(z2),Cuenta1=Val(z4))
+         ENDIF
+      Endif
+   Proximo
+ENDIF
+
+AgregarMarco(e:Val(fe1)..e:Val(aa2),2,0,Exe('COLOR'))
+AgregarMarco(h:Val(fe1)..h:Val(aa2),2,0,Exe('COLOR'))
+AgregarMarco(k:Val(fe1)..k:Val(aa2),2,0,Exe('COLOR'))
+AgregarMarco(n:Val(fe1)..n:Val(aa2),2,0,Exe('COLOR'))
+
+SCN(fi1, 1)
+ACT(a:Val(fi1),'FIN DE LISTADO')
+SetFont(a:Val(fi1), 1)
+
+FormatoCeldas(b9..q:Val(fi1), Exe('F2'))
+
+SetFont(b9..q:Val(fi1), 2)
+
+Impresion(1,2)
+
+ACO(1, 18)
+ACO(2, 8)
+ACO(3, 8)
+ACO(4, 8)
+ACO(5, 8)
+ACO(6, 8)
+ACO(7, 8)
+ACO(8, 8)
+ACO(9, 8)
+ACO(10, 8)
+ACO(11, 8)
+ACO(12, 8)
+ACO(13, 8)
+ACO(14, 8)
+ACO(15, 8)
+ACO(16, 8)
+ACO(17, 8)
+ACO(18, 8)
+ACO(19, 8)
+
+FijarCol(2)
+FijarFila(8)
+
+SetPrintFit(3, 65)
+LimitesVision(q:Val(fi1)+1)
+RangoTitulo(a:1..q:Val(fi1)+1, 7)

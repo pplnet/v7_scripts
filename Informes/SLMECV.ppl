@@ -1,0 +1,507 @@
+﻿ModoReproceso(SinDialogo)
+MostrarCuadroDeMensajes
+*ACT(es1,SQLSet("SELECT Codigo FROM "~DBO~".ESPECIES WHERE Status='HAB' ORDER BY Codigo "))
+ACT(es1,SQLSet("SELECT CodNumCajaValores FROM "~DBO~".ESPECIES ORDER BY Codigo"))
+CrearDialogo
+  Vehiculo1  : "Vehiculo"                          ; 1;1;;;;NoVacio(Dialogo.Vehiculo1);'Debe ingresar un vehiculo';NO;VAR('VEHICULODE')
+  Fecha1     : "Fecha"                             ; 2;1;;;;Dialogo.Fecha1<=Fsys y Dialogo.Fecha1<>0;'Debe Ingresar la Fecha';NO;FSys
+  Mercado1   : "Ubicacion"                         ; 3;1;;;;Vacio(Dialogo.MERCADO1) o [NoVacio(Dialogo.MERCADO1) y NoVacio(BuscarCampo('Mercados','Codigo','Codigo',Dialogo.MERCADO1))];'Error en Ubicacion';NO;;;
+  Radio1     : "Tipo Cliente|"~VAR('LABEL')~"|Caja|Todos" ; 4;1;;NO;NO;;;;2;
+  Radio2     : "Moneda|Pesos|Dolares"              ; 5;1;;;;;;;0;
+  Lista4     : "Estados"                           ; 6;1;;;;;;;;;SQLSet("SELECT Descripcion FROM "~DBO~".ESTADOSCUSTODIA WHERE Codigo = '"~Var('SALLIBRECU')~"' OR Habilitado = 'NO' ORDER BY Descripcion ");SI
+  Lista1     : "Especies"                          ; 0;2;;;;;;;;;val(es1);SI
+  Lista3     : 'Comitentes'                        ; 2;1;;;;;;;;;SQLSet("SELECT Distinct Numero FROM "~DBO~".CUENTAS ORDER BY Numero")
+  Lista2     : "Excluye Especies"                  ;-4;2;;;;;;;;;val(es1);SI
+  Check1     : "Otro programa"                     ;  ;2;;NO;NO;;;;0;
+FinDialogo
+
+IF Not Ok
+  Cancelar
+ENDIF
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+CrearFont(3,"Arial,10,B")
+
+* Reconstruye saldos por si se hubiera desliquidado FValor
+EjecutarEvento('DES81')
+
+ACT(xz1, Hora(Ahora))
+
+
+Message('Recuperando Informacion.....')
+
+**************************
+*Saldo cuenta vista
+
+SQL.ADD("SELECT  ST.Cliente, ST.Especie, ST.Mercado, ")
+SQL.ADD("CU.Nombre as NomCuenta,")
+SQL.ADD("E.Nombre,")
+SQL.ADD("ST.Cuenta, ")
+SQL.ADD("C.RazonSocial,")
+SQL.ADD("Convert(int, E.CodNumCajaValores) as NumCaja,")
+SQL.ADD("'' as DescEst,'' as Codigo,")
+SQL.ADD("E.Alias5, E.InteresesC,")
+SQL.ADD("Sum(ST.Saldo) as Saldo,")
+SQL.ADD("ST.Cupon, Convert(int, CU.Numero) as NroCuenta")
+
+SQL.ADD("FROM (")
+
+SQL.ADD("SELECT         S1.Cliente, S1.Mercado, S1.Cuenta,  S1.Especie, ")
+SQL.ADD("        ISNULL(S1.Cupon, '') AS Cupon, S1.Saldo,   S1.EnteCustodia")
+SQL.ADD("FROM "~DBO~".SALDOSDIA S1 ")
+SQL.ADD("WHERE S1.EnteCustodia = '"~Dialogo.Vehiculo1~"'")
+SQL.ADD("  and S1.Mercado = '"~Var('MERAUXLIQ')~"' ")
+SQL.ADD("  and S1.NrSaldo = 81")
+SQL.ADD("  and round(S1.Saldo,2) <> 0 ")
+SQL.ADD("  and S1.Fecha = (SELECT MAX(S2.Fecha) ")
+SQL.ADD("                  FROM "~DBO~".SALDOSDIA S2 ")
+SQL.ADD("                  WHERE S2.Cliente      = S1.Cliente ")
+SQL.ADD("                    and S2.Especie      = S1.Especie ")
+SQL.ADD("                    and S2.EnteCustodia = S1.EnteCustodia ")
+SQL.ADD("                    and S2.Mercado      = S1.Mercado ")
+SQL.ADD("                    and S2.NrSaldo      = S1.NrSaldo ")
+SQL.ADD("                    and S2.Cuenta       = S1.Cuenta ")
+SQL.ADD("                    and IsNull(S2.Cupon,'') = IsNull(S1.Cupon,'') ")
+SQL.ADD("                    and S2.Fecha       < '"~IdxDate(Dialogo.Fecha1)~"' ) ")
+
+*Rueda Garantizada invierto cantidad
+SQL.ADD("UNION ALL")
+SQL.ADD("SELECT        S3.Cliente,              S3.Mercado,  S3.Cuenta,   S3.Especie, ")
+SQL.ADD("       ISNULL(S3.Cupon, '') AS Cupon, -S3.Cantidad, S3.EnteCustodia")
+SQL.ADD("FROM "~DBO~".MOVEJECUTADOS S3")
+SQL.ADD("INNER JOIN "~DBO~".OPERACIONES O")
+SQL.ADD("    on  S3.NrOperacion  = O.NrOperacion")
+SQL.ADD("WHERE   S3.EnteCustodia = '"~Dialogo.Vehiculo1~"'")
+SQL.ADD("    and  O.TipoOp  in('TIC','TIV') and (O.CB4 = 1 or O.Cliente1=O.Vehiculo1)")
+SQL.ADD("    and S3.Mercado =  '"~Var('MERAUXLIQ')~"' ")
+SQL.ADD("    and S3.NrSaldo = 1")
+SQL.ADD("    and S3.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' " )
+    
+*Resto de los movimientos 
+SQL.ADD("UNION ALL")
+SQL.ADD("SELECT        S3.Cliente,             S3.Mercado,  S3.Cuenta,  S3.Especie, ")
+SQL.ADD("       ISNULL(S3.Cupon, '') AS Cupon, S3.Cantidad, S3.EnteCustodia")
+SQL.ADD("FROM "~DBO~".MOVEJECUTADOS S3")
+SQL.ADD("LEFT JOIN "~DBO~".OPERACIONES O")
+SQL.ADD("    on  S3.NrOperacion  = O.NrOperacion")
+SQL.ADD("WHERE   S3.EnteCustodia = '"~Dialogo.Vehiculo1~"'")
+SQL.ADD("    and not(IsNull(O.TipoOp,'') in('TIC','TIV') and (IsNull(O.CB4, 0) = 1 or IsNull(O.Cliente1,'')=IsNull(O.Vehiculo1,'')))")
+SQL.ADD("    and S3.Mercado = '"~Var('MERAUXLIQ')~"' ")
+SQL.ADD("    and S3.NrSaldo = 1")
+SQL.ADD("    and S3.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' " )
+
+SQL.ADD(") AS ST")
+
+SQL.ADD("INNER JOIN "~DBO~".CLIENTES C WITH (NOLOCK)")
+SQL.ADD("      ON C.Codigo   = ST.Cliente")
+SQL.ADD("INNER JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ")
+SQL.ADD("      ON E.Codigo   = ST.Especie ")
+SQL.ADD("INNER JOIN "~DBO~".CUENTAS CU WITH (NOLOCK) ")
+SQL.ADD("      ON CU.Codigo  = ST.Cuenta ")
+
+SQL.ADD("WHERE ")
+IF NoVacio(Dialogo.Lista3)
+   SQL.ADD("   CU.Numero IN ("~Pipe2Comillas(Dialogo.Lista3)~") AND ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("   E.CodNumCajaValores IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("   E.CodNumCajaValores Not IN ("~Pipe2Comillas(Dialogo.Lista2)~") AND ")
+ENDIF
+SQL.ADD("      ST.EnteCustodia = '"~Dialogo.Vehiculo1~"' AND ")
+IF NoVacio(Dialogo.Mercado1)
+   SQL.ADD("   ST.Mercado = '"~Dialogo.Mercado1~"' AND ")
+ENDIF
+IF Dialogo.Radio1 = 0
+   *- Solamente Clientes SUDAMERIS
+   SQL.ADD("   (C.TipoCliente = '"~VAR('CLISUD')~"' OR ")
+   SQL.ADD("    C.TipoCliente IS NULL OR ")
+   SQL.ADD("    C.TipoCliente = '      ') AND ")
+EndIf
+IF Dialogo.Radio1 = 1
+   *- Solamente Clientes CAJA
+   SQL.ADD(" C.TipoCliente = '"~VAR('CLICAJA')~"' AND ")
+EndIf
+SQL.ADD("      ST.Saldo <> 0 ")
+SQL.ADD(" AND  ST.Cliente = CU.Cliente ")
+
+SQL.ADD("GROUP BY ST.Cliente, ST.Mercado,  ST.Cuenta,          ST.Especie, ST.Cupon,      ST.EnteCustodia, ")
+SQL.ADD("          E.Nombre,  C.RazonSocial, Convert(int, E.CodNumCajaValores), E.Alias5,   E.InteresesC, CU.Nombre, CU.Numero")
+
+SQL.ADD("UNION ALL")
+
+
+**************************
+*Saldo Custodia
+ 
+SQL.ADD("SELECT  S1.Cliente,     S1.Especie,          S1.Mercado,                CU.Nombre as NomCuenta, E.Nombre,")
+SQL.ADD("        S1.Cuenta,      C.RazonSocial,       Convert(int, E.CodNumCajaValores) as NumCaja,       EC.Descripcion DescEst, EC.Codigo,")
+SQL.ADD("        E.Alias5,       E.InteresesC,    SUM(S1.Saldo) Saldo,           S1.Cupon,               Convert(int, CU.Numero) as NroCuenta")
+SQL.ADD("FROM "~DBO~".SALDOSDIA S1 WITH (NOLOCK) INNER JOIN "~DBO~".CLIENTES C WITH (NOLOCK)")
+SQL.ADD("           ON S1.Cliente = C.Codigo ")
+SQL.ADD("     INNER JOIN "~DBO~".ESPECIES E WITH (NOLOCK) ")
+SQL.ADD("           ON E.Codigo = S1.Especie ")
+SQL.ADD("     INNER JOIN "~DBO~".CUENTAS CU WITH (NOLOCK) ")
+SQL.ADD("           ON CU.Codigo = S1.Cuenta ")
+SQL.ADD("     INNER JOIN "~DBO~".ESTADOSCUSTODIA EC WITH (NOLOCK)  ")
+SQL.ADD("           ON (S1.NrSaldo>201 or S1.NrSaldo=101) AND (S1.NrSaldo not in(121,227)) AND ((S1.NrSaldo-100=EC.NrSaldo AND S1.NrSaldo>201) or (S1.NrSaldo=EC.NrSaldo AND S1.NrSaldo=101)) ")
+SQL.ADD("WHERE ")
+IF NoVacio(Dialogo.Lista3)
+   SQL.ADD("   CU.Numero IN ("~Pipe2Comillas(Dialogo.Lista3)~") AND ")
+ENDIF
+IF NoVacio(Dialogo.Lista1)
+   SQL.ADD("    E.CodNumCajaValores IN ("~Pipe2Comillas(Dialogo.Lista1)~") AND ")
+ENDIF
+IF NoVacio(Dialogo.Lista2)
+   SQL.ADD("   E.CodNumCajaValores Not IN ("~Pipe2Comillas(Dialogo.Lista2)~") AND ")
+ENDIF
+SQL.ADD("      S1.EnteCustodia = '"~Dialogo.Vehiculo1~"' AND ")
+IF NoVacio(Dialogo.Mercado1)
+   SQL.ADD("   S1.Mercado = '"~Dialogo.Mercado1~"' AND ")
+ENDIF
+IF Dialogo.Radio1 = 0
+   *- Solamente Clientes SUDAMERIS
+   SQL.ADD("   (C.TipoCliente = '"~VAR('CLISUD')~"' OR ")
+   SQL.ADD("    C.TipoCliente IS NULL OR ")
+   SQL.ADD("    C.TipoCliente = '      ') AND ")
+EndIf
+IF Dialogo.Radio1 = 1
+   *- Solamente Clientes CAJA
+   SQL.ADD(" C.TipoCliente = '"~VAR('CLICAJA')~"' AND ")
+EndIf
+SQL.ADD("      S1.Saldo <> 0 AND ")
+SQL.ADD("      S1.Fecha = (SELECT MAX(S2.Fecha) ")
+SQL.ADD("                  FROM "~DBO~".SALDOSDIA S2 WITH (NOLOCK) ")
+SQL.ADD("                  WHERE S2.Cliente = S1.Cliente AND ")
+SQL.ADD("                        S2.Especie = S1.Especie AND ")
+SQL.ADD("                        S2.Cupon = S1.Cupon AND ")
+SQL.ADD("                        S2.EnteCustodia = S1.EnteCustodia AND ")
+SQL.ADD("                        S2.Mercado = S1.Mercado AND ")
+SQL.ADD("                        S2.NrSaldo = S1.NrSaldo AND ")
+SQL.ADD("                        S2.Cuenta = S1.Cuenta AND ")
+SQL.ADD("                        S2.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"' ) ")
+SQL.ADD("GROUP BY S1.Especie, CU.Nombre, E.Nombre, S1.Mercado, S1.Cliente, S1.Cuenta, S1.NrSaldo, C.RazonSocial,  Convert(int, E.CodNumCajaValores),")
+SQL.ADD("         E.FechaCambioTasa, E.TasaIntAnterior, E.TasaIntVigente, EC.Descripcion, EC.Codigo,E.Alias5, E.InteresesC, E.Cotiza, S1.Cupon, Convert(int, CU.Numero)")
+SQL.ADD("ORDER BY Convert(int, CodNumCajaValores), Especie, Nombre, Cupon, Mercado, Convert(int, CU.Numero), Cuenta, Cliente")
+
+
+watch(SQL.BATCH())
+
+ACT(f1, 'Saldos de moneda y especie CV')
+ACD(f2, Dialogo.Fecha1)
+
+SetFont(f1..f2,3)
+AlinearCeldas(f1..f2,'C')
+
+ACT(a5, "Moneda: "~IIF(Dialogo.Radio2=0, "Pesos","Dolares"))
+
+ACT(a6, IIF (Dialogo.RADIO1=0    ,"TipoCliente: "~VAR('LABEL')   ,""))
+ACT(a6, IIF (Dialogo.RADIO1=1    ,"TipoCliente: Caja"            ,""))
+
+ACT(a6,  "Ubicacion: "       ~IIF (NoVacio(Dialogo.Mercado1)    ,Dialogo.Mercado1   ,"Todos"))
+ACT(a7,  "Clientes: "        ~IIF (NoVacio(Dialogo.Lista3)      ,Dialogo.Lista3     ,"Todos"))
+ACT(a8,  "Especies: "        ~IIF (NoVacio(Dialogo.Lista1)      ,Dialogo.Lista1     ,"Todas"))
+ACT(a9,  "Excluye Especies: "~IIF (NoVacio(Dialogo.Lista2)      ,Dialogo.Lista2     ,"Ninguna"))
+ACT(a10, "Estados: "         ~IIF (NoVacio(Dialogo.Lista4)      ,Dialogo.Lista4     ,"Todos"))
+
+SetFont(a4..m10,2)
+
+SetFilaActual(12)
+
+ACT(a:fac, 'Especie')
+ACT(b:fAC, 'Cupon')
+ACT(c:fac, 'Ubic.')
+ACT(d:fac, 'CodCliente')
+ACT(e:fac, 'Nombre Cliente ' )
+ACT(f:fac, 'Cuenta')
+ACT(g:fac, 'Nombre')
+ACT(h:fac, 'Estado')
+ACT(i:fac, 'V.N.')
+ACT(j:fac, 'V.R.')
+ACT(k:fac, 'Valuacion')
+AlinearCeldas(i:fac..k:fac,'D')
+
+SetFont(a:fac..k:fac,2)
+AgregarMarco(a:fac..k:fac,0,0,Exe('COLOR'))
+
+* Variable Especie
+ACT(az2, '')
+
+* Variable Mercado
+ACT(az3, '')
+
+* Variable Cliente
+ACT(az4, '')
+
+* Variable Cuenta
+ACT(az5, '')
+
+* Acumulador Especie VN
+ACN(ay2, 0)
+
+* Acumulador Mercado VN
+ACN(ay3, 0)
+
+* Acumulador Cliente VN
+ACN(ay4, 0)
+
+* Acumulador Especie VR
+ACN(ax2, 0)
+
+* Acumulador Mercado VR
+ACN(ax3, 0)
+
+* Acumulador Cliente VR
+ACN(ax4, 0)
+
+* Acumulador Especie Valuacion
+ACN(aw2, 0)
+
+* Acumulador Mercado Valuacion
+ACN(aw3, 0)
+
+* Acumulador Cliente Valuacion
+ACN(aw4, 0)
+
+*ACN(fi1, fac)
+*SetFilaActual(fac)
+
+Recorrer SQL
+
+   IF NoVacio(Dialogo.Lista4)
+      ACT(es1, Ascendientes('ESTADOSCUSTODIA',FBN['Codigo']))
+      IF EqStr(FBN['Codigo'],Var('SALLIBRECU'))
+         ACT(es1, FBN['Codigo'])
+      ELSE
+         ACN(es2, Posicion(FBN['Codigo'], Val(es1)))
+         ACT(es1, COPY(Val(es1),Longitud(FBN['Codigo'])+2,(Longitud(Val(es1))-(Longitud(FBN['Codigo'])+2))))
+      ENDIF
+      ACT(es3, BuscarCampo('ESTADOSCUSTODIA','Descripcion','Codigo',Val(es1)))
+   ENDIF
+
+   IF Incluido(Val(es3), Dialogo.Lista4) o Vacio(Dialogo.Lista4)
+      IF [Not EqStr(FBN['Especie'], Val(az2))] o [Eqstr(FBN['Especie'], Val(az2)) y Round(FBN['Cupon'],0) <> Round(Val(cp1),0)] 
+         IF Val(ay2)<>0 o Val(ay4)<>0  o Val(ay3)<>0
+            ACT(h:fac, 'Total Cliente --->')
+            ACN(i:fac, Val(ay4))
+            ACN(j:fac, Round(Val(ax4),val(vr2)) )
+            ACN(k:fac, Val(aw4))
+            SetFont(h:fac..k:fac,2)
+            ACN(ax4, 0)
+            ACN(ay4, 0)
+            ACN(aw4, 0)
+            
+            ifa
+            ACT(h:fac, 'Total Ubicacion --->')
+            ACN(i:fac, Val(ay3))
+            ACN(j:fac, Round(Val(ax3),val(vr2)))
+            ACN(k:fac, Val(aw3))
+            SetFont(h:fac..k:fac,2)
+            ACN(ax3, 0)
+            ACN(ay3, 0)
+            ACN(aw3, 0)
+            
+            ifa
+            ACT(h:fac, 'Total Especie --->')
+            ACN(i:fac, Val(ay2))
+            ACN(j:fac, Round(Val(ax2),val(vr2)))
+            ACN(k:fac, Val(aw2))
+            SetFont(h:fac..k:fac,2)
+            ACN(ax2, 0)
+            ACN(ay2, 0)
+            ACN(aw2, 0)
+            SetFilaActual(fac+2)
+         ENDIF
+
+        
+         Message(   FBN['NumCaja'] ~' - '~FBN['Especie'] ~' - '~FBN['Nombre'])
+         ACT(a:fac, FBN['NumCaja'] ~' - '~FBN['Especie'] ~' - '~FBN['Nombre'])
+        
+         ACN(cp1, FBN['Cupon'])
+         If Round(FBN['Cupon'],0) >= 0
+            ACT(b:fac, FBN['Cupon'])
+            AlinearCeldas(b:fac,'C')
+         Endif
+         
+         ACT(az2, FBN['Especie'])
+         ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', FBN['Especie']))
+         ACT(c:fac, FBN['Mercado'])
+         ACT(az3, FBN['Mercado'])
+         ACT(d:fac, FBN['NroCuenta'] ~ " - " ~ FBN['Cliente'])
+         ACT(e:fac,Copy(FBN['RazonSocial'],1,25))
+         ACT(az4, FBN['Cliente'])
+         ACT(f:fac, FBN['Cuenta'])
+         ACT(az5, FBN['Cuenta'])
+         ACT(g:fac, FBN['NomCuenta'])
+         SetFont(a:fac..e:fac,2)
+
+         ACN(vr2,FBN['Alias5'])
+      ENDIF
+
+      IF Not EqStr(FBN['Mercado'], Val(az3))
+         IF Val(ay2)<>0 o Val(ay4)<>0  o Val(ay3)<>0
+            ACT(h:fac, 'Total Cliente --->')
+            ACN(i:fac, Val(ay4))
+            ACN(j:fac, Round(Val(ax4),val(vr2)) )
+            ACN(k:fac, Val(aw4))
+            SetFont(h:fac..k:fac,2)
+            ACN(ax4, 0)
+            ACN(ay4, 0)
+            ACN(aw4, 0)
+            
+            ifa
+            ACT(h:fac, 'Total Ubicacion --->')
+            ACN(i:fac, Val(ay3))
+            ACN(j:fac, Round(Val(ax3),val(vr2)) )
+            ACN(k:fac, Val(aw3))
+            SetFont(h:fac..k:fac,2)
+            ACN(ax3, 0)
+            ACN(ay3, 0)
+            ACN(aw3, 0)
+            
+            ifa
+         ENDIF
+         ACT(c:fac, FBN['Mercado'])
+         ACT(az3, FBN['Mercado'])
+         ACT(d:fac, FBN['NroCuenta'] ~ " - " ~ FBN['Cliente'])
+         ACT(e:fac,Copy(FBN['RazonSocial'],1,25))
+         ACT(az4, FBN['Cliente'])
+         ACT(az5, FBN['Cuenta'])
+         ACT(f:fac, FBN['Cuenta'])
+         ACT(g:fac, FBN['NomCuenta'])
+         SetFont(c:fac..e:fac,2)
+      ENDIF
+
+      IF Not EqStr(FBN['Cliente'], Val(az4))
+         IF Val(ay2)<>0 o Val(ay4)<>0  o Val(ay3)<>0
+            ACT(h:fac, 'Total Cliente --->')
+            ACN(i:fac, Val(ay4))
+            ACN(j:fac, Round(Val(ax4),val(vr2)))
+            ACN(k:fac, Val(aw4))
+            SetFont(h:fac..k:fac,2)
+            ACN(ax4, 0)
+            ACN(ay4, 0)
+            ACN(aw4, 0)
+            
+            ifa
+         ENDIF
+         ACT(d:fac, FBN['NroCuenta'] ~ " - " ~ FBN['Cliente'])
+         ACT(e:fac,Copy(FBN['RazonSocial'],1,25))
+         ACT(az4, FBN['Cliente'])
+         ACT(az5, FBN['Cuenta'])
+         ACT(f:fac, FBN['Cuenta'])
+         ACT(g:fac, FBN['NomCuenta'])
+         SetFont(d:fac..e:fac,2)
+      ENDIF
+
+      IF Not EqStr(FBN['Cuenta'], Val(az5))
+         ACT(az5, FBN['Cuenta'])
+         ACT(f:fac, FBN['Cuenta'])
+         ACT(g:fac, FBN['NomCuenta'])
+      ENDIF
+
+      ACT(h:fac, FBN['DescEst'])
+      ACN(i:fac, FBN['Saldo'])
+
+      (.'INTERESCLE'.)
+
+      ACN(ca:fac, Val(zz:fac))
+
+      ACN(cb:fac, VALORTEORICO2(FBN['Especie'],Dialogo.Fecha1))
+
+      IF Dialogo.Radio2 = 0
+         ACN(cc:fac, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,VAR('MONELOCA')))
+      ELSE
+         ACN(cc:fac, CotizacionC(FBN['Especie'],,,,Dialogo.Fecha1,1,SI,VAR('MONEEXTR')))
+      ENDIF
+
+      ACN(j:fac, Round(Val(i:fac)*Val(cb:fac),val(vr2)) )
+
+      ACT(EE1,FBN['Especie'])
+      ACD(EE2,Dialogo.Fecha1)
+
+      IF EqStr(FBN['InteresesC'],'CLE')
+         IF Incluido(Val(al4), '1585')
+            ACN(k:fac, Val(j:fac)*Val(cc:fac)+(Val(ca:fac)*Val(cc:fac)) ) 
+         ELSE
+            ACN(k:fac, Val(j:fac)*Val(cc:fac)+Val(ca:fac) )
+         ENDIF
+      ELSE
+         ACN(k:fac, Val(i:fac)*Val(cc:fac)+Val(ca:fac) )
+      ENDIF
+
+      SCN(ay4, Val(i:fac))
+      SCN(ax4, Val(j:fac))
+      SCN(aw4, Val(k:fac))
+      SCN(ay3, Val(i:fac))
+      SCN(ax3, Val(j:fac))
+      SCN(aw3, Val(k:fac))
+      SCN(ay2, Val(i:fac))
+      SCN(ax2, Val(j:fac))
+      SCN(aw2, Val(k:fac))
+      SCN(aw1, Val(k:fac))
+   ENDIF
+Proximo
+
+
+
+ifa
+ACT(h:fac, 'Total Cliente --->')
+ACN(i:fac, Val(ay4))
+ACN(j:fac, Round(Val(ax4),val(vr2)) )
+ACN(k:fac, Val(aw4))
+SetFont(h:fac..k:fac,2)
+
+ifa
+ACT(h:fac, 'Total Ubicacion --->')
+ACN(i:fac, Val(ay3))
+ACN(j:fac, Round(Val(ax3),val(vr2)) )
+ACN(k:fac, Val(aw3))
+SetFont(h:fac..k:fac,2)
+
+ifa
+ACT(h:fac, 'Total Especie --->')
+ACN(i:fac, Val(ay2))
+ACN(j:fac, Round(Val(ax2) ,val(vr2)) )
+ACN(k:fac, Val(aw2))
+SetFont(h:fac..k:fac,2)
+SCN(fi1, 2)
+
+SetFont(h:fac..k:fac,2)
+
+SetFilaActual(fac+2)
+
+FormatoCeldas(i:11..k:fac,Exe('F2'))
+
+
+ACT(xz2, Hora(Ahora))
+
+SetFilaActual(fac+4)
+
+ACT(a:fac, 'Fin del Listado ')
+
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+
+ACO(1, 15)
+ACO(2, 4)
+ACO(3, 5)
+ACO(4, 15)
+ACO(5, 19)
+ACO(6, 8)
+ACO(7, 17)
+ACO(8, 12)
+ACO(9, 10)
+ACO(10,10)
+ACO(11,10)
+ACO(12,9)
+ACO(13,9)
+
+SetMargins(0,0,0,1.5)
+LimitesVision(k:fac)
+Impresion(1,2)
+SetPrintFit(3,70)
+RangoTitulo(a:1..k:fac, 12)
+FijarFila(13)
+

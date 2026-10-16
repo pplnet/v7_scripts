@@ -1,0 +1,94 @@
+﻿ACD(FE:99, Dialogo.Fecha1)
+
+SQL.ADD("Select Cliente1, DiasAnio, PorImpuesto, TipoOp, Cuotas1, Cantidad, PeriodoInts, ")
+SQL.ADD(" MB1, RB4, DiasMes, RB10, CB7, MB2, TipoTasa, Especie, Precio1, FechaOp, FechaVto, ")
+SQL.ADD(" NrOperacion, Especie, Cantidad, Plazo, Cuenta3, Precio3, TotalGanancias, TotalAux1, ")
+SQL.ADD(" Vehiculo1, Book1 ")
+SQL.ADD(" From "~DBO~".OPERACIONES ")
+SQL.ADD(" Where NrOperacion = '"~Val(NR:1)~"' ")
+Recorrer SQL
+   acn(PR:2,COTIZACION('CER',,,,fbn['FechaOp']-1,1))
+   IF fbn('FechaVto') = Val(FE:99)
+       IF DiaSem(Val(FE:99)) = 2
+           ***---PF que vence un lunes, => hay que devengar sabado y domingo si son del mismo mes
+           ***---que proceso
+           ACN(XX:1, 0)
+           Recorrer&k Habiles(Val(FE:99), -1, 'ARG')+1, Val(FE:99)-1
+               IF Mes(&k) = Mes(Val(FE:99))
+                   SCN(XX:1, 1)
+                   IF Val(XX:1) = 1
+                       ***---Fecha desde
+                       ACD(FE:77, &k-1)
+                   ENDIF
+                   acn(PR:3,COTIZACION('CER',,,,&k,1))
+                   ***---Capital Indexado a Fecha Proceso
+                   ACN(CP:2, fbn('Cantidad') * Val(PR:3) / Val(PR:2))
+                   ACD(FE:88, &k)
+               ENDIF
+           Proximo
+           ***---Capital Indexado a Fecha Proceso-1
+           acn(PR:3,COTIZACION('CER',,,,Val(FE:77),1))
+           ACN(CP:1, fbn('Cantidad') * Val(PR:3) / Val(PR:2))
+           ***---Capital Ajustado
+           ACN(CP:3, Val(CP:2) - Val(CP:1))
+       ENDIF
+   ELSE
+       IF [[DiaSem(Val(FE:99)) = 6] O [Not EsHabil(Val(FE:99)+1, 'ARG') Y DiaSem(Val(FE:99)) <> 6]] Y Val(FE:99) = FinDeMes(Val(FE:99),NO)
+           ***---Viernes fin de mes  o dia previo a un feriado y fin de mes=> calculo devengados
+           ***---hasta el fin de mes real (sabado o domingo).
+           ACN(XX:1, 0)
+           Recorrer&k Val(FE:99), Habiles(Val(FE:99), 1, 'ARG')-1
+               IF Mes(&k) = Mes(Val(FE:99))
+                   SCN(XX:1, 1)
+                   IF Val(XX:1) = 1
+                       ***---Fecha desde
+                       ACD(FE:77, &k-1)
+                   ENDIF
+                   acn(PR:3,COTIZACION('CER',,,,&k,1))
+                   ***---Capital Indexado a Fecha Proceso
+                   ACN(CP:2, fbn('Cantidad') * Val(PR:3) / Val(PR:2))
+                   ACD(FE:88, &k)
+               ENDIF
+           Proximo
+           ***---Capital Indexado a Fecha Proceso-1
+           acn(PR:3,COTIZACION('CER',,,,Val(FE:77),1))
+           ACN(CP:1, fbn('Cantidad') * Val(PR:3) / Val(PR:2))
+           ***---Capital Ajustado
+           ACN(CP:3, Val(CP:2) - Val(CP:1))
+       ELSE
+           IF [DiaSem(Val(FE:99)) = 2 O Not EsHabil(Val(FE:99) - 1, 'ARG')] Y fbn('FechaOp') < Val(FE:99)
+               ***---Lunes o el dia anterior fue feriado => calculo devengados desde el sabado o
+               ***---el feriado anterior si es del mismo mes.
+               ACN(XX:1, 0)
+               Recorrer&k Habiles(Val(FE:99),-1, 'ARG')+1, Val(FE:99)
+                   IF Mes(&k) = Mes(Val(FE:99))
+                       SCN(XX:1, 1)
+                       IF Val(XX:1) = 1
+                           ***---Fecha desde
+                           ACD(FE:77, &k-1)
+                       ENDIF
+                       acn(PR:3,COTIZACION('CER',,,,&k,1))
+                       ***---Capital Indexado a Fecha Proceso
+                       ACN(CP:2, fbn('Cantidad') * Val(PR:3) / Val(PR:2))
+                       ACD(FE:88, &k)
+                   ENDIF
+               Proximo
+               ***---Capital Indexado a Fecha Proceso-1
+               acn(PR:3,COTIZACION('CER',,,,Val(FE:77),1))
+               ACN(CP:1, fbn('Cantidad') * Val(PR:3) / Val(PR:2))
+               ***---Capital Ajustado
+               ACN(CP:3, Val(CP:2) - Val(CP:1))
+           ELSE
+               acn(PR:3,COTIZACION('CER',,,,Val(FE:99),1))
+               ***---Capital Indexado a Fecha Proceso
+               ACN(CP:2, fbn('Cantidad') * Val(PR:3) / Val(PR:2))
+               ***---Capital Indexado a Fecha Proceso-1
+               acn(PR:3,COTIZACION('CER',,,,Habiles(Val(FE:99), -1, 'ARG'),1))
+               ACN(CP:1, fbn('Cantidad') * Val(PR:3) / Val(PR:2))
+               ***---Capital Ajustado
+               ACN(CP:3, Val(CP:2) - Val(CP:1))
+           ENDIF
+       ENDIF
+   ENDIF
+Proximo
+

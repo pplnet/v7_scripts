@@ -1,0 +1,265 @@
+﻿ModoReproceso(ConDialogo)
+CrearDialogo
+  Fecha1   : 'Fecha'     ;;;;  ;;Dialogo.Fecha1 <> 0       ;'Fecha Invalida'   ;NO;FSys
+  Cliente1 : 'Agente'    ;;;;  ;;NoVacio(Dialogo.Cliente1) ;'Agente Invalido'  ;NO;;
+  Especie1 : 'Especie'   ;;;;  ;;NoVacio(Dialogo.Especie1) ;'Especie Invalida' ;NO;;
+  Fecha2   : 'FechaVto'  ;;;;  ;;Dialogo.Fecha2 <> 0       ;'FechaVto Invalida';NO;FSys
+  Vehiculo1: 'Vehiculo'  ;;;;NO;;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+FinDialogo
+if not Ok 
+  Cancelar
+endif
+
+CrearFont(1, 'Arial,8,')
+CrearFont(2, 'Arial,8,B')
+CrearFont(3, 'Arial,10,B')
+
+**AgregarBMP(A:1, Exe('LOGO'), 60)
+SetFilaActual(2)
+ACT(A:fac, CodigoInforme)
+ACT(G:Fac, 'Detalle de Conciliacion FPA - MAE del '~Dialogo.Fecha1)
+SetFont(G:fac, 3)
+SetFilaActual(fac+2)
+ACT(A:fac, 'Vehiculo: '~Dialogo.Vehiculo1)
+SetFont(A:fac, 2)
+if NoVacio(Dialogo.Cliente1)
+  IFA
+  ACT(A:fac, 'Agente: '~Dialogo.Cliente1)
+  SetFont(A:fac, 2)
+endif
+if NoVacio(Dialogo.Especie1)
+  IFA
+  ACT(A:fac, 'Especie: '~Dialogo.Especie1)
+  SetFont(A:fac, 2)
+endif
+if Dialogo.Fecha2 <> 0
+  IFA 
+  ACT(A:fac, 'FechaVto: '~Dialogo.Fecha2)
+  SetFont(A:fac, 2)
+endif
+SetFilaActual(fac+2)
+ACT(K:fac, '                  FPA')
+ACT(O:fac, '                  MAE')
+SetFont(F:fac..O:fac, 3)
+AgregarMarco(A:fac..I:fac, 0, 0, Exe('COLOR'))
+AgregarMarco(J:fac..M:fac, 0, 0, Exe('COLOR'))
+AgregarMarco(N:fac..Q:fac, 0, 0, Exe('COLOR'))
+AgregarMarco(R:fac..R:fac, 0, 0, Exe('COLOR'))
+ifa
+ACT(A:fac, 'Operacion')
+ACT(B:fac, 'Nro.AltaMAE')
+ACT(C:fac, 'TipoOp')
+ACT(D:fac, 'Cliente')
+ACT(E:fac, 'FechaOp')
+ACT(F:fac, 'FechaPrecan')
+ACT(G:fac, 'FechaVto')
+ACT(H:fac, 'Moneda')
+ACT(I:fac, 'Cantidad')
+ACT(J:fac, 'Tipo Fixing')
+ACT(K:fac, 'Precio Hoy')
+ACT(L:fac, 'Precio Ayer')
+ACT(M:fac, 'MTM')
+ACT(N:fac, 'Tipo Fixing')
+ACT(O:fac, 'Precio Hoy')
+ACT(P:fac, 'Precio Ayer')
+ACT(Q:fac, 'MTM')
+ACT(R:fac, 'Diferencia')
+SetFont(A:fac..R:fac, 2)
+AlinearCeldas(A:fac..R:fac, 'C')
+AgregarMarco(A:fac..I:fac, 0, 0, Exe('COLOR'))
+AgregarMarco(J:fac..M:fac, 0, 0, Exe('COLOR'))
+AgregarMarco(N:fac..Q:fac, 0, 0, Exe('COLOR'))
+AgregarMarco(R:fac..R:fac, 0, 0, Exe('COLOR'))
+
+ACN(x:1, fac+1)
+SQL.ADD(" Select O.NrOperacion, O.TipoOp, O.Cliente1, O.Especie, O.Cantidad, O.PrecioEj, ")
+SQL.ADD(" O.PrecioMer, O.FechaVto, O.FechaPrecan, O.ContraEspecie, O.MB1, O.FechaOp, O.Precio1, ")
+SQL.ADD(" M.Cantidad ResMov, O.FechaOp, O.CB6, O.NroAltaMAE, O.ObsErrorMAE ")
+SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".MOVEJECUTADOS M ")
+SQL.ADD(" Where O.NrOperacion = M.NrOperacion ")
+SQL.ADD(" AND O.TipoOp IN ('FXOCTC','FXOCTV') ")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD(" AND M.Cliente = '"~Dialogo.Cliente1~"' ")
+endif
+if Dialogo.Fecha2 <> 0
+  SQL.ADD(" AND O.FechaVto = '"~IdxDate(Dialogo.Fecha2)~"' ")
+endif
+if NoVacio(Dialogo.Especie1)
+  SQL.ADD(" AND O.Especie = '"~Dialogo.Especie1~"' ")
+endif
+SQL.ADD(" AND O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND M.NrSaldo = 100 ")
+SQL.ADD(" AND M.FechaMov = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" Order By O.NrOperacion ")
+Recorrer SQL
+  ***---TipoNegociacion
+  ACT(aa:fac, Copy(fbn('ObsErrorMAE'), 1, 1))
+  ***---EspecieOrigen
+  ACT(ab:fac, Copy(fbn('ObsErrorMAE'), 2, 5))
+  ***---Especie MTM
+  ACT(ac:fac, SQL(" Select EspecieDestino2 From "~DBO~".EQUIVALENCIA_ESPECIES Where TipoNegociacion = '"~Val(aa:fac)~"' AND EspecieOrigen = '"~Val(ab:fac)~"' AND EspecieDestino1 = '"~fbn('Especie')~"' AND TipoCotizacion = 'O' "))
+  ***---Metodo Fixing
+  if Eqstr(fbn('Especie'), 'USD')
+    if fbn('MB1') = 0
+      ACT(ad:fac, 'E')
+    endif
+    if fbn('MB1') = 1
+      ACT(ad:fac, 'A')
+    endif
+  endif
+  ***---Especie Fixing
+  ACT(ae:fac, SQL(" Select EspecieDestino2 From "~DBO~".EQUIVALENCIA_ESPECIES Where TipoCotizacion = 'F' AND TipoNegociacion = '"~Val(aa:fac)~"' AND Metodo = '"~Val(ad:fac)~"' "))
+  ACT(A:fac, fbn('NrOperacion'))
+  ACLO(A:fac, fbn('NrOperacion'))
+  ACT(B:fac, fbn('NroAltaMAE'))
+  ACT(C:fac, fbn('TipoOp'))
+  ACT(D:fac, fbn('Cliente1'))
+  ACD(E:fac, fbn('FechaOp'))
+  if fbn('CB6') = 1 Y fbn('FechaPrecan') <= Dialogo.Fecha1
+    ACD(F:fac, fbn('FechaPrecan'))
+  endif
+  ACD(G:fac, fbn('FechaVto'))
+  ACT(H:fac, fbn('Especie'))
+  ACN(I:fac, fbn('Cantidad'))
+  if fbn('MB1') = 0
+    ACT(J:fac, 'EMTA')
+  endif
+  if fbn('MB1') = 1
+    ACT(J:fac, 'Com A3500')
+  endif
+  if fbn('MB1') = 2
+    ACT(J:fac, 'Otro')
+  endif
+  ACN(af:fac, fbn('MB1'))
+  ***---Precio Hoy
+  if fbn('FechaVto') = Dialogo.Fecha1 O [fbn('FechaPrecan') = Dialogo.Fecha1 Y fbn('CB6') = 1]
+    ***---Fixing o Precan
+    ACN(K:fac, CotizacionC(Val(ae:fac),,,,Dialogo.Fecha1,1,,fbn('ContraEspecie')))
+  else
+    ACN(K:fac, CotizacionC(Val(ac:fac),'FUT',fbn('FechaVto'),,Dialogo.Fecha1,1,,fbn('ContraEspecie')))
+  endif
+  ***---Precio Ayer
+  if fbn('FechaOp') = Dialogo.Fecha1
+    ***---Comparo contra PrecioOp
+    ACN(L:fac, fbn('Precio1'))
+  else
+    ACN(L:fac, CotizacionC(Val(ac:fac),'FUT',fbn('FechaVto'),,Dialogo.Fecha1-1,1,,fbn('ContraEspecie')))
+  endif
+  if Eqstr(fbn('TipoOp'), 'FXOCTC')
+    ACN(M:fac, fbn('Cantidad') * (Val(K:fac)-Val(L:fac)))
+  else
+    ACN(M:fac, fbn('Cantidad') * (Val(L:fac)-Val(K:fac)))
+  endif
+  SCN(y:1, Val(M:fac))
+*  ACN(R:fac, Abs(Val(M:fac)))
+  ACN(R:fac, Val(M:fac))
+Proximo
+
+ACN(x:2, fac)
+ACN(x:3, fac)
+***---Detalle MTM del MAE
+SQL.ADD(" Select * From "~DBO~".MTMDETOCT  ")
+SQL.ADD(" Where FechaProc = '"~IdxDate(Dialogo.Fecha1)~"' ")
+if NoVacio(Dialogo.Cliente1)
+  SQL.ADD(" AND Cliente = '"~Dialogo.Cliente1~"' ")
+endif
+if Dialogo.Fecha2 <> 0
+  SQL.ADD(" AND FechaVto = '"~IdxDate(Dialogo.Fecha2)~"' ")
+endif
+if NoVacio(Dialogo.Especie1)
+  SQL.ADD(" AND Especie = '"~Dialogo.Especie1~"' ")
+endif
+Recorrer SQL
+  DFA
+  ACN(z:1, 0)
+  Recorrer&k Val(x:1), Val(x:2)
+    ***---Matcheo C/Registro del MAE con las operaciones de FPA
+    if Eqstr(Val(B:&k), fbn('NroAltaMAE'))
+      if Eqstr(fbn('MetodoFix'), 'E')
+        ACT(N:&k, 'EMTA')
+      endif
+      if Eqstr(fbn('MetodoFix'), 'C')
+        ACT(N:&k, 'Com A3500')
+      endif
+      ACN(O:&k, fbn('PrecioMTMH'))
+      ACN(P:&k, fbn('PrecioMTMA'))
+      ACN(Q:&k, fbn('Monto') * (-1) )
+      ACN(R:&k, Val(M:&k) - Val(Q:&k))
+      ACN(z:1, 1)
+      SCN(y:2, Val(Q:&k))
+      ACT(ag:&k, 'OK')
+    endif
+  Proximo
+  if Val(z:1) = 0
+    ***---Registro MAE que no esta en FPA
+    SCN(x:2, 1)
+    ifa
+    InsertarFila(Val(x:2))
+    ACT(B:Val(x:2), fbn('NroAltaMAE'))
+    ACT(C:Val(x:2), fbn('TipoOp'))
+    ACT(D:Val(x:2), fbn('Cliente'))
+    ACD(E:Val(x:2), fbn('FechaOp'))
+    ACD(G:Val(x:2), fbn('FechaVto'))
+    ACT(H:Val(x:2), fbn('Especie'))
+    ACN(I:Val(x:2), fbn('Cantidad'))
+    if Eqstr(fbn('MetodoFix'), 'E')
+      ACT(N:Val(x:2), 'EMTA')
+    endif
+    if Eqstr(fbn('MetodoFix'), 'C')
+      ACT(N:Val(x:2), 'Com A3500')
+    endif
+    ACN(O:Val(x:2), fbn('PrecioMTMH'))
+    ACN(P:Val(x:2), fbn('PrecioMTMA'))
+    ACN(Q:Val(x:2), fbn('Monto') * (-1))
+    ACN(R:Val(x:2), Val(M:Val(x:2)) - Val(Q:Val(x:2)))
+    SCN(y:2, Val(Q:Val(x:2)))
+    SCN(z:2, 1)
+  endif
+Proximo
+SetFont(A:Val(x:1)..ag:fac, 1)
+AgregarMarco(A:Val(x:1)..I:fac, 0, 0)
+AgregarMarco(J:Val(x:1)..M:fac, 0, 0)
+AgregarMarco(N:Val(x:1)..Q:fac, 0, 0)
+AgregarMarco(R:Val(x:1)..R:fac, 0, 0)
+
+SetFilaActual(fac+2)
+ACT(L:fac, 'Total Neto')
+ACN(M:fac, Val(y:1))
+ACN(Q:fac, Val(y:2))
+ACN(R:fac, Val(M:fac) - Val(Q:fac))
+SetFont(L:fac..R:fac, 2)
+FormatoCeldas(I:Val(x:1)..I:fac, Exe('F2'))
+FormatoCeldas(K:Val(x:1)..L:fac, Exe('F9'))
+FormatoCeldas(M:Val(x:1)..M:fac, Exe('F2'))
+FormatoCeldas(O:Val(x:1)..P:fac, Exe('F9'))
+FormatoCeldas(Q:Val(x:1)..R:fac, Exe('F2'))
+
+recorrer&i Val(x1),Val(x3)
+  if Not EqStr(Val(ag:&i),'OK')
+    SCN(z:2, 1)
+  endif
+proximo
+SetFont(x1..z3, 1)
+
+SetFilaActual(fac+2)
+ACT(A:fac, 'Fin del Informe')
+SetFont(A:fac, 2)
+
+ACO(2, 7)
+ACO(3, 5)
+ACO(4, 7)
+ACO(6, 7)
+ACO(8, 5)
+ACO(9, 10)
+ACO(11, 9)
+ACO(12, 9)
+ACO(13, 10)
+ACO(15, 9)
+ACO(16, 9)
+ACO(17, 10)
+ACO(18, 9)
+
+SetMargins(0, 0, 0, 0)
+SetPrintFit(3, 70)
+Impresion(1, 2)
+LimitesVision(R:fac+1)

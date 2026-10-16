@@ -1,0 +1,165 @@
+﻿*-Numero consecutivo de Operaciones
+ACT(z1,GetNumerador(1))
+                     
+*- Monto Bruto                
+If Eqstr(FBN['InteresesC'],'CLE')
+   ACN(mv1, Val(pr:1)*Val(ca:1)*(ValorTeorico2(Val(e:1),Val(fe:2))+IntsCapitalizados2(Val(e:1),Val(fe:2))) )
+else 
+   ACN(mv1, Val(pr:1)*Val(ca:1))
+Endif
+
+*- Resolucion 1585
+ACT(al4, BuscarCampo('ESPECIES', 'Alias4', 'Codigo', Val(e1)))                               
+
+* --- A la funcion InteresEspecie le paso VN con el factor de cap incluido --- *
+ACN(cf:1, (ValorTeorico2(Val(e:1),Val(fe:2))+IntsCapitalizados2(Val(e:1),Val(fe:2)))/ValorTeorico2(Val(e:1),Val(fe:2)))
+ACN(cf:2, Val(ca:2)*Val(cf:1))
+**ACN(ti:1, InteresEspecie(val(e1),val(fo1),val(ca1)))
+ACN(ti:1, InteresEspecie(val(e1),Val(fo1),Val(cf:2)) )
+* --- Pasa Interes a ContraEspecie --- *
+If Not Eqstr(fbn('ContraEspecie'),CotizaEn(fbn('Especie')))
+   ACN(ti:1, Val(t:1)*COTIZACIONC(CotizaEn(fbn('Especie')),,,,Val(fe:1)-1,1,SI,fbn('ContraEspecie')) )
+Endif
+* ---------------------------------------------------------------------------- *
+
+* Tasa de Interes de cap del cupon
+ACN(tc:17, CampoAgenda(fbn('Especie'),FStr(NrCupon2(FBN['Especie'],Val(fe:2)),0,0),4) )
+
+* Intereses Capitalizado
+ACD(t:12, UltCupon2(fbn('Especie'),Val(fe:2)))
+ACN(ta:17,(ValorTeorico2(fbn('Especie'),Val(fe:2))+IntsCapitalizados2(fbn('Especie'),Val(fe:2)))*Val(ct:2)*Val(tc:17)/DiasA(EspecieDiasAnio(fbn('Especie')),Val(fe:2))/100*iif(EspecieDiasAnio(fbn('Especie'))=0 y EspecieDiasMes(fbn('Especie'))=0,Dif360(Val(t:12),Val(fe:2),2),DifDias(Val(t:12),Val(fe:2),'USA',NO)))
+
+* Pasa a contraespecie el interes en capitalizado
+*ACT(WW1, CotizaEn(fbn('Especie')))
+*messagebox(fbn('ContraEspecie')~' '~Val(ww1))
+If Not Eqstr(fbn('ContraEspecie'), CotizaEn(fbn('Especie')))
+*messagebox('1')
+   ACN(ta:17, Val(ta:17)*COTIZACIONC(CotizaEn(fbn('Especie')),,,,Val(fe:1)-1,1,SI,fbn('ContraEspecie')) )
+Endif
+
+* Le aplica el precio al interes capitalizado
+ACN(ta:17, Val(ta:17)*fbn('PrecioReal'))
+
+* Le sumo al interes cash, el interes capitalizado. Ya esta todo en la misma moneda.
+ACN(ti:1, Val(ti:1) + Val(ta:17))
+* ---------------------------------------------------------------------------- *
+
+           
+*- Monto Neto
+If Incluido(Val(al4), '1585')
+   ACN(mn1, Val(mv1)+(Val(ti1)*Val(ca1)) )
+Else
+   ACN(mn1, Val(mv1)+Val(ti1))
+Endif
+
+*- Si la especie es Dirty Clean igualmente calculo los intereses
+IF EqStr(BuscarCampo('ESPECIES','CotizaMAE','Codigo',Val(e1)),'CLE')
+   ACN(ti:1,FBN['Impuestos'] )
+EndIf
+
+*- NroCupon Actual
+ACT(z10, FStr(NrCupon2(FBN['Especie'],FBN['FechaVto']),0,0))
+
+*- Aquellas operaciones que provienen de certificados de Tenencia se 
+*- ingresan liquidadas y no actualizan ni posiciones ni limites
+ACN(oc1,0)
+SQL.ADD("SELECT 1 FROM "~DBO~".CERTIFICADOSTENENCIA WHERE NrOrden='"~FBN['NrOrden']~"' ")
+
+Recorrer SQL
+  dfa
+  ACN(oc1,1)
+Proximo
+
+
+*- Busco la cotizacion de la operacion respecto del COTIZAEN
+ACN(z11,IIF(Eqstr(CotizaEn(FBN['Especie']),FBN['ContraEspecie']),1,CotizacionC(FBN['ContraEspecie'],,,,Val(fe:1),1,SI,CotizaEn(FBN['Especie']))))
+    
+                 
+SQL.ADD("INSERT INTO "~DBO~".OPERACIONES (")
+SQL.ADD("NrOperacion, TipoOp, Especie, Cantidad, Precio1, Cliente1,CB6, ")
+SQL.ADD("ContraEspecie, FechaOp, Plazo, ")
+SQL.ADD("FechaVto, PorComision, FormaLiquidacion1, ")
+SQL.ADD("FormaLiquidacion2, TipoCambio, ")
+SQL.ADD("TotalIntereses, TotalNetoCli1, ")
+SQL.ADD("TotalBrutoCli1, Mercado, Vehiculo1, ")
+SQL.ADD("Operador, TablaFeriados1, TasaInteresesCupon, FechaUltCupon, TasaBase, RB1, ")
+SQL.ADD("Cartera, TotalComisiones, CB9, Cuenta1, Cuenta4, EnteCus1, Cupon1, NrOrden1, ")      
+SQL.ADD("FechaCargaSys,FechaCarga, Plazo2, CB7,CanPosTrad,CanPosInv1,CanPosInv2,CanPosOSoc,PaseCB,TotalAux1 ")
+SQL.ADD(",TipoTicket,AmbitoNeg,NrOrden ")
+SQL.ADD(") VALUES (")
+SQL.ADD("'"~Val(z1)~"', 'TIC', '"~FBN['Especie']~"', "~Fstr(Val(ca:1),0,2)~", "~Fstr(FBN['PrecioReal'],0,8)~", '"~FBN['Cliente']~"','"~FBN['CB6']~"', ")
+SQL.ADD("'"~FBN['ContraEspecie']~"', '"~IdxDate(Val(fe:1))~"', '"~FBN['Lotes']~"',")
+SQL.ADD(" '"~IdxDate(Val(fe:2))~"', "~Fstr(FBN['MinArancel'],0,7)~", '"~FBN['RB9']~"', ")
+*** 09/03/05 SQL.ADD(" '"~FBN['RB10']~"', "~Fstr(FBN['PrecioEjercicio'],0,7)~", '"~Val(ti1)~"', "~Fstr(FBN['TotalAux1'],0,2)~", ")
+SQL.ADD(" '"~FBN['RB10']~"', "~Fstr(FBN['PrecioEjercicio'],0,7)~", "~Fstr(Dialogo.Cantidad3,0,8)~", "~Fstr(Dialogo.Cantidad2,0,2)~", ")
+SQL.ADD(" "~Fstr(Val(mv1),0,2)~", '"~FBN['Mercado']~"', '"~FBN['Vehiculo']~"',")
+SQL.ADD(" '"~USUARIOACTIVO~"', '"~FBN['Leyenda6']~"', "~Fstr(FBN['TotalAux2'],0,8)~", '"~IdxDate(FBN['FechaConcrecion'])~"',")
+SQL.ADD(" "~Fstr(FBN['TotalAux3'],0,8)~", '0', '"~FBN['RB1']~"', "~Fstr(FBN['TotalIva'],0,7)~",")
+SQL.ADD(" '"~FBN['CB9']~"', '"~Val(cu:1)~"', '"~FBN['Cuenta4']~"', '"~FBN['CodMAEContado']~"', '"~Val(z10)~"', '"~FBN['NrOrden']~"',")
+SQL.ADD(" '"~IdxDate(Fsys)~" "~COPY(Val(z3),1,2)~":"~COPY(Val(z3),4,2)~":"~COPY(Val(z3),7,2)~"' , GetDate(), ")
+SQL.ADD(" "~FStr((FBN['Lotes'] DIV 24),0,0)~", "~Val(z6)~","~Fstr(Val(ca:1),0,2)~",0,0,0,'0', "~Fstr(val(z11),0,7)~" ")
+If val(oc1)=1
+   *- Marca para saber si vino de certificados
+   SQL.ADD(",1,")
+Else
+   SQL.ADD(",0,")
+EndIf
+SQL.ADD(" '"~FBN['AmbitoNeg']~"','"~FBN['NrOrden']~"' ")
+SQL.ADD(" )")
+SQL.NEW
+SQL.EXEC
+
+* --- 09/03/05 --- *
+*SQL.ADD("UPDATE "~DBO~".ORDENES                   ")
+*SQL.ADD("SET NrOperacion2 = '"~Val(z1)~"'         ")
+*SQL.ADD("WHERE NrOrden = '"~FBN['NrOrden']~"'     ") 
+*SQL.NEW
+*SQL.EXEC
+* ---------------- *
+SQL.ADD("UPDATE "~DBO~".ORDENES ")
+SQL.ADD("SET NrOperacion2 = '"~Val(z1)~"' ,  ")
+SQL.ADD("    CantidadCompletada =CantidadCompletada + "~Fstr(Dialogo.Cantidad1,0,2)~" ")
+if fbn('RB2')=1
+   SQL.ADD("   , Cantidad8 = Cantidad8 + "~Fstr(Dialogo.Cantidad2,0,2)~" ")
+*10/03/05 else
+*10/03/05    SQL.ADD("    CantidadCompletada =CantidadCompletada + "~Fstr(Dialogo.Cantidad1,0,2)~" ")
+endif
+SQL.ADD("WHERE NrOrden = '"~FBN['NrOrden']~"' ") 
+SQL.NEW
+SQL.EXEC
+* ---------------- *
+
+*- Alta en la Instancia nro.1 
+ACT(az3,Val(z1))
+ACT(az4,'OPERACIONES')
+if Val(z:7)=0
+  If Dialogo.Radio3=0
+    *- No va al mae => Liquidacion
+    ACT(az5,'10|')
+  Else
+    ACT(az5,'50|')
+  EndIf
+Else
+   ACT(az5,'6|')
+EndIf
+
+(.'ALTAINSTAN'.)   
+
+Message('Actualizo Movimientos y Saldo ' )
+
+If val(oc1)=0 
+   *** Actualiza movimientos, limites y posiciones ****
+   SQL.ActualizarMovimientos4(val(z1),SI,NO,NO,SI,SI,SI)
+   SQL.EXEC
+
+Else
+   *- DE CERTIFICADOS DE TENENCIA
+*   SQL.ActualizarMovimientos4(val(z1),SI,NO,NO,NO,NO,NO)
+*   SQL.EXEC
+   act(dt1,Val(z1))
+  (.'ACTMOVOPMA'.)       
+
+EndIf
+
+
+

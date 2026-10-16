@@ -1,0 +1,309 @@
+﻿HojaVisible(SI)
+ModoReproceso(SinDialogo)
+ 
+CrearDialogo:2
+   Radio1       : 'Dia|Hoy|Ayer'    ;;;;;;;;;0
+   Fecha1       : 'Fecha '          ;;;;NO;;;;;;IIf(Dialogo.Radio1=0,Fsys,Habiles(Fsys,-1,'ARG'))
+   Vehiculo1    : 'Vehiculo'        ;;;;;;;;NO;VAR('VEHICULODE')
+   Label1       : ''                ;4;;;NO;;;;;'Carteras'
+   Check1       : 'Trading'         ;5;;;;;;;;1
+   Check2       : 'Otras Soc.'      ;6;;;;;;;;1   
+   Radio2       : 'Posicion|Liquidada|Concertada' ;;;;;;;;;0
+FinDialogo
+
+If Not Ok
+   Cancelar
+Endif
+
+CrearFont(1,"Arial,8,")
+CrearFont(2,"Arial,8,B")
+Crearfont(3,"Arial,10,B")
+
+SetFilaActual(1)
+
+ACT(a:FAC,'Resultados de Titulos')
+SetFont(a:FAC..a:FAC, 3)
+
+IFA
+ACT(a:FAC+1,'Fecha : '~Fecha(Dialogo.Fecha1))
+ACT(c:FAC+1,'Fecha : '~Iif(Dialogo.Radio2=0,'Posiciones Liquidadas','Posiciones Concertadas'))
+ACT(a:FAC+2, 'Vehiculo : '~Dialogo.Vehiculo1)
+ACT(a:FAC+3, 'Cartera: ')
+If Dialogo.Radio2=0
+   If Dialogo.Check1 = 1 y Dialogo.Check2 = 1 
+      ACT(a:FAC+3, Val(a:FAC+3)~'Trading y Otras Sociedades')
+***  14/03/05    ACT(cr1, '107|110|')
+*** son resultados que vienen de posiciones sin sector
+*** cambia los 0 por 7
+*** el 110 x 170
+*** 1 por 8
+*** 2 por 9
+      ACT(cr1, '177|170|')
+   Else
+      ACT(cr1, '')
+      If Dialogo.Check1 = 1
+         ACT(b:FAC+3, Val(b:FAC+3)~'Trading| ')
+***  14/03/05     ACT(cr1, Val(cr1)~'107|')
+         ACT(cr1, Val(cr1)~'177|')
+      Endif
+      If Dialogo.Check2 = 1
+         ACT(b:FAC+3, Val(b:FAC+3)~'Otras Sociedades| ')
+*** 14/03/05     ACT(cr1, Val(cr1)~'110|')
+         ACT(cr1, Val(cr1)~'170|')
+      Endif
+   Endif
+Else
+   If Dialogo.Check1 = 1 y Dialogo.Check2 = 1 
+      ACT(a:FAC+3, Val(a:FAC+3)~'Trading y Otras Sociedades')
+* 14/03/05     ACT(cr1, '103|106|')
+     ACT(cr1, '173|176|')
+   Else
+      ACT(cr1, '')
+      If Dialogo.Check1 = 1
+         ACT(b:FAC+3, Val(b:FAC+3)~'Trading| ')
+*14/03/05         ACT(cr1, Val(cr1)~'103|')
+         ACT(cr1, Val(cr1)~'173|')
+      Endif
+      If Dialogo.Check2 = 1
+         ACT(b:FAC+3, Val(b:FAC+3)~'Otras Sociedades| ')
+*14/03/05         ACT(cr1, Val(cr1)~'106|')
+         ACT(cr1, Val(cr1)~'176|')
+      Endif
+   Endif
+Endif
+
+SetFont(a:FAC+1..z:FAC+4,2)
+SetFilaActual(7)
+
+ACT(a:FAC,'Especie')
+ACT(b:FAC,'VN')
+ACT(c:FAC,'Precio')
+ACT(d:FAC,'V.Efectivo')
+ACT(e:FAC,'Vehiculo')
+ACT(f:FAC,'t-1')
+ACT(g:FAC,'Daily')
+ACT(g:FAC+1, 'Trad+Real')
+ACT(h:FAC+1, 'Revaluo')
+ACT(i:FAC,'MTD')
+ACT(i:FAC+1, 'Trad+Real')
+ACT(j:FAC+1, 'Revaluo')
+ACT(k:FAC,'YTD')
+ACT(k:FAC+1, 'Trad+Real')
+ACT(l:FAC+1, 'Revaluo')
+
+SetFont(a:FAC..z:FAC+2,2)
+AgregarMarco(a:FAC..n:FAC+1,1,0,Exe('COLOR6'))
+
+AlinearCeldas(a:FAC..f:FAC,'C')
+AlinearCeldas(g:FAC..l:FAC+1,'D')
+
+SetFilaActual(8)
+
+**- Selecciona las posiciones (CantidadFin) de Trading y/u Otras Sociedades para la fecha pedida
+SQL.ADD("SELECT P1.NrSaldo, E.Cotiza, E.Codigo, P1.Vehiculo, SUM(P1.CantidadFin) CantFin,  ")
+SQL.ADD("       SUM(CASE WHEN DATEDIFF(day, P1.Fecha, '"~IdxDate(Dialogo.Fecha1)~"')=1 THEN P1.Cantidad1 - P1.Cantidad2 ELSE 0 END)  as t1 ")
+SQL.ADD("FROM   "~DBO~".POSICIONES P1, "~DBO~".ESPECIES E ")
+SQL.ADD("WHERE  P1.Cliente = '"~Dialogo.Vehiculo1~"' AND ")
+SQL.ADD("       P1.Especie =  E.Codigo AND ")
+SQL.ADD("       E.Status   =  'HAB'    AND ")
+SQL.ADD("       E.Jerarquia LIKE '"~Var('JERTITULOS')~"%'   AND ")
+SQL.ADD("       P1.NrSaldo IN ("~Pipe2Comillas(Val(cr1))~") AND ")
+SQL.ADD("       P1.TipoNegocio = 'TIT' AND ")
+SQL.ADD("       P1.Fecha = (SELECT MAX(P2.Fecha)         ")
+SQL.ADD("                   FROM   "~DBO~".POSICIONES P2 ")
+SQL.ADD("                   WHERE  P2.Cliente = P1.Cliente AND ")
+SQL.ADD("                          P2.Especie = P1.Especie AND ")
+SQL.ADD("                          P2.NrSaldo = P1.NrSaldo AND ")
+SQL.ADD("                          P2.TipoNegocio = P1.TipoNegocio AND ")
+SQL.ADD("                          P2.Sector = P1.Sector AND ")
+If Dialogo.Radio1 = 0
+   * hoy
+   SQL.ADD("                        P2.Fecha <= '"~IdxDate(Dialogo.Fecha1)~"') ")
+Else
+   * ayer
+   SQL.ADD("                        P2.Fecha <= '"~IdxDate(Dialogo.Fecha1-1)~"') ")
+Endif
+SQL.ADD(" GROUP BY P1.NrSaldo, E.Cotiza, E.Codigo, P1.Vehiculo ")
+SQL.ADD(" ORDER BY 1, 2, 3, 4 ")
+
+
+ACN(v1,0)
+Recorrer SQL
+   If Not EqStr(FBN['NrSaldo'], Val(z1))
+      If Val(z2) <> 0
+         * Impresi¢n de Totales por moneda en que cotiza
+         ACT(a:FAC,'Total en '~Val(z3) )
+         ACN(d:FAC, Val(w4))
+         ACN(g:FAC, Val(w5))
+         ACN(h:FAC, Val(w6))
+         ACN(i:FAC, Val(w7))
+         ACN(j:FAC, Val(w8))
+         ACN(k:FAC, Val(w9))
+         ACN(l:FAC, VAl(w10))
+         SetFont(a:FAC..t:FAC, 2)
+         AgregarMarco(a:FAC..t:FAC,1,0)
+         IFA   
+      Endif
+      ACT(z3,FBN('Cotiza'))
+      ACN(z2, 1)
+
+      * R¢tulo de Cartera
+*14/03/05      If EqStr(FBN['NrSaldo'], '107')
+      If EqStr(FBN['NrSaldo'], '177')
+         ACT(a:FAC, 'Cartera Trading')
+      Endif
+*      If EqStr(FBN['NrSaldo'], '110')
+      If EqStr(FBN['NrSaldo'], '170')
+         ACT(a:FAC, 'Cartera Otras Soc')
+      Endif
+      SetFont(a:FAC..n:FAC, 2)
+      AgregarMarco(a:FAC..n:FAC,1,0,Exe('COLOR8'))      
+      IFA
+      ACT(z1, FBN['NrSaldo'])
+   Endif
+      
+   If Not EqStr(Val(z3), FBN['Cotiza'])
+      If Val(z2) <> 0
+         * Impresi¢n de Totales por moneda en que cotiza
+         ACT(a:FAC,'Total en '~Val(z3) )
+         ACN(d:FAC, Val(w4))
+         ACN(g:FAC, Val(w5))
+         ACN(h:FAC, Val(w6))
+         ACN(i:FAC, Val(w7))
+         ACN(j:FAC, Val(w8))
+         ACN(k:FAC, Val(w9))
+         ACN(l:FAC, VAl(w10))
+         SetFont(a:FAC..t:FAC, 2)
+         AgregarMarco(a:FAC..l:FAC,1,0)
+         IFA   
+      Endif
+      ACT(z3,FBN('Cotiza'))
+      ACN(z2, 1)
+      IFA
+   Endif
+   
+   ACT(a:FAC,FBN('Codigo'))
+   ACN(b:FAC,FBN('CantFin'))
+   
+   ACN(c:FAC, Cotizacion(FBN['Codigo'],,,,Dialogo.Fecha1,1))
+   
+   **-- Parametros para la funcion INTERESCLE
+   ACN(yt1, FAC)
+   ACD(yu:Val(yt1), Dialogo.Fecha1)
+   ACT(yv:Val(yt1), FBN['Codigo'])
+   ACN(yw:Val(yt1), FBN['CantFin'])
+   ACD(yx:Val(yt1), BuscarCampo('ESPECIES','FechaCambioTasa','Codigo', FBN['Codigo']))
+   ACN(yy:Val(yt1), BuscarCampo('ESPECIES','TasaIntAnterior','Codigo', FBN['Codigo']))
+   ACN(yz:Val(yt1), BuscarCampo('ESPECIES','TasaIntVigente','Codigo', FBN['Codigo']))
+                       
+   (.'INTERESCLE'.)
+       
+   If Eqstr(BuscarCampo('ESPECIES','InteresesC','Codigo',FBN['Codigo']),'CLE')
+      If Incluido(BuscarCampo('ESPECIES','Alias4','Codigo',FBN['Codigo']), '1585')
+         ACN(d:FAC, FBN['CantFin']*ValorTeorico2(FBN['Codigo'],Dialogo.Fecha1)*Val(c:FAC)+(VAl(zz:FAC)*Val(c:FAC)) )
+      Else
+         ACN(d:FAC, FBN['CantFin']*ValorTeorico2(FBN['Codigo'],Dialogo.Fecha1)*Val(c:FAC)+VAl(zz:FAC) )
+      Endif
+   Else
+      ACN(d:FAC, FBN['CantFin']*Val(c:FAC) )
+   Endif       
+
+   ACT(e:FAC, FBN('Vehiculo'))
+     
+   * t-1 para la posicion Actualizada
+   ACN(f:FAC, FBN('t1'))
+
+   **********************************************************************************
+   ***                                 Resultados                                 *** 
+   **********************************************************************************
+   ACN(x1, Dialogo.Fecha1)
+   ACN(x2, mes(Dialogo.Fecha1))
+   ACN(x3, Anio(Dialogo.Fecha1))
+   ACT(x4, Pad0(FStr(Val(x2),0,0),2)~Pad0(FStr(Val(x3),0,0),4))
+   ACN(x5, Num(Val(x4)))
+   ACT(x6, FBN['Codigo'])
+   ACT(x7, 'TRADE|REALIZ')
+   ACT(x8, FBN['NrSaldo'])
+   
+   (.'RESULTIT'.)
+   
+   Recorrer SQL
+      dfa
+      ACN(g:FAC, FBN('Diario'))
+      SCN(i:FAC, FBN('Mes'))
+      SCN(k:FAC, FBN('Anio'))
+   Proximo
+
+   ACT(x7, 'REVAL|')
+
+   (.'RESULTIT'.)
+   
+   Recorrer SQL
+      dfa
+      ACN(h:FAC, FBN('Diario'))
+      SCN(j:FAC, FBN('Mes'))
+      SCN(l:FAC, FBN('Anio'))
+   Proximo
+     
+   * Totales
+   SCN(w4, Val(d:FAC))
+   SCN(w5, Val(g:FAC))
+   SCN(w6, Val(h:FAC))
+   SCN(w7, Val(i:FAC))
+   SCN(w8, Val(j:FAC))
+   SCN(w9, Val(k:FAC))
+   SCN(w10, Val(l:FAC))
+   SCN(w11, Val(k:FAC))
+       
+   SetFont(a:FAC..l:FAC, 1)
+   If Val(b:FAC)=0 y Val(g:FAC)=0 y Val(h:FAC)=0 y Val(i:FAC)=0 y Val(j:FAC)=0 y Val(k:FAC)=0 y Val(l:FAC)=0
+      BorrarCeldas(a:FAC..l:FAC)
+      dfa
+   Endif
+Proximo
+
+IFA
+* Impresi¢n de Totales por moneda en que cotiza
+ACT(a:FAC,'Total en '~Val(z3) )
+ACN(d:FAC, Val(w4))
+ACN(g:FAC, Val(w5))
+ACN(h:FAC, Val(w6))
+ACN(i:FAC, Val(w7))
+ACN(j:FAC, Val(w8))
+ACN(k:FAC, Val(w9))
+ACN(l:FAC, VAl(w10))
+SetFont(a:FAC..t:FAC, 2)
+AgregarMarco(a:FAC..t:FAC,1,0)
+IFA   
+IFA
+
+ACT(a:FAC+2,'FIN DEL LISTADO')
+SetFont(a:FAC+1,2)
+
+ACO(1,5)
+ACO(2,8)
+ACO(3,5)
+ACO(4,8)
+ACO(5,8)
+ACO(6,8)
+ACO(7,8)
+ACO(8,8)
+ACO(9,8)
+ACO(10,8)
+ACO(11,8)
+ACO(12,8)
+ACO(13,8)
+ACO(14,8)
+ACO(15,8)
+
+
+FormatoCeldas(b:10..b:FAC,Exe('F0R'))
+FormatoCeldas(f:10..l:FAC,Exe('F2'))
+RangoTitulo(a:1..t:FAC, 8)
+FijarFila(9)
+
+LimitesVision(l:FAC+1)
+
+Impresion(1,2)
+
+

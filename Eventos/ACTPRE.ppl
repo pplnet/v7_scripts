@@ -1,0 +1,134 @@
+﻿CrearDialogo
+  NrOperacion1: 'Nr.Operacion:';1;1;;;;Novacio(Dialogo.NrOperacion1) y Incluido(BuscarCampo('OPERACIONES','TipoOp','NrOperacion',Dialogo.NrOperacion1),'TIC|TIV');'Operacion Invalida.';NO;
+  Check1      : 'Procesa'      ; ;1;;NO;NO;;;;1;
+  Check2      : 'Masivo'       ; ;1;;NO;NO;;;;0;
+FinDialogo
+if Not OK
+   Cancelar
+endif   
+
+If Dialogo.Check1=0
+  HojaVisible(SI)
+  If Dialogo.Check2=1
+    MessageBox('ACTPRE Operacion '~Dialogo.NrOperacion1)
+  endif
+endif
+
+ACN(y:1, Dialogo.Check1)
+ACN(y:2, Dialogo.Check2)
+ACT(b:1, Dialogo.NrOperacion1)
+ACT(b:2, BuscarCampo('OPERACIONES','NrOrden1','NrOperacion',Dialogo.NrOperacion1))
+ACN(c:1, SQL("SELECT Count(*) FROM "~DBO~".EJECUCIONES  WHERE NrOperacion = '"~Dialogo.NrOperacion1~"' ") )
+ACN(c:2, SQL("SELECT Count(*) FROM "~DBO~".EJECUCIONES  WHERE NrOrden = '"~Val(b:2)~"' ") )
+ACN(b:3, BuscarCampo('OPERACIONES','Precio1','NrOperacion',Dialogo.NrOperacion1))
+ACN(d:1, SQL("SELECT CASE WHEN T.Cant = 0 THEN 0 ELSE (T.PrecioxCant / T.Cant) END AS PrecioProm FROM (SELECT SUM(Cantidad * Precio) AS PrecioxCant, SUM(Cantidad) AS Cant FROM "~DBO~".EJECUCIONES  WHERE NrOperacion = '"~Dialogo.NrOperacion1~"' ) T ") )
+ACN(d:2, SQL("SELECT CASE WHEN T.Cant = 0 THEN 0 ELSE (T.PrecioxCant / T.Cant) END AS PrecioProm FROM (SELECT SUM(Cantidad * Precio) AS PrecioxCant, SUM(Cantidad) AS Cant FROM "~DBO~".EJECUCIONES  WHERE NrOrden     = '"~Val(b:2)~"'             ) T ") )
+if Val(c:1)=0
+  MessageBox('La Operacion '~Dialogo.NrOperacion1~' no tiene ejecuciones')
+  *ACN(x:1, 1)
+endif
+ACN(b:4, SQL("SELECT Count(*) FROM "~DBO~".MOVPENDIENTES WHERE NrOperacion = '"~Dialogo.NrOperacion1~"' and NrSaldo=1 ") )
+ACN(b:5, SQL("SELECT Count(*) FROM "~DBO~".MOVEJECUTADOS WHERE NrOperacion = '"~Dialogo.NrOperacion1~"' and NrSaldo=1 ") )
+if Val(b:5)>0
+  MessageBox('La Operacion '~Dialogo.NrOperacion1~' tiene Movimientos Ejecutados')
+  ACN(x:1, 1)
+endif
+
+if Val(x:1)=0
+  SQL.ADD(" Select * from "~DBO~".EJECUCIONES WHERE NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+  recorrer SQL
+    ACT(f:FAC, fbn('NrOperacion'))
+    ACT(g:FAC, fbn('NrOrden'))
+    ACN(h:FAC, fbn('Cantidad'))
+    ACN(i:FAC, fbn('Precio'))
+    SCN(j:1, fbn('Cantidad'))
+    SCN(k:1, fbn('Cantidad')*fbn('Precio'))
+  proximo
+  if Val(j:1)>0
+    ACN(l:1, Val(k:1)/Val(j:1))
+  endif
+  if Val(y:2)=0
+    CrearDialogo
+      NrOperacion1: 'Nr.Operacion:';1;1;;NO;;;;;Val(b:1)
+      Precio1:      'Pre.Actual'   ;2;1;;NO;;;;;Val(b:3)
+      Precio2:      'Pre.Nuevo'    ;2;2;;SI;;;;;Val(l:1)
+      Check1      : 'Procesa'      ;3;1;;NO;NO;;;;Val(y:1)
+      Check2      : 'Masivo'       ;4;1;;NO;NO;;;;Val(y:2);
+    FinDialogo
+    if Not OK
+      if Dialogo.Check1=1
+        Cancelar('Evento Cancelado')
+      else
+        MessageBox('Evento Cancelado')
+      ACN(x:1, 1)
+      endif
+    endif   
+    ACN(b:6, Dialogo.Precio2)
+  else
+    ACN(b:6, Val(l:1))
+  endif   
+endif
+
+if Val(x:1)=0
+  if Dialogo.Check1=1
+    SQL.ADD(" UPDATE "~DBO~".OPERACIONES ")
+    SQL.ADD(" SET Precio1       = "~FStr(VAL(b:6),1,8)~" ")
+    SQL.ADD(" WHERE NrOperacion ='"~Dialogo.NrOperacion1~"' ")
+    SQL.NEW
+    SQL.EXEC
+    
+*1:  <NrOperacion> = Numero de Operacion  a Modificar;
+*2:  <NrInstancia> = Numero de instancia para ubicar el script;
+*3:  <GBits> = Genera los bits correspondientes;    
+*4:  <GMovs> = Procesa la seccion Movimientos                   SI
+*5:  <GLimites>  = Procesa la seccion Limites                   SI
+*6:  <GEAR>  = Procesa la seccion Movimientos de EAR
+*7:  <GPosicion>  = Procesa la seccion Movimientos de Posicion  SI
+*8:  <EGarantias>  = Edita las Garantias 
+*9:  <GGarantias>  = Regraba las Garantias
+*10: <ECom2> = Edita las Comisiones2
+*11: <GCom2> = Genera las Comisiones2
+*12: <ECuotas> = Edita las Cuotas2
+*13: <GCuotas> = Graba las Cuotas2
+*14: <ECalls> = Edita los Calls/Puts
+*15: <GCalls> = Graba los Calls/Puts
+*16: <LSQL>  = Procesa seccion SQL
+*17: <LRep> = Procesa seccion Reprocesos (de informes)
+*18: <LPos> = Procesa seccion Postedicion (eventos)             SI
+*19: <GDevengados> = Procesa la seccion Devengados
+*20: <GCashflow> = Procesa la seccion Cashflow
+*21: <Edita> = Si edita o no la operacion 
+*22: <RecalcularCampos>  = Si recalcula o no los campos cuando Edita es NO  SI
+*23: alcularCuotas> = Si recalcula o no las cuotas cuando Edita es NO
+*24: <Chequea Condiciones> =                                                SI
+*25: <EmiteWarning> =
+*26: <ModOperacion> = Parametro numérico correspondiente a:                 0
+*   0 - Operaciones
+*   1 -Transacciones2 
+*   2 - Operaciones Eventuales 
+*   3 - Ordenes 
+*   4 - Minutas Bolsa
+*   5 - BOperaciones 
+*   6 - BTransacciones2
+*   7 - Tabla  (Usado por Banco Rio solamente )
+*   8 - OpMinoristas
+*   9 - Productos2
+
+
+    ModificarOperacion(Dialogo.NrOperacion1,0,NO,SI,SI,NO,SI,NO,NO,NO,NO,NO,NO,NO,NO,NO,NO,SI,NO,NO,NO,SI,NO,SI,NO,0,NO,NO)
+  endif
+else
+  if Dialogo.Check1=1
+    Cancelar('Evento Cancelado')
+  endif
+endif
+    
+FormatoCeldas(b:3,Exe('F8'))
+FormatoCeldas(b:6,Exe('F8'))
+FormatoCeldas(d:1..d:2,Exe('F8'))
+if FAC>0
+  FormatoCeldas(h:1..h:FAC,Exe('F2'))
+  FormatoCeldas(i:1..i:FAC,Exe('F8'))
+endif
+FormatoCeldas(j:1..k:1,Exe('F2'))
+FormatoCeldas(l:1,Exe('F8'))

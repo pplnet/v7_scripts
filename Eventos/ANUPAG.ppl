@@ -1,0 +1,276 @@
+﻿CrearDialogo
+  NrOperacion1: 'Nr.Operacion' ; 1;1;;  ;  ;;;;;;;;;" TipoOp ='PMU'"
+  Fecha1      : 'Fecha'        ; 2;1;;  ;  ;NoVacio(Dialogo.NrOperacion1) Y Dialogo.Fecha1<=Fsys;'Fecha incorrecta';NO;;FSys
+  Radio1      : 'Llamado|NO|SI'; 3;1;;NO;  ;;;;0;
+FinDialogo
+if not OK
+  Cancelar
+endif
+
+* Mov. de Pago
+ACT(s1,'30,40,41,42,43,50,51,52,53,60,61,62,63,80,81,82,83,85,86,87,88,90,91,92,93')
+* Mov. Saldos anteriores
+ACT(s2,'130,140,150,160,141,142,143,180,181,182,183,190')
+* Mov. WHT/PISE
+ACT(s3,'73,74,75,76,77,78')
+
+if Dialogo.Radio1=0
+  ACN(t1, SQL("Select Count(*) from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Dialogo.NrOperacion1~"' and FechaMov="~Idxdate2(Dialogo.Fecha1)~" and NrSaldo = 1 and NrGrupo<>1 "))
+  if val(t1)>0
+    Cancelar("No puede Anular el Pago. Existen Mov. Liquidados")
+  endif
+
+  ******* Si es 2412 con Vehiculo INGCURA, el Prestamo asociado no debe tener Mov.de Pago ********************
+  SQL.ADD("Select Vehiculo1,RB1,NrOperacion3 from "~DBO~".OPERACIONES where NrOperacion = '"~Dialogo.NrOperacion1~"' ")
+  Recorrer SQL
+    ACT(z1,FBN['Vehiculo1'])
+    ACT(z2,FBN['RB1'])
+    ACT(z3,FBN['NrOperacion3'])
+  Proximo
+  if NoVacio(val(z3)) y Eqstr(val(z1),'INGCURA') y Eqstr(val(z2),'1')
+    if SQL("Select Count(*) from "~DBO~".MOVEJECUTADOS where NrOperacion = '"~val(z3)~"' ")>0
+      Cancelar('No puede Anular el Pago. Existen Mov.en '~val(z3)~' de INGBA')
+    endif
+  endif
+  ************************************************************************************************************
+
+  ACN(t1, SQL("Select sum(Cantidad) from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Dialogo.NrOperacion1~"' and FechaMov="~Idxdate2(Dialogo.Fecha1)~" and NrSaldo in ("~val(s1)~") "))
+  if val(t1)>0
+    ACT(p1,Dialogo.NrOperacion1)
+    ACD(p2,Dialogo.Fecha1)
+    CrearDialogo
+      NrOperacion1: 'Nr.Operacion' ; 1;1;;NO;SI;;;;;val(p1)
+      Fecha1      : 'Fecha'        ; 2;1;;NO;SI;;;;;val(p2)
+      Fecha3      : 'FechaOp'      ; 3;1;;NO;SI;;;;;BuscarCampo('OPERACIONES','FechaOp','NrOperacion',Dialogo.NrOperacion1)
+      Fecha2      : 'FechaVto'     ; 4;1;;NO;SI;;;;;BuscarCampo('OPERACIONES','FechaVto','NrOperacion',Dialogo.NrOperacion1)
+      Vehiculo1   : 'Vehiculo'     ; 5;1;;NO;SI;;;;;BuscarCampo('OPERACIONES','Vehiculo1','NrOperacion',Dialogo.NrOperacion1)
+      String1     : 'Cliente'      ; 6;1;;NO;SI;;;;;BuscarCampo('CLIENTES','RazonSocial','Codigo',BuscarCampo('OPERACIONES','Cliente1','NrOperacion',Dialogo.NrOperacion1))
+      Especie1    : 'Especie'      ; 7;1;;NO;SI;;;;;BuscarCampo('OPERACIONES','Especie','NrOperacion',Dialogo.NrOperacion1)
+      Cantidad9   : 'Total'        ; 8;1;;NO;SI;;;;;val(t1)
+    FinDialogo
+    if not OK
+      Cancelar
+    endif
+  else
+    Cancelar('No existen pagos para la fecha ingresada')  
+  endif
+  if not Messagebox('Confirma la anulacion del pago '~Dialogo.NrOperacion1~' ?',3,1) = 1
+    Cancelar('Evento Cancelado')
+  endif
+endif
+
+SetFilaActual(2)
+* Capital
+ACN(a:fac,130)
+ACT(b:fac,'TotalAux1')
+* Intereses Normales
+ACN(a:fac+1,140)
+ACT(b:fac+1,'TotalAux2')
+* Int. Compensatorios
+ACN(a:fac+2,150)
+ACT(b:fac+2,'TotalAux3')
+* Int. Punitorios
+ACN(a:fac+3,160)
+ACT(b:fac+3,'TotalAux4')
+* IVA Normal s/Intereses
+ACN(a:fac+4,141)
+ACT(b:fac+4,'TotalAux5')
+* IVA Adicional s/Intereses
+ACN(a:fac+5,142)
+ACT(b:fac+5,'TotalAux6')
+* IVA Percepcion s/Intereses
+ACN(a:fac+6,143)
+ACT(b:fac+6,'TotalAux7')
+* Comisiones
+ACN(a:fac+7,180)
+ACT(b:fac+7,'TotalAux8')
+* IVA Normal s/Comisiones
+ACN(a:fac+8,181)
+ACT(b:fac+8,'TotalIVA')
+* IVA Adicional s/Comisiones
+ACN(a:fac+9,182)
+ACT(b:fac+9,'TotalIVAADI')
+* IVA Percepcion s/Comisiones
+ACN(a:fac+10,183)
+ACT(b:fac+10,'TotalIVAPER')
+* Comisiones Compensatorias
+ACN(a:fac+11,190)
+ACT(b:fac+11,'TotalAux9')
+
+SQL.ADD("Select * from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Dialogo.NrOperacion1~"' and FechaMov="~Idxdate2(Dialogo.Fecha1))
+SQL.ADD(" and NrSaldo in ("~val(s2)~") ")
+
+recorrer SQL
+  dfa
+  recorrer&I fac,fac+12
+    if fbn('NrSaldo')=val(a:&I)
+      SQL.ADD("Update "~DBO~".OPERACIONES set ")
+      SQL.ADD(""~val(b:&I)~"="~FStr(fbn['Cantidad'],1,2)~" ")
+      SQL.ADD("where NrOperacion='"~Dialogo.NrOperacion1~"'")
+      SQL.NEW    
+    endif
+  proximo
+proximo
+
+ACD(z5, SQL("SELECT Max(FechaMov) from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Dialogo.NrOperacion1~"' and FechaMov<"~Idxdate2(Dialogo.Fecha1)~" and NrSaldo in ("~val(s1)~") "))
+*messagebox(val(z5))
+
+SQL.ADD("Select * from "~DBO~".OPERACIONES where NrOperacion='"~Dialogo.NrOperacion1~"'")
+recorrer SQL
+  ACT(z3,FBN['Vehiculo1'])
+  ACT(z4,FBN['RB1'])
+  ACT(z5,FBN['NrOperacion3'])
+
+* Si esta cancelado desmarcar y actualizar la fecha de Cancelacion y la ultima fecha de pago
+  SQL.ADD("Update "~DBO~".OPERACIONES set FechaEj="~Idxdate2(val(z5)))
+
+* Si cancelo el pago de una precancelacion, actualizo los Intereses Normales  
+  if Dialogo.Fecha1<fbn('FechaVto')
+    ACN(x1, fbn('Cantidad')*fbn('Precio1')*(fbn('FechaVto')-fbn('FechaOp'))/iif(fbn('DiasAnio')=0,36000,36500))
+    ACN(y1, fbn('Cantidad')+Val(x1))
+    SQL.ADD(" ,TotalIntereses="~FStr(Val(x1),1,2))
+    SQL.ADD(" ,TotalBrutoCli1="~FStr(Val(y1),1,2))
+    * Si es DueFront y por porcentaje
+    if fbn('RB9')=2 y fbn('RB10')=1
+        ACN(x2, fbn('Cantidad')*fbn('PorComision')*(fbn('FechaVto')-fbn('FechaOp'))/iif(fbn('DiasAnio')=0,36000,36500))
+        SQL.ADD(" ,TotalComisiones="~FStr(Val(x2),1,2))
+    endif
+  endif
+  if fbn('CB6')=1
+    SQL.ADD(" ,FechaPrecan=null, CB6='0' ")
+  endif
+  SQL.ADD("where NrOperacion='"~Dialogo.NrOperacion1~"'")
+  SQL.NEW      
+
+
+  if Dialogo.Fecha1<fbn('FechaVto')
+  
+    *** Si existe un registro en DELDEVENGADOS lo proceso
+    ACD(zz20, SQL("SELECT Fecha FROM "~DBO~".DELDEVENGADOS WHERE NrOperacion='"~Dialogo.NrOperacion1~"' "))
+    if val(zz20)>0
+      SQL.ADD("DELETE FROM "~DBO~".MOVDEVENGADOS WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+      SQL.ADD("AND Fecha>="~IdxDate2(val(zz20)-1)~" ")
+      SQL.NEW
+      SQL.EXEC
+
+      SQL.ADD("DELETE FROM "~DBO~".DELDEVENGADOS WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+      SQL.NEW
+      SQL.EXEC
+    endif
+
+    *** Borro el Movimiento Calculado
+    SQL.ADD("DELETE FROM "~DBO~".MOVDEVENGADOS WHERE NrOperacion='"~Dialogo.NrOperacion1~"' ")
+    SQL.ADD("AND Fecha="~IdxDate2(Dialogo.Fecha1-1)~" ")
+    SQL.NEW
+    SQL.EXEC
+
+    *-------------------------------------------------------------------------------
+    *- INSERT en GENDEVENGADOS para regenerar los MOVDEVENGADOS
+    *- de Intereses y Comisiones Devengables que se borraron en la precancelacion    
+    *-------------------------------------------------------------------------------
+    ACN(zz8,140)
+    ACT(zz4,'INTLEN')
+    ACN(zz5,val(x1))
+    ACN(zz16,fbn('Precio1'))
+    * NrItem
+    ACN(zz18,1)
+
+    ACT(zz1,fbn('NrOperacion'))
+    ACD(zz2,fbn('FechaOp'))
+    ACD(zz3,fbn('FechaVto')-1)
+    ACT(zz6,fbn('Vehiculo1'))
+    ACT(zz7,fbn('Vehiculo1'))
+    ACT(zz9,fbn('Especie'))
+    ACT(zz10,fbn('Book1'))
+    * Cuota
+    ACN(zz11,1)
+    ACT(zz12,fbn('Especie'))
+    ACT(zz13,fbn('TablaFeriados1'))
+    ACN(zz14,IIF(Eqstr(val(zz7),VAR('VEHICULODE')),1,0))
+    ACN(zz15,fbn('Cantidad'))
+      ACN(zz17,IIF(fbn('DiasAnio')=0,360,365))
+    ACD(zz19,Dialogo.Fecha1-2)
+    (.'CANPRE12'.)
+
+    if fbn('RB9')=2 y fbn('RB10')=1
+      ACN(zz8,180)
+      ACT(zz4,'COMIS')
+      ACN(zz5,val(x2))
+      ACN(zz16,fbn('PorComision'))
+      * NrItem
+      ACN(zz18,2)
+      (.'CANPRE12'.)
+    endif
+  endif
+
+proximo
+
+ACT(z1,Dialogo.NrOperacion1)
+ACD(z2,Dialogo.Fecha1)
+ACT(pc1,'1')
+ACN(x3,Dialogo.Cantidad9)
+ACT(a1,Dialogo.Especie1)
+ACT(p1,Dialogo.Vehiculo1)
+(.'CANPRE16'.)
+
+SQL.ADD("DELETE from "~DBO~".MOVEJECUTADOS where NrOperacion='"~Dialogo.NrOperacion1~"' and FechaMov="~Idxdate2(Dialogo.Fecha1))
+SQL.ADD(" and NrSaldo in (200,201,202,203,"~val(s1)~","~val(s2)~","~val(s3)~") ")
+SQL.NEW
+
+SQL.ADD("DELETE from "~DBO~".MOVPENDIENTES where NrOperacion='"~Dialogo.NrOperacion1~"' and FechaMov="~Idxdate2(Dialogo.Fecha1))
+SQL.ADD(" and NrSaldo = 1 ")
+SQL.NEW
+
+SQL.ADD("Delete from "~DBO~".MOVDEVENGADOS where NrOperacion='"~Dialogo.NrOperacion1~"' ")
+SQL.ADD("and Fecha>="~IdxDate2(Dialogo.Fecha1)~" ")
+SQL.ADD("and NrSaldo in (150,160) ")
+SQL.ADD("and Monto < 0 ")
+SQL.NEW
+
+SQL.EXEC
+
+******* Si es 2412 con Vehiculo INGCURA, Actualizacion del Prestamo asociado ********************
+ if Eqstr(val(z3),'INGCURA') y Eqstr(val(z4),'1')
+    SQL.ADD("Select PorComision,DiasAnio,CB6 from "~DBO~".OPERACIONES where NrOperacion = '"~val(z5)~"' ")
+    Recorrer SQL
+       ACN(z6,FBN['PorComision'])
+       ACN(z7,FBN['DiasAnio'])
+    Proximo
+    EjecutarEvento('R2412',NrOperacion1=val(z5),NrOperacion2=Dialogo.NrOperacion1,Radio1=0,Cantidad1=val(z6),Entero1=val(z7))    
+ endif
+
+** Evento que vuleve atras la Asistencia Crediticia BCRA
+if EqStr(Val(p1),Var('VEHICULODE'))
+  EjecutarEvento('DESASI',NrOperacion1=Dialogo.NrOperacion1, Fecha1=Dialogo.Fecha1, Radio1=1, Radio2=0, Check1=1)
+endif
+EjecutarEvento('DESLHO',NrOperacion1=Dialogo.NrOperacion1, Fecha1=Dialogo.Fecha1, Radio1=1, Radio2=0, Check1=1)
+
+*** Genero devengado del dia de la anulacion, ya que tengo devengado hasta el dia anterior
+*** esto es cuando se anule fecha valor
+***
+if Dialogo.Fecha1 < Fsys
+   EjecutarEvento('GEIPMU',Fecha1=Dialogo.Fecha1,Cliente1='',NrOperacion1=Dialogo.NrOperacion1)
+endif 
+***
+*** Des Marco la transaccion ANUPAG para el mismo prestamo y la misma fecha
+
+SQL.ADD("Update "~DBO~".TRANSACCIONES2 set                  ")
+SQL.ADD(" CB1 = null                                        ")
+SQL.ADD("where NrOperacionRef1='"~Dialogo.NrOperacion1~"'   ")
+SQL.ADD("  and Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"'       ")
+SQL.ADD("  and TipoTr2 = 'ANUPAG'                           ")
+SQL.NEW   
+
+SQL.ADD("Update "~DBO~".TRANSACCIONES2 set                  ")
+SQL.ADD(" CB1 = 1                                           ")
+SQL.ADD("where NrTrans = '"~Val(nm1)~"'                     ")
+SQL.NEW   
+
+SQL.EXEC
+
+
+
+
+
+
+Messagebox('El pago fue anulado')

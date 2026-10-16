@@ -1,0 +1,129 @@
+﻿CrearDialogo
+  Check1      : 'Procesa';
+FinDialogo
+If Not OK
+  Cancelar
+EndIf
+if Dialogo.Check1=0
+  HojaVisible(SI)
+endif
+
+SetFilaActual(1)
+ACT(a:FAC, 'NrOrden')
+ACT(b:FAC, 'TipoOrden')
+ACT(c:FAC, 'Direccion')
+ACT(d:FAC, 'NroAlta')
+ACT(e:FAC, 'Accion')
+
+SQL.ADD(" Select * from "~DBO~".OPERACIONESBITS Where ( NrBit = 150 ) and ( Valor = '1' ) ")
+SQL.ADD(" Order by NrOperacion ")
+Recorrer SQL
+  ACT(a:FAC, FBN['NrOperacion'])
+  SQL.ADD(" Select NrOrden,TipoOrden,FechaEnvioMAE,Direccion,NroAltaMAE from "~DBO~".ORDENES Where NrOrden = '"~FBN['NrOperacion']~"' ")
+  Recorrer SQL
+    DFA
+    ACT(b:FAC, FBN['TipoOrden'])
+    if Incluido(Val(b:FAC),'TMANIF|OTIC|OTIV')
+      ACN(c:FAC, FBN['Direccion'])
+      ACT(d:FAC, FBN['NroAltaMAE'])
+      ACT(e:FAC, 'Pasa a 160')
+      if Dialogo.Check1=1
+        EjecutarEvento('CBOINS', String1=fbn['NrOrden'], Radio1=1, Radio2=0, Entero1=150, Entero2=160)
+      EndIf
+    EndIf
+  Proximo
+Proximo
+
+*******************************************************
+**** Ordenes esperando Respuesta del MAE *****
+*******************************************************
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'NrOrden')
+ACT(b:FAC, 'TipoOrden')
+ACT(c:FAC, 'FechaEnvio')
+ACT(d:FAC, 'Ahora')
+ACT(e:FAC, 'Env + Espera')
+ACT(f:FAC, 'Direccion')
+ACT(g:FAC, 'NroAlta')
+ACT(h:FAC, 'Excepcion')
+ACT(i:FAC, 'Leyenda')
+ACT(j:FAC, 'Accion')
+
+SQL.ADD(" Select NrOperacion from "~DBO~".OPERACIONESBITS Where ( NrBit = 162 ) and ( Valor = '1' ) ")
+SQL.ADD(" Order by NrOperacion ")
+Recorrer SQL
+  ACT(a:FAC, FBN['NrOperacion'])
+  SQL.ADD(" Select NrOrden,TipoOrden,FechaEnvioMAE,Direccion,NroAltaMAE from "~DBO~".ORDENES Where NrOrden = '"~FBN['NrOperacion']~"' ")
+  Recorrer SQL
+    DFA
+    ACT(b:FAC, FBN['TipoOrden'])
+    If incluido(FBN['TipoOrden'],'TMANIF|OTIC|OTIV')
+      ACT(c:FAC, Hora(FBN['FechaEnvioMAE']))
+      * Ahora
+      ACN(d:FAC, Num(Copy(Hora(SQLAhora),1,2))*3600+Num(Copy(Hora(SQLAhora),4,2))*60+Num(Copy(Hora(SQLAhora),7,2)))
+      * Hora envio + Espera
+      ACN(e:FAC, Num(Copy(Val(c:FAC),1,2))*3600+Num(Copy(Val(c:FAC),4,2))*60+Num(Copy(Val(c:FAC),7,2))+(Var('ESPERA')*60))
+      If  Num(Copy(Hora(SQLAhora),1,2))*3600+Num(Copy(Hora(SQLAhora),4,2))*60+Num(Copy(Hora(SQLAhora),7,2))>Num(Copy(Val(c:FAC),1,2))*3600+Num(Copy(Val(c:FAC),4,2))*60+Num(Copy(Val(c:FAC),7,2))+(Var('ESPERA')*60)
+        ACN(f:FAC, FBN['Direccion'])
+        ACT(g:FAC, FBN['NroAltaMAE'])
+        if fbn('Direccion')=1
+          * Baja
+          ACT(h:FAC, 'ERRORBAJA')
+          ACT(i:FAC, 'MAE no respondio informacion de Baja')
+        else
+          if Vacio(fbn('NroAltaMAE'))
+            * Alta
+            ACT(h:FAC, 'ERRORALTA')
+            ACT(i:FAC, 'MAE no respondio informacion de Alta')
+          else
+            * Modificacion
+            ACT(h:FAC, 'ERRORMODI')
+            ACT(i:FAC, 'MAE no respondio informacion de Modificacion')
+          endif
+        endif
+        ACT(j:FAC, 'Pasa a 169')
+        if Dialogo.Check1=1
+          SQL.ADD(" Insert into "~DBO~".EXCEPCIONES ")
+          SQL.ADD(" (NrOperacion, Fecha, Tipo, Descripcion ) Values ")
+*          SQL.ADD(" ('"~FBN['NrOrden']~"', '"~IdxDate(FSYS)~"' , '"~Val(h:FAC)~"', '"~Val(i:FAC)~"' ) ")
+          SQL.ADD(" ('"~FBN['NrOrden']~"', "~SQLAhora~" , '"~Val(h:FAC)~"', '"~Val(i:FAC)~"' ) ")
+          SQL.NEW
+          SQL.EXEC
+          EjecutarEvento('CBOINS', String1=fbn['NrOrden'], Radio1=1, Radio2=1, Entero1=162, Entero2=169)
+        endif
+      endif
+    endif
+  proximo
+proximo
+
+*******************************************************
+**** Ordenes Con datos Incompletos                *****
+*******************************************************
+SetFilaActual(FAC+2)
+ACT(a:FAC, 'NrOrden')
+ACT(b:FAC, 'TipoOrden')
+ACT(c:FAC, 'FechaEnvio')
+ACT(d:FAC, 'Direccion')
+ACT(e:FAC, 'NroAlta')
+ACT(f:FAC, 'Leyenda')
+
+
+SQL.ADD(" Select NrOperacion from "~DBO~".OPERACIONESBITS Where ( NrBit = 71 ) and ( Valor = '1' ) ")
+SQL.ADD(" Order by NrOperacion ")
+Recorrer SQL
+  ACT(a:FAC, FBN['NrOperacion'])
+  SQL.ADD(" Select NrOrden,TipoOrden,FechaEnvioMAE,Direccion,NroAltaMAE,Leyenda1 from "~DBO~".ORDENES Where NrOrden = '"~FBN['NrOperacion']~"' ")
+  Recorrer SQL
+    ACT(a:fac,fbn['NrOrden'])
+    ACT(b:fac,fbn['TipoOrden'])
+    ACT(c:fac,fbn['fechaEnvioMAE'])
+    ACT(d:fac,fbn['direccion'])
+    ACT(e:fac,fbn['NroAltaMAE'])
+    ACT(f:fac,fbn['Leyenda1'])
+    
+    *** Generar la operacion a partir de la Orden
+    EjecutarEvento('CBOINS', String1=fbn['NrOrden'], Radio1=1, Radio2=1, Entero1=71, Entero2=9)
+    EjecutarEvento('GEOPOR', NrOrden1=fbn['NrOrden'], Check1=1)
+  proximo
+proximo
+

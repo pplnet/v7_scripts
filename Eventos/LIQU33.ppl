@@ -1,0 +1,83 @@
+﻿* Carga Precio para los Non deliverable FW, y afecta los mov. a liquidar.
+MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1: 'F.Desde ';2;;;;;;;;;FSYS   
+  Fecha2: 'F.Hasta' ;3;;;;;;;;;HABILES(FSYS,2, 'ARG',NO) 
+FinDialogo
+
+If not ok
+   Cancelar
+Endif
+
+SQL.ADD("Select * from "~DBO~".OPERACIONES  ")
+SQL.ADD("Where TipoOp In ('FXVT','FXCT') ")
+SQL.ADD("  and (FechaVto2 Between '"~IdxDate(Dialogo.Fecha1)~"' and '"~IdxDate(Dialogo.Fecha2)~"') ")
+SQL.ADD("  and RB10 = '1' ")
+SQL.ADD("  and TipoCambio3 > 0 ")
+SQL.ADD("  and NrOperacion Not In (Select NrOperacion from "~DBO~".MOVEJECUTADOS where NrSaldo = 1) ")
+acn(z1,0)
+Recorrer SQL
+    SCN(z1,1)
+    ACT(a:Val(z1), fbn['NrOperacion'])
+    ACT(b:Val(z1), fbn['Cliente1'])
+    ACT(c:Val(z1), fbn['Especie'])
+    ACN(e:Val(z1), fbn['Cantidad'])
+    ACN(f:Val(z1), fbn['Precio1'])
+    ACN(g:Val(z1), fbn['TotalBrutoCli1'])
+    ACN(t:Val(z1), fbn['TipoCambio3'])
+    ACN(j:Val(z1), fbn['FechaOp'])
+    ACN(k:Val(z1), fbn['FechaVto'])
+    ACN(l:Val(z1), 0)
+    ACN(m:Val(z1), fbn['FechaVto2'])
+    ACN(n:Val(z1), fbn['FechaPago'])
+    ACN(o:Val(z1), fbn['TotalNetoCli1'])
+proximo
+
+If Val(z1)=0
+   Cancelar('No existen valuaciones de Non-Deliverable para anular.')
+Endif
+
+ACO(1,9)
+ACO(2,9)
+ACO(3,6)
+ACO(4,6)
+ACO(5,12)
+ACO(6,12)
+ACO(7,15)
+
+FormatoCeldas(f1..f:Val(z1),Exe('F9'))
+FormatoCeldas(i1..i:Val(z1),Exe('F9'))
+
+AlinearCeldas(e:1..g:FAC, 'D')
+
+CrearListBox ; 'Arial,8,'
+   'Anula'         ;l1..l:FAC;SI;;;60;CHECK  ;RGB(220,220,193);
+   'NrOperacion'   ;a1..a:FAC;NO;;;70;STRING;;RGB(220,220,220);
+   'Cierre'        ;t1..t:FAC;NO;;;90;NUMERO;'##,###.########';RGB(220,220,220);
+   'Cliente'       ;b1..b:FAC;NO;;;70;STRING;;RGB(220,220,220);
+   'Especie'       ;c1..c:FAC;NO;;;50;STRING;;RGB(220,220,220);
+   'Cantidad'      ;e1..e:FAC;NO;;;90;NUMERO;'##,###,###.##'  ;RGB(220,220,220);
+   'PrecioOp'      ;f1..f:FAC;NO;;;90;NUMERO;'##,###.########';RGB(220,220,220);
+   'Resultado'     ;o1..o:FAC;NO;;;90;NUMERO;'##,###,###.##'  ;RGB(220,220,220);
+   'Eval.Date'     ;m1..m:FAC;NO;;;60;FECHA;RGB(220,220,220);
+   'FechaOp'       ;j1..j:FAC;NO;;;60;FECHA;RGB(220,220,220);
+FinListBox
+
+If Ok 
+  Recorrer&i 1,fac
+    * --- Solo proceso los precios que hayan sido confirmados
+    If Val(l:&i)=1  y  Val(t:&i)<>0 
+       Message(' Actualizando Movimientos Operacion '~Val(a:&i))
+       SQL.ADD(" Update "~DBO~".OPERACIONES Set ")
+       SQL.ADD(" TipoCambio3   = 0,  ") 
+       SQL.ADD(" TotalNetoCli1 = 0 ")
+       SQL.ADD(" Where NrOperacion ='"~Val(a:&i)~"'")
+       SQL.NEW
+       SQL.EXEC
+       
+       * --- Actualiza los movimientos de liquidacion de la operacion
+       SQL.ActualizarMovimientos3(Val(a:&i),SI,NO,NO,SI,NO)
+       SQL.EXEC
+    Endif
+  Proximo
+Endif

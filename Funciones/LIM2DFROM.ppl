@@ -1,0 +1,597 @@
+﻿*************
+*** DFROM ***
+*************
+SQL.ADD("Select L.Commited,     L.Sublimite,      L.Especie,  L.PlazoDesde, ")
+SQL.ADD("       L.PlazoHasta,   L.MontoOperativo, L.Tenor,    L.Vehiculo    ")
+SQL.ADD("     , L.FAsignacion,  L.FVencimiento,   L.FRevision, L.Limite ")
+SQL.ADD("from "~DBO~".LIMASIGNADOS L ")
+SQL.ADD("where L.Cliente='"~Dialogo.Cliente1~"' ")
+if NoVacio(Dialogo.Vehiculo1)
+  SQL.ADD("and L.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+endif
+SQL.ADD("and L.Limite='DFROM' ")
+SQL.ADD("and L.FAsignacion <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("and (L.PlazoDesde in (1,31,91,181,366,731) and L.PlazoHasta in (30,90,180,365,730,10000)) ")
+SQL.ADD("Union ")
+SQL.ADD("Select LL.Commited  ,    LL.Sublimite,        LL.Especie,    LL.PlazoDesde, ")
+SQL.ADD("       LL.PlazoHasta,    0 as MontoOperativo, 0 as Tenor,    LL.Vehiculo   ")
+SQL.ADD("     , '"~IdxDate(Fecha('01/01/1900'))~"' as FAsignacion,  ")
+SQL.ADD("       '"~IdxDate(Fecha('01/01/1900'))~"' as FVencimiento, ")
+SQL.ADD("       '"~IdxDate(Fecha('01/01/1900'))~"' as FRevision, LL.Limite  ")
+SQL.ADD("from "~DBO~".LIMCONSUMIDOS LL ")
+SQL.ADD("where LL.Cliente='"~Dialogo.Cliente1~"' ")
+if NoVacio(Dialogo.Vehiculo1)
+ SQL.ADD("and LL.Vehiculo = '"~Dialogo.Vehiculo1~"' ")
+endif
+if Dialogo.Fecha1 >= Fsys
+ SQL.ADD("and LL.Monto > 0 ")
+endif
+SQL.ADD("and LL.Limite='DFVN' ")
+SQL.ADD("and LL.Commited in ('SI','NO') ")
+SQL.ADD("and (LL.PlazoDesde in (1,31,91,181,366,731) and LL.PlazoHasta in (30,90,180,365,730,10000)) ")
+SQL.ADD("and   Not Exists (Select Monto from "~DBO~".LIMASIGNADOS M")
+SQL.ADD("                where  M.Cliente   = '"~Dialogo.Cliente1~"' ")
+if NoVacio(Dialogo.Vehiculo1)
+ SQL.ADD("                and   M.Vehiculo  = '"~Dialogo.Vehiculo1~"'")
+endif
+SQL.ADD("                and  (M.PlazoDesde in (1,31,91,181,366,731) and M.PlazoHasta in (30,90,180,365,730,10000)) ")
+SQL.ADD("                and   M.Limite    = 'DFROM' ")
+SQL.ADD("                and   M.FAsignacion <= '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD("                and   M.Especie   = LL.Especie ")
+SQL.ADD("                and   M.PlazoDesde= LL.PlazoDesde ")
+SQL.ADD("                and   M.PlazoHasta= LL.PlazoHasta ")
+SQL.ADD("                and   M.Commited  = LL.Commited ")
+SQL.ADD("                and   M.Sublimite = LL.Sublimite) ")
+SQL.ADD("order by 1,2,3,4,5")
+Recorrer SQL
+  DFA
+  SCN(x1,1)
+  ACT(ua:val(x1), FBN['Commited'])
+  ACT(ub:val(x1), FBN['Sublimite'])
+  ACT(uc:val(x1), FBN['Especie'])
+  ACN(ud:val(x1), FBN['PlazoDesde'])
+  ACN(ue:val(x1), FBN['PlazoHasta'])
+  ACD(uf:val(x1), VtoLimite('DFROM',Dialogo.Cliente1,FBN['Especie'],Dialogo.Vehiculo1,,,,,,,,,,,,,FBN['Sublimite'],FBN['Commited']))
+  ACN(ug:val(x1), FBN['MontoOperativo'])
+  if Vacio(FBN['Sublimite'])
+    ACN(uh:val(x1),LimConsumido(Dialogo.Cliente1,'DFROM',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,FBN['PlazoDesde'],,,,FBN['Commited']))
+  else
+    ACN(uh:val(x1),LimConsumido(Dialogo.Cliente1,'DFVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,FBN['PlazoDesde'],,,FBN['Sublimite'],FBN['Commited']))
+  endif
+  ACN(ui:val(x1), FBN['Tenor'])
+  ACD(uj:val(x1), FBN['FAsignacion'])
+  ACD(uk:val(x1), FBN['FRevision'])
+  ACD(ul:val(x1), FBN['FVencimiento'])
+
+  ACN(u1,0)
+  ACN(u2,0)
+  ACN(u3,0)
+  if Not EqStr(FBN['Commited'],Val(v1))
+    ACN(u1,1)
+    ACN(u2,1)
+    ACN(u3,1)
+  endif
+  if Not EqStr(FBN['Sublimite'],Val(v2))
+    ACN(u2,1)
+    ACN(u3,1)
+  endif
+  if Not EqStr(FBN['Especie'],Val(v3))
+    ACN(u3,1)
+  endif
+  ACN(un:val(x1), Val(u1))
+  ACN(uo:val(x1), Val(u2))
+  ACN(up:val(x1), Val(u3))
+  
+  if Val(u1)=1
+    * Es el Primero del Cross
+    if Vacio(FBN['Sublimite'])
+      * Es Cross
+      recorrer&i 1,6
+        if Val(pd:&i)<=FBN['PlazoDesde']
+          if EqStr(FBN['Commited'],'SI')
+            SCN(x2,1)
+            ACT(va:val(x2), FBN['Commited'])
+            ACT(vc:val(x2), Var('ESPDEFLHO'))
+            ACN(vd:val(x2), Val(pd:&i))
+            ACN(ve:val(x2), Val(ph:&i))
+            ACN(vg:val(x2), FBN['MontoOperativo'])
+            ACN(vh:val(x2), LimConsumido(Dialogo.Cliente1,'DFROM',Var('ESPDEFLHO'),0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,,FBN['Commited']))
+            ACN(vi:val(x2), FBN['Tenor'])
+            ACD(vj:val(x2), FBN['FAsignacion'])
+            ACD(vk:val(x2), FBN['FRevision'])
+            ACD(vl:val(x2), FBN['FVencimiento'])
+            ACN(y2, Val(pd:&i))
+          else
+            SCN(x3,1)
+            ACT(xa:val(x3), FBN['Commited'])
+            ACT(xc:val(x3), Var('ESPDEFLHO'))
+            ACN(xd:val(x3), Val(pd:&i))
+            ACN(xe:val(x3), Val(ph:&i))
+            ACN(xg:val(x3), FBN['MontoOperativo'])
+            ACN(xh:val(x3), LimConsumido(Dialogo.Cliente1,'DFROM',Var('ESPDEFLHO'),0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,,FBN['Commited']))
+            ACN(xi:val(x3), FBN['Tenor'])
+            ACD(xj:val(x3), FBN['FAsignacion'])
+            ACD(xk:val(x3), FBN['FRevision'])
+            ACD(xl:val(x3), FBN['FVencimiento'])
+            ACN(y3, Val(pd:&i))
+          endif
+        else
+          Break
+        endif
+      proximo
+    else
+      * No existe Cross
+      recorrer&i 1,6
+        if Val(pd:&i)<=FBN['PlazoDesde']
+          if EqStr(FBN['Commited'],'SI')
+            SCN(x2,1)
+            ACT(va:val(x2), FBN['Commited'])
+            ACT(vc:val(x2), Var('ESPDEFLHO'))
+            ACN(vd:val(x2), Val(pd:&i))
+            ACN(ve:val(x2), Val(ph:&i))
+            ACN(vh:val(x2), LimConsumido(Dialogo.Cliente1,'DFROM',Var('ESPDEFLHO'),0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,,FBN['Commited']))
+            ACN(vi:val(x2), FBN['Tenor'])
+            ACD(vj:val(x2), FBN['FAsignacion'])
+            ACD(vk:val(x2), FBN['FRevision'])
+            ACD(vl:val(x2), FBN['FVencimiento'])
+            ACN(y2, Val(pd:&i))
+          else
+            SCN(x3,1)
+            ACT(xa:val(x3), FBN['Commited'])
+            ACT(xc:val(x3), Var('ESPDEFLHO'))
+            ACN(xd:val(x3), Val(pd:&i))
+            ACN(xe:val(x3), Val(ph:&i))
+            ACN(xh:val(x3), LimConsumido(Dialogo.Cliente1,'DFROM',Var('ESPDEFLHO'),0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,,FBN['Commited']))
+            ACN(xi:val(x3), FBN['Tenor'])
+            ACD(xj:val(x3), FBN['FAsignacion'])
+            ACD(xk:val(x3), FBN['FRevision'])
+            ACD(xl:val(x3), FBN['FVencimiento'])
+            ACN(y3, Val(pd:&i))
+          endif
+        else
+          Break
+        endif
+      proximo
+      recorrer&i 1,6
+        if Val(pd:&i)<=FBN['PlazoDesde']
+          if EqStr(FBN['Commited'],'SI')
+            SCN(x4,1)
+            ACT(wa:val(x4), FBN['Commited'])
+            ACT(wb:val(x4), FBN['SubLimite'])
+            ACT(wc:val(x4), FBN['Especie'])
+            ACN(wd:val(x4), Val(pd:&i))
+            ACN(we:val(x4), Val(ph:&i))
+            ACN(wg:val(x4), FBN['MontoOperativo'])
+            ACN(wh:val(x4), LimConsumido(Dialogo.Cliente1,'DFVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,FBN['SubLimite'],FBN['Commited']))
+            ACN(wi:val(x4), FBN['Tenor'])
+            ACD(wj:val(x4), FBN['FAsignacion'])
+            ACD(wk:val(x4), FBN['FRevision'])
+            ACD(wl:val(x4), FBN['FVencimiento'])
+            ACN(y4, Val(pd:&i))
+          else
+            SCN(x5,1)
+            ACT(ya:val(x5), FBN['Commited'])
+            ACT(yb:val(x5), FBN['SubLimite'])
+            ACT(yc:val(x5), FBN['Especie'])
+            ACN(yd:val(x5), Val(pd:&i))
+            ACN(ye:val(x5), Val(ph:&i))
+            ACN(yg:val(x5), FBN['MontoOperativo'])
+            ACN(yh:val(x5), LimConsumido(Dialogo.Cliente1,'DFVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,FBN['SubLimite'],FBN['Commited']))
+            ACN(yi:val(x5), FBN['Tenor'])
+            ACD(yj:val(x5), FBN['FAsignacion'])
+            ACD(yk:val(x5), FBN['FRevision'])
+            ACD(yl:val(x5), FBN['FVencimiento'])
+            ACN(y5, Val(pd:&i))
+          endif
+        else
+          Break
+        endif
+      proximo
+    endif
+  else
+    if Val(u2)=1 o Val(u3)=1
+      ACN(y4,0)
+      ACN(y5,0)
+      if Vacio(FBN['Sublimite'])
+        MessageBox('Error Vacio Sublimite - 1')
+      else
+        recorrer&i 1,6
+          if Val(pd:&i)<=FBN['PlazoDesde']
+            if EqStr(FBN['Commited'],'SI')
+              SCN(x4,1)
+              ACT(wa:val(x4), FBN['Commited'])
+              ACT(wb:val(x4), FBN['SubLimite'])
+              ACT(wc:val(x4), FBN['Especie'])
+              ACN(wd:val(x4), Val(pd:&i))
+              ACN(we:val(x4), Val(ph:&i))
+              ACN(wg:val(x4), FBN['MontoOperativo'])
+              ACN(wh:val(x4), LimConsumido(Dialogo.Cliente1,'DFVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,FBN['SubLimite'],FBN['Commited']))
+              ACN(wi:val(x4), FBN['Tenor'])
+              ACD(wj:val(x4), FBN['FAsignacion'])
+              ACD(wk:val(x4), FBN['FRevision'])
+              ACD(wl:val(x4), FBN['FVencimiento'])
+              ACN(y4, Val(pd:&i))
+            else
+              SCN(x5,1)
+              ACT(ya:val(x5), FBN['Commited'])
+              ACT(yb:val(x5), FBN['SubLimite'])
+              ACT(yc:val(x5), FBN['Especie'])
+              ACN(yd:val(x5), Val(pd:&i))
+              ACN(ye:val(x5), Val(ph:&i))
+              ACN(yg:val(x5), FBN['MontoOperativo'])
+              ACN(yh:val(x5), LimConsumido(Dialogo.Cliente1,'DFVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,FBN['SubLimite'],FBN['Commited']))
+              ACN(yi:val(x5), FBN['Tenor'])
+              ACD(yj:val(x5), FBN['FAsignacion'])
+              ACD(yk:val(x5), FBN['FRevision'])
+              ACD(yl:val(x5), FBN['FVencimiento'])
+              ACN(y5, Val(pd:&i))
+            endif
+          endif
+        proximo
+      endif
+    else
+      ** Igual al Anterior
+      if Vacio(FBN['Sublimite'])
+        * Es Cross
+        recorrer&i 1,6
+          if EqStr(FBN['Commited'],'SI')
+            if Val(pd:&i)>Val(y2) y Val(pd:&i)<=FBN['PlazoDesde']
+              SCN(x2,1)
+              ACT(va:val(x2), FBN['Commited'])
+              ACT(vc:val(x2), Var('ESPDEFLHO'))
+              ACN(vd:val(x2), Val(pd:&i))
+              ACN(ve:val(x2), Val(ph:&i))
+              if Val(pd:&i)=FBN['PlazoDesde']
+                ACN(vg:val(x2), FBN['MontoOperativo'])
+              endif
+              ACN(vh:val(x2), LimConsumido(Dialogo.Cliente1,'DFROM',Var('ESPDEFLHO'),0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,,FBN['Commited']))
+              ACN(vi:val(x2), FBN['Tenor'])
+              ACD(vj:val(x2), FBN['FAsignacion'])
+              ACD(vk:val(x2), FBN['FRevision'])
+              ACD(vl:val(x2), FBN['FVencimiento'])
+              ACN(y2, Val(pd:&i))
+            endif
+          else
+            if Val(pd:&i)>Val(y3) y Val(pd:&i)<=FBN['PlazoDesde']
+              SCN(x3,1)
+              ACT(xa:val(x3), FBN['Commited'])
+              ACT(xc:val(x3), Var('ESPDEFLHO'))
+              ACN(xd:val(x3), Val(pd:&i))
+              ACN(xe:val(x3), Val(ph:&i))
+              if Val(pd:&i)=FBN['PlazoDesde']
+                ACN(xg:val(x3), FBN['MontoOperativo'])
+              endif
+              ACN(xh:val(x3), LimConsumido(Dialogo.Cliente1,'DFROM',Var('ESPDEFLHO'),0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,,FBN['Commited']))
+              ACN(xi:val(x3), FBN['Tenor'])
+              ACD(xj:val(x3), FBN['FAsignacion'])
+              ACD(xk:val(x3), FBN['FRevision'])
+              ACD(xl:val(x3), FBN['FVencimiento'])
+              ACN(y3, Val(pd:&i))
+            endif
+          endif
+        proximo
+      else
+        recorrer&i 1,6
+          if EqStr(FBN['Commited'],'SI')
+            if Val(pd:&i)>Val(y4) y Val(pd:&i)<=FBN['PlazoDesde']
+              SCN(x4,1)
+              ACT(wa:val(x4), FBN['Commited'])
+              ACT(wb:val(x4), FBN['Sublimite'])
+              ACT(wc:val(x4), FBN['Especie'])
+              ACN(wd:val(x4), Val(pd:&i))
+              ACN(we:val(x4), Val(ph:&i))
+              if Val(pd:&i)=FBN['PlazoDesde']
+                ACN(wg:val(x4), FBN['MontoOperativo'])
+              endif
+              ACN(wh:val(x4), LimConsumido(Dialogo.Cliente1,'DFVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,FBN['Sublimite'],FBN['Commited']))
+              ACN(wi:val(x4), FBN['Tenor'])
+              ACD(wj:val(x4), FBN['FAsignacion'])
+              ACD(wk:val(x4), FBN['FRevision'])
+              ACD(wl:val(x4), FBN['FVencimiento'])
+              ACN(y4, Val(pd:&i))
+            endif
+          else
+            if Val(pd:&i)>Val(y5) y Val(pd:&i)<=FBN['PlazoDesde']
+              SCN(x5,1)
+              ACT(ya:val(x5), FBN['Commited'])
+              ACT(yb:val(x5), FBN['Sublimite'])
+              ACT(yc:val(x5), FBN['Especie'])
+              ACN(yd:val(x5), Val(pd:&i))
+              ACN(ye:val(x5), Val(ph:&i))
+              if Val(pd:&i)=FBN['PlazoDesde']
+                ACN(yg:val(x5), FBN['MontoOperativo'])
+              endif
+              ACN(yh:val(x5), LimConsumido(Dialogo.Cliente1,'DFVN',FBN['Especie'],0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,FBN['Sublimite'],FBN['Commited']))
+              ACN(yi:val(x5), FBN['Tenor'])
+              ACD(yj:val(x5), FBN['FAsignacion'])
+              ACD(yk:val(x5), FBN['FRevision'])
+              ACD(yl:val(x5), FBN['FVencimiento'])
+              ACN(y5, Val(pd:&i))
+            endif
+          endif
+        proximo
+      endif
+    endif
+    if EqStr(FBN['Commited'],'SI')
+      if FBN['PlazoDesde']>Val(y2)
+        recorrer&i 1,6
+          if Val(pd:&i)>Val(y2) y Val(pd:&i)<=FBN['PlazoDesde']
+            SCN(x2,1)
+            ACT(va:val(x2), FBN['Commited'])
+            ACT(vc:val(x2), Var('ESPDEFLHO'))
+            ACN(vd:val(x2), Val(pd:&i))
+            ACN(ve:val(x2), Val(ph:&i))
+            ACN(vh:val(x2), LimConsumido(Dialogo.Cliente1,'DFROM',Var('ESPDEFLHO'),0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,,FBN['Commited']))
+            ACN(vi:val(x2), FBN['Tenor'])
+            ACD(vj:val(x2), FBN['FAsignacion'])
+            ACD(vk:val(x2), FBN['FRevision'])
+            ACD(vl:val(x2), FBN['FVencimiento'])
+            ACN(y2, Val(pd:&i))
+          endif
+        proximo
+      endif
+    else
+      if FBN['PlazoDesde']>Val(y3)
+        recorrer&i 1,6
+          if Val(pd:&i)>Val(y3) y Val(pd:&i)<=FBN['PlazoDesde']
+            SCN(x3,1)
+            ACT(xa:val(x3), FBN['Commited'])
+            ACT(xc:val(x3), Var('ESPDEFLHO'))
+            ACN(xd:val(x3), Val(pd:&i))
+            ACN(xe:val(x3), Val(ph:&i))
+            ACN(xh:val(x3), LimConsumido(Dialogo.Cliente1,'DFROM',Var('ESPDEFLHO'),0,Dialogo.Vehiculo1,,,,Dialogo.Fecha1,,,,,,,,Val(pd:&i),,,,FBN['Commited']))
+            ACN(xi:val(x3), FBN['Tenor'])
+            ACD(xj:val(x3), FBN['FAsignacion'])
+            ACD(xk:val(x3), FBN['FRevision'])
+            ACD(xl:val(x3), FBN['FVencimiento'])
+            ACN(y3, Val(pd:&i))
+          endif
+        proximo
+      endif
+    endif
+  endif
+
+  ACT(v1, fbn('Commited'))
+  ACT(v2, fbn('Sublimite'))
+  ACT(v3, fbn('Especie'))
+Proximo
+if Val(x1)>0
+  SetFont(ua:1..uq:val(x1), 2)
+endif
+
+if Val(x2)>0
+  SetFont(va:1..vl:val(x2), 2)
+  Recorrer&i 1,Val(x2)
+    if Val(vg:&i)<>0 o Val(vh:&i)<>0
+      if &i=1
+        SCN(sa:1, Val(vg:&i))
+        SCN(sb:1, Val(vh:&i))
+      endif
+      SCN(z1,1)
+      ACT(a:val(z1), 'Cross')
+      ACT(b:val(z1), 'Commited')
+      ACT(c:val(z1), Val(vc:&i))
+      if Val(ve:&i)=10000
+        ACT(d:val(z1), FStr(Val(vd:&i),1,0)~' - S/Lim')
+      else
+        ACT(d:val(z1), FStr(Val(vd:&i),1,0)~' - '~FStr(Val(ve:&i),1,0))
+      endif
+      if Val(vg:&i)>0
+        ACN(e:val(z1), Val(vi:&i))
+      endif
+      ACN(f:val(z1), Val(vg:&i))
+      ACN(g:val(z1), Val(vg:&i)*CotizacionC(Val(vc:&i),,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      ACN(h:val(z1), Val(vh:&i))
+      ACN(i:val(z1), Val(vh:&i)*CotizacionC(Val(vc:&i),,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      ACN(j:val(z1), Val(f:val(z1))-Val(h:val(z1)))
+      ACN(k:val(z1), Val(g:val(z1))-Val(i:val(z1)))
+      if Val(ff1)<Dialogo.Fecha1 y Val(ff1)>Fecha('01/01/1900')
+        if Val(f:val(z1)) = 0
+          ACT(l:val(z1), 'No Asignado')
+          ColorCeldas(l:val(z1),clRED)
+        else
+         ACT(l:val(z1), 'Vencido')
+         if Val(k:val(z1)) < 0
+           ACT(l:val(z1), Val(l:val(z1))~' - Excedido')
+         endif
+         ColorCeldas(l:val(z1),clRED)
+        endif
+      else
+        if Val(f:val(z1)) = 0
+          ACT(l:val(z1), 'No Asignado')
+          ColorCeldas(l:val(z1),clRED)
+        else
+          if Val(k:val(z1)) < 0
+            ACT(l:val(z1), 'Excedido')
+            ColorCeldas(l:val(z1),clRED)
+          else
+            if val(vl:&i) < Dialogo.Fecha1
+              ACT(l:val(z1), 'Vencido')
+              ColorCeldas(l:val(z1),clRED)
+            else
+              ACT(l:val(z1), 'OK')
+            endif
+          endif
+        endif
+      endif
+      SetFont(a:val(z1)..l:val(z1), 2)
+      if Val(i:val(z1))>0
+        ACL(i:val(z1), 'DETLCR', Cliente1=Dialogo.Cliente1, TipoLimite1='DFROM', Vehiculo1=Dialogo.Vehiculo1, Fecha1=Dialogo.Fecha1)
+      endif
+    endif
+  proximo
+endif
+
+if Val(x4)>0
+  SetFont(wa:1..wl:val(x4), 2)
+  Recorrer&i 1,Val(x4)
+    if Abs(Val(wg:&i))>0.001 o Abs(Val(wh:&i))>0.001
+      SCN(z1,1)
+      ACT(a:val(z1), 'Cte./Prod.')
+      ACT(b:val(z1), 'Commited / '~Val(wb:&i))
+      ACT(c:val(z1), Val(wc:&i))
+      if Val(we:&i)=10000
+        ACT(d:val(z1), FStr(Val(wd:&i),1,0)~' - S/Lim')
+      else
+        ACT(d:val(z1), FStr(Val(wd:&i),1,0)~' - '~FStr(Val(we:&i),1,0))
+      endif
+      if Val(wg:&i)>0
+        ACN(e:val(z1), Val(wi:&i))
+      endif
+      ACN(f:val(z1), Val(wg:&i))
+      ACN(g:val(z1), Val(wg:&i)*CotizacionC(Val(wc:&i),,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      ACN(h:val(z1), Val(wh:&i))
+      ACN(i:val(z1), Val(wh:&i)*CotizacionC(Val(wc:&i),,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      ACN(j:val(z1), Val(f:val(z1))-Val(h:val(z1)))
+      ACN(k:val(z1), Val(g:val(z1))-Val(i:val(z1)))
+      if Val(ff1)<Dialogo.Fecha1 y Val(ff1)>Fecha('01/01/1900')
+        if Val(f:val(z1)) = 0
+          ACT(l:val(z1), 'No Asignado')
+          ColorCeldas(l:val(z1),clRED)
+        else
+         ACT(l:val(z1), 'Vencido')
+         if Val(k:val(z1)) < 0
+           ACT(l:val(z1), Val(l:val(z1))~' - Excedido')
+         endif
+         ColorCeldas(l:val(z1),clRED)
+        endif
+      else
+        if Val(f:val(z1)) = 0
+          ACT(l:val(z1), 'No Asignado')
+          ColorCeldas(l:val(z1),clRED)
+        else
+          if Val(k:val(z1)) < 0
+            ACT(l:val(z1), 'Excedido')
+            ColorCeldas(l:val(z1),clRED)
+          else
+            if val(wl:&i) < Dialogo.Fecha1
+              ACT(l:val(z1), 'Vencido')
+              ColorCeldas(l:val(z1),clRED)
+            else
+              ACT(l:val(z1), 'OK')
+            endif
+          endif
+        endif
+      endif
+      SetFont(a:val(z1)..l:val(z1), 2)
+      if Val(i:val(z1))>0
+        if Val(f:val(z1))=0
+          ACL(h:val(z1), 'DETLVN', Cliente1=Dialogo.Cliente1, String1='DFVN', Vehiculo1=Dialogo.Vehiculo1, Fecha1=Dialogo.Fecha1, Especie1=Val(wc:&i),String2=Val(wb:&i))
+        else
+          ACL(i:val(z1), 'DETLCR', Cliente1=Dialogo.Cliente1, TipoLimite1='DFROM', Vehiculo1=Dialogo.Vehiculo1, Fecha1=Dialogo.Fecha1)
+        endif
+      endif
+    endif
+  proximo
+endif
+if Val(x3)>0
+  SetFont(xa:1..xl:val(x3), 2)
+  Recorrer&i 1,Val(x3)
+    if Val(xg:&i)<>0 o Val(xh:&i)<>0
+      if &i=1
+        SCN(sa:1, Val(xg:&i))
+        SCN(sb:1, Val(xh:&i))
+      endif
+      SCN(z1,1)
+      ACT(a:val(z1), 'Cross')
+      ACT(b:val(z1), 'Uncommited')
+      ACT(c:val(z1), Val(xc:&i))
+      if Val(xe:&i)=10000
+        ACT(d:val(z1), FStr(Val(xd:&i),1,0)~' - S/Lim')
+      else
+        ACT(d:val(z1), FStr(Val(xd:&i),1,0)~' - '~FStr(Val(xe:&i),1,0))
+      endif
+      if Val(xg:&i)>0
+        ACN(e:val(z1), Val(xi:&i))
+      endif
+      ACN(f:val(z1), Val(xg:&i))
+      ACN(g:val(z1), Val(xg:&i)*CotizacionC(Val(xc:&i),,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      ACN(h:val(z1), Val(xh:&i))
+      ACN(i:val(z1), Val(xh:&i)*CotizacionC(Val(xc:&i),,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      ACN(j:val(z1), Val(f:val(z1))-Val(h:val(z1)))
+      ACN(k:val(z1), Val(g:val(z1))-Val(i:val(z1)))
+      if Val(ff1)<Dialogo.Fecha1 y Val(ff1)>Fecha('01/01/1900')
+        if Val(f:val(z1)) = 0
+          ACT(l:val(z1), 'No Asignado')
+          ColorCeldas(l:val(z1),clRED)
+        else
+         ACT(l:val(z1), 'Vencido')
+         if Val(k:val(z1)) < 0
+           ACT(l:val(z1), Val(l:val(z1))~' - Excedido')
+         endif
+         ColorCeldas(l:val(z1),clRED)
+        endif
+      else
+        if Val(f:val(z1)) = 0
+          ACT(l:val(z1), 'No Asignado')
+          ColorCeldas(l:val(z1),clRED)
+        else
+          if Val(k:val(z1)) < 0
+            ACT(l:val(z1), 'Excedido')
+            ColorCeldas(l:val(z1),clRED)
+          else
+            ACT(l:val(z1), 'OK')
+          endif
+        endif
+      endif
+      SetFont(a:val(z1)..l:val(z1), 2)
+      if Val(i:val(z1))>0
+        ACL(i:val(z1), 'DETLCR', Cliente1=Dialogo.Cliente1, TipoLimite1='DFROM', Vehiculo1=Dialogo.Vehiculo1, Fecha1=Dialogo.Fecha1)
+      endif
+    endif
+  proximo
+endif
+if Val(x5)>0
+  SetFont(ya:1..yl:Val(x5), 2)
+  Recorrer&i 1,Val(x5)
+    if Abs(Val(yg:&i))>0.001 o Abs(Val(yh:&i))>0.001
+      SCN(z1,1)
+      ACT(a:val(z1), 'Cte./Prod.')
+      ACT(b:val(z1), 'Uncommited / '~Val(yb:&i))
+      ACT(c:val(z1), Val(yc:&i))
+      if Val(ye:&i)=10000
+        ACT(d:val(z1), FStr(Val(yd:&i),1,0)~' - S/Lim')
+      else
+        ACT(d:val(z1), FStr(Val(yd:&i),1,0)~' - '~FStr(Val(ye:&i),1,0))
+      endif
+      if Val(yg:&i)>0
+        ACN(e:val(z1), Val(yi:&i))
+      endif
+      ACN(f:val(z1), Val(yg:&i))
+      ACN(g:val(z1), Val(yg:&i)*CotizacionC(Val(yc:&i),,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      ACN(h:val(z1), Val(yh:&i))
+      ACN(i:val(z1), Val(yh:&i)*CotizacionC(Val(yc:&i),,,,Dialogo.Fecha1-1,1,SI,'USD'))
+      ACN(j:val(z1), Val(f:val(z1))-Val(h:val(z1)))
+      ACN(k:val(z1), Val(g:val(z1))-Val(i:val(z1)))
+      if Val(ff1)<Dialogo.Fecha1 y Val(ff1)>Fecha('01/01/1900')
+        if Val(f:val(z1)) = 0
+          ACT(l:val(z1), 'No Asignado')
+          ColorCeldas(l:val(z1),clRED)
+        else
+         ACT(l:val(z1), 'Vencido')
+         if Val(k:val(z1)) < 0
+           ACT(l:val(z1), Val(l:val(z1))~' - Excedido')
+         endif
+         ColorCeldas(l:val(z1),clRED)
+       endif
+      else
+        if Val(f:val(z1)) = 0
+          ACT(l:val(z1), 'No Asignado')
+          ColorCeldas(l:val(z1),clRED)
+        else
+          if Val(k:val(z1)) < 0
+            ACT(l:val(z1), 'Excedido')
+            ColorCeldas(l:val(z1),clRED)
+          else
+            ACT(l:val(z1), 'OK')
+          endif
+        endif
+      endif
+      SetFont(a:val(z1)..l:val(z1), 2)
+      if Val(i:val(z1))>0
+        ACL(i:val(z1), 'DETLCR', Cliente1=Dialogo.Cliente1, TipoLimite1='DFROM', Vehiculo1=Dialogo.Vehiculo1, Fecha1=Dialogo.Fecha1)
+      endif
+    endif
+  proximo
+endif
+*** FIN DFROM ***

@@ -1,0 +1,152 @@
+﻿CrearDialogo
+   NrOperacion1: 'NrOperacion'
+   Radio1     :  'Accion|Conf.|Rechaza';;;;;;;;;0
+FinDialogo
+
+If not ok
+   Cancelar
+Endif
+
+SQL.ADD(" Select Direccion, TipoOp, NrOperacion, NroAltaMAE, Cliente1, Plazo,  CB6,  FechaOp,  ")
+SQL.ADD(" FechaVto, Especie, Cantidad, Precio1, TotalBrutoCli1, MB1, FechaPrecan, MercadoRB    ")
+SQL.ADD("From "~DBO~".OPERACIONES                         ")
+SQL.ADD("where  NrOperacion = '"~Dialogo.NrOperacion1~"'  ")
+
+
+Recorrer SQL
+   ACT(a:fac, IIF(FBN['Direccion']=1,'BAJA','ALTA'))
+   If NoVacio(FBN['FechaPrecan']) 
+      ACT(a:fac, 'PREC')
+   EndIf
+   ACT(b:fac, FBN['TipoOp'])
+   ACT(c:fac, FBN['NrOperacion'])
+
+   ****** nro secuencia?
+   ACT(d:fac, FBN['NroAltaMAE'])
+   
+   ACT(e:fac, FBN['Cliente1'])
+   ACN(f:fac, FBN['Plazo'])
+   ACD(g:fac, IIF(NoVacio(FBN['FechaPrecan']),FBN['FechaPrecan'],FBN['FechaVto']))
+   ACT(h:fac, FBN['Especie'])
+   ACN(i:fac, FBN['Cantidad'])
+   ACN(j:fac, FBN['Precio1'])
+   ACN(k:fac, FBN['TotalBrutoCli1'])
+   ACT(l:fac, IIF(FBN['MB1']=0,'EMTA',IIF(FBN['MB1']=1,'A 3500','')))
+   IF Dialogo.Radio1 =1
+      */Rechazo
+      ACN(m:fac, 0)
+      ACN(n:fac, 1)
+   else
+      ACN(m:fac, 1)
+      ACN(n:fac, 0)
+   endif
+   ACN(o:fac, FBN['CB6'])
+   ACD(p:fac, FBN['FechaOp'])
+   ACT(q:fac, FBN['MercadoRB'])
+
+Proximo
+
+IF NO
+CrearListBox ; 'Arial,8,';'CONFIRMACION de Operaciones FXOCT'
+ 'Ok'              ; m1..m:fac;Val(n:FLB)=0;Val(m:FLB)+Val(n:FLB)<2;'Debe marcar OK o Rechazo';30;CHECK;Exe('COLOR12');;;;;;NO;; 
+ 'Rechazo'         ; n1..n:fac;Val(m:FLB)=0;;;60;CHECK;Exe('COLOR7');;;;;;NO;;
+ 'TipoConf'        ; a1..a:fac;NO;;;50;STRING;;Exe('COLOR6');
+ 'TipoOp'          ; b1..b:fac;NO;;;50;STRING;;Exe('COLOR6');
+ 'NrOperacion'     ; c1..c:fac;NO;;;70;STRING;;Exe('COLOR6');
+ 'Secuencia'       ; d1..d:fac;NO;;;50;STRING;;Exe('COLOR6');
+ 'Contraparte'     ; e1..e:fac;NO;;;70;STRING;;Exe('COLOR6');
+ 'Plazo'           ; f1..f:fac;NO;;;30;NUMERO;'####';Exe('COLOR6');
+ 'FechaVto'        ; g1..g:fac;NO;;;60;FECHA;Exe('COLOR6');
+ 'Moneda'          ; h1..h:fac;NO;;;50;STRING;;Exe('COLOR6');
+ 'Importe ME'      ; i1..i:fac;NO;;;80;NUMERO;'####,###,###.##';Exe('COLOR6');
+ 'T. Cambio'       ; j1..j:fac;NO;;;80;NUMERO;'###,###.##########';Exe('COLOR6');
+
+ 'Importe'         ; k1..k:fac;NO;;;80;NUMERO;'####,###,###.##';Exe('COLOR6');
+ 'Fixing'          ; l1..l:fac;NO;;;50;STRING;;Exe('COLOR6');
+ 'Fecha Conc.'     ; p1..p:fac;NO;;;60;FECHA;Exe('COLOR6');
+FinListBox
+ENDIF
+Recorrer&i 1,fac
+   If [val(m:&i) = 1] o [val(n:&i) = 1]
+      If [SQL("Select Count(*) from "~DBO~".OPERACIONESBITS where NrOperacion = '"~val(c:&i)~"' and NrBit in (70,1,30) and Valor = '1' ") <> 0]
+         *-Si se RECHAZA
+         If Val(n:&i)=1
+            ACT(z:1, 'Confirmacion Rechazada')
+            If EqStr(Val(a:&i),'BAJA')
+               *- Si se RECHAZA y es una BAJA => paso a instancia Superv. Mesa
+               RetrocederOperacion(val(c:&i),70,1,NO,NO)
+            Else
+               If EqStr(Val(a:&i),'ALTA')
+                  *- Si se RECHAZA y es un ALTA => paso a instancia Alta SIOPEL
+                  AvanzarOperacion(val(c:&i),70,1,NO,NO)
+               Else
+                   *- Si se RECHAZA y es una PRECANCELACION => Paso a instancia Superv. Mesa
+                   RetrocederOperacion(val(c:&i),70,1,NO,NO)
+                   ACT(z:1, 'Aceleramiento Rechazado en Confirmacion')
+               EndIf
+            EndIf
+
+            SQL.ADD(" INSERT Into "~DBO~".EXCEPCIONES         ")
+            SQL.ADD(" (NrOperacion, Tipo, Fecha, Descripcion) ")
+            SQL.ADD(" Values ")
+            SQL.ADD(" ('"~val(c:&i)~"', 'OPEWAR', '"~IdxDate(FSYS)~"', '"~Val(z:1)~"') ")
+            SQL.NEW
+            SQL.EXEC
+         EndIf
+
+         *-Si se ACEPTA
+         If Val(m:&i)=1
+            If EqStr(Val(a:&i),'BAJA')
+               *- Si se ACEPTA y es una BAJA
+               *- Veo si ya se corrio el MTM
+               ACN(y1,0)
+               ACN(y1, SQL("SELECT 1 FROM "~DBO~".FLAGSOCT WHERE Fecha = '"~IdxDate(Val(p:&i))~"' AND Registro = 'MTMD' "))
+               If Val(y1) = 1
+                  *- Obtengo la LIQOCT
+                  SQL.ADD("Select NrTrans from "~DBO~".TRANSACCIONES2 ")
+                  SQL.ADD(" where TipoTr2 = 'LIQOCT' ")
+                  SQL.ADD(" and Fecha1 = "~IdxDate2(Val(p:&i))~" ")
+                  SQL.ADD(" and Cambio1 = 0 ")
+                  Recorrer SQL
+                     ACT(y3, fbn('NrTrans'))
+                  proximo  
+                  *- Veo si la LIQOCT esta liquidada
+                  ACN(y4, 0)
+                  ACN(y4, SQL("Select Count(*) from "~DBO~".MOVEJECUTADOS where NrOperacion = '"~Val(y3)~"' and NrSaldo=1 "))
+                  if Val(y4)>0
+                     ACT(z:1, 'No puede confirmar la anulacion - la Transaccion '~Val(y3)~' esta liquidada.')
+                     MessageBox(Val(z:1))
+                  else
+                      ACT(z:1, 'Confirmacion de Operacion - Se recalcula el MTM')
+                      *- paso a instancia anulacion, para que no la tome el MTM
+                      RetrocederOperacion(val(c:&i),1,30,NO,NO)
+                      *- Recalculo MTM
+                      EjecutarEvento('MTMOCT',Fecha1=Val(p:&i),Vehiculo1=Dialogo.Vehiculo1,Cliente1='',Check1=1,Check2=1,Check3=1)
+                      *- vuelvo a instancia Confirmacion
+                      RetrocederOperacion(val(c:&i),30,1,NO,NO)
+                      */EjecutarEvento('DESAFE',NrOperacion1=val(c:&i))
+                  endif
+                  *- grabo siempre una excepcion en la operacion
+                  SQL.ADD(" INSERT Into "~DBO~".EXCEPCIONES         ")
+                  SQL.ADD(" (NrOperacion, Tipo, Fecha, Descripcion) ")
+                  SQL.ADD(" Values ")
+                  SQL.ADD(" ('"~val(c:&i)~"', 'OPEWAR', '"~IdxDate(FSYS)~"', '"~Val(z:1)~"') ")
+                  SQL.NEW
+                  SQL.EXEC
+                 else
+               EndIf
+            Else
+               If Incluido(Val(a:&i),'ALTA|PREC')
+                  *- Si se ACEPTA y es un ALTA => paso a instancia Terminal
+                  AvanzarOperacion(val(c:&i),1,70,NO,NO)
+                  AvanzarOperacion(val(c:&i),3,70,NO,NO)
+               EndIf
+            EndIf
+
+         EndIf
+
+      else
+         Messagebox('La Operacion '~val(c:&i)~' no se encuentra en la instancia Confirmacion')
+      EndIf    
+   EndIf
+Proximo

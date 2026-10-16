@@ -1,0 +1,94 @@
+﻿*HojaVisible(SI)
+CrearDialogo
+  NrTrans1: 'Nro.Voucher';;;;;;Incluido(BuscarCampo('TRANSACCIONES2','TipoTr2','NrTrans',Dialogo.NrTrans1),'FXDEP|FXRET|FXCOMP');'Tipo de Comprobante incorrecto';NO;;;;;;" TipoTr2 IN ('FXDEP','FXRET','FXCOMP') AND Fecha1 = '"~IdxDate(Fsys)~"' and CB3 = '1' ";
+  Radio1  : 'Cierre OCT'    ;;;;NO;NO;;;;1;
+FinDialogo
+
+if Not OK
+  Cancelar
+endif
+
+IF Dialogo.Radio1=1 Y Eqstr(BuscarCampo('TRANSACCIONES2','Mercado1','NrTrans',Dialogo.NrTrans1), Var('MERCOCT'))
+    Cancelar('Las Fallas OCT no Pueden Anularse con este Proceso')
+ENDIF
+if BuscarCampo('TRANSACCIONES2','CB9','NrTrans',Dialogo.NrTrans1)=1
+  Cancelar('El Voucher '~Dialogo.NrTrans1~' esta confirmado')
+endif
+
+ACT(MO:1, Var('MERCOCT'))
+
+SQL.ADD("Select T.NrTrans, T.NrTransRef1, T.Mercado1, T.CB9, T.TipoTr2 ")
+SQL.ADD("from "~DBO~".TRANSACCIONES2 T, "~DBO~".OPERACIONESBITS B ")
+SQL.ADD("where T.NrTrans = B.NrOperacion ")
+SQL.ADD("and T.NrTrans = '"~Dialogo.NrTrans1~"' ")
+SQL.ADD("and (")
+SQL.ADD("(B.NrBit = 2 and B.Valor = '1' and (T.CB9 = '0' or T.CB9 is NULL) and T.Mercado1!='CE' and T.Mercado1!='EU' and T.Mercado1!='CRYL' and T.Mercado1!='ARGEN' )")
+SQL.ADD("or ( (B.NrBit = 7 or B.NrBit = 6) and B.Valor = '1' and T.CB3 = '1' and T.Mercado1 in ('CE','EU','CRYL','ARGEN','"~Val(MO:1)~"'))")
+SQL.ADD(")")
+
+Recorrer SQL
+    **** MessageBox('Anulacion TRANSP Nr. '~FBN['NrTransRef1'])
+    ACT(a:FAC, FBN['NrTrans'])
+    ACT(b:FAC, FBN['NrTransRef1'])
+    ACT(c:FAC, FBN['Mercado1'])
+    ACT(d:FAC, FBN['TipoTr2'])
+
+    if SQL("Select Count(*) from "~DBO~".MOVPENDIENTES where NrOperacion = '"~Val(b:FAC)~"' and NrSaldo = 1 ") = 0
+       Cancelar('El Voucher de Transporte '~Val(b:FAC)~' ya esta liquidado')
+    endif    
+
+    SQL.ADD("DELETE from "~DBO~".INSTANCIASOP where NrOperacion = '"~Val(b:FAC)~"'")
+    SQL.NEW
+
+    SQL.ADD("DELETE from "~DBO~".OPERACIONESBITS where NrOperacion = '"~Val(b:FAC)~"'")
+    SQL.NEW
+
+    SQL.ADD("DELETE from "~DBO~".MOVPENDIENTES where NrOperacion = '"~Val(b:FAC)~"'")
+    SQL.NEW
+
+    SQL.ADD("DELETE from "~DBO~".MOVEJECUTADOS where NrOperacion = '"~Val(b:FAC)~"'")
+    SQL.NEW
+
+    SQL.ADD("DELETE from "~DBO~".MOVLIMITES where NrOperacion = '"~Val(b:FAC)~"'")
+    SQL.NEW
+
+    SQL.ADD("DELETE from "~DBO~".MOVCASHFLOW where NrOperacion = '"~Val(b:FAC)~"'")
+    SQL.NEW
+
+    SQL.ADD("DELETE from "~DBO~".TRANSACCIONES2 where NrTrans = '"~Val(b:FAC)~"'")
+    SQL.NEW
+
+    SQL.ADD("Delete from "~DBO~".INSTANCIASOP ")
+    SQL.ADD("Where NrOperacion = '"~Dialogo.NrTrans1~"' ")
+    SQL.ADD("and (NrInstancia = 7 or NrInstancia = 6 )")
+    SQL.NEW
+
+    SQL.ADD("UPDATE "~DBO~".TRANSACCIONES2 ")
+    SQL.ADD("SET Fecha3 = NULL, ")
+    SQL.ADD("NrTransRef1 = NUll, ")
+    SQL.ADD("Cantidad3 = NUll, ")
+    SQL.ADD("Cantidad4 = NUll, ")
+    SQL.ADD("CB3 = NULL ")
+    SQL.ADD("Where NrTrans = '"~Dialogo.NrTrans1~"' ")
+    SQL.NEW
+
+    SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+    SQL.ADD("SET Valor = '0' ")
+    SQL.ADD("where NrOperacion = '"~Dialogo.NrTrans1~"' ")
+    SQL.ADD("and NrBit = 2 ")
+    SQL.NEW
+
+    SQL.ADD("UPDATE "~DBO~".OPERACIONESBITS ")
+    SQL.ADD("SET Valor = '1' ")
+    SQL.ADD("where NrOperacion = '"~Dialogo.NrTrans1~"' ")
+    if EqStr(Val(d:FAC),'FXDEP')
+      SQL.ADD("and NrBit = 7 ")
+    else
+      SQL.ADD("and NrBit = 6 ")
+    endif
+    SQL.NEW
+    SQL.EXEC
+Proximo
+if FAC=0
+  Cancelar('El Voucher '~Dialogo.NrTrans1~' no se puede desfallar.')
+endif

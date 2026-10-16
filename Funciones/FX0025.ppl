@@ -1,0 +1,267 @@
+﻿***---Traigo todos los pases juntos, en un query compras y en otro vtas. Para FXP que generan
+***---arbitrajes, tengo que tratarlos para cada caso en particular, inclusive los filtros del
+***---dialogo para spot/forward.
+
+***---Query para compras de Arbitraje, compras de Pases y C/V del resto
+
+SQL.ADD(" SELECT O.NrOperacion, O.Especie, O.Cliente1, O.Cantidad, O.Precio1, O.TotalBrutoCli1, ")
+SQL.ADD(" O.TipoOp, O.FechaVto, O.FechaPago, O.FechaOp, E.Nombre, C.RazonSocial, O.Corredor,")
+SQL.ADD(" O.TotalComisiones, O.SectorRB, O.PaseCB, O.Arbitraje, O.PrecioEj, O.FechaEj, ")
+SQL.ADD(" O.Cotizacion1, O.Cotizacion2, O.ContraEspecie, 'Compra' FXA, O.Precio3, O.Precio4, ")
+SQL.ADD(" O.Plazo, 'Compra' FXP, O.Precio2, O.TotalBrutoCli2, O.FechaAltaMAE, O.FechaBajaMAE, ")
+SQL.ADD(" O.TasaBase, O.TotalNetoCli3, O.Book1, ")
+SQL.ADD(" CallPut = CASE WHEN O.TipoOp = 'FXC'  THEN 'CON' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXV'  THEN 'CON' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXA'  THEN 'CON' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXP' AND O.ContraEspecie = '"~Var('MONELOCA')~"' THEN 'CON' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXP' AND O.Especie = '"~Var('MONELOCA')~"' THEN 'FUT' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXP' AND O.Especie <> '"~Var('MONELOCA')~"' AND O.ContraEspecie <> '"~Var('MONELOCA')~"' THEN 'PASARB' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXAT' THEN 'FUT' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXVT' THEN 'FUT' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXCT' THEN 'FUT' ")
+SQL.ADD("      WHEN O.TipoOp = 'FCC'  THEN 'CAL' ")
+SQL.ADD("      WHEN O.TipoOp = 'FVC'  THEN 'CAL' ")
+SQL.ADD("      WHEN O.TipoOp = 'FCP'  THEN 'PUT' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXCC'  THEN 'PUT' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXVC'  THEN 'PUT' ")
+SQL.ADD("      WHEN O.TipoOp = 'FXCJ'  THEN 'PUT' ")
+SQL.ADD("      WHEN O.TipoOp = 'FVP'  THEN 'PUT' END ")
+SQL.ADD(" FROM  "~DBO~".CLIENTES C, "~DBO~".ESPECIES E, "~DBO~".OPERACIONES O ")
+IF Dialogo.Radio4 = 5
+    ***---Llamado por el informe Vtos. x Especie cuando la moneda es $
+    SQL.ADD(" WHERE (O.ContraEspecie   = E.Codigo) ")
+    SQL.ADD(" AND   ((O.TipoOp <> 'FXP' AND O.FechaVto = '"~IdxDate(Dialogo.Fecha1)~"') OR (O.ContraEspecie = '"~Var('MONELOCA')~"' AND O.FechaBajaMAE = '"~IdxDate(Dialogo.Fecha1)~"' AND O.TipoOp = 'FXP') OR (O.Especie = '"~Var('MONELOCA')~"' AND O.FechaPago = '"~IdxDate(Dialogo.Fecha1)~"' AND O.TipoOp = 'FXP') OR (O.TipoOp IN ('FXCC','FXVC') AND O.FechaOp = '"~IdxDate(Dialogo.Fecha1)~"') OR ((O.Especie <> '"~Var('MONELOCA')~"' AND O.ContraEspecie <> '"~Var('MONELOCA')~"' AND O.TipoOp = 'FXP') AND (O.FechaBajaMAE = '"~IdxDate(Dialogo.Fecha1)~"' OR O.FechaPago = '"~IdxDate(Dialogo.Fecha1)~"'))) ")
+ELSE
+    SQL.ADD(" WHERE O.Especie   = E.Codigo ")
+    SQL.ADD(" AND   ((O.TipoOp <> 'FXP' AND O.FechaVto = '"~IdxDate(Dialogo.Fecha1)~"') OR (O.TipoOp IN ('FXCC','FXVC') AND O.FechaOp = '"~IdxDate(Dialogo.Fecha1)~"') OR (O.ContraEspecie = '"~Var('MONELOCA')~"' AND O.FechaAltaMAE = '"~IdxDate(Dialogo.Fecha1)~"' AND O.TipoOp = 'FXP') OR (O.Especie = '"~Var('MONELOCA')~"' AND O.FechaVto = '"~IdxDate(Dialogo.Fecha1)~"' AND O.TipoOp = 'FXP') OR ((O.Especie <> '"~Var('MONELOCA')~"' AND O.ContraEspecie <> '"~Var('MONELOCA')~"' AND O.TipoOp = 'FXP') AND (O.FechaAltaMAE = '"~IdxDate(Dialogo.Fecha1)~"' OR O.FechaVto = '"~IdxDate(Dialogo.Fecha1)~"'))) ")
+ENDIF
+
+SQL.ADD(" AND  (O.Arbitraje <> '1' OR O.TipoOp IN ('FXA','FXAT') OR O.Arbitraje Is Null) ")
+SQL.ADD(" AND  (O.PaseCB <> '1' OR O.TipoOp IN ('FXP') OR O.PaseCB Is Null) ")
+SQL.ADD(" AND   O.Cliente1  = C.Codigo ")
+SQL.ADD(" AND   O.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+IF NoVacio(Dialogo.Book1)
+    SQL.ADD(" AND O.Book1 = '"~Dialogo.Book1~"' ")
+ENDIF
+If NoVacio(Dialogo.Especie1)
+    IF Dialogo.Radio4 = 5
+        SQL.ADD(" AND (O.ContraEspecie = '"~Dialogo.Especie1~"' OR (O.TipoOp IN ('FXP','FXCJ') AND (O.Especie = '"~Dialogo.Especie1~"' OR O.ContraEspecie = '"~Dialogo.Especie1~"'))) ")
+    ELSE
+        SQL.ADD(" AND ('"~Dialogo.Especie1~"' = O.Especie OR (O.TipoOp IN ('FXP','FXCJ') AND (O.Especie = '"~Dialogo.Especie1~"' OR O.ContraEspecie = '"~Dialogo.Especie1~"'))) ")
+    ENDIF
+Endif
+IF NO
+If Dialogo.Radio1=0
+  SQL.ADD(" AND O.Cartera = '0' ")
+Else
+  If Dialogo.Radio1=1
+    SQL.ADD(" AND O.Cartera = '1' ")
+  Else
+    SQL.ADD(" AND O.Cartera IN ('1','0') ")
+  Endif
+Endif
+ENDIF
+If Dialogo.Radio3=0 
+  If Dialogo.Radio2=0
+    If Dialogo.Radio4=0
+      ***---Compras Spot
+      SQL.ADD(" AND  (O.TipoOp In ('FXC', 'FXA', 'FXCC','FXCJ') OR (O.TipoOp = 'FXP' AND O.ContraEspecie = '"~Var('MONELOCA')~"') OR (O.TipoOp = 'FXP' AND O.Especie <> '"~Var('MONELOCA')~"')) ")
+    Else
+      If Dialogo.Radio4=1
+        SQL.ADD(" AND  O.TipoOp In ('FCC','FCP') ")
+      Else
+        SQL.ADD(" AND  (O.TipoOp In ('FXC','FCC','FCP','FXA','FXCC','FXCJ') OR (O.TipoOp = 'FXP' AND O.ContraEspecie = '"~Var('MONELOCA')~"') OR (O.TipoOp = 'FXP' AND O.Especie <> '"~Var('MONELOCA')~"')) ")
+      Endif
+    Endif
+  Else
+     If Dialogo.Radio2=1
+       ***---Compras Forward
+       SQL.ADD(" AND  (O.TipoOp In ('FXCT','FXAT') OR (O.TipoOp = 'FXP' AND O.Especie = '"~Var('MONELOCA')~"') OR (O.TipoOp = 'FXP' AND O.ContraEspecie <> '"~Var('MONELOCA')~"')) ")
+     Else
+       If Dialogo.Radio4=0
+         ***---Compras Spot y Forward
+        SQL.ADD(" AND  O.TipoOp In ('FXCT','FXC','FXAT','FXA', 'FXP','FXCC','FXCJ') ")
+       Else
+         If Dialogo.Radio4=1
+           SQL.ADD(" AND  O.TipoOp In ('FCC','FCP') ")
+         Else
+          SQL.ADD(" AND  O.TipoOp In ('FCC','FCP','FXCT','FXC','FXAT','FXA', 'FXP','FXCC','FXCJ') ")
+         Endif
+       Endif
+     Endif
+  Endif
+Endif
+If Dialogo.Radio3=1
+  If Dialogo.Radio2=0
+    If Dialogo.Radio4=0
+      ***---Ventas Spot
+      SQL.ADD(" AND  O.TipoOp In ('FXV', 'FXA','FXVC','FXCJ') ")
+    Else
+      If Dialogo.Radio4=1
+        SQL.ADD(" AND  O.TipoOp In ('FVC','FVP') ")
+      Else
+        SQL.ADD(" AND  O.TipoOp In ('FVC','FVP','FXV', 'FXA','FXVC','FXCJ') ")
+      Endif
+    Endif
+  Else
+    If Dialogo.Radio2=1
+      ***---Ventas Forward
+      SQL.ADD(" AND  O.TipoOp In ('FXVT', 'FXAT') ")
+    Else
+      If Dialogo.Radio4=0
+        ***---Ventas Spot y Forward
+        SQL.ADD(" AND  O.TipoOp In ('FXVT','FXV', 'FXA', 'FXAT','FXVC','FXCJ') ")
+      Else
+        If Dialogo.Radio4=1
+          SQL.ADD(" AND  O.TipoOp In ('FVC','FVP') ")
+        Else
+          SQL.ADD(" AND  O.TipoOp In ('FVC','FVP','FXVT','FXV', 'FXAT', 'FXA','FXVC','FXCJ') ")
+        Endif
+      Endif
+    Endif
+  Endif
+Endif
+If Dialogo.Radio3=2
+  If Dialogo.Radio2=0
+    If Dialogo.Radio4=0
+      ***---Compras y Ventas Spot
+       SQL.ADD(" AND  (O.TipoOp In ('FXV','FXC','FXA','FXCC','FXVC','FXCJ') OR (O.TipoOp = 'FXP' AND O.ContraEspecie = '"~Var('MONELOCA')~"') OR (O.TipoOp = 'FXP' AND O.Especie <> '"~Var('MONELOCA')~"')) ")
+    Else
+      If Dialogo.Radio4=1
+        SQL.ADD(" AND  O.TipoOp In ('FCC','FCP','FVP','FVC') ")
+      Else
+        SQL.ADD(" AND  (O.TipoOp In ('FXV','FXC','FCC','FCP','FVC','FVP','FXA','FXCC','FXVC','FXCJ') OR (O.TipoOp = 'FXP' AND O.ContraEspecie = '"~Var('MONELOCA')~"') OR (O.TipoOp = 'FXP' AND O.Especie <> '"~Var('MONELOCA')~"')) ")
+      Endif
+    Endif 
+  Else
+    If Dialogo.Radio2=1
+      ***---Compras y Ventas Forward
+      SQL.ADD(" AND  (O.TipoOp In ('FXVT','FXCT','FXAT') OR (O.TipoOp = 'FXP' AND O.Especie = '"~Var('MONELOCA')~"') OR (O.TipoOp = 'FXP' AND O.ContraEspecie <> '"~Var('MONELOCA')~"')) ")
+    Else
+      If Dialogo.Radio4=0
+        ***---Compras y Ventas Spot y Forward
+         SQL.ADD(" AND  O.TipoOp In ('FXCT','FXC','FXV','FXVT','FXA','FXAT', 'FXP','FXCC','FXVC','FXCJ') ")
+      Else
+        If Dialogo.Radio4=1
+          SQL.ADD(" AND  O.TipoOp In ('FCC','FCP','FVP','FVC') ")
+        Else
+           SQL.ADD(" AND  O.TipoOp In ('FXA','FXAT','FXCT','FXC','FXV','FXVT','FVC','FVP','FCP','FCC', 'FXP','FXCC','FXVC','FXCJ') ")
+        Endif
+      Endif
+    Endif
+  Endif
+Endif
+
+IF Dialogo.Fecha2 <> 0
+    SQL.ADD(" AND O.FechaOp = '"~IdxDate(Dialogo.Fecha2)~"' ")
+ENDIF
+
+***---Query para Ventas de Arbitrajes
+If [Dialogo.Radio4=0 o Dialogo.Radio4=2 o Dialogo.Radio4=5] y [Dialogo.Radio3=1 o Dialogo.Radio3=2]
+  SQL.ADD(" UNION ")
+  SQL.ADD(" SELECT O.NrOperacion, O.Especie, O.Cliente1, O.Cantidad, O.Precio1, O.TotalBrutoCli1, ")
+  SQL.ADD(" O.TipoOp, O.FechaVto, O.FechaPago, O.FechaOp, E.Nombre, C.RazonSocial, O.Corredor,")
+  SQL.ADD(" O.TotalComisiones, O.SectorRB, O.PaseCB, O.Arbitraje, O.PrecioEj, O.FechaEj, ")
+  SQL.ADD(" O.Cotizacion1, O.Cotizacion2, O.ContraEspecie, 'Venta' FXA, O.Precio3, O.Precio4, ")
+  SQL.ADD(" O.Plazo, 'Arbitraje' FXP, O.Precio2, O.TotalBrutoCli2, O.FechaAltaMAE, O.FechaBajaMAE, ")
+  SQL.ADD(" O.TasaBase, O.TotalNetoCli3, O.Book1, ")
+  SQL.ADD(" CallPut = CASE WHEN O.TipoOp = 'FXA'  THEN 'CON' ")
+  SQL.ADD("                WHEN O.TipoOp = 'FXAT' THEN 'FUT' END ")
+  SQL.ADD(" FROM  "~DBO~".CLIENTES C, "~DBO~".ESPECIES E, "~DBO~".OPERACIONES O ")
+  SQL.ADD(" WHERE O.ContraEspecie = E.Codigo ")
+  SQL.ADD(" AND   O.Cliente1  = C.Codigo ")
+  IF NoVacio(Dialogo.Book1)
+      SQL.ADD(" AND O.Book1 = '"~Dialogo.Book1~"' ")
+  ENDIF
+  IF Dialogo.Radio2 = 0
+      SQL.ADD(" AND   O.TipoOp IN ('FXA') ")
+  ENDIF
+  IF Dialogo.Radio2 = 1
+      SQL.ADD(" AND   O.TipoOp IN ('FXAT') ")
+  ENDIF
+  IF Dialogo.Radio2 = 2
+      SQL.ADD(" AND   O.TipoOp IN ('FXAT','FXA') ")
+  ENDIF
+  SQL.ADD(" AND   '"~Dialogo.Vehiculo1~"' = O.Vehiculo1 ")
+  IF Dialogo.Radio4 = 5
+      ***---Llamado por el informe Vtos. x Especie cuando la moneda es $
+      SQL.ADD(" AND   '"~IdxDate(Dialogo.Fecha1)~"' = O.FechaPago ")
+  ELSE
+      SQL.ADD(" AND   '"~IdxDate(Dialogo.Fecha1)~"' = O.FechaVto ")
+  ENDIF
+  If NoVacio(Dialogo.Especie1)
+    SQL.ADD(" AND '"~Dialogo.Especie1~"' = O.ContraEspecie ")
+  Endif
+IF NO
+  If Dialogo.Radio1=0
+    SQL.ADD(" AND O.Cartera = '0' ")
+  Else
+    If Dialogo.Radio1=1
+      SQL.ADD(" AND O.Cartera = '1' ")
+    Else
+      SQL.ADD(" AND O.Cartera IN ('1','0') ")
+    Endif
+  Endif
+ENDIF
+  IF Dialogo.Fecha2 <> 0
+      SQL.ADD(" AND O.FechaOp = '"~IdxDate(Dialogo.Fecha2)~"' ")
+  ENDIF
+Endif
+
+***---Query para Ventas de Pases
+If [Dialogo.Radio4=0 o Dialogo.Radio4=2 o Dialogo.Radio4=5] y [Dialogo.Radio3=1 o Dialogo.Radio3=2]
+  SQL.ADD(" UNION ")
+  SQL.ADD(" SELECT O.NrOperacion, O.Especie, O.Cliente1, O.Cantidad, O.Precio1, O.TotalBrutoCli1, ")
+  SQL.ADD(" O.TipoOp, O.FechaVto, O.FechaPago, O.FechaOp, E.Nombre, C.RazonSocial, O.Corredor,")
+  SQL.ADD(" O.TotalComisiones, O.SectorRB, O.PaseCB, O.Arbitraje, O.PrecioEj, O.FechaEj, ")
+  SQL.ADD(" O.Cotizacion1, O.Cotizacion2, O.ContraEspecie, 'Venta' FXA, O.Precio3, O.Precio4, ")
+  SQL.ADD(" O.Plazo, 'Venta' FXP, O.Precio2, O.TotalBrutoCli2, O.FechaAltaMAE, O.FechaBajaMAE, ")
+  SQL.ADD(" O.TasaBase, O.TotalNetoCli3, O.Book1, ")
+  SQL.ADD(" CallPut = CASE WHEN O.TipoOp = 'FXP' AND O.Especie = '"~Var('MONELOCA')~"' THEN 'CON' ")
+  SQL.ADD("                WHEN O.TipoOp = 'FXP' AND O.ContraEspecie = '"~Var('MONELOCA')~"' THEN 'FUT' ")
+  SQL.ADD("                WHEN O.TipoOp = 'FXP' AND O.Especie <> '"~Var('MONELOCA')~"' AND O.ContraEspecie <> '"~Var('MONELOCA')~"' THEN 'PASARB' END ")
+  SQL.ADD(" FROM  "~DBO~".CLIENTES C, "~DBO~".ESPECIES E, "~DBO~".OPERACIONES O ")
+  SQL.ADD(" WHERE O.ContraEspecie = E.Codigo ")
+  SQL.ADD(" AND   O.Cliente1  = C.Codigo ")
+  SQL.ADD(" AND   '"~Dialogo.Vehiculo1~"' = O.Vehiculo1 ")
+  IF NoVacio(Dialogo.Book1)
+      SQL.ADD(" AND O.Book1 = '"~Dialogo.Book1~"' ")
+  ENDIF
+  IF Dialogo.Radio2 = 0
+      ***---Ventas Spot
+      SQL.ADD(" AND   ((O.TipoOp IN ('FXP') AND O.Especie = '"~Var('MONELOCA')~"') OR (O.TipoOp IN ('FXP') AND O.ContraEspecie <> '"~Var('MONELOCA')~"')) ")
+  ENDIF
+  IF Dialogo.Radio2 = 1
+      ***---Ventas Forward
+      SQL.ADD(" AND   ((O.TipoOp IN ('FXP') AND O.ContraEspecie = '"~Var('MONELOCA')~"') OR (O.TipoOp IN ('FXP') AND O.Especie <> '"~Var('MONELOCA')~"')) ")
+  ENDIF
+  IF Dialogo.Radio2 = 2
+      ***---Ventas Spot y Forward
+      SQL.ADD(" AND   O.TipoOp IN ('FXP') ")
+  ENDIF
+  IF Dialogo.Radio4 = 5
+      ***---Llamado por el informe Vtos. x Especie cuando la moneda es $
+      SQL.ADD(" AND   ((O.ContraEspecie = '"~Var('MONELOCA')~"' AND O.FechaPago = '"~IdxDate(Dialogo.Fecha1)~"') OR (O.Especie = '"~Var('MONELOCA')~"' AND O.FechaBajaMAE = '"~IdxDate(Dialogo.Fecha1)~"')) ")
+  ELSE
+      SQL.ADD(" AND   ((O.ContraEspecie = '"~Var('MONELOCA')~"' AND O.FechaVto = '"~IdxDate(Dialogo.Fecha1)~"') OR (O.Especie = '"~Var('MONELOCA')~"' AND O.FechaAltaMAE = '"~IdxDate(Dialogo.Fecha1)~"') OR ((O.Especie <> '"~Var('MONELOCA')~"' AND O.ContraEspecie <> '"~Var('MONELOCA')~"') AND (O.FechaAltaMAE = '"~IdxDate(Dialogo.Fecha1)~"' OR O.FechaVto = '"~IdxDate(Dialogo.Fecha1)~"'))) ")
+  ENDIF
+  If NoVacio(Dialogo.Especie1)
+    SQL.ADD(" AND (O.Especie = '"~Dialogo.Especie1~"' OR O.ContraEspecie = '"~Dialogo.Especie1~"') ")
+  Endif
+IF NO
+  If Dialogo.Radio1=0
+    SQL.ADD(" AND O.Cartera = '0' ")
+  Else
+    If Dialogo.Radio1=1
+      SQL.ADD(" AND O.Cartera = '1' ")
+    Else
+      SQL.ADD(" AND O.Cartera IN ('1','0') ")
+    Endif
+  Endif
+ENDIF
+  IF Dialogo.Fecha2 <> 0
+      SQL.ADD(" AND O.FechaOp = '"~IdxDate(Dialogo.Fecha2)~"' ")
+  ENDIF
+Endif
+
+SQL.ADD(" ORDER BY O.Book1, O.NrOperacion, O.Especie, O.FechaVto, O.Cliente1 ")

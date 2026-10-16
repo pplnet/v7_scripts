@@ -1,0 +1,121 @@
+﻿MostrarCuadroDeMensajes
+CrearDialogo
+  Fecha1    : 'Fecha:'         ;;;;  ;  ;Dialogo.Fecha1 <= Fsys y EsHabil(Dialogo.Fecha1, 'ARG');'Fecha Invalida';NO;Fsys
+  Vehiculo1 : 'Vehiculo:'      ;;;;NO;  ;NoVacio(Dialogo.Vehiculo1);'Vehiculo Invalido';NO;Var('VEHICULODE');
+FinDialogo
+if Not OK
+  Cancelar
+endif
+ACN(BD:1, 0)
+
+SetFilaActual(0)
+if SQL(" Select 1 From "~DBO~".FLAGSOCT Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' AND Registro = 'CIED' ") <> 1
+  Cancelar('El Cierre del Dia No Ha Sido Procesado')
+endif
+
+ACT(ME:1, Var('MERCOCT'))
+ACT(CT:2, CuentaCliente(Dialogo.Vehiculo1, 'ARP','',Val(ME:1)))
+ACN(PS:1, 0)
+ACN(ML:1, 0)
+ACN(ML:2, 0)
+
+***---Se anulan solo las LIQOCT que tienen el ultimo paso, que fueron las fallas
+SQL.ADD(" Select NrTrans, Cantidad1, Cliente1, NrTransRef1, Cantidad2 ")
+SQL.ADD(" From "~DBO~".TRANSACCIONES2 T1 ")
+SQL.ADD(" Where T1.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND T1.TipoTr2 = 'LIQOCT' ")
+SQL.ADD(" AND T1.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD(" AND T1.Cambio1 = 0 ")
+*SQL.ADD(" AND T1.Cambio1 = (Select Max(Cambio1) From "~DBO~".TRANSACCIONES2 T2 ")
+*SQL.ADD("                   Where T2.TipoTr2 = 'LIQOCT' ")
+*SQL.ADD("                   AND T2.Fecha1 = '"~IdxDate(Dialogo.Fecha1)~"' ")
+*SQL.ADD("                   AND T2.Vehiculo1 = '"~Dialogo.Vehiculo1~"' ")
+*SQL.ADD("                   AND T2.Cliente1 = T1.Cliente1) ")
+SQL.ADD(" Order By NrTrans ")
+Recorrer SQL
+  ACN(BD:1, 1)
+  ACT(A:fac, fbn('NrTrans'))
+  ACT(B:fac, fbn('Cliente1'))
+  ACN(C:fac, fbn('Cantidad1'))
+  ACN(D:fac, fbn('Cantidad2'))
+  SCN(ML:1, fbn('Cantidad1'))
+  SCN(ML:2, fbn('Cantidad2'))
+  ACT(LS:1, Val(LS:1)~'|'~fbn('NrTrans'))
+  ***---Nro. de Voucher que confirmo/fallo la LIQOCT
+  ACT(NV:fac, fbn('NrTransRef1'))
+  IF fbn('Cantidad1') <> fbn('Cantidad2')
+    ***---Obtengo el voucher de transporte
+    ACT(TR:fac, SQL(" Select NrTrans From "~DBO~".TRANSACCIONES2 Where TipoTr2 = 'TRANSP' AND NrTransRef1 = '"~Val(NV:fac)~"' "))
+    IF SQL(" Select 1 From "~DBO~".MOVPENDIENTES Where NrOperacion = '"~Val(TR:fac)~"' AND NrSaldo = 1 ") <> 1
+      Cancelar('El Voucher de Transporte '~Val(TR:fac)~' ya esta liquidado')
+    endif
+  endif
+Proximo
+
+ACN(FI:1, fac)
+ifa
+ACT(A:fac, 'MULTILATERAL')
+ACN(C:fac, Val(ML:1))
+ACN(D:fac, Val(ML:2))
+
+if Val(BD:1) = 1
+  CrearListBox ; 'Arial,8,';'Anulacion de Cierre Diario OCT del dia '~Dialogo.Fecha1
+    'Transaccion'               ;A:1..A:fac;NO;;;90;STRING;;RGB(450,200,250);
+    'Agente'                    ;B:1..B:fac;NO;;;70;STRING;;RGB(450,200,250);
+    'Cantidad Liquidada'        ;C:1..C:fac;NO;;;120;NUMERO;'###,###,###,###.##';RGB(450,200,250);
+    'Cantidad Confirmada'       ;D:1..D:fac;NO;;;120;NUMERO;'###,###,###,###.##';RGB(450,200,250);
+  FinListBox
+  IF Not OK
+    Cancelar
+  endif
+else
+  SQL.ADD(" Delete "~DBO~".FLAGSOCT ")
+  SQL.ADD(" Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+  SQL.ADD(" AND Registro = 'CIED' ")
+  SQL.NEW
+  SQL.EXEC
+*  Cancelar('No Hay un Cierre Diario OCT que Concuerde con los Datos Ingresados')
+  Cancelar('El Cierre Diario OCT No Tuvo Liquidaciones')
+endif
+
+Recorrer&k 1, Val(FI:1)
+  SQL.ADD(" Select CB3, CB9 From "~DBO~".TRANSACCIONES2 Where NrTrans = '"~Val(NV:&k)~"' ")
+  Recorrer SQL
+    DFA
+    ACN(CB:3, fbn('CB3'))
+    ACN(CB:9, fbn('CB9'))
+  Proximo
+  if Val(CB:3) = 1
+    ***---Falla
+    Message('Anulando Falla del Voucher '~Val(NV:&k))
+    EjecutarEvento('ANUFAL', NrTrans1=Val(NV:&k), Radio1=0)
+  endif
+  if Val(CB:9) = 1
+    ***---Confirmacion
+    Message('Anulando Confirmacion del Voucher '~Val(NV:&k))
+    EjecutarEvento('XNOCON', NrTrans1=Val(NV:&k))
+    SQL.ADD(" Update "~DBO~".TRANSACCIONES2 ")
+    SQL.ADD(" Set Cantidad4 = 0 ")
+    SQL.ADD(" Where NrTrans = '"~Val(NV:&k)~"' ")
+    SQL.NEW
+  endif
+  SQL.ADD(" Update "~DBO~".TRANSACCIONES2 ")
+  SQL.ADD(" Set Cantidad2 = 0, ")
+  SQL.ADD(" NrTransRef1 = Null ")
+  SQL.ADD(" Where NrTrans = '"~Val(A:&k)~"' ")
+  SQL.NEW
+  SQL.EXEC
+  ***---Elimino LIQOCT de falla
+*  Message('Eliminando LIQOCT '~Val(A:&k))
+*  SQL.ADD(" Delete "~DBO~".TRANSACCIONES2 Where NrTrans = '"~Val(A:&k)~"' ")
+*  SQL.NEW
+Proximo
+
+*** desarmo la liquidacion ****
+EjecutarEvento('ALIQAU', Fecha1=Dialogo.Fecha1)
+
+SQL.ADD(" Delete "~DBO~".FLAGSOCT ")
+SQL.ADD(" Where Fecha = '"~IdxDate(Dialogo.Fecha1)~"' ")
+SQL.ADD(" AND Registro = 'CIED' ")
+SQL.NEW
+SQL.EXEC

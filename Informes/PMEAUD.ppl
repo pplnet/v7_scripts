@@ -1,0 +1,143 @@
+﻿ModoReproceso(SinDialogo)
+MostrarCuadrodeMensajes
+CrearDialogo
+  Fecha1 :       'Desde'      ;1;1;;;;Dialogo.Fecha1>0;;NO;FSys
+  Fecha2  :      'Hasta'      ;2;1;;;;Dialogo.Fecha1<=Dialogo.Fecha2;'Fecha Hasta debe er mayor o igual a Fecha Desde!';NO;FSys
+  Radio1  :      'Opcion|Ns Sa|Sa Ns|Ni Sa|Ni Ns|Todas';;;;;;;;;4;
+  Label1  :       ;4;1;;  ;  ;;;;'No sancionada a Sancionada|Sancionada a No Sancionada|No informada a Sancionada|No informada a No Sancionada|Todas'
+  Operador:      'Usuario'    ;;;;;;;;;
+  Lista1  :      'Especies'   ;;;;;;;;;;;SQLSet("Select Codigo from "~DBO~".ESPECIES Where Jerarquia LIKE '"~Var('JERTITULOS')~"%' and Cotiza is Not Null and Cotiza <> '' ")  
+  
+FinDialogo
+
+If not Ok
+  Cancelar
+endif
+
+AgregarBMP(a1,Exe('LOGO'),EXE('ESCALOGO'))
+
+CrearFont(1, 'Arial,8,B')
+CrearFont(2, 'Arial,8,')
+CrearFont(3, 'Arial,12,B')
+
+
+ACT(d3, 'PME Novedades de especies ')
+
+SetFont(d3,3)
+
+ACT(a5, 'Desde: '~Dialogo.Fecha1~'    Hasta: '~Dialogo.Fecha2)
+If NoVacio(Dialogo.Lista1)
+   ACT(a6, 'Especies: '~Dialogo.Lista1)
+Else
+   ACT(a6, 'Especies: Todas')   
+Endif
+if Dialogo.Radio1 = 0
+   ACT(a7, 'Opcion : No sancionada a Sancionada')
+Else
+   if Dialogo.Radio1 = 1
+      ACT(a7, 'Opcion : Sancionada a No Sancionada')
+   Else
+      if Dialogo.Radio1 = 2
+         ACT(a7, 'Opcion : No informada a Sancionada')
+      Else
+         if Dialogo.Radio1 = 3
+            ACT(a7, 'Opcion : No informada a No Sancionada')
+         Else
+            ACT(a7, 'Opcion : Todas')
+         Endif
+      Endif
+   Endif
+Endif
+
+If NoVacio(Dialogo.Operador)
+   ACT(a8, 'Operador : '~Dialogo.Operador)
+Else
+   ACT(a8, 'Operador : Todos')
+Endif
+
+SetFilaActual(10)
+ACT(a:fac, 'Usuario')
+ACT(b:fac, 'Fecha')
+ACT(c:fac, 'Especie')
+ACT(d:fac, 'Val.Anterior')
+ACT(e:fac, 'Val.Actual')
+AgregarMarco(a:fac..e:fac,1,0,Exe('COLOR6'))
+
+SetFont(a5..e:fac, 1)
+
+message('Recuperando auditoria de Script...')
+SQL.ADD("Select Codigo,Accion,Fecha,ValorAnterior,ValorActual,Operador ")
+SQL.ADD("  From "~DBO~".PMAUDIT  ")
+SQL.ADD(" where Fecha >= '"~IdxDate(Dialogo.Fecha1)~"' and Fecha <= '"~IdxDate(Dialogo.Fecha2+1)~"' ")
+SQL.ADD(" and Tabla = 'ESPECIES' ")
+SQL.ADD(" and Campo in ('EstadoOperativo') ")
+If NoVacio(Dialogo.Lista1)
+   SQL.ADD(" and Codigo in ("~Pipe2Comillas(Dialogo.Lista1)~") ")
+Endif
+IF NoVacio(Dialogo.Operador)
+   SQL.ADD(" and Operador = '"~Dialogo.Operador ~"' ")
+Endif
+if Dialogo.Radio1 = 0
+   SQL.ADD(" and ValorAnterior = 'NO' and ValorActual = 'SI' ")
+Else
+   if Dialogo.Radio1 = 1
+      SQL.ADD(" and ValorAnterior = 'SI' and ValorActual = 'NO' ")
+   Else
+      if Dialogo.Radio1 = 2
+      SQL.ADD(" and ISNULL(ValorAnterior,'NE') = 'NE' and ValorActual = 'SI' ")
+      Else
+         if Dialogo.Radio1 = 3
+         SQL.ADD(" and ISNULL(ValorAnterior,'NE') = 'NE' and ValorActual = 'NO' ")
+         Endif
+      Endif
+   Endif
+Endif
+SQL.ADD("order by Fecha, Codigo, Accion  ")
+Watch(sql.Batch)
+Recorrer SQL
+
+  acn(x1, 0)
+  
+  if Not EqStr(Val(z1), fbn('Codigo')~fbn('Accion')~fbn('Fecha'))
+      ACT(z1,    fbn('Codigo')~fbn('Accion')~fbn('Fecha'))
+      ACT(a:fac, fbn('Operador'))
+      ACT(b:fac, fbn('Fecha'))
+      ACT(c:fac, fbn('Codigo'))
+      scn(x1, 1)
+    endif
+    if [EqStr(fbn('Accion'),'A') y NoVacio(fbn('ValorActual'))] o [EqStr(fbn('Accion'),'M') y Not EqStr(fbn('ValorActual'),fbn('ValorAnterior'))]
+    
+       ACT(d:fac, iif(EqStr(fbn('ValorAnterior'),'SI'),'Sancionada',iif(EqStr(fbn('ValorAnterior'),'NO'),'No Sancionada','No informada')))
+       ACT(e:fac, iif(EqStr(fbn('ValorActual'),'SI'),'Sancionada',iif(EqStr(fbn('ValorActual'),'NO'),'No Sancionada','No informada')))
+    else
+      if Val(x1) = 0
+        dfa
+      endif
+    endif
+
+Proximo
+
+SetFont(a9..z:fac, 2)
+
+
+SetFilaActual(fac+2)
+ACT(a:fac, 'Fin del Informe')
+SetFont(a:fac,1)
+
+RangoTitulo(a1..h:fac, 7)
+
+ACO(1,8)
+ACO(3,5)
+ACO(4,16)
+ACO(5,14)
+
+
+ACO(2,13)
+ACO(6,12)
+ACO(7,14)
+ACO(8,14)
+ACO(9,1)
+LimitesVision(i:fac+1)
+SetPrintFit(3,80)
+
+

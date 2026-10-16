@@ -1,0 +1,137 @@
+﻿**HojaVisible(SI)
+CrearDialogo
+  Vehiculo1:'Vehiculo'  ;;;;NO;;NoVacio(Dialogo.Vehiculo1);'Debe Ingresar un Vehiculo';NO;Var('VEHICULODE');
+  Fecha1   :'Fecha'     ;;;;;;SI O NoVacio(Dialogo.Fecha1) y Dialogo.Fecha1>=FSys-VAR('DIASPAR');'Fecha Operacion Desde Incorrecta';NO;FSys
+  Book1    :'Cartera'   ;;;;;;;;;;
+FinDialogo
+
+If not Ok
+   Cancelar
+Endif
+
+acn(mar1,0)
+
+SQL.ADD("SELECT M.FechaMov ")
+SQL.ADD("FROM   "~DBO~".OPERACIONES O, "~DBO~".MOVPOSEJE M ")
+SQL.ADD(" Where O.NrOperacion = M.NrOperacion ")
+SQL.ADD("   and M.FechaMov    <= '"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD("   and M.Cantidad   >= 0 ")
+SQL.ADD("   and M.NrSaldo     = '101' ")
+SQL.ADD("   and M.Vehiculo    = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and M.Cliente     = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and M.TipoNegocio = 'T' ")
+SQL.ADD("   and O.TipoOp = 'TIC'  ")
+If NoVacio(Dialogo.Book1)
+   SQL.ADD("   and M.Book     = '"~Dialogo.Book1~"' ")
+EndIf
+SQL.ADD("   and O.NrOperacion Not In  ")
+SQL.ADD("       (Select NrOperacion FROM "~DBO~".PARTIDAS) ")
+SQL.ADD("GROUP BY M.FechaMov ") 
+SQL.ADD(" UNION ALL ")
+SQL.ADD("SELECT M.FechaMov ")
+SQL.ADD("FROM   "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVPOSEJE M ")
+SQL.ADD(" Where T.NrTrans     = M.NrOperacion ")
+SQL.ADD("   and M.FechaMov <= '"~IdxDate(Dialogo.Fecha1)~"'  ")
+SQL.ADD("   and M.Cantidad   >= 0 ")
+SQL.ADD("   and M.NrSaldo     = '101' ")
+SQL.ADD("   and M.Vehiculo    = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and M.Cliente     = '"~Dialogo.Vehiculo1~"' ")
+SQL.ADD("   and M.TipoNegocio = 'T' ")
+If NoVacio(Dialogo.Book1)
+   SQL.ADD("   and M.Book     = '"~Dialogo.Book1~"' ")
+EndIf
+SQL.ADD("   and T.NrTrans     Not In  ")
+SQL.ADD("       (Select NrOperacion FROM "~DBO~".PARTIDAS) ")
+SQL.ADD("GROUP BY M.FechaMov ")
+
+act(k1,'')
+Recorrer SQL
+
+   *- Selecciono todas las operaciones con fecha del dia que no tengan asociadas partidas
+   *- CBC y PABC No Afectan Posiciones ya que no se liquida la especie
+   SQL.ADD(" Select M.NrSaldo, O.FechaOp, O.Vehiculo1, O.Especie, M.Cantidad, M.Precio, ")
+   SQL.ADD("        O.FechaVto, O.TipoOp, O.NrOperacion, M.Book, M.Cupon, M.FechaMov ")
+   SQL.ADD(" From "~DBO~".OPERACIONES O, "~DBO~".MOVPOSEJE M ")
+   SQL.ADD(" Where O.NrOperacion = M.NrOperacion ")
+   SQL.ADD("   and M.FechaMov    = '"~IdxDate(fbn['FechaMov'])~"' ")
+   SQL.ADD("   and M.Cantidad   >= 0 ")
+   SQL.ADD("   and M.NrSaldo     = '101' ")
+   SQL.ADD("   and M.Vehiculo    = '"~Dialogo.Vehiculo1~"' ")
+   SQL.ADD("   and M.Cliente     = '"~Dialogo.Vehiculo1~"' ")
+   SQL.ADD("   and M.TipoNegocio = 'T' ")
+   If NoVacio(Dialogo.Book1)
+      SQL.ADD("   and M.Book     = '"~Dialogo.Book1~"' ")
+   EndIf
+   SQL.ADD("   and O.NrOperacion Not In  ")
+   SQL.ADD("       (Select NrOperacion FROM "~DBO~".PARTIDAS) ")
+   SQL.ADD(" Union All ")
+   SQL.ADD(" Select M.NrSaldo, T.Fecha1 as FechaOp, T.Vehiculo1, T.Especie, M.Cantidad, ")
+   SQL.ADD("        M.Precio, T.Fecha1 FechaVto, T.TipoTr2 TipoOp,T.NrTrans NrOperacion, ")
+   SQL.ADD("        M.Book, M.Cupon, M.FechaMov ")
+   SQL.ADD(" From "~DBO~".TRANSACCIONES2 T, "~DBO~".MOVPOSEJE M ")
+   SQL.ADD(" Where T.NrTrans     = M.NrOperacion ")
+   SQL.ADD("   and M.FechaMov    = '"~IdxDate(fbn['FechaMov'])~"' ")
+   SQL.ADD("   and M.Cantidad   >= 0 ")
+   SQL.ADD("   and M.NrSaldo     = '101' ")
+   SQL.ADD("   and M.Vehiculo    = '"~Dialogo.Vehiculo1~"' ")
+   SQL.ADD("   and M.Cliente     = '"~Dialogo.Vehiculo1~"' ")
+   SQL.ADD("   and M.TipoNegocio = 'T' ")
+   If NoVacio(Dialogo.Book1)
+      SQL.ADD("   and M.Book     = '"~Dialogo.Book1~"' ")
+   EndIf
+   SQL.ADD("   and T.NrTrans Not In  ")
+   SQL.ADD("       (Select NrOperacion FROM "~DBO~".PARTIDAS) ")
+   SQL.ADD(" Order By 7, 3, 4, 10, 12, 1, 11")
+   
+   ACN(aa5,0 )
+
+   Recorrer SQL
+      scn(mar1,1)
+
+      *- Calculo la Sumatoria de Operaciones y Transacciones Especie-Vehiculo-FechaOp-Cartera
+      If [[fbn['FechaVto']<>val(aa3)] o [Not EqStr(FBN['Vehiculo1'],val(aa2))] o [Not EqStr(FBN['Especie'],val(aa1))] o [fbn['Cupon']<>val(aa7)] o [fbn['NrSaldo']<>val(aa4)]  o [Not EqStr(FBN['Book'],val(aa6))]] y [val(aa5)<>0]
+         
+         (.'GENPARTIDA'.)
+         *- Inicializo variables de suma
+         ACN(ee1,0)
+         ACN(ff1,0)
+         act(k1,'')
+      Endif
+
+      If [[fbn['FechaVto']<>val(aa3)] o [Not EqStr(FBN['Vehiculo1'],val(aa2))] o [Not EqStr(FBN['Especie'],val(aa1))] o [fbn['Cupon']<>val(aa7)] o [fbn['NrSaldo']<>val(aa4)]  o [Not EqStr(FBN['Book'],val(aa6))]]
+         ACD(aa3, FBN['FechaVto'])
+         ACT(aa2,FBN['Vehiculo1'])
+         ACT(aa1,FBN['Especie'])
+         ACN(aa7,FBN['Cupon'])
+         ACN(aa4,FBN['NrSaldo'])
+         ACT(aa6,FBN['Book'])
+         ACN(aa5,fac )
+
+         acn(ee1,0)
+         acn(ff1,0)
+         act(k1,'')
+      EndIf
+      
+      ACD(b:fac,fbn['FechaOp'])
+      ACT(c:fac,FBN['Vehiculo1'])
+      ACT(d:fac,FBN['Especie'])
+      SCN(ee1,FBN['Cantidad'])
+      SCN(ff1,FBN['Cantidad']*FBN['Precio'])
+      ACD(g:fac,FBN['FechaVto'])
+      ACT(h:fac,FBN['TipoOp'])
+      ACT(i:fac,FBN['NrOperacion'])
+      ACN(l:fac,FBN['Cupon'])
+      ACT(m:fac,FBN['Book'])
+      
+      *- k: Lista de Operaciones que Forman la Partida
+      ACT(k1,val(k1)~FBN['NrOperacion']~'|')
+   Proximo
+
+   If val(aa5)<>0
+      (.'GENPARTIDA'.)
+   EndIf
+Proximo
+
+If Val(mar1) =0
+   Cancelar('No existen partidas para generar para el dia '~Dialogo.Fecha1)
+endif
