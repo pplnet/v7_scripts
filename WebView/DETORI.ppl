@@ -1,0 +1,107 @@
+﻿** DETORI - Detalle Ordenes de Inversion
+** ============================================================================
+** WebView DETORI - Detalle Ordenes de Inversion
+** ============================================================================
+
+** Resuelve el prefijo de esquema. Intenta VARIABLES; si esta vacio usa 'dbo'.
+** Todos los defs que acceden tablas llaman a este patron.
+
+** Devuelve el servidor y la base de datos a la que se conecta V7.
+def GetDbInfo()
+    &sql := "SELECT @@SERVERNAME as Servidor, DB_NAME() as BaseDatos"
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** Fecha del sistema (FSYS) en ISO yyyy-mm-dd.
+def GetFechaSistema()
+    &fsys := Fecha(FSys, 'yyyy-mm-dd')
+    return &fsys
+end
+
+** Vehiculos habilitados para el lookup.
+def GetVehiculos()
+    &dbo := Query("SELECT ISNULL(NULLIF(RTRIM(ISNULL((SELECT TOP 1 Valor FROM VARIABLES WHERE UPPER(RTRIM(Codigo))='DBO'),'')),''),'dbo')")
+    &sql := "SELECT RTRIM(Codigo) as Codigo, RTRIM(ISNULL(Descripcion, '')) as Descripcion FROM " ~ &dbo ~ ".VEHICULOS WHERE (Status = 'HAB' OR Status IS NULL OR Status = '') ORDER BY Codigo"
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** Especies habilitadas para el lookup.
+def GetEspecies()
+    &dbo := Query("SELECT ISNULL(NULLIF(RTRIM(ISNULL((SELECT TOP 1 Valor FROM VARIABLES WHERE UPPER(RTRIM(Codigo))='DBO'),'')),''),'dbo')")
+    &sql := "SELECT RTRIM(Codigo) as Codigo, RTRIM(ISNULL(Nombre, '')) as Nombre FROM " ~ &dbo ~ ".ESPECIES WHERE Status = 'HAB' ORDER BY Codigo"
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** Books para el lookup. vehiculo vacio = todos los books.
+def GetBooks(vehiculo)
+    &dbo := Query("SELECT ISNULL(NULLIF(RTRIM(ISNULL((SELECT TOP 1 Valor FROM VARIABLES WHERE UPPER(RTRIM(Codigo))='DBO'),'')),''),'dbo')")
+    &sql := "SELECT RTRIM(Codigo) as Codigo, RTRIM(ISNULL(Descripcion, '')) as Descripcion FROM " ~ &dbo ~ ".BOOKS WHERE 1 = 1"
+    If NoVacio(vehiculo)
+        &sql := &sql ~ " AND Vehiculo = '" ~ vehiculo ~ "'"
+    EndIf
+    &sql := &sql ~ " ORDER BY Codigo"
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
+
+** Diagnostico: cuenta registros con distintos niveles de filtro. Solo depuracion.
+def GetMovDiag(fechaMov)
+    &dbo := Query("SELECT ISNULL(NULLIF(RTRIM(ISNULL((SELECT TOP 1 Valor FROM VARIABLES WHERE UPPER(RTRIM(Codigo))='DBO'),'')),''),'dbo')")
+    &total    := Query("SELECT COUNT(*) FROM " ~ &dbo ~ ".MOVEJECUTADOS")
+    &con50    := Query("SELECT COUNT(*) FROM " ~ &dbo ~ ".MOVEJECUTADOS WHERE NrSaldo = 50")
+    &conFecha := Query("SELECT COUNT(*) FROM " ~ &dbo ~ ".MOVEJECUTADOS WHERE NrSaldo = 50 AND CONVERT(date, FechaMov) = CONVERT(date, '" ~ fechaMov ~ "', 23)")
+    &ultimaF  := Query("SELECT ISNULL(CONVERT(VARCHAR(10), MAX(FechaMov), 23), 'sin datos') FROM " ~ &dbo ~ ".MOVEJECUTADOS WHERE NrSaldo = 50")
+    &resultado := QueryTable("SELECT '" ~ &dbo ~ "' as Dbo, " ~ &total ~ " as TotalTabla, " ~ &con50 ~ " as ConNrSaldo50, " ~ &conFecha ~ " as ConFecha, '" ~ &ultimaF ~ "' as UltimaFecha")
+    return &resultado
+end
+
+** Devuelve el SQL armado por GetMovEjecutados sin ejecutarlo. Solo depuracion.
+def GetMovSQL(fechaMov, vehiculo, book, especie)
+    &dbo := Query("SELECT ISNULL(NULLIF(RTRIM(ISNULL((SELECT TOP 1 Valor FROM VARIABLES WHERE UPPER(RTRIM(Codigo))='DBO'),'')),''),'dbo')")
+    &sql := "SELECT TOP 1000 ISNULL(NrOperacion,0) as NrOperacion, CONVERT(VARCHAR(10),FechaMov,23) as FechaMov, RTRIM(ISNULL(Especie,'')) as Especie, ISNULL(Cantidad,0) as Cantidad, RTRIM(ISNULL(Leyenda,'')) as Leyenda FROM " ~ &dbo ~ ".MOVEJECUTADOS WHERE NrSaldo = 50"
+    &sql := &sql ~ " AND CONVERT(date, FechaMov) = CONVERT(date, '" ~ fechaMov ~ "', 23)"
+    If NoVacio(vehiculo)
+        &sql := &sql ~ " AND EnteCustodia = '" ~ vehiculo ~ "'"
+    EndIf
+    If NoVacio(book)
+        &sql := &sql ~ " AND Book = '" ~ book ~ "'"
+    EndIf
+    If NoVacio(especie)
+        &sql := &sql ~ " AND Especie = '" ~ especie ~ "'"
+    EndIf
+    &sql := &sql ~ " ORDER BY NrOperacion"
+    return &sql
+end
+
+** Movimientos ejecutados con NrSaldo = 50.
+** fechaMov: yyyy-mm-dd (requerido).
+** vehiculo (EnteCustodia), book, especie: opcionales; vacio = sin filtro.
+def GetMovEjecutados(fechaMov, vehiculo, book, especie)
+    &dbo := Query("SELECT ISNULL(NULLIF(RTRIM(ISNULL((SELECT TOP 1 Valor FROM VARIABLES WHERE UPPER(RTRIM(Codigo))='DBO'),'')),''),'dbo')")
+    &sql := <<
+        SELECT TOP 1000
+            ISNULL(NrOperacion, 0) as NrOperacion,
+            CONVERT(VARCHAR(10), FechaMov, 23) as FechaMov,
+            RTRIM(ISNULL(Especie, '')) as Especie,
+            ISNULL(Cantidad, 0) as Cantidad,
+            RTRIM(ISNULL(Leyenda, '')) as Leyenda
+        FROM
+    >>
+    &sql := &sql ~ &dbo ~ ".MOVEJECUTADOS WHERE NrSaldo = 50"
+    &sql := &sql ~ " AND CONVERT(date, FechaMov) = CONVERT(date, '" ~ fechaMov ~ "', 23)"
+    If NoVacio(vehiculo)
+        &sql := &sql ~ " AND EnteCustodia = '" ~ vehiculo ~ "'"
+    EndIf
+    If NoVacio(book)
+        &sql := &sql ~ " AND Book = '" ~ book ~ "'"
+    EndIf
+    If NoVacio(especie)
+        &sql := &sql ~ " AND Especie = '" ~ especie ~ "'"
+    EndIf
+    &sql := &sql ~ " ORDER BY NrOperacion"
+    &resultado := QueryTable(&sql)
+    return &resultado
+end
